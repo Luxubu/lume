@@ -20,7 +20,7 @@ program takes about 1 s in Python and 1.4 s in Ruby.
 The language design lives in the [Lume Language Design](https://claude.ai/code/artifact/1872fe63-1816-4b1e-9983-dec2774382fb)
 document. This repository is the compiler and the examples.
 
-## Status: milestone 6 of 7
+## Status: all 7 prototype milestones done
 
 | # | Milestone | Status |
 | --- | --- | --- |
@@ -30,7 +30,7 @@ document. This repository is the compiler and the examples.
 | 4 | `enum`, `match` with exhaustiveness errors, tuples, `T?` | done |
 | 5 | `T or E`, `Error`, `?` on Result, implicit `Ok`, `!`, `File`/`Env` | done |
 | 6 | `\|>`, `import rust.<crate>` + `rust:` blocks (signature mapping deferred) | done |
-| 7 | Port the sample programs plus a graph program; settle the memory policy | next |
+| 7 | Port the sample programs plus a graph program; settle the memory policy | done: Rust-faithful ownership, no ORC |
 
 What works today: functions (`def` block and one-liner forms, return type
 inferred when omitted), `struct` with fields and methods (fields used bare
@@ -84,10 +84,19 @@ tests/run.sh            # every example's output and every error message, diffed
 tests/run.sh --update   # accept current output as the new expectation
 ```
 
-Ownership, for now: `Int`/`Float`/`Bool` pass by value; `Str`, lists and
-structs are passed by reference and cloned only where an owned value is needed
-(returned, stored in a struct or list, bound to a name). No ownership syntax
-appears in Lume code. Milestone 7 measures how far this gets.
+Ownership: `Int`/`Float`/`Bool` pass by value; `Str`, lists, maps and structs
+are passed by reference and cloned only where an owned value is needed. The
+programmer writes mutability, never ownership: `var self` on a method that
+changes fields, `var xs: [Int]` on a parameter changed in place. Milestone 7
+measured zero ownership syntax across 202 lines of ported programs
+(`examples/port/`), so the memory policy is settled: Rust-faithful inferred
+ownership, no reference-counting fallback.
+
+Speed: computation runs at Rust speed (`fib(35)`: 30 ms vs Python 1.04 s).
+Allocation-heavy string-and-map code is about 3x off hand-written Rust and
+slightly ahead of Python (word count over 360k words: Rust 22 ms, Lume 74 ms,
+Python 84 ms); closing that gap is stdlib codegen work (lazy `split`, map
+`entry`, a hash-backed ordered map), the next milestone.
 
 ## Build
 
@@ -122,5 +131,6 @@ compiler/src/codegen.rs  Rust emission plus name/mutability checks
 compiler/src/error.rs    error rendering (line, caret, help)
 compiler/src/main.rs     the CLI
 examples/                programs that must keep compiling
+examples/port/           the design doc's sample programs and the graph program
 examples/errors/         programs that must keep failing, with good messages
 ```
