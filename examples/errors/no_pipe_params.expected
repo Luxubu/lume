@@ -1,0 +1,6 @@
+error: expected `|x|` naming the block's argument, found the end of the line
+  --> examples/errors/no_pipe_params.lume:2:20
+  |
+2 |   [1, 2, 3].each do
+  |                    ^
+  help: write `{ |x| ... }` or `do |x|`; use `_` only in a bare argument like `.map(_.name)`

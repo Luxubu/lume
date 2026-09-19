@@ -121,6 +121,17 @@ impl Parser {
         }
     }
 
+    /// `name (` — a space between a name and `(` is always an error: it is
+    /// unclear whether it is a call or a value in parentheses.
+    fn reject_spaced_paren(&self, name: &str) -> Result<()> {
+        if self.at_sym("(") && self.toks[self.pos].space_before {
+            let (l, c) = self.here();
+            return Err(LumeError::new(l, c, format!("a space between `{}` and `(` is ambiguous: a call, or a value in parentheses?", name))
+                .with_help(format!("for a call write `{}(...)` with no space; for a value in parentheses, drop the outer parentheses or wrap the whole argument: `{}((a + b) * 2)`", name, name)));
+        }
+        Ok(())
+    }
+
     fn skip_newlines(&mut self) {
         while matches!(self.peek(), Tok::Newline) {
             self.advance();
@@ -693,6 +704,7 @@ impl Parser {
                             .err(format!("expected a method name after `.`, found {}", self.describe())))
                     }
                 };
+                self.reject_spaced_paren(&format!(".{}", name))?;
                 let mut args = if self.at_sym("(") { self.call_args()? } else { Vec::new() };
                 if let Some(block) = self.trailing_block()? {
                     if args.iter().any(|a| matches!(a.value.kind, ExprKind::Lambda { .. })) {
@@ -893,8 +905,8 @@ impl Parser {
                 }
                 "puts" => {
                     self.advance();
-                    let paren_call = self.at_sym("(") && !self.toks[self.pos].space_before;
-                    let arg = if paren_call {
+                    self.reject_spaced_paren("puts")?;
+                    let arg = if self.at_sym("(") {
                         let mut a = self.call_args()?;
                         if a.len() != 1 || a[0].name.is_some() {
                             return Err(LumeError::new(line, col, "`puts` takes exactly one value"));
@@ -922,6 +934,7 @@ impl Parser {
                 }
                 _ => {
                     self.advance();
+                    self.reject_spaced_paren(&s)?;
                     if self.at_sym("(") {
                         let args = self.call_args()?;
                         Ok(Expr::new(ExprKind::Call { name: s, args }, line, col))

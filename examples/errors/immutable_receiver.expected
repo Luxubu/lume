@@ -1,0 +1,6 @@
+error: `c` is immutable, but `bump` changes it
+  --> examples/errors/immutable_receiver.lume:8:4
+  |
+8 |   c.bump
+  |    ^
+  help: declare it with `var c = ...` on line 7

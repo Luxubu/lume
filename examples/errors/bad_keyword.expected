@@ -1,0 +1,6 @@
+error: `User` has no parameter named `agee`
+  --> examples/errors/bad_keyword.lume:6:31
+  |
+6 |   u = User(name: "Ana", agee: 31)
+  |                               ^
+  help: did you mean `age`?

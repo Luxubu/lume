@@ -1,0 +1,6 @@
+error: tabs are not allowed for indentation
+  --> examples/errors/tabs.lume:2:1
+  |
+2 | 	puts "hi"
+  | ^
+  help: use spaces; two per level is the convention

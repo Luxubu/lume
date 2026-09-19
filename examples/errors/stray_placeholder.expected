@@ -1,0 +1,6 @@
+error: `_` can only be used inside a method argument
+  --> examples/errors/stray_placeholder.lume:2:7
+  |
+2 |   x = _ + 1
+  |       ^
+  help: write `xs.map(_.name)`; elsewhere give the value a name

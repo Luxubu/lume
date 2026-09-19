@@ -1,0 +1,5 @@
+error: `Int` values cannot take a block; only lists and ranges can
+  --> examples/errors/block_on_int.lume:3:9
+  |
+3 |   puts n.map(_ * 2)
+  |         ^

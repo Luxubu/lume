@@ -1,0 +1,18 @@
+evens: [4, 2, 6]
+squares: [9, 1, 16, 1, 25, 81, 4, 36]
+sum of squares of odds: 117
+how many > 3: 4
+any nine? true  all positive? true
+first three sorted: [1, 1, 2]
+adults: [Ana, Cy]
+total age of adults: 76
+oldest first: [Cy, Ana, Bo, Di]
+average adult age: 38
+Ana (31), Bo (16), Cy (45), Di (12)
+welcome, Ana
+hi, Bo
+welcome, Cy
+hi, Di
+greeted 4
+sum 1..100 of multiples of 7: 735
+[10, 20, 30, 40, 50]

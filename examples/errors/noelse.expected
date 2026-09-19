@@ -1,0 +1,6 @@
+error: this `if` is the function's result but has no `else`
+  --> examples/errors/noelse.lume:2:3
+  |
+2 |   if n < 0: "negative"
+  |   ^
+  help: add an `else` branch, or add `return` before it if it is not the result

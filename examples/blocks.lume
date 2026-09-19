@@ -44,4 +44,4 @@ def main:
 
   # ranges are lazy too
   puts "sum 1..100 of multiples of 7: #{(1..100).filter(_ % 7 == 0).sum}"
-  puts (1..5).map(_ * 10).to_list
+  puts((1..5).map(_ * 10).to_list)

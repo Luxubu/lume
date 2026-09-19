@@ -1,0 +1,5 @@
+error: `add` is missing an argument: b
+  --> examples/errors/arity.lume:4:8
+  |
+4 |   puts add(1)
+  |        ^

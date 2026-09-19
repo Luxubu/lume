@@ -1,0 +1,6 @@
+error: unknown name `totl`
+  --> examples/errors/typo.lume:3:8
+  |
+3 |   puts totl
+  |        ^
+  help: did you mean `total`?

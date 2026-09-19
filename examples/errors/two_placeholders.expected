@@ -1,0 +1,6 @@
+error: `_` may appear only once in a shorthand block
+  --> examples/errors/two_placeholders.lume:3:19
+  |
+3 |   puts nums.map(_ * _)
+  |                   ^
+  help: name the argument instead: `{ |x| x.a + x.b }`

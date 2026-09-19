@@ -1,0 +1,6 @@
+error: `count` is immutable and cannot be changed with `+=`
+  --> examples/errors/immutable.lume:4:5
+  |
+4 |     count += n
+  |     ^
+  help: declare it with `var count = ...` on line 2

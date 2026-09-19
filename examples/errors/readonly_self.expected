@@ -1,0 +1,6 @@
+error: `bump` changes the field `n`, but its `self` is read-only
+  --> examples/errors/readonly_self.lume:4:5
+  |
+4 |     n += 1
+  |     ^
+  help: write `def bump(var self, ...)` to allow it

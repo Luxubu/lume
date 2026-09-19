@@ -1,0 +1,13 @@
+p = Point(x: 3.0, y: 4.0)
+distance: 5.0
+q at origin? true
+moved to Point(x: 3.0, y: 4.0)
+m.x is now 10.0
+Ana <ana@x.com> is 31, adult
+Bo <bo@x.com> is 16, minor
+Cy <cy@x.com> is 45, adult
+Hi, Ana
+Hi, Cy
+Ana older than Cy? false
+equal? true
+stack Stack(items: [1, 2, 3]) top=3 size=3

@@ -1,0 +1,6 @@
+error: `break` outside of a loop
+  --> examples/errors/break_in_block.lume:3:5
+  |
+3 |     break if n == 2
+  |     ^
+  help: a block runs once per item and cannot `break`; use a `for` loop, or `filter`/`take` before `each`

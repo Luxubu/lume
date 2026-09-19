@@ -1,0 +1,6 @@
+error: `x` is immutable and cannot be reassigned
+  --> examples/errors/reassign.lume:4:3
+  |
+4 |   x = y + x
+  |   ^
+  help: declare it with `var x = ...` on line 2 if it needs to change; `x = x.something` is allowed as a transform of the same value

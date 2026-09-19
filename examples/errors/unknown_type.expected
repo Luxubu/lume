@@ -1,0 +1,6 @@
+error: unknown type `Usr`
+  --> examples/errors/unknown_type.lume:1:11
+  |
+1 | def greet(u: Usr) -> Str = "hi"
+  |           ^
+  help: did you mean `Str`?

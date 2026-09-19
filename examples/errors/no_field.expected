@@ -1,0 +1,6 @@
+error: `User` has no field or method named `nme`
+  --> examples/errors/no_field.lume:7:9
+  |
+7 |   puts u.nme
+  |         ^
+  help: did you mean `name`?
