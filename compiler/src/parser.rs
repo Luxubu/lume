@@ -14,7 +14,7 @@ pub struct Parser {
     col_base: usize,
 }
 
-pub fn parse_program(toks: Vec<Token>) -> Result<Vec<FnDef>> {
+pub fn parse_program(toks: Vec<Token>) -> Result<Vec<Item>> {
     let mut p = Parser { toks, pos: 0, line_base: 0, col_base: 0 };
     p.program()
 }
@@ -145,33 +145,124 @@ impl Parser {
 
     // ----- program / functions --------------------------------------------
 
-    fn program(&mut self) -> Result<Vec<FnDef>> {
-        let mut fns = Vec::new();
+    fn program(&mut self) -> Result<Vec<Item>> {
+        let mut items = Vec::new();
         self.skip_newlines();
         while !matches!(self.peek(), Tok::Eof) {
             if self.at_kw("def") {
-                fns.push(self.fn_def()?);
+                items.push(Item::Fn(self.fn_def(false)?));
+            } else if self.at_kw("struct") {
+                items.push(Item::Struct(self.struct_def()?));
             } else if matches!(self.peek(), Tok::Indent) {
                 return Err(self
                     .err("unexpected indentation at the top level")
                     .with_help("top-level code goes inside `def main:`"));
             } else {
                 return Err(self
-                    .err(format!("expected `def`, found {}", self.describe()))
-                    .with_help("in this milestone a file is a list of `def` functions; put statements inside `def main:`"));
+                    .err(format!("expected `def` or `struct`, found {}", self.describe()))
+                    .with_help("a file is a list of `def` functions and `struct` types; statements go inside `def main:`"));
             }
             self.skip_newlines();
         }
-        Ok(fns)
+        Ok(items)
     }
 
-    fn fn_def(&mut self) -> Result<FnDef> {
+    fn struct_def(&mut self) -> Result<StructDef> {
+        let (line, col) = self.here();
+        self.advance(); // struct
+        let (name, nl, nc) = self.ident("a struct name")?;
+        if !name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+            return Err(LumeError::new(nl, nc, format!("struct names start with a capital letter: `{}`", name))
+                .with_help(format!("rename it `{}`", capitalize(&name))));
+        }
+        if !self.eat_sym(":") {
+            return Err(self
+                .err(format!("expected `:` after `struct {}`", name))
+                .with_help("a struct's fields and methods go in an indented block"));
+        }
+        if !matches!(self.peek(), Tok::Newline) {
+            return Err(self.err("expected the fields of the struct on the following lines"));
+        }
+        self.advance();
+        if !matches!(self.peek(), Tok::Indent) {
+            return Err(self
+                .err(format!("struct `{}` has no fields", name))
+                .with_help("indent at least one `name: Type` line under it"));
+        }
+        self.advance();
+        let mut fields = Vec::new();
+        let mut methods = Vec::new();
+        while !matches!(self.peek(), Tok::Dedent | Tok::Eof) {
+            if self.at_kw("def") {
+                methods.push(self.fn_def(true)?);
+            } else if let Tok::Ident(fname) = self.peek().clone() {
+                if !methods.is_empty() {
+                    return Err(self
+                        .err(format!("field `{}` comes after a method", fname))
+                        .with_help("list all fields first, then the methods"));
+                }
+                let (fname, fl, fc) = self.ident("a field name")?;
+                if !self.eat_sym(":") {
+                    return Err(self
+                        .err(format!("field `{}` needs a type", fname))
+                        .with_help(format!("write `{}: Int`, `{}: Str`, and so on", fname, fname)));
+                }
+                let ty = self.parse_type()?;
+                if self.at_sym("=") {
+                    return Err(self.err("field defaults are not supported yet"));
+                }
+                fields.push(Param { name: fname, ty, line: fl, col: fc });
+                self.end_stmt()?;
+            } else {
+                return Err(self.err(format!("expected a field or `def` inside `struct {}`, found {}", name, self.describe())));
+            }
+            self.skip_newlines();
+        }
+        if matches!(self.peek(), Tok::Dedent) {
+            self.advance();
+        }
+        if fields.is_empty() {
+            return Err(LumeError::new(line, col, format!("struct `{}` has no fields", name))
+                .with_help("a struct needs at least one `name: Type` field"));
+        }
+        Ok(StructDef { name, fields, methods, line, col })
+    }
+
+    fn fn_def(&mut self, in_struct: bool) -> Result<FnDef> {
         let (line, col) = self.here();
         self.advance(); // def
         let (name, _, _) = self.ident("a function name")?;
         let mut params = Vec::new();
+        let mut self_kind = SelfKind::Read;
         if self.eat_sym("(") {
+            let mut first = true;
             while !self.at_sym(")") {
+                // `self` / `var self` as the first parameter of a method
+                let is_var = self.at_kw("var");
+                let self_next = if is_var { matches!(self.peek_at(1), Tok::Ident(s) if s == "self") } else { self.at_kw("self") };
+                if self_next {
+                    let (sl, sc) = self.here();
+                    if !in_struct {
+                        return Err(LumeError::new(sl, sc, "`self` is only allowed in a method inside a struct"));
+                    }
+                    if !first {
+                        return Err(LumeError::new(sl, sc, "`self` must be the first parameter"));
+                    }
+                    if is_var {
+                        self.advance();
+                        self_kind = SelfKind::Mutate;
+                    }
+                    self.advance(); // self
+                    if self.at_sym(":") {
+                        return Err(self.err("`self` takes no type; it is always the struct itself"));
+                    }
+                    first = false;
+                    if !self.eat_sym(",") {
+                        break;
+                    }
+                    continue;
+                }
+                first = false;
                 let (pname, pl, pc) = self.ident("a parameter name")?;
                 if !self.eat_sym(":") {
                     return Err(self
@@ -186,19 +277,34 @@ impl Parser {
             }
             self.expect_sym(")", "to close the parameter list")?;
         }
-        let ret = if self.eat_sym("->") { self.parse_type()? } else { Type::Unit };
+        let ret = if self.eat_sym("->") { Some(self.parse_type()?) } else { None };
         let body = if self.eat_sym(":") {
             self.block()?
         } else if self.eat_sym("=") {
-            let e = self.expr()?;
-            self.end_stmt()?;
-            Block { stmts: vec![Stmt::Expr(e)] }
+            // `def f = expr`, or `def f =` with the expression on the next indented line
+            if matches!(self.peek(), Tok::Newline) && matches!(self.peek_at(1), Tok::Indent) {
+                self.advance();
+                self.advance();
+                let e = self.expr()?;
+                self.skip_newlines();
+                if !matches!(self.peek(), Tok::Dedent) {
+                    return Err(self
+                        .err(format!("expected a single expression after `def {} =`, found {}", name, self.describe()))
+                        .with_help("for several statements use `def ...:` and an indented body"));
+                }
+                self.advance();
+                Block { stmts: vec![Stmt::Expr(e)] }
+            } else {
+                let e = self.expr()?;
+                self.end_stmt()?;
+                Block { stmts: vec![Stmt::Expr(e)] }
+            }
         } else {
             return Err(self
                 .err(format!("expected `:` or `=` after the signature of `{}`, found {}", name, self.describe()))
                 .with_help("`def f(x: Int) -> Int:` starts a block; `def f(x: Int) -> Int = x * 2` is a one-liner"));
         };
-        Ok(FnDef { name, params, ret, body, line, col })
+        Ok(FnDef { name, params, ret, self_kind, body, line, col })
     }
 
     fn parse_type(&mut self) -> Result<Type> {
@@ -356,6 +462,27 @@ impl Parser {
             }
         }
         let e = self.expr()?;
+        // Field assignment: `recv.field = value` / `recv.field += value`
+        if let Tok::Sym(op) = self.peek().clone() {
+            if matches!(op, "=" | "+=" | "-=" | "*=" | "/=" | "%=") {
+                if let ExprKind::Method { recv, name, args } = &e.kind {
+                    if args.is_empty() {
+                        let recv = (**recv).clone();
+                        let field = name.clone();
+                        self.advance();
+                        let value = self.expr()?;
+                        let op = if op == "=" { None } else { Some(op) };
+                        let s = Stmt::FieldAssign { recv, field, op, value, line, col };
+                        let s = self.trailing_condition(s)?;
+                        self.end_stmt()?;
+                        return Ok(s);
+                    }
+                }
+                return Err(self
+                    .err("only a name or a field can be assigned to")
+                    .with_help("the left side of `=` must be `name` or `value.field`"));
+            }
+        }
         let s = self.trailing_condition(Stmt::Expr(e))?;
         self.end_stmt()?;
         Ok(s)
@@ -583,11 +710,30 @@ impl Parser {
         Ok(e)
     }
 
-    fn call_args(&mut self) -> Result<Vec<Expr>> {
+    fn call_args(&mut self) -> Result<Vec<Arg>> {
         self.expect_sym("(", "to start the argument list")?;
-        let mut args = Vec::new();
+        let mut args: Vec<Arg> = Vec::new();
         while !self.at_sym(")") {
-            args.push(self.expr()?);
+            // keyword argument: `name: value`
+            let mut name = None;
+            if let (Tok::Ident(n), Tok::Sym(":")) = (self.peek().clone(), self.peek_at(1).clone()) {
+                if !lexer::is_keyword(&n) {
+                    let (l, c) = self.here();
+                    if args.iter().any(|a| a.name.as_deref() == Some(n.as_str())) {
+                        return Err(LumeError::new(l, c, format!("argument `{}` is given twice", n)));
+                    }
+                    self.advance();
+                    self.advance();
+                    name = Some(n);
+                }
+            }
+            if name.is_none() && args.iter().any(|a| a.name.is_some()) {
+                return Err(self
+                    .err("a positional argument cannot follow a keyword argument")
+                    .with_help("put positional arguments first, or name this one too"));
+            }
+            let value = self.expr()?;
+            args.push(Arg { name, value });
             if !self.eat_sym(",") {
                 break;
             }
@@ -664,10 +810,10 @@ impl Parser {
                     self.advance();
                     let arg = if self.at_sym("(") {
                         let mut a = self.call_args()?;
-                        if a.len() != 1 {
+                        if a.len() != 1 || a[0].name.is_some() {
                             return Err(LumeError::new(line, col, "`puts` takes exactly one value"));
                         }
-                        a.remove(0)
+                        a.remove(0).value
                     } else if matches!(self.peek(), Tok::Newline | Tok::Dedent | Tok::Eof) {
                         Expr::new(ExprKind::Str(vec![StrPiece::Lit(String::new())]), line, col)
                     } else {
@@ -678,8 +824,11 @@ impl Parser {
                 "if" => self.if_expr(),
                 "nil" | "null" | "None" => Err(LumeError::new(line, col, format!("there is no `{}` in Lume", s))
                     .with_help("absence is an Option (`T?`), coming in milestone 5")),
-                "self" => Err(LumeError::new(line, col, "`self` is only meaningful inside a struct method (milestone 2)")),
-                "struct" | "enum" | "match" | "interface" | "extend" | "import" | "test" => {
+                "self" => {
+                    self.advance();
+                    Ok(Expr::new(ExprKind::SelfRef, line, col))
+                }
+                "enum" | "match" | "interface" | "extend" | "import" | "test" => {
                     Err(LumeError::new(line, col, format!("`{}` is not implemented yet in this milestone", s)))
                 }
                 _ if lexer::is_keyword(&s) => {
@@ -700,5 +849,13 @@ impl Parser {
             }
             _ => Err(self.err(format!("expected a value, found {}", self.describe()))),
         }
+    }
+}
+
+fn capitalize(s: &str) -> String {
+    let mut c = s.chars();
+    match c.next() {
+        Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+        None => String::new(),
     }
 }

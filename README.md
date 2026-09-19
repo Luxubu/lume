@@ -20,28 +20,39 @@ program takes about 1 s in Python and 1.4 s in Ruby.
 The language design lives in the [Lume Language Design](https://claude.ai/code/artifact/1872fe63-1816-4b1e-9983-dec2774382fb)
 document. This repository is the compiler and the examples.
 
-## Status: milestone 1 of 7
+## Status: milestone 2 of 7
 
 | # | Milestone | Status |
 | --- | --- | --- |
 | 1 | Lexer with indentation, parser, `fib` transpiles to Rust and runs | done |
-| 2 | `struct` with methods, bare field access, keyword constructors | next |
-| 3 | `_` shorthand, inline blocks, `do` blocks, `for ... where` (`where` done) | |
+| 2 | `struct` with methods, bare field access, keyword constructors | done |
+| 3 | `_` shorthand, inline blocks, `do` blocks, `for ... where` (`where` done) | next |
 | 4 | `enum`, `match` with exhaustiveness errors | |
 | 5 | `T or E`, `T?`, `?` propagation, implicit `Ok` | |
 | 6 | `\|>`, `import rust.<crate>` with automatic type mapping | |
 | 7 | Port the sample programs plus a graph program; settle the memory policy | |
 
-What works today: functions (`def` block and one-liner forms), `Int`/`Float`/
-`Bool`/`Str`/`[T]`, immutable bindings and `var`, `if`/`elif`/`else` as
+What works today: functions (`def` block and one-liner forms, return type
+inferred when omitted), `struct` with fields and methods (fields used bare
+inside methods, `var self` for methods that change them, positional and
+keyword constructors, `p.x = v`, `==` and printing derived), `Int`/`Float`/
+`Bool`/`Str`/`[T]`, immutable bindings and `var` (with `x = x.trim`
+self-transform rebinding), `if`/`elif`/`else` as
 expressions, trailing `if`/`unless`, `while`, `for x in range` with `where`,
 lists, ranges (`1..10` inclusive, `1...10` exclusive), string interpolation,
 `and`/`or`/`not`, `**`, calls, a small set of built-in methods (`len`, `sum`,
 `sort`, `first`, `last`, `upcase`, `trim`, `sqrt`, ...).
 
-Errors are Lume errors, not rustc errors: unknown names (with a "did you mean"),
-assignment to an immutable binding (pointing at where it was declared), wrong
-argument counts, `if` used as a value without `else`, bad indentation, tabs.
+Errors are Lume errors, not rustc errors: unknown names, fields and types (with
+a "did you mean"), assignment to an immutable binding (pointing at where it was
+declared), changing a field from a method without `var self`, calling a
+mutating method on an immutable value, wrong or missing arguments and keywords,
+`if` used as a value without `else`, bad indentation, tabs.
+
+Ownership, for now: `Int`/`Float`/`Bool` pass by value; `Str`, lists and
+structs are passed by reference and cloned only where an owned value is needed
+(returned, stored in a struct or list, bound to a name). No ownership syntax
+appears in Lume code. Milestone 7 measures how far this gets.
 
 ## Build
 

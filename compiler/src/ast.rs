@@ -1,6 +1,7 @@
-//! Abstract syntax tree for the milestone-1 subset of Lume:
-//! functions, bindings, if/elif/else as expressions, while, for..in..where,
-//! calls, method calls, string interpolation, lists and ranges.
+//! Abstract syntax tree for the milestone-2 subset of Lume:
+//! functions, structs with methods, bindings, if/elif/else as expressions,
+//! while, for..in..where, calls with keyword arguments, method calls,
+//! string interpolation, lists and ranges.
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
@@ -11,6 +12,16 @@ pub enum Type {
     Unit,
     List(Box<Type>),
     Named(String),
+    /// Not yet inferred. Never reaches generated Rust.
+    Unknown,
+}
+
+impl Type {
+    /// Types that Rust copies bitwise; everything else is borrowed when
+    /// passed to a function.
+    pub fn is_copy(&self) -> bool {
+        matches!(self, Type::Int | Type::Float | Type::Bool | Type::Unit)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -21,14 +32,39 @@ pub struct Param {
     pub col: usize,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum SelfKind {
+    /// A free function, or a method that only reads fields (`&self`).
+    Read,
+    /// `def f(var self, ...)` — may change fields (`&mut self`).
+    Mutate,
+}
+
 #[derive(Debug, Clone)]
 pub struct FnDef {
     pub name: String,
     pub params: Vec<Param>,
-    pub ret: Type,
+    /// `None` when the signature has no `-> Type`; inferred from the body.
+    pub ret: Option<Type>,
+    pub self_kind: SelfKind,
     pub body: Block,
     pub line: usize,
     pub col: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct StructDef {
+    pub name: String,
+    pub fields: Vec<Param>,
+    pub methods: Vec<FnDef>,
+    pub line: usize,
+    pub col: usize,
+}
+
+#[derive(Debug, Clone)]
+pub enum Item {
+    Fn(FnDef),
+    Struct(StructDef),
 }
 
 #[derive(Debug, Clone, Default)]
@@ -38,14 +74,15 @@ pub struct Block {
 
 #[derive(Debug, Clone)]
 pub enum Stmt {
-    /// `name = value` — a new immutable binding, or an assignment if `name`
-    /// already exists in scope (the code generator decides, and rejects
-    /// assignment to an immutable binding).
+    /// `name = value` — a new immutable binding, an assignment to a `var`,
+    /// a self-transform rebind, or a field assignment inside a method.
     Bind { name: String, value: Expr, line: usize, col: usize },
     /// `var name = value`
     Var { name: String, value: Expr, line: usize, col: usize },
     /// `name += value` and friends
     OpAssign { name: String, op: &'static str, value: Expr, line: usize, col: usize },
+    /// `recv.field = value` / `recv.field += value`
+    FieldAssign { recv: Expr, field: String, op: Option<&'static str>, value: Expr, line: usize, col: usize },
     Expr(Expr),
     Return { value: Option<Expr>, line: usize, col: usize },
     While { cond: Expr, body: Block },
@@ -58,6 +95,12 @@ pub enum Stmt {
 pub enum StrPiece {
     Lit(String),
     Expr(Expr),
+}
+
+#[derive(Debug, Clone)]
+pub struct Arg {
+    pub name: Option<String>,
+    pub value: Expr,
 }
 
 #[derive(Debug, Clone)]
@@ -74,12 +117,16 @@ pub enum ExprKind {
     Bool(bool),
     Str(Vec<StrPiece>),
     Ident(String),
+    SelfRef,
     List(Vec<Expr>),
     Range { lo: Box<Expr>, hi: Box<Expr>, inclusive: bool },
     Unary { op: &'static str, expr: Box<Expr> },
     Binary { op: &'static str, lhs: Box<Expr>, rhs: Box<Expr> },
-    Call { name: String, args: Vec<Expr> },
-    Method { recv: Box<Expr>, name: String, args: Vec<Expr> },
+    /// `name(args)` — a function call or a struct constructor.
+    Call { name: String, args: Vec<Arg> },
+    /// `recv.name` / `recv.name(args)` — a field read or a method call;
+    /// the code generator decides from the receiver's type.
+    Method { recv: Box<Expr>, name: String, args: Vec<Arg> },
     If { branches: Vec<(Expr, Block)>, else_block: Option<Block> },
     Puts(Box<Expr>),
 }

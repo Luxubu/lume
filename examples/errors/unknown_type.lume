@@ -1,0 +1,4 @@
+def greet(u: Usr) -> Str = "hi"
+
+def main:
+  puts "x"

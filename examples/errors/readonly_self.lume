@@ -1,0 +1,8 @@
+struct Counter:
+  n: Int
+  def bump:
+    n += 1
+
+def main:
+  var c = Counter(0)
+  c.bump

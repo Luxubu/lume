@@ -1,0 +1,7 @@
+struct User:
+  name: Str
+  age: Int
+
+def main:
+  u = User(name: "Ana", agee: 31)
+  puts u

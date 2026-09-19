@@ -1,0 +1,65 @@
+# Structs: fields, methods, bare field access, keyword constructors,
+# `var self` for methods that change fields.
+
+struct Point:
+  x: Float
+  y: Float
+
+  def dist(other: Point) -> Float =
+    ((x - other.x) ** 2.0 + (y - other.y) ** 2.0).sqrt
+
+  def origin? = x == 0.0 and y == 0.0
+
+  def move(var self, dx: Float, dy: Float):
+    x += dx
+    y += dy
+
+struct User:
+  name: Str
+  email: Str
+  age: Int
+
+  def adult? = age >= 18
+  def greeting = "Hi, #{name}"
+  def older_than(other: User) = age > other.age
+
+struct Stack:
+  items: [Int]
+
+  def push(var self, n: Int):
+    items.push(n)
+
+  def top = items.last
+  def size = items.len
+
+def describe(u: User) -> Str:
+  kind = if u.adult?: "adult" else: "minor"
+  "#{u.name} <#{u.email}> is #{u.age}, #{kind}"
+
+def main:
+  p = Point(3.0, 4.0)
+  q = Point(x: 0.0, y: 0.0)
+  puts "p = #{p}"
+  puts "distance: #{p.dist(q)}"
+  puts "q at origin? #{q.origin?}"
+
+  var m = Point(1.0, 1.0)
+  m.move(2.0, 3.0)
+  puts "moved to #{m}"
+  m.x = 10.0
+  puts "m.x is now #{m.x}"
+
+  users = [User("Ana", "ana@x.com", 31), User("Bo", "bo@x.com", 16), User(name: "Cy", email: "cy@x.com", age: 45)]
+  for u in users:
+    puts describe(u)
+  for u in users where u.adult?:
+    puts u.greeting
+  ana = users.first
+  puts "Ana older than Cy? #{ana.older_than(users.last)}"
+  puts "equal? #{ana == User("Ana", "ana@x.com", 31)}"
+
+  var s = Stack([])
+  s.push(1)
+  s.push(2)
+  s.push(3)
+  puts "stack #{s} top=#{s.top} size=#{s.size}"
