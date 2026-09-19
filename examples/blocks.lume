@@ -1,0 +1,47 @@
+# Blocks: `_` shorthand, `{ |x| ... }` inline, `do |x|` multi-line.
+# Chains are lazy: filter/map build an iterator, nothing runs until a
+# consumer (to_list, sum, each, for, puts) asks for values.
+
+struct User:
+  name: Str
+  age: Int
+
+  def adult? = age >= 18
+
+def main:
+  nums = [3, 1, 4, 1, 5, 9, 2, 6]
+
+  # _ shorthand: one argument, used once
+  evens = nums.filter(_ % 2 == 0)
+  squares = nums.map { |n| n * n }
+  puts "evens: #{evens}"
+  puts "squares: #{squares}"
+  puts "sum of squares of odds: #{nums.filter(_ % 2 == 1).map { |n| n * n }.sum}"
+  puts "how many > 3: #{nums.count(_ > 3)}"
+  puts "any nine? #{nums.any?(_ == 9)}  all positive? #{nums.all?(_ > 0)}"
+  puts "first three sorted: #{nums.sort.take(3)}"
+
+  users = [User("Ana", 31), User("Bo", 16), User("Cy", 45), User("Di", 12)]
+
+  adults = users.filter(_.adult?)
+  names = adults.map(_.name)
+  puts "adults: #{names}"
+  puts "total age of adults: #{users.filter(_.adult?).sum(_.age)}"
+  puts "oldest first: #{users.sort_by(_.age).reverse.map(_.name)}"
+  puts "average adult age: #{adults.sum(_.age) / adults.len}"
+
+  # inline block when the argument is used twice or needs a name
+  labels = users.map { |u| "#{u.name} (#{u.age})" }
+  puts labels.join(", ")
+
+  # do-block for several statements
+  var greeted = 0
+  users.each do |u|
+    next_word = if u.adult?: "welcome" else: "hi"
+    puts "#{next_word}, #{u.name}"
+    greeted += 1
+  puts "greeted #{greeted}"
+
+  # ranges are lazy too
+  puts "sum 1..100 of multiples of 7: #{(1..100).filter(_ % 7 == 0).sum}"
+  puts (1..5).map(_ * 10).to_list

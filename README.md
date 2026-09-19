@@ -20,14 +20,14 @@ program takes about 1 s in Python and 1.4 s in Ruby.
 The language design lives in the [Lume Language Design](https://claude.ai/code/artifact/1872fe63-1816-4b1e-9983-dec2774382fb)
 document. This repository is the compiler and the examples.
 
-## Status: milestone 2 of 7
+## Status: milestone 3 of 7
 
 | # | Milestone | Status |
 | --- | --- | --- |
 | 1 | Lexer with indentation, parser, `fib` transpiles to Rust and runs | done |
 | 2 | `struct` with methods, bare field access, keyword constructors | done |
-| 3 | `_` shorthand, inline blocks, `do` blocks, `for ... where` (`where` done) | next |
-| 4 | `enum`, `match` with exhaustiveness errors | |
+| 3 | `_` shorthand, inline blocks, `do` blocks, `for ... where` | done |
+| 4 | `enum`, `match` with exhaustiveness errors | next |
 | 5 | `T or E`, `T?`, `?` propagation, implicit `Ok` | |
 | 6 | `\|>`, `import rust.<crate>` with automatic type mapping | |
 | 7 | Port the sample programs plus a graph program; settle the memory policy | |
@@ -37,7 +37,11 @@ inferred when omitted), `struct` with fields and methods (fields used bare
 inside methods, `var self` for methods that change them, positional and
 keyword constructors, `p.x = v`, `==` and printing derived), `Int`/`Float`/
 `Bool`/`Str`/`[T]`, immutable bindings and `var` (with `x = x.trim`
-self-transform rebinding), `if`/`elif`/`else` as
+self-transform rebinding), blocks in three forms (`xs.map(_.name)`,
+`xs.map { |x| x * 2 }`, `xs.each do |x|` with an indented body) on `map`,
+`filter`, `reject`, `each`, `sum`, `count`, `any?`, `all?`, `sort_by`, plus
+`take`, `skip`, `to_list` — chains are lazy and compile to one fused Rust
+iterator, `if`/`elif`/`else` as
 expressions, trailing `if`/`unless`, `while`, `for x in range` with `where`,
 lists, ranges (`1..10` inclusive, `1...10` exclusive), string interpolation,
 `and`/`or`/`not`, `**`, calls, a small set of built-in methods (`len`, `sum`,

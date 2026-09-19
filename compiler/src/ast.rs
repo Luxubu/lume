@@ -12,6 +12,10 @@ pub enum Type {
     Unit,
     List(Box<Type>),
     Named(String),
+    /// A lazy chain (`xs.filter(...).map(...)`) not yet collected. The bool
+    /// says whether items are references into the source list. Internal:
+    /// becomes `[T]` wherever a value is needed, never reaches a signature.
+    Iter(Box<Type>, bool),
     /// Not yet inferred. Never reaches generated Rust.
     Unknown,
 }
@@ -21,6 +25,14 @@ impl Type {
     /// passed to a function.
     pub fn is_copy(&self) -> bool {
         matches!(self, Type::Int | Type::Float | Type::Bool | Type::Unit)
+    }
+
+    /// The type a value of this type has once materialised.
+    pub fn materialized(&self) -> Type {
+        match self {
+            Type::Iter(e, _) => Type::List(e.clone()),
+            other => other.clone(),
+        }
     }
 }
 
@@ -129,6 +141,11 @@ pub enum ExprKind {
     Method { recv: Box<Expr>, name: String, args: Vec<Arg> },
     If { branches: Vec<(Expr, Block)>, else_block: Option<Block> },
     Puts(Box<Expr>),
+    /// `_` inside a method argument; the parser turns the argument into a
+    /// one-parameter `Lambda` whose parameter is named `_`.
+    Placeholder,
+    /// `{ |x| expr }`, `do |x| ... end-of-block`, or a wrapped `_` argument.
+    Lambda { params: Vec<String>, body: Block },
 }
 
 impl Expr {

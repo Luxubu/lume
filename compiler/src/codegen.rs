@@ -92,6 +92,7 @@ pub struct Gen {
     current_ret: Type,
     current_fn: String,
     loop_depth: usize,
+    in_block: bool,
 }
 
 pub fn generate(program: &[Item]) -> Result<String> {
@@ -106,12 +107,16 @@ pub fn generate(program: &[Item]) -> Result<String> {
         current_ret: Type::Unit,
         current_fn: String::new(),
         loop_depth: 0,
+        in_block: false,
     };
     g.program(program)?;
     Ok(g.out)
 }
 
 fn rust_name(name: &str) -> String {
+    if name == "_" {
+        return "lume_it".into();
+    }
     let base = name.replace('?', "_q");
     if RUST_RESERVED.contains(&base.as_str()) {
         if base == "self" || base == "Self" || base == "crate" || base == "super" {
@@ -133,6 +138,7 @@ pub fn rust_type(t: &Type) -> String {
         Type::Unit => "()".into(),
         Type::List(inner) => format!("Vec<{}>", rust_type(inner)),
         Type::Named(n) => n.clone(),
+        Type::Iter(inner, _) => format!("Vec<{}>", rust_type(inner)),
         Type::Unknown => "_".into(),
     }
 }
@@ -146,6 +152,7 @@ pub fn type_name(t: &Type) -> String {
         Type::Unit => "()".into(),
         Type::List(i) => format!("[{}]", type_name(i)),
         Type::Named(n) => n.clone(),
+        Type::Iter(i, _) => format!("[{}]", type_name(i)),
         Type::Unknown => "?".into(),
     }
 }
@@ -413,7 +420,7 @@ impl Gen {
             let last = i + 1 == n;
             match s {
                 Stmt::Bind { name, value, line, .. } | Stmt::Var { name, value, line, .. } => {
-                    let vt = self.ty_of(value);
+                    let vt = self.ty_of(value).materialized();
                     let mutable = matches!(s, Stmt::Var { .. });
                     if self.lookup(name).is_none() || mutable {
                         self.declare(name, mutable, false, vt, *line);
@@ -433,7 +440,7 @@ impl Gen {
                             }
                             if else_block.is_none() { Type::Unit } else { bt }
                         }
-                        _ => self.ty_of(e),
+                        _ => self.ty_of(e).materialized(),
                     };
                 }
                 _ => {
@@ -449,7 +456,7 @@ impl Gen {
 
     // ----- type inference ---------------------------------------------------
 
-    fn ty_of(&self, e: &Expr) -> Type {
+    fn ty_of(&mut self, e: &Expr) -> Type {
         match &e.kind {
             ExprKind::Int(_) => Type::Int,
             ExprKind::Float(_) => Type::Float,
@@ -476,7 +483,7 @@ impl Gen {
                 }
                 Type::List(Box::new(t))
             }
-            ExprKind::Range { .. } => Type::List(Box::new(Type::Int)),
+            ExprKind::Range { .. } => Type::Iter(Box::new(Type::Int), false),
             ExprKind::Unary { op, expr } => match *op {
                 "not" => Type::Bool,
                 _ => self.ty_of(expr),
@@ -497,8 +504,13 @@ impl Gen {
                     Type::Unknown
                 }
             }
-            ExprKind::Method { recv, name, .. } => {
+            ExprKind::Method { recv, name, args } => {
                 let rt = self.ty_of(recv);
+                if let Some(Arg { value: lam, .. }) = args.last() {
+                    if let ExprKind::Lambda { params, body } = &lam.kind {
+                        return self.block_method_type(&rt, name, params, body);
+                    }
+                }
                 if let Type::Named(sn) = &rt {
                     if let Some(info) = self.structs.get(sn) {
                         if let Some((_, ft)) = info.fields.iter().find(|(n, _)| n == name) {
@@ -527,6 +539,48 @@ impl Gen {
                 Type::Unknown
             }
             ExprKind::Puts(_) => Type::Unit,
+            ExprKind::Placeholder => Type::Unknown,
+            ExprKind::Lambda { .. } => Type::Unknown,
+        }
+    }
+
+    /// Element type and by-reference flag of a list, range or lazy chain.
+    fn elem_of(&self, t: &Type) -> Option<(Type, bool)> {
+        match t {
+            Type::List(e) => Some(((**e).clone(), !e.is_copy())),
+            Type::Iter(e, by_ref) => Some(((**e).clone(), *by_ref)),
+            _ => None,
+        }
+    }
+
+    /// Type of the tail expression of a block body with `params` bound to `elem`.
+    fn lambda_body_type(&mut self, params: &[String], elem: &Type, by_ref: bool, body: &Block) -> Type {
+        self.push_scope();
+        if let Some(p) = params.first() {
+            self.declare(p, false, by_ref && !elem.is_copy(), elem.clone(), 0);
+        }
+        let t = self.tail_type(body);
+        self.pop_scope();
+        t
+    }
+
+    fn block_method_type(&mut self, recv: &Type, name: &str, params: &[String], body: &Block) -> Type {
+        let (elem, by_ref) = match self.elem_of(recv) {
+            Some(x) => x,
+            None => return Type::Unknown,
+        };
+        match name {
+            "map" => {
+                let bt = self.lambda_body_type(params, &elem, by_ref, body).materialized();
+                Type::Iter(Box::new(bt), false)
+            }
+            "filter" | "reject" => Type::Iter(Box::new(elem), by_ref),
+            "each" => Type::Unit,
+            "sum" => self.lambda_body_type(params, &elem, by_ref, body),
+            "count" => Type::Int,
+            "any?" | "all?" => Type::Bool,
+            "sort_by" => Type::List(Box::new(elem)),
+            _ => Type::Unknown,
         }
     }
 
@@ -643,7 +697,7 @@ impl Gen {
     fn stmt(&mut self, s: &Stmt, is_tail: bool) -> Result<()> {
         match s {
             Stmt::Var { name, value, line, col } => {
-                let vt = self.ty_of(value);
+                let vt = self.ty_of(value).materialized();
                 let v = self.expr_owned(value)?;
                 if self.scopes.last().unwrap().contains_key(name) {
                     return Err(LumeError::new(*line, *col, format!("`{}` is already declared in this block", name))
@@ -656,7 +710,7 @@ impl Gen {
                 }
             }
             Stmt::Bind { name, value, line, col } => {
-                let vt = self.ty_of(value);
+                let vt = self.ty_of(value).materialized();
                 match self.lookup(name).cloned() {
                     Some(b) if b.mutable => {
                         let v = self.expr_owned(value)?;
@@ -801,7 +855,7 @@ impl Gen {
             Stmt::For { var, iter, filter, body, line, .. } => {
                 let it_ty = self.ty_of(iter);
                 let (it, elem_ty, borrowed) = match (&iter.kind, &it_ty) {
-                    (ExprKind::Range { .. }, _) => (self.expr(iter)?, Type::Int, false),
+                    (_, Type::Iter(elem, by_ref)) => (self.expr(iter)?, (**elem).clone(), *by_ref && !elem.is_copy()),
                     (_, Type::List(elem)) if elem.is_copy() || **elem == Type::Unknown => {
                         (format!("({}).iter().cloned()", self.expr(iter)?), (**elem).clone(), false)
                     }
@@ -829,13 +883,23 @@ impl Gen {
             }
             Stmt::Break { line, col } => {
                 if self.loop_depth == 0 {
-                    return Err(LumeError::new(*line, *col, "`break` outside of a loop"));
+                    let e = LumeError::new(*line, *col, "`break` outside of a loop");
+                    return Err(if self.in_block {
+                        e.with_help("a block runs once per item and cannot `break`; use a `for` loop, or `filter`/`take` before `each`")
+                    } else {
+                        e
+                    });
                 }
                 self.line("break;");
             }
             Stmt::Next { line, col } => {
                 if self.loop_depth == 0 {
-                    return Err(LumeError::new(*line, *col, "`next` outside of a loop"));
+                    let e = LumeError::new(*line, *col, "`next` outside of a loop");
+                    return Err(if self.in_block {
+                        e.with_help("a block runs once per item and cannot `next`; use a `for` loop, or `filter`/`take` before `each`")
+                    } else {
+                        e
+                    });
                 }
                 self.line("continue;");
             }
@@ -891,7 +955,7 @@ impl Gen {
 
     /// True when the expression names a place we cannot move out of: a
     /// borrowed parameter, `self`, or a field reached through either.
-    fn is_borrowed_place(&self, e: &Expr) -> bool {
+    fn is_borrowed_place(&mut self, e: &Expr) -> bool {
         match &e.kind {
             ExprKind::Ident(n) => match self.lookup(n) {
                 Some(b) => b.borrowed,
@@ -914,8 +978,13 @@ impl Gen {
     /// return, constructor argument, list item). Places that are borrowed
     /// get cloned; owned locals move.
     fn expr_owned(&mut self, e: &Expr) -> Result<String> {
-        let s = self.expr(e)?;
         let t = self.ty_of(e);
+        if let Type::Iter(_, by_ref) = &t {
+            let by_ref = *by_ref;
+            let s = self.expr(e)?;
+            return Ok(self.collect_iter(&s, by_ref));
+        }
+        let s = self.expr(e)?;
         if !t.is_copy() && self.is_borrowed_place(e) {
             Ok(format!("{}.clone()", s))
         } else {
@@ -926,6 +995,11 @@ impl Gen {
     /// An argument for a parameter of type `t`: Copy types by value,
     /// everything else by reference.
     fn expr_arg(&mut self, e: &Expr, t: &Type) -> Result<String> {
+        if let Type::Iter(_, by_ref) = self.ty_of(e) {
+            let s = self.expr(e)?;
+            let c = self.collect_iter(&s, by_ref);
+            return Ok(format!("&{}", c));
+        }
         let s = self.expr(e)?;
         if t.is_copy() {
             return Ok(s);
@@ -940,6 +1014,149 @@ impl Gen {
         } else {
             Ok(format!("&{}", s))
         }
+    }
+
+    /// Materialise a lazy chain into a Vec of owned values.
+    fn collect_iter(&self, it: &str, by_ref: bool) -> String {
+        if by_ref {
+            format!("({}).cloned().collect::<Vec<_>>()", it)
+        } else {
+            format!("({}).collect::<Vec<_>>()", it)
+        }
+    }
+
+    /// An expression wherever a plain value is needed (printing, comparing,
+    /// interpolating): lazy chains are collected, everything else passes.
+    fn expr_val(&mut self, e: &Expr) -> Result<String> {
+        if let Type::Iter(_, by_ref) = self.ty_of(e) {
+            let s = self.expr(e)?;
+            return Ok(self.collect_iter(&s, by_ref));
+        }
+        self.expr(e)
+    }
+
+    /// The iterator a list, range or chain yields: (rust, elem type, by_ref).
+    fn iter_base(&mut self, recv: &Expr, e: &Expr) -> Result<(String, Type, bool)> {
+        let rt = self.ty_of(recv);
+        let r = self.expr(recv)?;
+        match rt {
+            Type::List(elem) => {
+                if elem.is_copy() {
+                    Ok((format!("({}).iter().cloned()", r), *elem, false))
+                } else {
+                    Ok((format!("({}).iter()", r), *elem, true))
+                }
+            }
+            Type::Iter(elem, by_ref) => Ok((r, *elem, by_ref)),
+            Type::Unknown => Err(LumeError::new(e.line, e.col, "cannot tell what kind of value this block is applied to")
+                .with_help("add a type to the binding or parameter it comes from")),
+            other => Err(LumeError::new(e.line, e.col, format!("`{}` values cannot take a block; only lists and ranges can", type_name(&other)))),
+        }
+    }
+
+    /// Emits a Rust closure for a Lume block whose single parameter has type
+    /// `elem`. `pattern_ref` is set for predicates (Rust passes `&Item`).
+    fn gen_lambda(&mut self, params: &[String], body: &Block, elem: &Type, by_ref: bool, pattern_ref: bool, want_value: bool, at: &Expr) -> Result<String> {
+        if params.len() != 1 {
+            return Err(LumeError::new(at.line, at.col, format!("this block takes one argument, but {} were named", params.len()))
+                .with_help("blocks with two arguments arrive with tuples and maps in a later milestone"));
+        }
+        let p = &params[0];
+        // How the closure sees the item:
+        //  - predicates get &Item: Copy items are destructured `|&x|`, others stay refs
+        //  - transforms get Item: refs when the chain is by_ref, owned otherwise
+        let (pattern, borrowed) = if pattern_ref {
+            if elem.is_copy() { (format!("&{}", rust_name(p)), false) } else { (rust_name(p), true) }
+        } else {
+            (rust_name(p), by_ref && !elem.is_copy())
+        };
+        self.push_scope();
+        self.declare(p, false, borrowed, elem.clone(), at.line);
+        let saved_loop = self.loop_depth;
+        let saved_in_block = self.in_block;
+        self.loop_depth = 0;
+        self.in_block = true;
+        let saved_out = std::mem::take(&mut self.out);
+        let base = self.indent;
+        // Single-expression body: emit inline.
+        let inline = body.stmts.len() == 1 && matches!(body.stmts[0], Stmt::Expr(ref x) if !matches!(x.kind, ExprKind::If { .. }));
+        let text = if inline {
+            if let Stmt::Expr(x) = &body.stmts[0] {
+                let v = if want_value { self.expr_owned(x)? } else { self.expr_stmt(x)? };
+                format!("|{}| {}", pattern, v)
+            } else {
+                unreachable!()
+            }
+        } else {
+            self.out.push_str(&format!("|{}| {{\n", pattern));
+            self.nested_block(body, want_value)?;
+            self.out.push_str(&"    ".repeat(base));
+            self.out.push('}');
+            std::mem::take(&mut self.out)
+        };
+        self.out = saved_out;
+        self.loop_depth = saved_loop;
+        self.in_block = saved_in_block;
+        self.pop_scope();
+        Ok(text)
+    }
+
+    /// Collection methods that take a block.
+    fn block_method(&mut self, recv: &Expr, name: &str, args: &[Arg], lam: &Expr, e: &Expr) -> Result<String> {
+        let (params, body) = match &lam.kind {
+            ExprKind::Lambda { params, body } => (params, body),
+            _ => unreachable!(),
+        };
+        if args.len() > 1 {
+            return Err(LumeError::new(e.line, e.col, format!("`{}` takes only a block", name)));
+        }
+        let (it, elem, by_ref) = self.iter_base(recv, e)?;
+        Ok(match name {
+            "map" => {
+                let f = self.gen_lambda(params, body, &elem, by_ref, false, true, lam)?;
+                format!("{}.map({})", it, f)
+            }
+            "filter" | "reject" => {
+                let f = self.gen_lambda(params, body, &elem, by_ref, true, true, lam)?;
+                let f = if name == "reject" { format!("|x| !({})(x)", f) } else { f };
+                format!("{}.filter({})", it, f)
+            }
+            "each" => {
+                let f = self.gen_lambda(params, body, &elem, by_ref, false, false, lam)?;
+                format!("{}.for_each({})", it, f)
+            }
+            "sum" => {
+                let bt = self.lambda_body_type(params, &elem, by_ref, body);
+                let f = self.gen_lambda(params, body, &elem, by_ref, false, true, lam)?;
+                let rt = match bt {
+                    Type::Float => "f64",
+                    _ => "i64",
+                };
+                format!("{}.map({}).sum::<{}>()", it, f, rt)
+            }
+            "count" => {
+                let f = self.gen_lambda(params, body, &elem, by_ref, true, true, lam)?;
+                format!("({}.filter({}).count() as i64)", it, f)
+            }
+            "any?" | "all?" => {
+                let f = self.gen_lambda(params, body, &elem, by_ref, false, true, lam)?;
+                format!("{}.{}({})", it, if name == "any?" { "any" } else { "all" }, f)
+            }
+            "sort_by" => {
+                let f = self.gen_lambda(params, body, &elem, by_ref, false, true, lam)?;
+                let owned = self.collect_iter(&it, by_ref);
+                format!(
+                    "{{ let mut v = {}; let key = {}; v.sort_by(|a, b| key(a).partial_cmp(&key(b)).unwrap()); v }}",
+                    owned,
+                    // the key closure receives &Item after collecting owned values
+                    f.replacen(&format!("|{}|", rust_name(&params[0])), &format!("|{}: &{}|", rust_name(&params[0]), rust_type(&elem)), 1)
+                )
+            }
+            _ => {
+                return Err(LumeError::new(e.line, e.col, format!("`{}` does not take a block", name))
+                    .with_help("block methods are: map, filter, reject, each, sum, count, any?, all?, sort_by"));
+            }
+        })
     }
 
     fn if_chain(&mut self, branches: &[(Expr, Block)], else_block: Option<&Block>, want_value: bool) -> Result<String> {
@@ -1042,7 +1259,7 @@ impl Gen {
                             StrPiece::Lit(s) => fmt.push_str(&escape_rust_str(s, true)),
                             StrPiece::Expr(x) => {
                                 fmt.push_str("{}");
-                                args.push(format!("({}).lume_str()", self.expr(x)?));
+                                args.push(format!("({}).lume_str()", self.expr_val(x)?));
                             }
                         }
                     }
@@ -1086,8 +1303,8 @@ impl Gen {
                 }
             }
             ExprKind::Binary { op, lhs, rhs } => {
-                let mut l = self.expr(lhs)?;
-                let mut r = self.expr(rhs)?;
+                let mut l = self.expr_val(lhs)?;
+                let mut r = self.expr_val(rhs)?;
                 let lt = self.ty_of(lhs);
                 // Borrowed parameters compared or combined with owned values
                 // need a deref so the types line up on both sides.
@@ -1136,7 +1353,49 @@ impl Gen {
                 }
             }
             ExprKind::Method { recv, name, args } => {
+                if let Some(last) = args.last() {
+                    if matches!(last.value.kind, ExprKind::Lambda { .. }) {
+                        return self.block_method(recv, name, &args[..args.len() - 1], &last.value, e);
+                    }
+                }
                 let rt = self.ty_of(recv);
+                // Lazy chains: a few methods stay lazy, the rest collect first.
+                if let Type::Iter(elem, by_ref) = &rt {
+                    let r = self.expr(recv)?;
+                    match name.as_str() {
+                        "take" | "skip" if args.len() == 1 => {
+                            let n = self.expr(&args[0].value)?;
+                            return Ok(format!("{}.{}(({}) as usize)", r, name, n));
+                        }
+                        "len" if args.is_empty() => return Ok(format!("({}.count() as i64)", r)),
+                        "to_list" if args.is_empty() => return Ok(self.collect_iter(&r, *by_ref)),
+                        "sum" if args.is_empty() => {
+                            let t = if **elem == Type::Float { "f64" } else { "i64" };
+                            let r = if *by_ref { format!("{}.cloned()", r) } else { r };
+                            return Ok(format!("{}.sum::<{}>()", r, t));
+                        }
+                        "max" | "min" if args.is_empty() && elem.is_copy() => {
+                            return Ok(format!("{}.{}().unwrap()", r, name));
+                        }
+                        "first" if args.is_empty() => {
+                            let r = if *by_ref { format!("{}.cloned()", r) } else { r };
+                            return Ok(format!("{}.next().unwrap()", r));
+                        }
+                        "empty?" | "any?" if args.is_empty() => {
+                            let neg = if name == "empty?" { "" } else { "!" };
+                            return Ok(format!("({}{}.next().is_none())", neg, r));
+                        }
+                        _ => {
+                            let collected = self.collect_iter(&r, *by_ref);
+                            let mut parts = Vec::new();
+                            for a in args {
+                                parts.push(self.expr_val(&a.value)?);
+                            }
+                            let _ = elem;
+                            return self.method(&collected, name, &parts, e);
+                        }
+                    }
+                }
                 let r = self.expr(recv)?;
                 if let Type::Named(sname) = &rt {
                     let info = self.structs[sname].clone();
@@ -1168,7 +1427,16 @@ impl Gen {
                 }
                 let mut parts = Vec::new();
                 for a in args {
-                    parts.push(self.expr(&a.value)?);
+                    parts.push(self.expr_val(&a.value)?);
+                }
+                if matches!(name.as_str(), "take" | "skip") && parts.len() == 1 {
+                    if let Type::List(elem) = &rt {
+                        let base = if elem.is_copy() { format!("({}).iter().cloned()", r) } else { format!("({}).iter()", r) };
+                        return Ok(format!("{}.{}(({}) as usize)", base, name, parts[0]));
+                    }
+                }
+                if name == "to_list" && parts.is_empty() {
+                    return Ok(format!("({}).clone()", r));
                 }
                 self.method(&r, name, &parts, e)?
             }
@@ -1180,8 +1448,16 @@ impl Gen {
                 self.if_chain(branches, else_block.as_ref(), true)?
             }
             ExprKind::Puts(arg) => {
-                let a = self.expr(arg)?;
+                let a = self.expr_val(arg)?;
                 format!("println!(\"{{}}\", ({}).lume_str())", a)
+            }
+            ExprKind::Placeholder => {
+                return Err(LumeError::new(e.line, e.col, "`_` can only be used inside a method argument")
+                    .with_help("write `xs.map(_.name)`; elsewhere give the value a name"));
+            }
+            ExprKind::Lambda { .. } => {
+                return Err(LumeError::new(e.line, e.col, "a block must follow a method call")
+                    .with_help("write `xs.each do |x|` or `xs.map { |x| ... }`"));
             }
         })
     }
@@ -1276,24 +1552,30 @@ fn is_builtin_name(name: &str) -> bool {
         "len" | "empty?" | "any?" | "to_str" | "to_s" | "to_float" | "to_int" | "upcase" | "downcase" | "trim"
             | "sqrt" | "abs" | "floor" | "ceil" | "round" | "sum" | "push" | "pop" | "first" | "last"
             | "contains?" | "reverse" | "sort" | "max" | "min" | "lines" | "split" | "join"
-            | "starts_with?" | "ends_with?" | "chars"
+            | "starts_with?" | "ends_with?" | "chars" | "take" | "skip" | "to_list"
     )
 }
 
 /// Result type of a built-in method on a value of type `recv`.
 fn builtin_method_type(recv: &Type, name: &str) -> Type {
     let elem = match recv {
-        Type::List(e) => Some((**e).clone()),
+        Type::List(e) | Type::Iter(e, _) => Some((**e).clone()),
         _ => None,
     };
     match name {
+        "take" | "skip" => match recv {
+            Type::List(e) => Type::Iter(e.clone(), !e.is_copy()),
+            Type::Iter(..) => recv.clone(),
+            _ => Type::Unknown,
+        },
+        "to_list" => recv.materialized(),
         "len" | "to_int" => Type::Int,
         "empty?" | "any?" | "contains?" | "starts_with?" | "ends_with?" => Type::Bool,
         "to_str" | "to_s" | "upcase" | "downcase" | "trim" | "join" => Type::Str,
         "to_float" | "sqrt" | "floor" | "ceil" | "round" => Type::Float,
         "abs" => recv.clone(),
         "sum" | "first" | "last" | "max" | "min" | "pop" => elem.unwrap_or(Type::Unknown),
-        "sort" | "reverse" => recv.clone(),
+        "sort" | "reverse" => recv.materialized(),
         "push" => Type::Unit,
         "lines" | "split" | "chars" => Type::List(Box::new(Type::Str)),
         _ => Type::Unknown,

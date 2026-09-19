@@ -36,6 +36,8 @@ pub struct Token {
     pub tok: Tok,
     pub line: usize,
     pub col: usize,
+    /// True when whitespace (or the line start) precedes this token.
+    pub space_before: bool,
 }
 
 pub const KEYWORDS: &[&str] = &[
@@ -66,8 +68,10 @@ pub fn lex(src: &str) -> Result<Vec<Token>> {
     let mut at_line_start = true;
     let mut depth: i32 = 0;
 
-    let push = |toks: &mut Vec<Token>, tok: Tok, line: usize, col: usize| {
-        toks.push(Token { tok, line, col });
+    let mut space_before = true;
+    let push = |toks: &mut Vec<Token>, tok: Tok, line: usize, col: usize, space_before: &mut bool| {
+        toks.push(Token { tok, line, col, space_before: *space_before });
+        *space_before = false;
     };
 
     while i < n {
@@ -102,11 +106,11 @@ pub fn lex(src: &str) -> Result<Vec<Token>> {
             let top = *indent_stack.last().unwrap();
             if spaces > top {
                 indent_stack.push(spaces);
-                push(&mut toks, Tok::Indent, line, 1);
+                push(&mut toks, Tok::Indent, line, 1, &mut space_before);
             } else if spaces < top {
                 while spaces < *indent_stack.last().unwrap() {
                     indent_stack.pop();
-                    push(&mut toks, Tok::Dedent, line, 1);
+                    push(&mut toks, Tok::Dedent, line, 1, &mut space_before);
                 }
                 if spaces != *indent_stack.last().unwrap() {
                     return Err(LumeError::new(
@@ -120,6 +124,7 @@ pub fn lex(src: &str) -> Result<Vec<Token>> {
             i = j;
             col = spaces + 1;
             at_line_start = false;
+            space_before = true;
         }
 
         let c = chars[i];
@@ -131,7 +136,7 @@ pub fn lex(src: &str) -> Result<Vec<Token>> {
                         Some(Tok::Newline) | Some(Tok::Indent) | None
                     );
                     if !last_is_break {
-                        push(&mut toks, Tok::Newline, line, col);
+                        push(&mut toks, Tok::Newline, line, col, &mut space_before);
                     }
                     at_line_start = true;
                 }
@@ -142,6 +147,7 @@ pub fn lex(src: &str) -> Result<Vec<Token>> {
             ' ' | '\r' => {
                 i += 1;
                 col += 1;
+                space_before = true;
             }
             '#' => {
                 while i < n && chars[i] != '\n' {
@@ -182,7 +188,7 @@ pub fn lex(src: &str) -> Result<Vec<Token>> {
                             .with_help("Int is 64-bit; the largest value is 9223372036854775807")
                     })?)
                 };
-                push(&mut toks, tok, line, start_col);
+                push(&mut toks, tok, line, start_col, &mut space_before);
             }
             '"' => {
                 let start_col = col;
@@ -288,7 +294,7 @@ pub fn lex(src: &str) -> Result<Vec<Token>> {
                 if !lit.is_empty() || parts.is_empty() {
                     parts.push(StrPart::Lit(lit));
                 }
-                push(&mut toks, Tok::Str(parts), line, start_col);
+                push(&mut toks, Tok::Str(parts), line, start_col, &mut space_before);
             }
             c if c.is_alphabetic() || c == '_' => {
                 let start_col = col;
@@ -304,7 +310,7 @@ pub fn lex(src: &str) -> Result<Vec<Token>> {
                     i += 1;
                     col += 1;
                 }
-                push(&mut toks, Tok::Ident(s), line, start_col);
+                push(&mut toks, Tok::Ident(s), line, start_col, &mut space_before);
             }
             _ => {
                 let mut matched = None;
@@ -322,7 +328,7 @@ pub fn lex(src: &str) -> Result<Vec<Token>> {
                             ")" | "]" | "}" => depth -= 1,
                             _ => {}
                         }
-                        push(&mut toks, Tok::Sym(sym), line, col);
+                        push(&mut toks, Tok::Sym(sym), line, col, &mut space_before);
                         i += sym.len();
                         col += sym.len();
                     }
@@ -343,12 +349,12 @@ pub fn lex(src: &str) -> Result<Vec<Token>> {
         Some(Tok::Newline) | Some(Tok::Dedent) | None
     );
     if !last_is_break {
-        push(&mut toks, Tok::Newline, line, col);
+        push(&mut toks, Tok::Newline, line, col, &mut space_before);
     }
     while indent_stack.len() > 1 {
         indent_stack.pop();
-        push(&mut toks, Tok::Dedent, line, 1);
+        push(&mut toks, Tok::Dedent, line, 1, &mut space_before);
     }
-    push(&mut toks, Tok::Eof, line, col);
+    push(&mut toks, Tok::Eof, line, col, &mut space_before);
     Ok(toks)
 }

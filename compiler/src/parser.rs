@@ -693,7 +693,14 @@ impl Parser {
                             .err(format!("expected a method name after `.`, found {}", self.describe())))
                     }
                 };
-                let args = if self.at_sym("(") { self.call_args()? } else { Vec::new() };
+                let mut args = if self.at_sym("(") { self.call_args()? } else { Vec::new() };
+                if let Some(block) = self.trailing_block()? {
+                    if args.iter().any(|a| matches!(a.value.kind, ExprKind::Lambda { .. })) {
+                        return Err(LumeError::new(block.line, block.col, format!("`{}` is given two blocks", name))
+                            .with_help("use either `_` in the argument or a `{ |x| }` / `do |x|` block, not both"));
+                    }
+                    args.push(Arg { name: None, value: block });
+                }
                 e = Expr::new(ExprKind::Method { recv: Box::new(e), name, args }, line, col);
                 continue;
             }
@@ -733,6 +740,7 @@ impl Parser {
                     .with_help("put positional arguments first, or name this one too"));
             }
             let value = self.expr()?;
+            let value = self.wrap_placeholder(value)?;
             args.push(Arg { name, value });
             if !self.eat_sym(",") {
                 break;
@@ -743,6 +751,77 @@ impl Parser {
                 .err(format!("expected `,` or `)` in the argument list, found {}", self.describe())));
         }
         Ok(args)
+    }
+
+    /// An argument that mentions `_` becomes a one-parameter lambda. `_` may
+    /// appear exactly once (principle: one obvious way; two uses get a name).
+    fn wrap_placeholder(&self, value: Expr) -> Result<Expr> {
+        let n = count_placeholders(&value);
+        match n {
+            0 => Ok(value),
+            1 => {
+                let (l, c) = (value.line, value.col);
+                let mut value = value;
+                replace_placeholders(&mut value);
+                Ok(Expr::new(
+                    ExprKind::Lambda { params: vec!["_".into()], body: Block { stmts: vec![Stmt::Expr(value)] } },
+                    l,
+                    c,
+                ))
+            }
+            _ => Err(LumeError::new(value.line, value.col, "`_` may appear only once in a shorthand block")
+                .with_help("name the argument instead: `{ |x| x.a + x.b }`")),
+        }
+    }
+
+    /// `{ |a, b| expr }` on the same line, or `do |a, b|` followed by an
+    /// indented body. Returns None when no block follows.
+    fn trailing_block(&mut self) -> Result<Option<Expr>> {
+        let (line, col) = self.here();
+        if self.at_sym("{") {
+            self.advance();
+            let params = self.block_params()?;
+            let body = self.expr()?;
+            if self.at_sym(";") || matches!(self.peek(), Tok::Newline) {
+                return Err(self
+                    .err("an inline block holds a single expression")
+                    .with_help("for several statements use `do |x|` and an indented body"));
+            }
+            if !self.eat_sym("}") {
+                return Err(self.err(format!("expected `}}` to close the block, found {}", self.describe())));
+            }
+            return Ok(Some(Expr::new(ExprKind::Lambda { params, body: Block { stmts: vec![Stmt::Expr(body)] } }, line, col)));
+        }
+        if self.at_kw("do") {
+            self.advance();
+            let params = self.block_params()?;
+            let body = self.block()?;
+            return Ok(Some(Expr::new(ExprKind::Lambda { params, body }, line, col)));
+        }
+        Ok(None)
+    }
+
+    fn block_params(&mut self) -> Result<Vec<String>> {
+        if !self.eat_sym("|") {
+            return Err(self
+                .err(format!("expected `|x|` naming the block's argument, found {}", self.describe()))
+                .with_help("write `{ |x| ... }` or `do |x|`; use `_` only in a bare argument like `.map(_.name)`"));
+        }
+        let mut params = Vec::new();
+        loop {
+            let (p, l, c) = self.ident("a block parameter")?;
+            if params.contains(&p) {
+                return Err(LumeError::new(l, c, format!("block parameter `{}` is listed twice", p)));
+            }
+            params.push(p);
+            if !self.eat_sym(",") {
+                break;
+            }
+        }
+        if !self.eat_sym("|") {
+            return Err(self.err(format!("expected `|` after the block parameters, found {}", self.describe())));
+        }
+        Ok(params)
     }
 
     fn primary(&mut self) -> Result<Expr> {
@@ -796,7 +875,13 @@ impl Parser {
                 self.expect_sym("]", "to close the list")?;
                 Ok(Expr::new(ExprKind::List(items), line, col))
             }
-            Tok::Sym("{") => Err(self.err("blocks `{ |x| ... }` and maps are not implemented yet (milestone 3)")),
+            Tok::Sym("{") => Err(self
+                .err("a `{ |x| ... }` block goes after a method call, like `xs.map { |x| x * 2 }`")
+                .with_help("maps `{k: v}` are not implemented yet")),
+            Tok::Ident(s) if s == "_" => {
+                self.advance();
+                Ok(Expr::new(ExprKind::Placeholder, line, col))
+            }
             Tok::Ident(s) => match s.as_str() {
                 "true" => {
                     self.advance();
@@ -808,7 +893,8 @@ impl Parser {
                 }
                 "puts" => {
                     self.advance();
-                    let arg = if self.at_sym("(") {
+                    let paren_call = self.at_sym("(") && !self.toks[self.pos].space_before;
+                    let arg = if paren_call {
                         let mut a = self.call_args()?;
                         if a.len() != 1 || a[0].name.is_some() {
                             return Err(LumeError::new(line, col, "`puts` takes exactly one value"));
@@ -857,5 +943,98 @@ fn capitalize(s: &str) -> String {
     match c.next() {
         Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
         None => String::new(),
+    }
+}
+
+/// Number of `_` placeholders in an expression, not descending into nested
+/// lambdas (those own their own `_`).
+fn count_placeholders(e: &Expr) -> usize {
+    fn walk_block(b: &Block) -> usize {
+        b.stmts
+            .iter()
+            .map(|s| match s {
+                Stmt::Expr(e) => count_placeholders(e),
+                Stmt::Bind { value, .. } | Stmt::Var { value, .. } | Stmt::OpAssign { value, .. } => count_placeholders(value),
+                Stmt::Return { value: Some(e), .. } => count_placeholders(e),
+                _ => 0,
+            })
+            .sum()
+    }
+    match &e.kind {
+        ExprKind::Placeholder => 1,
+        ExprKind::Lambda { .. } => 0,
+        ExprKind::Int(_) | ExprKind::Float(_) | ExprKind::Bool(_) | ExprKind::Ident(_) | ExprKind::SelfRef => 0,
+        ExprKind::Str(pieces) => pieces
+            .iter()
+            .map(|p| match p {
+                StrPiece::Expr(e) => count_placeholders(e),
+                _ => 0,
+            })
+            .sum(),
+        ExprKind::List(items) => items.iter().map(count_placeholders).sum(),
+        ExprKind::Range { lo, hi, .. } => count_placeholders(lo) + count_placeholders(hi),
+        ExprKind::Unary { expr, .. } => count_placeholders(expr),
+        ExprKind::Binary { lhs, rhs, .. } => count_placeholders(lhs) + count_placeholders(rhs),
+        ExprKind::Call { args, .. } => args.iter().map(|a| count_placeholders(&a.value)).sum(),
+        ExprKind::Method { recv, args, .. } => {
+            count_placeholders(recv) + args.iter().map(|a| count_placeholders(&a.value)).sum::<usize>()
+        }
+        ExprKind::If { branches, else_block } => {
+            branches.iter().map(|(c, b)| count_placeholders(c) + walk_block(b)).sum::<usize>()
+                + else_block.as_ref().map(walk_block).unwrap_or(0)
+        }
+        ExprKind::Puts(e) => count_placeholders(e),
+    }
+}
+
+/// Turns the single `_` into a reference to the lambda's parameter, also
+/// named `_`, without descending into nested lambdas.
+fn replace_placeholders(e: &mut Expr) {
+    fn walk_block(b: &mut Block) {
+        for s in &mut b.stmts {
+            match s {
+                Stmt::Expr(e) => replace_placeholders(e),
+                Stmt::Bind { value, .. } | Stmt::Var { value, .. } | Stmt::OpAssign { value, .. } => replace_placeholders(value),
+                Stmt::Return { value: Some(e), .. } => replace_placeholders(e),
+                _ => {}
+            }
+        }
+    }
+    match &mut e.kind {
+        ExprKind::Placeholder => e.kind = ExprKind::Ident("_".into()),
+        ExprKind::Lambda { .. } => {}
+        ExprKind::Str(pieces) => {
+            for p in pieces {
+                if let StrPiece::Expr(x) = p {
+                    replace_placeholders(x);
+                }
+            }
+        }
+        ExprKind::List(items) => items.iter_mut().for_each(replace_placeholders),
+        ExprKind::Range { lo, hi, .. } => {
+            replace_placeholders(lo);
+            replace_placeholders(hi);
+        }
+        ExprKind::Unary { expr, .. } => replace_placeholders(expr),
+        ExprKind::Binary { lhs, rhs, .. } => {
+            replace_placeholders(lhs);
+            replace_placeholders(rhs);
+        }
+        ExprKind::Call { args, .. } => args.iter_mut().for_each(|a| replace_placeholders(&mut a.value)),
+        ExprKind::Method { recv, args, .. } => {
+            replace_placeholders(recv);
+            args.iter_mut().for_each(|a| replace_placeholders(&mut a.value));
+        }
+        ExprKind::If { branches, else_block } => {
+            for (c, b) in branches {
+                replace_placeholders(c);
+                walk_block(b);
+            }
+            if let Some(b) = else_block {
+                walk_block(b);
+            }
+        }
+        ExprKind::Puts(x) => replace_placeholders(x),
+        _ => {}
     }
 }
