@@ -12,7 +12,6 @@ def main -> () or Error:
     counts[key] = counts[key].or(0) + 1
 
   counts.to_list
-    |> .sort_by(_.1)
-    |> .reverse
+    |> .sort_by { |w, n| -n }
     |> .take(5)
     |> .each { |word, n| puts "#{n.pad(6)}  #{word}" }

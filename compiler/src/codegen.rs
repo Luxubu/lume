@@ -75,13 +75,120 @@ fn lume_write_file(path: &str, text: &str) -> Result<(), Error> {
     std::fs::write(path, text).map_err(|e| Error { message: format!("cannot write `{}`: {}", path, e) })
 }
 fn lume_args() -> Vec<String> { std::env::args().skip(1).collect() }
-impl<K: LumeShow, V: LumeShow> LumeShow for std::collections::BTreeMap<K, V> {
+/// Lume's map: insertion-ordered (as in Ruby), hash lookups, one copy of each key.
+/// Entries live in a Vec; a hash -> positions index finds them. Removal leaves a
+/// tombstone; the Vec is compacted when tombstones outnumber live entries.
+#[derive(Clone, Debug)]
+struct LumeMap<K, V> {
+    entries: Vec<Option<(K, V)>>,
+    index: std::collections::HashMap<u64, Vec<usize>>,
+    live: usize,
+}
+impl<K: std::hash::Hash + Eq + Clone, V: Clone> LumeMap<K, V> {
+    fn new() -> Self { LumeMap { entries: Vec::new(), index: std::collections::HashMap::new(), live: 0 } }
+    fn hash_of<Q: std::hash::Hash + ?Sized>(k: &Q) -> u64 {
+        use std::hash::Hasher;
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        k.hash(&mut h);
+        h.finish()
+    }
+    fn position<Q>(&self, k: &Q) -> Option<usize> where K: std::borrow::Borrow<Q>, Q: std::hash::Hash + Eq + ?Sized {
+        let h = Self::hash_of(k);
+        self.index.get(&h)?.iter().copied().find(|&i| matches!(&self.entries[i], Some((ek, _)) if ek.borrow() == k))
+    }
+    fn get<Q>(&self, k: &Q) -> Option<&V> where K: std::borrow::Borrow<Q>, Q: std::hash::Hash + Eq + ?Sized {
+        self.position(k).and_then(|i| self.entries[i].as_ref().map(|(_, v)| v))
+    }
+    fn get_mut<Q>(&mut self, k: &Q) -> Option<&mut V> where K: std::borrow::Borrow<Q>, Q: std::hash::Hash + Eq + ?Sized {
+        let i = self.position(k)?;
+        self.entries[i].as_mut().map(|(_, v)| v)
+    }
+    fn contains_key<Q>(&self, k: &Q) -> bool where K: std::borrow::Borrow<Q>, Q: std::hash::Hash + Eq + ?Sized { self.position(k).is_some() }
+    fn insert(&mut self, k: K, v: V) -> Option<V> {
+        if let Some(i) = self.position(&k) {
+            return self.entries[i].as_mut().map(|e| std::mem::replace(&mut e.1, v));
+        }
+        let h = Self::hash_of(&k);
+        self.index.entry(h).or_default().push(self.entries.len());
+        self.entries.push(Some((k, v)));
+        self.live += 1;
+        None
+    }
+    /// The value for `k`, inserting `default` first if absent.
+    fn entry_or_insert(&mut self, k: K, default: V) -> &mut V {
+        let i = match self.position(&k) {
+            Some(i) => i,
+            None => {
+                let h = Self::hash_of(&k);
+                self.index.entry(h).or_default().push(self.entries.len());
+                self.entries.push(Some((k, default)));
+                self.live += 1;
+                self.entries.len() - 1
+            }
+        };
+        &mut self.entries[i].as_mut().unwrap().1
+    }
+    fn remove<Q>(&mut self, k: &Q) -> Option<V> where K: std::borrow::Borrow<Q>, Q: std::hash::Hash + Eq + ?Sized {
+        let i = self.position(k)?;
+        let h = Self::hash_of(k);
+        if let Some(v) = self.index.get_mut(&h) { v.retain(|&j| j != i); }
+        let (_, v) = self.entries[i].take()?;
+        self.live -= 1;
+        if self.entries.len() > 8 && self.live * 2 < self.entries.len() { self.compact(); }
+        Some(v)
+    }
+    fn compact(&mut self) {
+        let old = std::mem::take(&mut self.entries);
+        self.index.clear();
+        self.live = 0;
+        for e in old.into_iter().flatten() { self.insert(e.0, e.1); }
+    }
+    fn len(&self) -> usize { self.live }
+    fn is_empty(&self) -> bool { self.live == 0 }
+    fn iter(&self) -> impl Iterator<Item = (&K, &V)> { self.entries.iter().flatten().map(|(k, v)| (k, v)) }
+    fn keys(&self) -> impl Iterator<Item = &K> { self.iter().map(|(k, _)| k) }
+    fn values(&self) -> impl Iterator<Item = &V> { self.iter().map(|(_, v)| v) }
+    fn from<const N: usize>(pairs: [(K, V); N]) -> Self {
+        let mut m = Self::new();
+        for (k, v) in pairs { m.insert(k, v); }
+        m
+    }
+}
+impl<K: std::hash::Hash + Eq + Clone, V: Clone + PartialEq> PartialEq for LumeMap<K, V> {
+    fn eq(&self, other: &Self) -> bool {
+        self.len() == other.len() && self.iter().all(|(k, v)| other.get(k) == Some(v))
+    }
+}
+impl<K: LumeShow + std::hash::Hash + Eq + Clone, V: LumeShow + Clone> LumeShow for LumeMap<K, V> {
     fn lume_str(&self) -> String {
         format!("{{{}}}", self.iter().map(|(k, v)| format!("{}: {}", k.lume_str(), v.lume_str())).collect::<Vec<_>>().join(", "))
     }
 }
-impl<K, V> LumeLen for std::collections::BTreeMap<K, V> { fn lume_len(&self) -> i64 { self.len() as i64 } }
-impl<K, V> LumeEmpty for std::collections::BTreeMap<K, V> { fn lume_empty(&self) -> bool { self.is_empty() } }
+impl<K: std::hash::Hash + Eq + Clone, V: Clone> LumeLen for LumeMap<K, V> { fn lume_len(&self) -> i64 { self.len() as i64 } }
+impl<K: std::hash::Hash + Eq + Clone, V: Clone> LumeEmpty for LumeMap<K, V> { fn lume_empty(&self) -> bool { self.is_empty() } }
+/// `split` that drops trailing empty pieces (Ruby), without collecting.
+struct LumeSplit<'a> { inner: std::str::Split<'a, &'a str>, pending_empty: usize, buffered: Option<&'a str>, done: bool }
+impl<'a> LumeSplit<'a> {
+    fn new(inner: std::str::Split<'a, &'a str>) -> Self { LumeSplit { inner, pending_empty: 0, buffered: None, done: false } }
+}
+impl<'a> Iterator for LumeSplit<'a> {
+    type Item = &'a str;
+    fn next(&mut self) -> Option<&'a str> {
+        if self.pending_empty > 0 { self.pending_empty -= 1; return Some(""); }
+        if let Some(b) = self.buffered.take() { return Some(b); }
+        if self.done { return None; }
+        loop {
+            match self.inner.next() {
+                None => { self.done = true; self.pending_empty = 0; return None; }
+                Some("") => { self.pending_empty += 1; }
+                Some(piece) => {
+                    if self.pending_empty > 0 { self.pending_empty -= 1; self.buffered = Some(piece); return Some(""); }
+                    return Some(piece);
+                }
+            }
+        }
+    }
+}
 fn lume_pad<T: LumeShow>(x: T, width: i64) -> String { format!("{:>w$}", x.lume_str(), w = width.max(0) as usize) }
 fn lume_now() -> i64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
@@ -184,6 +291,8 @@ pub struct Gen {
     tmp: usize,
     pub warnings: Vec<LumeError>,
     has_rust_blocks: bool,
+    /// Statements that follow the one being emitted, in the same block.
+    rest_of_block: Vec<Stmt>,
 }
 
 pub fn generate(program: &[Item]) -> Result<Output> {
@@ -205,6 +314,7 @@ pub fn generate(program: &[Item]) -> Result<Output> {
         tmp: 0,
         warnings: Vec::new(),
         has_rust_blocks: false,
+        rest_of_block: Vec::new(),
     };
     // The built-in Error type: a struct with one field, defined in the prelude.
     g.structs.insert("Error".into(), StructInfo { fields: vec![("message".into(), Type::Str)], methods: HashMap::new() });
@@ -246,7 +356,7 @@ pub fn rust_type(t: &Type) -> String {
         Type::Option(inner) => format!("Option<{}>", rust_type(inner)),
         Type::Tuple(ts) => format!("({})", ts.iter().map(rust_type).collect::<Vec<_>>().join(", ")),
         Type::Result(t, e) => format!("Result<{}, {}>", rust_type(t), rust_type(e)),
-        Type::Map(k, v) => format!("std::collections::BTreeMap<{}, {}>", rust_type(k), rust_type(v)),
+        Type::Map(k, v) => format!("LumeMap<{}, {}>", rust_type(k), rust_type(v)),
         Type::Iter(inner, _) => format!("Vec<{}>", rust_type(inner)),
         Type::Unknown => "_".into(),
     }
@@ -1159,7 +1269,7 @@ impl Gen {
                 return Err(LumeError::new(p.line, p.col, format!("parameter `{}` is listed twice", p.name)));
             }
             let rt = rust_type(&p.ty);
-            let rt = if p.mutable { format!("&mut {}", rt) } else if p.ty.is_copy() { rt } else { format!("&{}", rt) };
+            let rt = if p.mutable { format!("&mut {}", rt) } else if p.ty.is_copy() { rt } else if p.ty == Type::Str { "&str".to_string() } else { format!("&{}", rt) };
             parts.push(format!("{}: {}", rust_name(&p.name), rt));
         }
         let mut header = format!("fn {}({})", fn_name, parts.join(", "));
@@ -1225,9 +1335,21 @@ impl Gen {
         }
         for (i, s) in b.stmts.iter().enumerate() {
             let last = i + 1 == n;
-            self.stmt(s, want_value && last)?;
+            let saved = std::mem::replace(&mut self.rest_of_block, b.stmts[i + 1..].to_vec());
+            let r = self.stmt(s, want_value && last);
+            self.rest_of_block = saved;
+            r?;
         }
         Ok(())
+    }
+
+    /// True when a name bound in the current block is not used by any later
+    /// statement of that block, so its value may be moved instead of cloned.
+    fn dead_after_this(&self, name: &str) -> bool {
+        if !self.scopes.last().map(|sc| sc.contains_key(name)).unwrap_or(false) {
+            return false;
+        }
+        !self.rest_of_block.iter().any(|st| stmt_mentions(st, name))
     }
 
     fn nested_block(&mut self, b: &Block, want_value: bool) -> Result<()> {
@@ -1346,11 +1468,38 @@ impl Gen {
                 }
                 let target = Expr::new(ExprKind::Index { recv: Box::new(recv.clone()), index: Box::new(index.clone()) }, *line, *col);
                 if let (Type::Map(k_ty, _), None) = (&rt, op) {
+                    // `m[k] = m[k].or(d) op x`: one lookup through the entry API.
+                    if let ExprKind::Binary { op: bop, lhs, rhs } = &value.kind {
+                        if matches!(*bop, "+" | "-" | "*" | "/" | "%") {
+                            if let ExprKind::Method { recv: orecv, name: oname, args: oargs } = &lhs.kind {
+                                if oname == "or" && oargs.len() == 1 {
+                                    if let ExprKind::Index { recv: irecv, index: iidx } = &orecv.kind {
+                                        if same_expr(irecv, recv) && same_expr(iidx, index) {
+                                            let place = self.mutable_place(recv, "this map", *line, *col)?;
+                                            let k = self.expr_val(index)?;
+                                            let movable = matches!(&index.kind, ExprKind::Ident(n) if self.dead_after_this(n) && !self.is_borrowed_ident(index));
+                                            let k = if k_ty.is_copy() || !matches!(index.kind, ExprKind::Ident(_)) || movable { k } else if **k_ty == Type::Str { format!("({}).to_string()", k) } else { format!("({}).clone()", k) };
+                                            let k = if k_ty.is_copy() && self.is_borrowed_ident(index) { format!("*{}", k) } else { k };
+                                            let d = self.expr_owned(&oargs[0].value)?;
+                                            let x = self.expr_val(rhs)?;
+                                            let tmp = self.fresh("e");
+                                            self.line(&format!("{{ let {} = {}.entry_or_insert({}, {}); *{} = *{} {} {}; }}", tmp, place, k, d, tmp, tmp, bop, x));
+                                            if is_tail {
+                                                return self.tail_unit(*line, *col);
+                                            }
+                                            return Ok(());
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                     // insert or replace: the value is computed first (it may read the
                     // same key), and a non-Copy key is cloned so it stays usable after.
                     let place = self.mutable_place(recv, "this map", *line, *col)?;
                     let k = self.expr_val(index)?;
-                    let k = if k_ty.is_copy() || matches!(index.kind, ExprKind::Str(_) | ExprKind::Int(_)) { k } else { format!("({}).clone()", k) };
+                    let movable = matches!(&index.kind, ExprKind::Ident(n) if self.dead_after_this(n) && !self.is_borrowed_ident(index));
+                    let k = if k_ty.is_copy() || matches!(index.kind, ExprKind::Str(_) | ExprKind::Int(_)) || movable { k } else if **k_ty == Type::Str { format!("({}).to_string()", k) } else { format!("({}).clone()", k) };
                     let v = self.expr_owned(value)?;
                     let tmp = self.fresh("v");
                     self.line(&format!("{{ let {} = {}; {}.insert({}, {}); }}", tmp, v, place, k, tmp));
@@ -1729,7 +1878,15 @@ impl Gen {
 
     /// Materialise a lazy chain into a Vec of owned values.
     fn collect_iter(&self, it: &str, by_ref: bool) -> String {
-        if by_ref {
+        self.collect_iter_t(it, by_ref, &Type::Unknown)
+    }
+
+    /// Like `collect_iter`, but knows the item type: borrowed strings may be
+    /// `&str` (from `split`/`lines`), which `to_string` handles and `cloned` does not.
+    fn collect_iter_t(&self, it: &str, by_ref: bool, elem: &Type) -> String {
+        if by_ref && *elem == Type::Str {
+            format!("({}).map(|s| s.to_string()).collect::<Vec<String>>()", it)
+        } else if by_ref {
             format!("({}).cloned().collect::<Vec<_>>()", it)
         } else {
             format!("({}).collect::<Vec<_>>()", it)
@@ -1739,9 +1896,9 @@ impl Gen {
     /// An expression wherever a plain value is needed (printing, comparing,
     /// interpolating): lazy chains are collected, everything else passes.
     fn expr_val(&mut self, e: &Expr) -> Result<String> {
-        if let Type::Iter(_, by_ref) = self.ty_of(e) {
+        if let Type::Iter(elem, by_ref) = self.ty_of(e) {
             let s = self.expr(e)?;
-            return Ok(self.collect_iter(&s, by_ref));
+            return Ok(self.collect_iter_t(&s, by_ref, &elem));
         }
         self.expr(e)
     }
@@ -1751,14 +1908,15 @@ impl Gen {
     /// get cloned; owned locals move.
     fn expr_owned(&mut self, e: &Expr) -> Result<String> {
         let t = self.ty_of(e);
-        if let Type::Iter(_, by_ref) = &t {
-            let by_ref = *by_ref;
+        if let Type::Iter(elem, by_ref) = &t {
+            let (by_ref, elem) = (*by_ref, (**elem).clone());
             let s = self.expr(e)?;
-            return Ok(self.collect_iter(&s, by_ref));
+            return Ok(self.collect_iter_t(&s, by_ref, &elem));
         }
         let s = self.expr(e)?;
         if !t.is_copy() && self.is_borrowed_place(e) {
-            Ok(format!("{}.clone()", s))
+            // a borrowed string may be a `&str`: to_string covers both
+            if t == Type::Str { Ok(format!("{}.to_string()", s)) } else { Ok(format!("{}.clone()", s)) }
         } else {
             Ok(s)
         }
@@ -1767,9 +1925,9 @@ impl Gen {
     /// An argument for a parameter of type `t`: Copy types by value,
     /// everything else by reference.
     fn expr_arg(&mut self, e: &Expr, t: &Type) -> Result<String> {
-        if let Type::Iter(_, by_ref) = self.ty_of(e) {
+        if let Type::Iter(elem, by_ref) = self.ty_of(e) {
             let s = self.expr(e)?;
-            let c = self.collect_iter(&s, by_ref);
+            let c = self.collect_iter_t(&s, by_ref, &elem);
             return Ok(format!("&{}", c));
         }
         let s = self.expr(e)?;
@@ -1933,8 +2091,12 @@ impl Gen {
             }
             "sort_by" | "min_by" | "max_by" => {
                 let f = self.gen_lambda(params, body, &elem, by_ref, false, true, None, lam)?;
-                let owned = self.collect_iter(&it, by_ref);
-                let key = f.replacen(&format!("|{}|", rust_name(&params[0])), &format!("|{}: &{}|", rust_name(&params[0]), rust_type(&elem)), 1);
+                let owned = self.collect_iter_t(&it, by_ref, &elem);
+                // annotate the closure's whole parameter pattern with the item type
+                let key = match f.strip_prefix('|').and_then(|rest| rest.find('|').map(|i| (&rest[..i], &rest[i + 1..]))) {
+                    Some((pat, body)) => format!("|{}: &{}|{}", pat, rust_type(&elem), body),
+                    None => f.clone(),
+                };
                 match name {
                     "sort_by" => format!("{{ let mut v = {}; let key = {}; v.sort_by(|a, b| key(a).partial_cmp(&key(b)).unwrap()); v }}", owned, key),
                     "min_by" => format!("{{ let key = {}; {}.into_iter().min_by(|a, b| key(a).partial_cmp(&key(b)).unwrap()) }}", key, owned),
@@ -2636,13 +2798,13 @@ impl Gen {
             }
             ExprKind::MapLit(pairs) => {
                 if pairs.is_empty() {
-                    "std::collections::BTreeMap::new()".to_string()
+                    "LumeMap::new()".to_string()
                 } else {
                     let mut parts = Vec::new();
                     for (k, v) in pairs {
                         parts.push(format!("({}, {})", self.expr_owned(k)?, self.expr_owned(v)?));
                     }
-                    format!("std::collections::BTreeMap::from([{}])", parts.join(", "))
+                    format!("LumeMap::from([{}])", parts.join(", "))
                 }
             }
             ExprKind::Rust(code) => {
@@ -2804,7 +2966,7 @@ impl Gen {
                             return Ok(format!("{}.enumerate().map(|(i, x)| (i as i64, x))", r));
                         }
                         "len" if args.is_empty() => return Ok(format!("({}.count() as i64)", r)),
-                        "to_list" if args.is_empty() => return Ok(self.collect_iter(&r, *by_ref)),
+                        "to_list" if args.is_empty() => return Ok(self.collect_iter_t(&r, *by_ref, elem)),
                         "sum" if args.is_empty() => {
                             let t = if **elem == Type::Float { "f64" } else { "i64" };
                             let r = if *by_ref { format!("{}.cloned()", r) } else { r };
@@ -2822,7 +2984,7 @@ impl Gen {
                             return Ok(format!("({}{}.next().is_none())", neg, r));
                         }
                         _ => {
-                            let collected = self.collect_iter(&r, *by_ref);
+                            let collected = self.collect_iter_t(&r, *by_ref, elem);
                             let mut parts = Vec::new();
                             for a in args {
                                 parts.push(self.expr_val(&a.value)?);
@@ -2983,7 +3145,14 @@ impl Gen {
             "pop" => { need(0)?; format!("({}).pop()", recv) }
             "first" => { need(0)?; format!("({}).first().cloned()", recv) }
             "last" => { need(0)?; format!("({}).last().cloned()", recv) }
-            "contains?" => { need(1)?; format!("({}).contains(&{})", recv, args[0]) }
+            "contains?" => {
+                need(1)?;
+                match rt {
+                    Type::Str => format!("({}).contains(&*({}))", recv, args[0]),
+                    Type::List(e) if **e == Type::Str => format!("({}).iter().any(|x| x.as_str() == &*({}))", recv, args[0]),
+                    _ => format!("({}).contains(&({}))", recv, args[0]),
+                }
+            }
             "reverse" => { need(0)?; format!("{{ let mut v = ({}).clone(); v.reverse(); v }}", recv) }
             "sort" => { need(0)?; format!("{{ let mut v = ({}).clone(); v.sort(); v }}", recv) }
             "max" | "min" => {
@@ -2994,8 +3163,8 @@ impl Gen {
                     format!("({}).iter().cloned().{}()", recv, name)
                 }
             }
-            "lines" => { need(0)?; format!("({}).lines().map(|s| s.to_string()).collect::<Vec<String>>()", recv) }
-            "split" => { need(1)?; format!("lume_split(&{}, &{})", recv, args[0]) }
+            "lines" => { need(0)?; format!("({}).lines()", recv) }
+            "split" => { need(1)?; format!("LumeSplit::new(({}).split(&*({})))", recv, args[0]) }
             "join" => { need(1)?; format!("({}).join(&*{})", recv, args[0]) }
             "starts_with?" => { need(1)?; format!("({}).starts_with(&*{})", recv, args[0]) }
             "ends_with?" => { need(1)?; format!("({}).ends_with(&*{})", recv, args[0]) }
@@ -3129,7 +3298,8 @@ fn builtin_method_type(recv: &Type, name: &str) -> Type {
         "first" | "last" | "max" | "min" | "pop" => elem.map(|e| Type::Option(Box::new(e))).unwrap_or(Type::Unknown),
         "sort" | "reverse" => recv.materialized(),
         "push" => Type::Unit,
-        "lines" | "split" | "chars" => Type::List(Box::new(Type::Str)),
+        "lines" | "split" => Type::Iter(Box::new(Type::Str), true),
+        "chars" => Type::List(Box::new(Type::Str)),
         "or" => match recv {
             Type::Option(i) => (**i).clone(),
             Type::Result(t, _) => (**t).clone(),
@@ -3203,5 +3373,59 @@ fn map_key(map_ty: &Type, k: &str) -> String {
     match map_ty {
         Type::Map(kt, _) if kt.is_copy() => format!("&({})", k),
         _ => format!("&*({})", k),
+    }
+}
+
+/// Structural equality for the simple expressions that appear as map
+/// receivers and keys (names, fields, literals, tuple indexes).
+fn same_expr(a: &Expr, b: &Expr) -> bool {
+    match (&a.kind, &b.kind) {
+        (ExprKind::Ident(x), ExprKind::Ident(y)) => x == y,
+        (ExprKind::SelfRef, ExprKind::SelfRef) => true,
+        (ExprKind::Int(x), ExprKind::Int(y)) => x == y,
+        (ExprKind::Str(x), ExprKind::Str(y)) => {
+            x.len() == y.len() && x.iter().zip(y).all(|(p, q)| matches!((p, q), (StrPiece::Lit(s), StrPiece::Lit(t)) if s == t))
+        }
+        (ExprKind::Method { recv: r1, name: n1, args: a1 }, ExprKind::Method { recv: r2, name: n2, args: a2 }) => {
+            n1 == n2 && a1.is_empty() && a2.is_empty() && same_expr(r1, r2)
+        }
+        (ExprKind::TupleIndex { recv: r1, index: i1 }, ExprKind::TupleIndex { recv: r2, index: i2 }) => i1 == i2 && same_expr(r1, r2),
+        _ => false,
+    }
+}
+
+fn stmt_mentions(s: &Stmt, name: &str) -> bool {
+    let blk = |b: &Block| b.stmts.iter().any(|st| stmt_mentions(st, name));
+    match s {
+        Stmt::Bind { value, .. } | Stmt::Var { value, .. } | Stmt::OpAssign { value, .. } => expr_mentions(value, name),
+        Stmt::FieldAssign { recv, value, .. } => expr_mentions(recv, name) || expr_mentions(value, name),
+        Stmt::IndexAssign { recv, index, value, .. } => expr_mentions(recv, name) || expr_mentions(index, name) || expr_mentions(value, name),
+        Stmt::Expr(e) => expr_mentions(e, name),
+        Stmt::Return { value, .. } => value.as_ref().map(|e| expr_mentions(e, name)).unwrap_or(false),
+        Stmt::While { cond, body } => expr_mentions(cond, name) || blk(body),
+        Stmt::For { iter, filter, body, .. } => expr_mentions(iter, name) || filter.as_ref().map(|f| expr_mentions(f, name)).unwrap_or(false) || blk(body),
+        Stmt::Break { .. } | Stmt::Next { .. } => false,
+    }
+}
+
+fn expr_mentions(e: &Expr, name: &str) -> bool {
+    let blk = |b: &Block| b.stmts.iter().any(|st| stmt_mentions(st, name));
+    match &e.kind {
+        ExprKind::Ident(n) => n == name,
+        ExprKind::Rust(code) => code.contains(name),
+        ExprKind::Int(_) | ExprKind::Float(_) | ExprKind::Bool(_) | ExprKind::SelfRef | ExprKind::None | ExprKind::Placeholder => false,
+        ExprKind::Str(pieces) => pieces.iter().any(|p| matches!(p, StrPiece::Expr(x) if expr_mentions(x, name))),
+        ExprKind::List(items) | ExprKind::Tuple(items) => items.iter().any(|i| expr_mentions(i, name)),
+        ExprKind::MapLit(pairs) => pairs.iter().any(|(k, v)| expr_mentions(k, name) || expr_mentions(v, name)),
+        ExprKind::Range { lo, hi, .. } => expr_mentions(lo, name) || expr_mentions(hi, name),
+        ExprKind::Unary { expr, .. } | ExprKind::Some(expr) | ExprKind::Ok(expr) | ExprKind::Try(expr) | ExprKind::Unwrap(expr) | ExprKind::Puts(expr) => expr_mentions(expr, name),
+        ExprKind::TupleIndex { recv, .. } => expr_mentions(recv, name),
+        ExprKind::Index { recv, index } => expr_mentions(recv, name) || expr_mentions(index, name),
+        ExprKind::Binary { lhs, rhs, .. } => expr_mentions(lhs, name) || expr_mentions(rhs, name),
+        ExprKind::Call { args, .. } => args.iter().any(|a| expr_mentions(&a.value, name)),
+        ExprKind::Method { recv, args, .. } => expr_mentions(recv, name) || args.iter().any(|a| expr_mentions(&a.value, name)),
+        ExprKind::If { branches, else_block } => branches.iter().any(|(c, b)| expr_mentions(c, name) || blk(b)) || else_block.as_ref().map(blk).unwrap_or(false),
+        ExprKind::Match { scrutinee, arms } => expr_mentions(scrutinee, name) || arms.iter().any(|a| a.guard.as_ref().map(|g| expr_mentions(g, name)).unwrap_or(false) || blk(&a.body)),
+        ExprKind::Lambda { body, .. } => blk(body),
     }
 }

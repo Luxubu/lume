@@ -20,7 +20,7 @@ program takes about 1 s in Python and 1.4 s in Ruby.
 The language design lives in the [Lume Language Design](https://claude.ai/code/artifact/1872fe63-1816-4b1e-9983-dec2774382fb)
 document. This repository is the compiler and the examples.
 
-## Status: all 7 prototype milestones done
+## Status: prototype milestones 1–7 done, milestone 8 done
 
 | # | Milestone | Status |
 | --- | --- | --- |
@@ -31,6 +31,7 @@ document. This repository is the compiler and the examples.
 | 5 | `T or E`, `Error`, `?` on Result, implicit `Ok`, `!`, `File`/`Env` | done |
 | 6 | `\|>`, `import rust.<crate>` + `rust:` blocks (signature mapping deferred) | done |
 | 7 | Port the sample programs plus a graph program; settle the memory policy | done: Rust-faithful ownership, no ORC |
+| 8 | Stdlib speed: ordered hash map, entry updates, lazy `split`/`lines`, key liveness | done: 74 ms → 23 ms |
 
 What works today: functions (`def` block and one-liner forms, return type
 inferred when omitted), `struct` with fields and methods (fields used bare
@@ -93,10 +94,12 @@ measured zero ownership syntax across 202 lines of ported programs
 ownership, no reference-counting fallback.
 
 Speed: computation runs at Rust speed (`fib(35)`: 30 ms vs Python 1.04 s).
-Allocation-heavy string-and-map code is about 3x off hand-written Rust and
-slightly ahead of Python (word count over 360k words: Rust 22 ms, Lume 74 ms,
-Python 84 ms); closing that gap is stdlib codegen work (lazy `split`, map
-`entry`, a hash-backed ordered map), the next milestone.
+String-and-map code is within 20% of hand-written Rust after milestone 8
+(word count over 360k words: hand-written Rust 19 ms, Lume 23 ms, Python
+79 ms). What made the difference: `split`/`lines` are lazy and yield string
+slices, `m[k] = m[k].or(0) + 1` compiles to one entry lookup, a key that is
+not used afterwards is moved rather than cloned, and `{K: V}` is an
+insertion-ordered hash map (Ruby's order, hash speed) written in the prelude.
 
 ## Build
 
