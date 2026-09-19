@@ -1,0 +1,39 @@
+# Bindings, loops, filters and if-as-a-value.
+
+def classify(n: Int) -> Str:
+  if n < 0: "negative"
+  elif n == 0: "zero"
+  elif n < 10: "small"
+  else: "large"
+
+def main:
+  # immutable by default, `var` to mutate
+  var total = 0
+  for n in 1..100 where n % 3 == 0:
+    total += n
+  puts "sum of multiples of 3 up to 100: #{total}"
+
+  var i = 0
+  while i < 6:
+    puts "i = #{i}" if i % 2 == 0
+    i += 1
+
+  nums = [3, 1, 4, 1, 5, 9, 2, 6]
+  var biggest = 0
+  for n in nums:
+    biggest = n if n > biggest
+  puts "biggest of #{nums.len} numbers: #{biggest}"
+  puts "sum: #{nums.sum}, sorted: #{nums.sort.first}..#{nums.sort.last}"
+
+  size = if biggest > 5: "big" else: "small"
+  puts "that is #{size}"
+
+  for n in [-5, 0, 7, 42]:
+    puts "#{n} is #{classify(n)}"
+
+  x = 2.0 ** 10.0
+  puts "2^10 = #{x}, sqrt = #{x.sqrt}"
+
+  name = "lume"
+  puts "#{name.upcase} has #{name.len} letters"
+  puts "done" unless total == 0

@@ -1,0 +1,14 @@
+[package]
+name = "lume"
+version = "0.1.0"
+edition = "2021"
+description = "The Lume compiler: Ruby's feel, Rust's speed. Transpiles .lume to Rust."
+
+[[bin]]
+name = "lume"
+path = "src/main.rs"
+
+[dependencies]
+
+[profile.release]
+opt-level = 3

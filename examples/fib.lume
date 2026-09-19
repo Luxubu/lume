@@ -1,0 +1,14 @@
+# Fibonacci — the first Lume program.
+# Build and run:  lume run examples/fib.lume
+
+def fib(n: Int) -> Int:
+  if n < 2: n
+  else: fib(n - 1) + fib(n - 2)
+
+def square(n: Int) -> Int = n * n
+
+def main:
+  for i in 0..10:
+    puts "fib(#{i}) = #{fib(i)}"
+  puts "square of 12 is #{square(12)}"
+  puts "fib(35) = #{fib(35)}"

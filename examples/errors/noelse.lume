@@ -1,0 +1,5 @@
+def sign(n: Int) -> Str:
+  if n < 0: "negative"
+
+def main:
+  puts sign(-1)
