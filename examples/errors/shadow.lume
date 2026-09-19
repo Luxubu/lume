@@ -1,4 +1,0 @@
-def main:
-  name = "  lume  "
-  name = name.trim
-  puts name

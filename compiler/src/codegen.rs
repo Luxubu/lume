@@ -271,11 +271,18 @@ impl Gen {
                         self.line(&format!("{} = {};", rust_name(name), v));
                     }
                     Some(b) => {
-                        return Err(LumeError::new(*line, *col, format!("`{}` is immutable and cannot be reassigned", name))
-                            .with_help(format!(
-                                "declare it with `var {} = ...` on line {} if it needs to change",
-                                name, b.line
-                            )));
+                        // Self-transform shadowing: `x = x.trim`, `x = x + 1` rebinds an
+                        // immutable x when the right side *starts with* x.
+                        if leftmost_ident(value) == Some(name.as_str()) {
+                            self.declare(name, false, *line);
+                            self.line(&format!("let {} = {};", rust_name(name), v));
+                        } else {
+                            return Err(LumeError::new(*line, *col, format!("`{}` is immutable and cannot be reassigned", name))
+                                .with_help(format!(
+                                    "declare it with `var {} = ...` on line {} if it needs to change; `{} = {}.something` is allowed as a transform of the same value",
+                                    name, b.line, name, name
+                                )));
+                        }
                     }
                     None => {
                         self.declare(name, false, *line);
@@ -601,6 +608,18 @@ impl Gen {
             "chars" => { need(0)?; format!("({}).chars().map(|c| c.to_string()).collect::<Vec<String>>()", recv) }
             _ => format!("({}).{}({})", recv, rust_name(name), args.join(", ")),
         })
+    }
+}
+
+/// The identifier an expression starts with, reading left to right:
+/// `x.trim` -> x, `x + 1` -> x, `(x) * 2` -> x, `y + x` -> y, `3 + x` -> None.
+fn leftmost_ident(e: &Expr) -> Option<&str> {
+    match &e.kind {
+        ExprKind::Ident(n) => Some(n.as_str()),
+        ExprKind::Method { recv, .. } => leftmost_ident(recv),
+        ExprKind::Binary { lhs, .. } => leftmost_ident(lhs),
+        ExprKind::Range { lo, .. } => leftmost_ident(lo),
+        _ => None,
     }
 }
 

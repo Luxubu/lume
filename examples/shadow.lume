@@ -1,0 +1,10 @@
+# Self-transform shadowing: allowed when the right side starts with the name.
+def main:
+  name = "  lume  "
+  name = name.trim
+  name = name.upcase
+  puts "[#{name}]"
+
+  n = 5
+  n = n * 2 + 1
+  puts n
