@@ -140,6 +140,15 @@ enum BindKind {
     Owned,
 }
 
+pub struct Output {
+    pub rust: String,
+    pub warnings: Vec<LumeError>,
+    /// Cargo dependencies from `import rust.<crate>`: (crate, version).
+    pub deps: Vec<(String, String)>,
+    /// The program contains `rust:` blocks, so rustc errors may be the user's.
+    pub has_rust_blocks: bool,
+}
+
 pub struct Gen {
     out: String,
     indent: usize,
@@ -161,9 +170,10 @@ pub struct Gen {
     at_tail: bool,
     tmp: usize,
     pub warnings: Vec<LumeError>,
+    has_rust_blocks: bool,
 }
 
-pub fn generate(program: &[Item]) -> Result<(String, Vec<LumeError>)> {
+pub fn generate(program: &[Item]) -> Result<Output> {
     let mut g = Gen {
         out: String::new(),
         indent: 0,
@@ -181,11 +191,18 @@ pub fn generate(program: &[Item]) -> Result<(String, Vec<LumeError>)> {
         at_tail: false,
         tmp: 0,
         warnings: Vec::new(),
+        has_rust_blocks: false,
     };
     // The built-in Error type: a struct with one field, defined in the prelude.
     g.structs.insert("Error".into(), StructInfo { fields: vec![("message".into(), Type::Str)], methods: HashMap::new() });
     g.program(program)?;
-    Ok((g.out, g.warnings))
+    let mut deps = Vec::new();
+    for item in program {
+        if let Item::Import(imp) = item {
+            deps.push((imp.krate.clone(), imp.version.clone().unwrap_or_else(|| "*".into())));
+        }
+    }
+    Ok(Output { rust: g.out, warnings: g.warnings, deps, has_rust_blocks: g.has_rust_blocks })
 }
 
 fn rust_name(name: &str) -> String {
@@ -380,8 +397,15 @@ impl Gen {
     fn program(&mut self, program: &[Item]) -> Result<()> {
         // Pass 1: collect types and signatures.
         let mut seen = HashSet::new();
+        let mut imported: HashSet<String> = HashSet::new();
         for item in program {
             match item {
+                Item::Import(imp) => {
+                    let key = imp.alias.clone().unwrap_or_else(|| imp.krate.clone());
+                    if !imported.insert(key.clone()) {
+                        return Err(LumeError::new(imp.line, imp.col, format!("`{}` is imported twice", key)));
+                    }
+                }
                 Item::Fn(f) => {
                     if !seen.insert(f.name.clone()) {
                         return Err(LumeError::new(f.line, f.col, format!("function `{}` is defined twice", f.name)));
@@ -429,6 +453,7 @@ impl Gen {
         // Check that every named type exists.
         for item in program {
             match item {
+                Item::Import(_) => {}
                 Item::Fn(f) => self.check_sig_types(f)?,
                 Item::Struct(s) => {
                     for fld in &s.fields {
@@ -458,6 +483,7 @@ impl Gen {
                     Item::Fn(f) => (vec![f], None),
                     Item::Struct(s) => (s.methods.iter().collect(), Some(&s.name)),
                     Item::Enum(e) => (e.methods.iter().collect(), Some(&e.name)),
+                    Item::Import(_) => (vec![], None),
                 };
                 for f in fns {
                     if f.ret.is_some() || self.sig_ret(&f.name, owner) != Type::Unknown {
@@ -479,6 +505,7 @@ impl Gen {
                 Item::Fn(f) => (vec![f], None),
                 Item::Struct(s) => (s.methods.iter().collect(), Some(&s.name)),
                 Item::Enum(e) => (e.methods.iter().collect(), Some(&e.name)),
+                Item::Import(_) => (vec![], None),
             };
             for f in fns {
                 if self.sig_ret(&f.name, owner) == Type::Unknown {
@@ -492,10 +519,20 @@ impl Gen {
         self.out.push_str(PRELUDE);
         self.out.push('\n');
         for item in program {
+            if let Item::Import(imp) = item {
+                match &imp.alias {
+                    Some(a) => self.line(&format!("use {} as {};", imp.krate, a)),
+                    None => self.line(&format!("use {};", imp.krate)),
+                }
+            }
+        }
+        self.out.push('\n');
+        for item in program {
             match item {
                 Item::Fn(f) => self.fn_def(f, None)?,
                 Item::Struct(s) => self.struct_def(s)?,
                 Item::Enum(e) => self.enum_def(e)?,
+                Item::Import(_) => continue,
             }
             self.out.push('\n');
         }
@@ -702,6 +739,26 @@ impl Gen {
         Ok(())
     }
 
+    /// `xs.map(f)` with `f` a function name: the same as `xs.map { |x| f(x) }`.
+    fn fn_ref_as_block(&self, e: &Expr) -> Option<Expr> {
+        let (recv, name, args) = match &e.kind {
+            ExprKind::Method { recv, name, args } => (recv, name, args),
+            _ => return None,
+        };
+        const BLOCK_METHODS: &[&str] = &["map", "filter", "reject", "each", "sum", "count", "any?", "all?", "find", "take_while", "sort_by", "min_by", "max_by"];
+        if !BLOCK_METHODS.contains(&name.as_str()) || args.len() != 1 || args[0].name.is_some() {
+            return None;
+        }
+        let fname = match &args[0].value.kind {
+            ExprKind::Ident(n) if self.lookup(n).is_none() && self.fns.contains_key(n) => n.clone(),
+            _ => return None,
+        };
+        let (l, c) = (args[0].value.line, args[0].value.col);
+        let call = Expr::new(ExprKind::Call { name: fname, args: vec![Arg { name: None, value: Expr::new(ExprKind::Ident("_".into()), l, c) }] }, l, c);
+        let lam = Expr::new(ExprKind::Lambda { params: vec!["_".into()], body: Block { stmts: vec![Stmt::Expr(call)] } }, l, c);
+        Some(Expr::new(ExprKind::Method { recv: recv.clone(), name: name.clone(), args: vec![Arg { name: None, value: lam }] }, e.line, e.col))
+    }
+
     /// `x.name?` where no method `name?` exists but `name` does means
     /// `x.name` followed by `?` (propagation). Returns the rewritten
     /// expression in that case.
@@ -744,6 +801,9 @@ impl Gen {
     fn ty_of(&mut self, e: &Expr) -> Type {
         if let ExprKind::Method { .. } = &e.kind {
             if let Some(ne) = self.split_trailing_try(e) {
+                return self.ty_of(&ne);
+            }
+            if let Some(ne) = self.fn_ref_as_block(e) {
                 return self.ty_of(&ne);
             }
         }
@@ -859,6 +919,7 @@ impl Gen {
                 Type::Result(t, _) => *t,
                 _ => Type::Unknown,
             },
+            ExprKind::Rust(_) => Type::Unknown,
             ExprKind::Ok(x) => {
                 let t = self.ty_of(x).materialized();
                 match &self.current_ret {
@@ -1101,7 +1162,7 @@ impl Gen {
             _ => return text,
         };
         let et = self.ty_of(e).materialized();
-        if matches!(et, Type::Result(..)) {
+        if matches!(et, Type::Result(..)) || matches!(e.kind, ExprKind::Rust(_)) {
             return text;
         }
         if et == err_t && et != ok_t {
@@ -1562,6 +1623,10 @@ impl Gen {
     /// `pattern_ref` is set for predicates (Rust passes `&Item`). `acc` is
     /// the accumulator type for `fold`.
     fn gen_lambda(&mut self, params: &[String], body: &Block, elem: &Type, by_ref: bool, pattern_ref: bool, want_value: bool, acc: Option<&Type>, at: &Expr) -> Result<String> {
+        self.gen_lambda_ex(params, body, elem, by_ref, pattern_ref, want_value, acc, false, at)
+    }
+
+    fn gen_lambda_ex(&mut self, params: &[String], body: &Block, elem: &Type, by_ref: bool, pattern_ref: bool, want_value: bool, acc: Option<&Type>, negate: bool, at: &Expr) -> Result<String> {
         let expected = if acc.is_some() { 2 } else if matches!(elem, Type::Tuple(ts) if ts.len() == 2) && params.len() == 2 { 2 } else { 1 };
         if params.len() != expected {
             let msg = if acc.is_some() {
@@ -1598,12 +1663,12 @@ impl Gen {
         let text = if inline {
             if let Stmt::Expr(x) = &body.stmts[0] {
                 let v = if want_value { self.expr_owned(x)? } else { self.expr_stmt(x)? };
-                format!("|{}| {}", pattern, v)
+                if negate { format!("|{}| !({})", pattern, v) } else { format!("|{}| {}", pattern, v) }
             } else {
                 unreachable!()
             }
         } else {
-            self.out.push_str(&format!("|{}| {{\n", pattern));
+            self.out.push_str(&format!("|{}| {}{{\n", pattern, if negate { "!" } else { "" }));
             self.nested_block(body, want_value)?;
             self.out.push_str(&"    ".repeat(base));
             self.out.push('}');
@@ -1633,8 +1698,7 @@ impl Gen {
                 format!("{}.map({})", it, f)
             }
             "filter" | "reject" | "take_while" => {
-                let f = self.gen_lambda(params, body, &elem, by_ref, true, true, None, lam)?;
-                let f = if name == "reject" { format!("|x| !({})(x)", f) } else { f };
+                let f = self.gen_lambda_ex(params, body, &elem, by_ref, true, true, None, name == "reject", lam)?;
                 format!("{}.{}({})", it, if name == "reject" { "filter" } else { name }, f)
             }
             "each" => {
@@ -2331,6 +2395,16 @@ impl Gen {
                 }
             }
             ExprKind::Ok(x) => format!("Ok({})", self.expr_owned(x)?),
+            ExprKind::Rust(code) => {
+                self.has_rust_blocks = true;
+                if code.contains('\n') {
+                    let pad = "    ".repeat(self.indent + 1);
+                    let body = code.lines().map(|l| format!("{}{}", pad, l)).collect::<Vec<_>>().join("\n");
+                    format!("{{\n{}\n{}}}", body, "    ".repeat(self.indent))
+                } else {
+                    format!("{{ {} }}", code)
+                }
+            }
             ExprKind::Range { lo, hi, inclusive } => {
                 let l = self.expr(lo)?;
                 let h = self.expr(hi)?;
@@ -2410,6 +2484,9 @@ impl Gen {
             }
             ExprKind::Method { recv, name, args } => {
                 if let Some(ne) = self.split_trailing_try(e) {
+                    return self.expr(&ne);
+                }
+                if let Some(ne) = self.fn_ref_as_block(e) {
                     return self.expr(&ne);
                 }
                 // Enum.Variant(...) constructor

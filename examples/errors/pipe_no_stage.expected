@@ -1,0 +1,6 @@
+error: expected a method or function after `|>`, found `3`
+  --> examples/errors/pipe_no_stage.lume:2:14
+  |
+2 |   x = [1, 2] |> 3
+  |              ^
+  help: write `x |> .method(...)` or `x |> function(...)`

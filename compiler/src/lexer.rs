@@ -43,7 +43,7 @@ pub struct Token {
 pub const KEYWORDS: &[&str] = &[
     "def", "var", "const", "if", "elif", "else", "unless", "while", "for", "in", "where",
     "return", "break", "next", "true", "false", "and", "or", "not", "puts", "struct", "enum",
-    "match", "interface", "extend", "import", "pub", "test", "assert",
+    "match", "interface", "extend", "import", "pub", "test", "assert", "rust",
 ];
 
 pub fn is_keyword(s: &str) -> bool {
@@ -103,6 +103,17 @@ pub fn lex(src: &str) -> Result<Vec<Token>> {
                 col = 1;
                 continue;
             }
+            // A line starting with `|>` continues the previous expression.
+            if j + 1 < n && chars[j] == '|' && chars[j + 1] == '>' {
+                if matches!(toks.last().map(|t| &t.tok), Some(Tok::Newline)) {
+                    toks.pop();
+                }
+                i = j;
+                col = spaces + 1;
+                at_line_start = false;
+                space_before = true;
+                continue;
+            }
             let top = *indent_stack.last().unwrap();
             if spaces > top {
                 indent_stack.push(spaces);
@@ -130,6 +141,58 @@ pub fn lex(src: &str) -> Result<Vec<Token>> {
         let c = chars[i];
         match c {
             '\n' => {
+                // `rust:` followed by an indented block: capture the block verbatim.
+                let is_rust_block = depth == 0
+                    && toks.len() >= 2
+                    && matches!(toks[toks.len() - 1].tok, Tok::Sym(":"))
+                    && matches!(&toks[toks.len() - 2].tok, Tok::Ident(s) if s == "rust");
+                if is_rust_block {
+                    let base = *indent_stack.last().unwrap();
+                    let start_line = line;
+                    i += 1;
+                    line += 1;
+                    let mut raw_lines: Vec<(usize, String)> = Vec::new();
+                    loop {
+                        if i >= n {
+                            break;
+                        }
+                        let mut k = i;
+                        let mut sp = 0;
+                        while k < n && chars[k] == ' ' {
+                            sp += 1;
+                            k += 1;
+                        }
+                        let mut end = k;
+                        while end < n && chars[end] != '\n' {
+                            end += 1;
+                        }
+                        let text: String = chars[k..end].iter().collect();
+                        let blank = text.trim().is_empty();
+                        if !blank && sp <= base {
+                            break;
+                        }
+                        raw_lines.push((sp, text));
+                        i = if end < n { end + 1 } else { end };
+                        line += 1;
+                    }
+                    while raw_lines.last().map(|(_, t)| t.trim().is_empty()).unwrap_or(false) {
+                        raw_lines.pop();
+                    }
+                    if raw_lines.is_empty() {
+                        return Err(LumeError::new(start_line, col, "`rust:` needs an indented block of Rust code on the following lines"));
+                    }
+                    let min_indent = raw_lines.iter().filter(|(_, t)| !t.trim().is_empty()).map(|(sp, _)| *sp).min().unwrap_or(0);
+                    let code = raw_lines
+                        .iter()
+                        .map(|(sp, t)| format!("{}{}", " ".repeat(sp.saturating_sub(min_indent)), t))
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    push(&mut toks, Tok::Str(vec![StrPart::Lit(code)]), start_line, col, &mut space_before);
+                    push(&mut toks, Tok::Newline, line, 1, &mut space_before);
+                    at_line_start = true;
+                    col = 1;
+                    continue;
+                }
                 if depth == 0 {
                     let last_is_break = matches!(
                         toks.last().map(|t| &t.tok),

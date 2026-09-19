@@ -1,0 +1,5 @@
+error: `regex` is imported twice
+  --> examples/errors/import_twice.lume:2:1
+  |
+2 | import rust.regex
+  | ^

@@ -102,10 +102,21 @@ pub struct EnumDef {
 }
 
 #[derive(Debug, Clone)]
+pub struct Import {
+    /// `import rust.regex` -> "regex"
+    pub krate: String,
+    pub version: Option<String>,
+    pub alias: Option<String>,
+    pub line: usize,
+    pub col: usize,
+}
+
+#[derive(Debug, Clone)]
 pub enum Item {
     Fn(FnDef),
     Struct(StructDef),
     Enum(EnumDef),
+    Import(Import),
 }
 
 #[derive(Debug, Clone)]
@@ -221,6 +232,8 @@ pub enum ExprKind {
     Ok(Box<Expr>),
     /// `expr!` — unwrap or panic; a warning outside tests
     Unwrap(Box<Expr>),
+    /// `rust("...")` or `rust:` + indented block — Rust code emitted verbatim
+    Rust(String),
 }
 
 impl Expr {

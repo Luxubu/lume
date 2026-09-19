@@ -1,0 +1,5 @@
+import rust.regex
+import rust.regex
+
+def main:
+  puts "x"

@@ -1,0 +1,42 @@
+# The pipe operator: `x |> .method` calls a method on x,
+# `x |> f(y)` calls f(x, y). Lines starting with |> continue the expression.
+
+struct User:
+  name: Str
+  age: Int
+
+  def adult? = age >= 18
+
+def parse_user(line: Str) -> User or Error:
+  match line.split(","):
+    [name, age] -> User(name.trim, age.trim.to_int?)
+    _           -> Error("bad line: #{line}")
+
+def shout(s: Str) -> Str = s.upcase + "!"
+
+def load_users(text: Str) -> [User] or Error:
+  var users: [User] = []
+  for line in text.lines |> .reject(_.trim.empty?):
+    users.push(parse_user(line)?)
+  users
+
+def main -> () or Error:
+  text = "Ana, 31\nBo, 16\n\nCy, 45\nDi, 12\n"
+
+  adults = load_users(text)?
+    |> .filter(_.adult?)
+    |> .sort_by(_.age)
+    |> .map(_.name)
+  puts adults
+
+  "hello" |> shout |> puts
+  "quiet" |> shout |> .downcase |> puts
+
+  total = text.lines
+    |> .reject(_.empty?)
+    |> .map(parse_user)
+    |> .map { |r| r.or(User("?", 0)) }
+    |> .sum(_.age)
+  puts "total age: #{total}"
+
+  (1..10) |> .filter(_ % 2 == 0) |> .map { |n| n * n } |> .to_list |> puts

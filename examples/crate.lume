@@ -1,0 +1,26 @@
+# The Rust bridge. `import rust.<crate>` adds a cargo dependency, and a
+# `rust:` block inside a Lume function is Rust code with the function's
+# parameters in scope. The declared return type is the Lume type of the
+# result; everything else in the file is ordinary Lume.
+
+import rust.regex = "1"
+
+def is_email(s: Str) -> Bool:
+  rust:
+    regex::Regex::new(r"^[^@\s]+@[^@\s]+\.[a-z]{2,}$").unwrap().is_match(s)
+
+def digits(s: Str) -> [Str]:
+  rust:
+    let re = regex::Regex::new(r"\d+").unwrap();
+    re.find_iter(s).map(|m| m.as_str().to_string()).collect()
+
+def word_count(s: Str) -> Int:
+  rust("s.split_whitespace().count() as i64")
+
+def main:
+  for addr in ["ana@x.com", "not an email", "bo@site.org"]:
+    puts "#{addr}: #{is_email(addr)}"
+  puts digits("order 66 shipped 3 items on day 1024")
+  puts digits("no numbers here").len
+  puts word_count("the quick brown fox")
+  puts ["a@b.co", "nope", "c@d.io"].filter(is_email).len

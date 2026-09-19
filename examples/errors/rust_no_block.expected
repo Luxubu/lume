@@ -1,0 +1,5 @@
+error: `rust:` needs an indented block of Rust code on the following lines
+  --> examples/errors/rust_no_block.lume:2:8
+  |
+2 |   rust:
+  |        ^

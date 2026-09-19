@@ -20,7 +20,7 @@ program takes about 1 s in Python and 1.4 s in Ruby.
 The language design lives in the [Lume Language Design](https://claude.ai/code/artifact/1872fe63-1816-4b1e-9983-dec2774382fb)
 document. This repository is the compiler and the examples.
 
-## Status: milestone 5 of 7
+## Status: milestone 6 of 7
 
 | # | Milestone | Status |
 | --- | --- | --- |
@@ -29,8 +29,8 @@ document. This repository is the compiler and the examples.
 | 3 | `_` shorthand, inline blocks, `do` blocks, `for ... where` | done |
 | 4 | `enum`, `match` with exhaustiveness errors, tuples, `T?` | done |
 | 5 | `T or E`, `Error`, `?` on Result, implicit `Ok`, `!`, `File`/`Env` | done |
-| 6 | `\|>`, `import rust.<crate>` with automatic type mapping | next |
-| 7 | Port the sample programs plus a graph program; settle the memory policy | |
+| 6 | `\|>`, `import rust.<crate>` + `rust:` blocks (signature mapping deferred) | done |
+| 7 | Port the sample programs plus a graph program; settle the memory policy | next |
 
 What works today: functions (`def` block and one-liner forms, return type
 inferred when omitted), `struct` with fields and methods (fields used bare
@@ -55,7 +55,12 @@ error up, a bare value in a `T or E` function is `Ok` and an `Error(...)` is
 `.error?`, `.or_error("msg")` to turn a `T?` into a `T or Error`, `!` to
 unwrap-or-stop with a warning, `Str.to_int`/`to_float` return `T or Error`),
 typed bindings (`var xs: [User] = []`), `def main -> () or Error`,
-`File.read`/`File.write`/`File.exists?`, `Env.args`/`Env.get`, `if`/`elif`/`else` as
+`File.read`/`File.write`/`File.exists?`, `Env.args`/`Env.get`, the pipe
+(`x |> .method`, `x |> f(y)` is `f(x, y)`, `x |> puts`; lines starting with
+`|>` continue the expression), function names as blocks (`xs.map(parse)`),
+the Rust bridge (`import rust.regex = "1"` adds a cargo dependency; a `rust:`
+block inside a Lume function is Rust with the parameters in scope and the
+declared return type as its Lume type), `if`/`elif`/`else` as
 expressions, trailing `if`/`unless`, `while`, `for x in range` with `where`,
 lists, ranges (`1..10` inclusive, `1...10` exclusive), string interpolation,
 `and`/`or`/`not`, `**`, calls, a small set of built-in methods (`len`, `sum`,
@@ -104,6 +109,8 @@ lume check examples/fib.lume        # parse and check only
 ```
 
 Generated Rust and binaries go in a `.lume/` directory next to the source file.
+A program that imports a crate is built with cargo (first build fetches the
+crate; later builds are cached under `.lume/cargo-<name>/`).
 
 ## Layout
 

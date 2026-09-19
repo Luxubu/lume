@@ -166,6 +166,8 @@ impl Parser {
                 items.push(Item::Struct(self.struct_def()?));
             } else if self.at_kw("enum") {
                 items.push(Item::Enum(self.enum_def()?));
+            } else if self.at_kw("import") {
+                items.push(Item::Import(self.import_def()?));
             } else if matches!(self.peek(), Tok::Indent) {
                 return Err(self
                     .err("unexpected indentation at the top level")
@@ -239,6 +241,53 @@ impl Parser {
                 .with_help("a struct needs at least one `name: Type` field"));
         }
         Ok(StructDef { name, fields, methods, line, col })
+    }
+
+    fn import_def(&mut self) -> Result<Import> {
+        let (line, col) = self.here();
+        self.advance(); // import
+        let (hl, hc) = self.here();
+        let head = match self.peek().clone() {
+            Tok::Ident(s) => {
+                self.advance();
+                s
+            }
+            _ => return Err(self.err(format!("expected a module name after `import`, found {}", self.describe()))),
+        };
+        if head != "rust" {
+            return Err(LumeError::new(hl, hc, format!("importing Lume module `{}` is not supported yet", head))
+                .with_help("only `import rust.<crate>` works in this milestone; Lume modules arrive with the module system"));
+        }
+        if !self.eat_sym(".") {
+            return Err(self.err("expected `.` and a crate name after `import rust`").with_help("for example `import rust.regex`"));
+        }
+        let (krate, _, _) = self.ident("a crate name")?;
+        let version = if self.eat_sym("=") {
+            match self.peek().clone() {
+                Tok::Str(parts) => {
+                    self.advance();
+                    let mut v = String::new();
+                    for p in parts {
+                        match p {
+                            StrPart::Lit(t) => v.push_str(&t),
+                            _ => return Err(self.err("a crate version is a plain string like \"1.10\"")),
+                        }
+                    }
+                    Some(v)
+                }
+                _ => return Err(self.err("expected a version string after `=`, like `import rust.regex = \"1.10\"`")),
+            }
+        } else {
+            None
+        };
+        let alias = if self.at_kw("as") || matches!(self.peek(), Tok::Ident(s) if s == "as") {
+            self.advance();
+            Some(self.ident("an alias")?.0)
+        } else {
+            None
+        };
+        self.end_stmt()?;
+        Ok(Import { krate, version, alias, line, col })
     }
 
     fn enum_def(&mut self) -> Result<EnumDef> {
@@ -970,11 +1019,7 @@ impl Parser {
                     "/" => ("/", 7, false),
                     "%" => ("%", 7, false),
                     "**" => ("**", 9, true),
-                    "|>" => {
-                        return Err(self
-                            .err("the pipe operator `|>` is not implemented yet (milestone 6)")
-                            .with_help("use a method chain for now: `x.lines.map(f)`"));
-                    }
+                    "|>" => ("|>", 0, false),
                     _ => break,
                 },
                 _ => break,
@@ -984,6 +1029,10 @@ impl Parser {
             }
             let (line, col) = self.here();
             self.advance();
+            if op == "|>" {
+                lhs = self.pipe_stage(lhs, line, col)?;
+                continue;
+            }
             let next_min = if right_assoc { prec } else { prec + 1 };
             let rhs = self.binary(next_min)?;
             lhs = match op {
@@ -996,6 +1045,30 @@ impl Parser {
             };
         }
         Ok(lhs)
+    }
+
+    /// The right side of `|>`: `.method(args)` applies to the piped value;
+    /// `f(args)` receives it as the first argument; `f` alone calls `f(x)`.
+    fn pipe_stage(&mut self, lhs: Expr, line: usize, col: usize) -> Result<Expr> {
+        if self.at_sym(".") {
+            return self.postfix_from(lhs);
+        }
+        match self.peek().clone() {
+            Tok::Ident(name) if !lexer::is_keyword(&name) || name == "puts" => {
+                let (sl, sc) = self.here();
+                self.advance();
+                if name == "puts" {
+                    return Ok(Expr::new(ExprKind::Puts(Box::new(lhs)), sl, sc));
+                }
+                self.reject_spaced_paren(&name)?;
+                let mut args = if self.at_sym("(") { self.call_args()? } else { Vec::new() };
+                args.insert(0, Arg { name: None, value: lhs });
+                let call = Expr::new(ExprKind::Call { name, args }, sl, sc);
+                self.postfix_from(call)
+            }
+            _ => Err(LumeError::new(line, col, format!("expected a method or function after `|>`, found {}", self.describe()))
+                .with_help("write `x |> .method(...)` or `x |> function(...)`")),
+        }
     }
 
     fn unary(&mut self) -> Result<Expr> {
@@ -1016,7 +1089,12 @@ impl Parser {
     }
 
     fn postfix(&mut self) -> Result<Expr> {
-        let mut e = self.primary()?;
+        let e = self.primary()?;
+        self.postfix_from(e)
+    }
+
+    fn postfix_from(&mut self, start: Expr) -> Result<Expr> {
+        let mut e = start;
         loop {
             if self.at_sym(".") {
                 let (line, col) = self.here();
@@ -1279,6 +1357,45 @@ impl Parser {
                     }
                     Ok(Expr::new(ExprKind::None, line, col))
                 }
+                "rust" => {
+                    self.advance();
+                    if self.eat_sym(":") {
+                        // the lexer captured the indented block as one string token
+                        return match self.peek().clone() {
+                            Tok::Str(parts) => {
+                                self.advance();
+                                let mut code = String::new();
+                                for p in parts {
+                                    if let StrPart::Lit(t) = p {
+                                        code.push_str(&t);
+                                    }
+                                }
+                                Ok(Expr::new(ExprKind::Rust(code), line, col))
+                            }
+                            _ => Err(self.err("`rust:` needs an indented block of Rust code on the following lines")),
+                        };
+                    }
+                    self.reject_spaced_paren("rust")?;
+                    if !self.eat_sym("(") {
+                        return Err(self.err("expected `rust(\"...\")` or `rust:` followed by an indented block"));
+                    }
+                    let code = match self.peek().clone() {
+                        Tok::Str(parts) => {
+                            self.advance();
+                            let mut code = String::new();
+                            for p in parts {
+                                match p {
+                                    StrPart::Lit(t) => code.push_str(&t),
+                                    StrPart::Expr(..) => return Err(self.err("Rust code cannot contain `#{}` interpolation; Lume names are visible inside it directly")),
+                                }
+                            }
+                            code
+                        }
+                        _ => return Err(self.err("`rust(...)` takes one string of Rust code")),
+                    };
+                    self.expect_sym(")", "to close `rust(...)`")?;
+                    Ok(Expr::new(ExprKind::Rust(code), line, col))
+                }
                 "Ok" => {
                     self.advance();
                     self.reject_spaced_paren("Ok")?;
@@ -1375,7 +1492,7 @@ fn count_placeholders(e: &Expr) -> usize {
         ExprKind::Puts(e) => count_placeholders(e),
         ExprKind::Some(e) | ExprKind::Ok(e) | ExprKind::Try(e) | ExprKind::Unwrap(e) | ExprKind::TupleIndex { recv: e, .. } => count_placeholders(e),
         ExprKind::Tuple(items) => items.iter().map(count_placeholders).sum(),
-        ExprKind::None => 0,
+        ExprKind::None | ExprKind::Rust(_) => 0,
         ExprKind::Match { scrutinee, arms } => {
             count_placeholders(scrutinee)
                 + arms.iter().map(|a| a.guard.as_ref().map(count_placeholders).unwrap_or(0) + walk_block(&a.body)).sum::<usize>()
