@@ -1,0 +1,6 @@
+build order: http, json, web, db, app
+who needs json: [db, web]
+detected cycle: app -> web -> json -> app
+forward: [10, 20, 30, 40]
+backward: [40, 30, 20, 10]
+4 nodes, head Some(0), tail Some(3)

@@ -1,0 +1,64 @@
+# Sample program 3 from the design doc: the HTTP handler, ported in-process.
+# Same shape (App holding a Store, get/create handlers, Response values),
+# driven by a list of simulated requests instead of a network server.
+# The threaded `shared var Store` case waits for async (decided after M7).
+
+struct User:
+  id: Int
+  name: Str
+  email: Str
+
+enum Response:
+  Ok(body: Str)
+  Created(id: Int)
+  NotFound(what: Str)
+  BadRequest(why: Str)
+
+  def status = match self:
+    Ok(_)         -> 200
+    Created(_)    -> 201
+    NotFound(_)   -> 404
+    BadRequest(_) -> 400
+
+struct Store:
+  users: [User]
+  next_id: Int
+
+  def find(id: Int) -> User? = users.find(_.id == id)
+
+  def insert(var self, name: Str, email: Str) -> Int:
+    id = next_id
+    users.push(User(id, name, email))
+    next_id += 1
+    id
+
+struct App:
+  store: Store
+
+  def get_user(id: Int) -> Response:
+    match store.find(id):
+      Some(u) -> Response.Ok("#{u.name} <#{u.email}>")
+      None    -> NotFound("user #{id}")
+
+  def create_user(var self, body: Str) -> Response:
+    match body.split(","):
+      [name, email] if email.contains?("@") -> Created(store.insert(name.trim, email.trim))
+      [_, email]                            -> BadRequest("bad email: #{email.trim}")
+      parts                                 -> BadRequest("expected name,email; got #{parts.len} fields")
+
+enum Request:
+  Get(id: Int)
+  Post(body: Str)
+
+def main:
+  var app = App(Store([], 1))
+  requests = [Post("Ana, ana@x.com"), Post("Bo, bo@x.com"), Get(1), Get(7), Post("Cy, nope"), Post("just one field"), Get(2)]
+  var log: [(Int, Str)] = []
+  for req in requests:
+    resp = match req:
+      Get(id)    -> app.get_user(id)
+      Post(body) -> app.create_user(body)
+    log.push((resp.status, resp.to_s))
+  for status, text in log:
+    puts "#{status}  #{text}"
+  puts "#{app.store.users.len} users stored; statuses: #{log.map(_.0)}"

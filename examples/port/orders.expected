@@ -1,0 +1,32 @@
+warning: `!` stops the program if the value is missing or an error
+  --> examples/port/orders.lume:47:11
+   |
+47 |   o.submit!
+   |           ^
+  help: fine in tests and quick scripts; elsewhere use `match`, `?` or `.or(default)`
+warning: `!` stops the program if the value is missing or an error
+  --> examples/port/orders.lume:52:19
+   |
+52 |   o.approve("Ana")!
+   |                   ^
+  help: fine in tests and quick scripts; elsewhere use `match`, `?` or `.or(default)`
+warning: `!` stops the program if the value is missing or an error
+  --> examples/port/orders.lume:56:15
+   |
+56 |   empty.submit!
+   |               ^
+  help: fine in tests and quick scripts; elsewhere use `match`, `?` or `.or(default)`
+warning: `!` stops the program if the value is missing or an error
+  --> examples/port/orders.lume:60:32
+   |
+60 |   empty.reject("nothing in it")!
+   |                                ^
+  help: fine in tests and quick scripts; elsewhere use `match`, `?` or `.or(default)`
+order 1: 2 items, total 13.5, draft
+order 1: 2 items, total 13.5, submitted (timestamped)
+expected: order 1 already submitted
+order 1: 2 items, total 13.5, approved by Ana
+expected: empty order
+order 2: 0 items, total 0.0, rejected: nothing in it
+approved: [1]
+grand total: 13.5

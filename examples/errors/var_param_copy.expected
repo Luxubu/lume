@@ -1,0 +1,6 @@
+error: `var n` needs a list, map, string or struct; `Int` values are copied, so changing the copy would do nothing
+  --> examples/errors/var_param_copy.lume:1:14
+  |
+1 | def bump(var n: Int):
+  |              ^
+  help: return the new value instead

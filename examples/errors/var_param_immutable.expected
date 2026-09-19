@@ -1,0 +1,6 @@
+error: `add_all` may change `xs`, but `items` is immutable
+  --> examples/errors/var_param_immutable.lume:6:11
+  |
+6 |   add_all(items, 3)
+  |           ^
+  help: declare it with `var items = ...` on line 5

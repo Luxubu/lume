@@ -1,0 +1,8 @@
+201  Created(id: 1)
+201  Created(id: 2)
+200  Ok(body: Ana <ana@x.com>)
+404  NotFound(what: user 7)
+400  BadRequest(why: bad email: nope)
+400  BadRequest(why: expected name,email; got 1 fields)
+200  Ok(body: Bo <bo@x.com>)
+2 users stored; statuses: [201, 201, 200, 404, 400, 400, 200]

@@ -1,0 +1,7 @@
+def bump(var n: Int):
+  n += 1
+
+def main:
+  var x = 1
+  bump(x)
+  puts x

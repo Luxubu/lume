@@ -1,0 +1,18 @@
+# Sample program 1 from the design doc: word count (the Python-replacement case).
+# Usage: lume run wordcount.lume -- <file>     (falls back to a built-in text)
+
+def main -> () or Error:
+  text = match Env.args.first:
+    Some(path) -> File.read(path)?
+    None       -> "the quick brown fox jumps over the lazy dog the fox the dog barks"
+
+  var counts: {Str: Int} = {}
+  for word in text.split(" ") where not word.empty?:
+    key = word.downcase
+    counts[key] = counts[key].or(0) + 1
+
+  counts.to_list
+    |> .sort_by(_.1)
+    |> .reverse
+    |> .take(5)
+    |> .each { |word, n| puts "#{n.pad(6)}  #{word}" }

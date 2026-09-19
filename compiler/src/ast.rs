@@ -18,6 +18,8 @@ pub enum Type {
     Tuple(Vec<Type>),
     /// `T or E`
     Result(Box<Type>, Box<Type>),
+    /// `{K: V}`
+    Map(Box<Type>, Box<Type>),
     /// A lazy chain (`xs.filter(...).map(...)`) not yet collected. The bool
     /// says whether items are references into the source list. Internal:
     /// becomes `[T]` wherever a value is needed, never reaches a signature.
@@ -51,6 +53,8 @@ impl Type {
 pub struct Param {
     pub name: String,
     pub ty: Type,
+    /// `var name: T` — the callee may change it in place
+    pub mutable: bool,
     pub line: usize,
     pub col: usize,
 }
@@ -165,8 +169,10 @@ pub enum Stmt {
     Var { name: String, ty: Option<Type>, value: Expr, line: usize, col: usize },
     /// `name += value` and friends
     OpAssign { name: String, op: &'static str, value: Expr, line: usize, col: usize },
-    /// `recv.field = value` / `recv.field += value`
+    /// `recv.field = value` / `recv.field += value`; `recv` may be `xs[i]`
     FieldAssign { recv: Expr, field: String, op: Option<&'static str>, value: Expr, line: usize, col: usize },
+    /// `xs[i] = value` / `m[k] = value` / `xs[i] += value`
+    IndexAssign { recv: Expr, index: Expr, op: Option<&'static str>, value: Expr, line: usize, col: usize },
     Expr(Expr),
     Return { value: Option<Expr>, line: usize, col: usize },
     While { cond: Expr, body: Block },
@@ -234,6 +240,10 @@ pub enum ExprKind {
     Unwrap(Box<Expr>),
     /// `rust("...")` or `rust:` + indented block — Rust code emitted verbatim
     Rust(String),
+    /// `xs[i]` / `m[k]` — reads give `T?`
+    Index { recv: Box<Expr>, index: Box<Expr> },
+    /// `{k: v, ...}` / `{}`
+    MapLit(Vec<(Expr, Expr)>),
 }
 
 impl Expr {

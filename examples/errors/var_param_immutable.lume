@@ -1,0 +1,7 @@
+def add_all(var xs: [Int], n: Int):
+  xs.push(n)
+
+def main:
+  items = [1, 2]
+  add_all(items, 3)
+  puts items

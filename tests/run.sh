@@ -42,14 +42,15 @@ check() {  # name, expected-file, actual-text
   fi
 }
 
-for f in examples/*.lume; do
-  name=$(basename "$f" .lume)
+for f in examples/*.lume examples/port/*.lume; do
+  name=$(basename "$(dirname "$f")")/$(basename "$f" .lume); name=${name#examples/}
+  [ "$(dirname "$f")" = "examples" ] && name=$(basename "$f" .lume)
   out=$("$LUME" run "$f" 2>&1); code=$?
   if [ $code -ne 0 ]; then
     echo "FAIL $name: exit $code"; printf '%s\n' "$out" | head -15 | sed 's/^/    /'
     fail=$((fail+1)); failed+=("$name"); continue
   fi
-  check "$name" "examples/$name.expected" "$out"
+  check "$name" "${f%.lume}.expected" "$out"
 done
 
 for f in examples/errors/*.lume; do
@@ -66,7 +67,7 @@ for f in examples/errors/*.lume; do
   check "$name" "examples/errors/$(basename "$f" .lume).expected" "$out"
 done
 
-rm -rf examples/.lume examples/errors/.lume
+rm -rf examples/.lume examples/errors/.lume examples/port/.lume
 if [ $UPDATE = 1 ]; then echo "expected files updated"; exit 0; fi
 echo "$pass passed, $fail failed"
 [ $fail -eq 0 ] || { printf '  %s\n' "${failed[@]}"; exit 1; }

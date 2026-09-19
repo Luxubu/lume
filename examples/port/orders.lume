@@ -1,0 +1,69 @@
+# Sample program 2 from the design doc: order state machine (enums, match, errors).
+
+struct Item:
+  name: Str
+  price: Float
+
+enum Status:
+  Draft
+  Submitted(at: Int)
+  Approved(by: Str)
+  Rejected(reason: Str)
+
+struct Order:
+  id: Int
+  items: [Item]
+  status: Status
+
+  def total = items.sum(_.price)
+
+  def submit(var self) -> () or Error:
+    match status:
+      Draft -> status = Submitted(Time.now)
+      _     -> Error("order #{id} already submitted")
+
+  def approve(var self, by: Str) -> () or Error:
+    match status:
+      Submitted(_) if total > 0.0 -> status = Approved(by)
+      Submitted(_)                -> Error("empty order")
+      _                           -> Error("not awaiting approval")
+
+  def reject(var self, reason: Str) -> () or Error:
+    match status:
+      Submitted(_) -> status = Rejected(reason)
+      _            -> Error("not awaiting approval")
+
+  def label = match status:
+    Draft          -> "draft"
+    Submitted(at)  -> "submitted (#{if at > 0: "timestamped" else: "no time"})"
+    Approved(by)   -> "approved by #{by}"
+    Rejected(r)    -> "rejected: #{r}"
+
+def report(o: Order) = puts "order #{o.id}: #{o.items.len} items, total #{o.total}, #{o.label}"
+
+def main:
+  var o = Order(1, [Item("pen", 1.5), Item("book", 12.0)], Draft)
+  report(o)
+  o.submit!
+  report(o)
+  match o.submit:
+    Ok(_)    -> puts "submitted twice?"
+    Error(e) -> puts "expected: #{e.message}"
+  o.approve("Ana")!
+  report(o)
+
+  var empty = Order(2, [], Draft)
+  empty.submit!
+  match empty.approve("Bo"):
+    Ok(_)    -> puts "approved an empty order?"
+    Error(e) -> puts "expected: #{e.message}"
+  empty.reject("nothing in it")!
+  report(empty)
+
+  orders = [o, empty]
+  approved = orders.filter do |x|
+    match x.status:
+      Approved(_) -> true
+      _           -> false
+  puts "approved: #{approved.map(_.id)}"
+  puts "grand total: #{orders.sum(_.total)}"

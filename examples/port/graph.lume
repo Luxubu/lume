@@ -1,0 +1,104 @@
+# The graph-heavy program: a dependency resolver (topological sort with cycle
+# detection) and an arena-based doubly linked list. This is the ownership
+# stress test: shared structure, recursion that mutates state while walking
+# edges, and nodes that point at each other.
+
+struct Graph:
+  edges: {Str: [Str]}          # package -> what it depends on
+
+  def add(var self, pkg: Str, deps: [Str]):
+    edges[pkg] = deps
+    for d in deps where not edges.contains?(d):
+      edges[d] = []
+
+  def deps_of(pkg: Str) -> [Str] = edges[pkg].or([])
+
+  # Depth-first walk. `state` records 1 = visiting, 2 = done.
+  def visit(pkg: Str, var state: {Str: Int}, var order: [Str], var path: [Str]) -> () or Error:
+    match state[pkg]:
+      Some(2) -> return
+      Some(1) -> return Error("cycle: #{path.join(" -> ")} -> #{pkg}")
+      _       -> state[pkg] = 1
+    path.push(pkg)
+    for d in deps_of(pkg):
+      visit(d, state, order, path)?
+    path.pop
+    state[pkg] = 2
+    order.push(pkg)
+
+  def resolve -> [Str] or Error:
+    var state: {Str: Int} = {}
+    var order: [Str] = []
+    var path: [Str] = []
+    for pkg in edges.keys:
+      visit(pkg, state, order, path)?
+    order
+
+  def dependents_of(target: Str) -> [Str] =
+    edges.to_list.filter { |pkg, deps| deps.contains?(target) }.map(_.0)
+
+# An arena: nodes live in a list and point at each other by position.
+struct Node:
+  value: Int
+  prev: Int?
+  next: Int?
+
+struct DList:
+  nodes: [Node]
+  head: Int?
+  tail: Int?
+
+  def push_back(var self, v: Int):
+    idx = nodes.len
+    nodes.push(Node(v, tail, None))
+    match tail:
+      Some(t) -> nodes[t].next = Some(idx)
+      None    -> head = Some(idx)
+    tail = Some(idx)
+
+  def to_list -> [Int]:
+    var out: [Int] = []
+    var cur = head
+    while cur.some?:
+      i = cur.or(0)
+      match nodes[i]:
+        Some(n) ->
+          out.push(n.value)
+          cur = n.next
+        None -> cur = None
+    out
+
+  def reversed -> [Int]:
+    var out: [Int] = []
+    var cur = tail
+    while cur.some?:
+      i = cur.or(0)
+      match nodes[i]:
+        Some(n) ->
+          out.push(n.value)
+          cur = n.prev
+        None -> cur = None
+    out
+
+def main:
+  var g = Graph({})
+  g.add("app", ["web", "db"])
+  g.add("web", ["http", "json"])
+  g.add("db", ["json"])
+  g.add("http", [])
+  match g.resolve:
+    Ok(order) -> puts "build order: #{order.join(", ")}"
+    Error(e)  -> puts e.message
+  puts "who needs json: #{g.dependents_of("json")}"
+
+  g.add("json", ["app"])        # introduce a cycle
+  match g.resolve:
+    Ok(order) -> puts "unexpected: #{order}"
+    Error(e)  -> puts "detected #{e.message}"
+
+  var l = DList([], None, None)
+  for v in [10, 20, 30, 40]:
+    l.push_back(v)
+  puts "forward: #{l.to_list}"
+  puts "backward: #{l.reversed}"
+  puts "#{l.nodes.len} nodes, head #{l.head}, tail #{l.tail}"

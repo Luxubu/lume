@@ -35,7 +35,7 @@ impl LumeSum<f64> for Vec<f64> { fn lume_sum(&self) -> f64 { self.iter().sum() }
 impl<T, U: LumeSum<T>> LumeSum<T> for &U { fn lume_sum(&self) -> T { (**self).lume_sum() } }
 trait LumeShow { fn lume_str(&self) -> String; }
 impl LumeShow for i64 { fn lume_str(&self) -> String { self.to_string() } }
-impl LumeShow for f64 { fn lume_str(&self) -> String { format!("{:?}", self) } }
+impl LumeShow for f64 { fn lume_str(&self) -> String { format!("{:?}", if *self == 0.0 { 0.0 } else { *self }) } }
 impl LumeShow for bool { fn lume_str(&self) -> String { self.to_string() } }
 impl LumeShow for String { fn lume_str(&self) -> String { self.clone() } }
 impl LumeShow for str { fn lume_str(&self) -> String { self.to_string() } }
@@ -75,6 +75,17 @@ fn lume_write_file(path: &str, text: &str) -> Result<(), Error> {
     std::fs::write(path, text).map_err(|e| Error { message: format!("cannot write `{}`: {}", path, e) })
 }
 fn lume_args() -> Vec<String> { std::env::args().skip(1).collect() }
+impl<K: LumeShow, V: LumeShow> LumeShow for std::collections::BTreeMap<K, V> {
+    fn lume_str(&self) -> String {
+        format!("{{{}}}", self.iter().map(|(k, v)| format!("{}: {}", k.lume_str(), v.lume_str())).collect::<Vec<_>>().join(", "))
+    }
+}
+impl<K, V> LumeLen for std::collections::BTreeMap<K, V> { fn lume_len(&self) -> i64 { self.len() as i64 } }
+impl<K, V> LumeEmpty for std::collections::BTreeMap<K, V> { fn lume_empty(&self) -> bool { self.is_empty() } }
+fn lume_pad<T: LumeShow>(x: T, width: i64) -> String { format!("{:>w$}", x.lume_str(), w = width.max(0) as usize) }
+fn lume_now() -> i64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
+}
 fn lume_split(s: &str, sep: &str) -> Vec<String> {
     let mut v: Vec<String> = s.split(sep).map(|x| x.to_string()).collect();
     while v.last().map(|x| x.is_empty()).unwrap_or(false) { v.pop(); }
@@ -103,6 +114,8 @@ struct Binding {
 #[derive(Clone)]
 struct Sig {
     params: Vec<(String, Type)>,
+    /// Which parameters are `var` (passed as `&mut`).
+    var_params: Vec<bool>,
     ret: Type,
     self_kind: SelfKind,
 }
@@ -233,6 +246,7 @@ pub fn rust_type(t: &Type) -> String {
         Type::Option(inner) => format!("Option<{}>", rust_type(inner)),
         Type::Tuple(ts) => format!("({})", ts.iter().map(rust_type).collect::<Vec<_>>().join(", ")),
         Type::Result(t, e) => format!("Result<{}, {}>", rust_type(t), rust_type(e)),
+        Type::Map(k, v) => format!("std::collections::BTreeMap<{}, {}>", rust_type(k), rust_type(v)),
         Type::Iter(inner, _) => format!("Vec<{}>", rust_type(inner)),
         Type::Unknown => "_".into(),
     }
@@ -250,6 +264,7 @@ pub fn type_name(t: &Type) -> String {
         Type::Option(i) => format!("{}?", type_name(i)),
         Type::Tuple(ts) => format!("({})", ts.iter().map(type_name).collect::<Vec<_>>().join(", ")),
         Type::Result(t, e) => format!("{} or {}", type_name(t), type_name(e)),
+        Type::Map(k, v) => format!("{{{}: {}}}", type_name(k), type_name(v)),
         Type::Iter(i, _) => format!("[{}]", type_name(i)),
         Type::Unknown => "?".into(),
     }
@@ -319,6 +334,14 @@ impl Gen {
         let s = self.current_type.as_ref()?;
         let info = self.structs.get(s)?;
         info.fields.iter().find(|(n, _)| n == name).map(|(_, t)| t.clone())
+    }
+
+    /// A zero-argument method of the current type, callable bare inside
+    /// another method (`total` for `def total`).
+    fn bare_method(&self, name: &str) -> Option<Sig> {
+        let t = self.current_type.as_ref()?;
+        let m = self.methods_of(t)?.get(name)?;
+        if m.params.is_empty() { Some(m.clone()) } else { None }
     }
 
     fn methods_of(&self, tname: &str) -> Option<&HashMap<String, Sig>> {
@@ -579,7 +602,7 @@ impl Gen {
             }
             Type::List(inner) | Type::Option(inner) => self.check_type(inner, line, col),
             Type::Tuple(ts) => ts.iter().try_for_each(|t| self.check_type(t, line, col)),
-            Type::Result(t, e) => {
+            Type::Result(t, e) | Type::Map(t, e) => {
                 self.check_type(t, line, col)?;
                 self.check_type(e, line, col)
             }
@@ -817,6 +840,8 @@ impl Gen {
                     b.ty.clone()
                 } else if let Some(t) = self.field_type(n) {
                     t
+                } else if let Some(m) = self.bare_method(n) {
+                    m.ret
                 } else if let Ok(Some(en)) = self.resolve_variant(n, e.line, e.col) {
                     Type::Named(en)
                 } else {
@@ -850,6 +875,8 @@ impl Gen {
             ExprKind::Call { name, .. } => {
                 if let Some(s) = self.fns.get(name) {
                     s.ret.clone()
+                } else if let Some(m) = self.current_type.as_ref().and_then(|t| self.methods_of(t)).and_then(|m| m.get(name)) {
+                    m.ret.clone()
                 } else if self.structs.contains_key(name) {
                     Type::Named(name.clone())
                 } else if let Ok(Some(en)) = self.resolve_variant(name, e.line, e.col) {
@@ -886,6 +913,9 @@ impl Gen {
                     if let Some(m) = self.methods_of(sn).and_then(|m| m.get(name)) {
                         return m.ret.clone();
                     }
+                    if name == "to_s" || name == "to_str" {
+                        return Type::Str;
+                    }
                 }
                 builtin_method_type(&rt, name)
             }
@@ -920,6 +950,21 @@ impl Gen {
                 _ => Type::Unknown,
             },
             ExprKind::Rust(_) => Type::Unknown,
+            ExprKind::Index { recv, .. } => match self.ty_of(recv).materialized() {
+                Type::List(e) => Type::Option(e),
+                Type::Map(_, v) => Type::Option(v),
+                Type::Str => Type::Unknown,
+                _ => Type::Unknown,
+            },
+            ExprKind::MapLit(pairs) => {
+                let mut k = Type::Unknown;
+                let mut v = Type::Unknown;
+                for (pk, pv) in pairs {
+                    if k == Type::Unknown { k = self.ty_of(pk).materialized(); }
+                    if v == Type::Unknown { v = self.ty_of(pv).materialized(); }
+                }
+                Type::Map(Box::new(k), Box::new(v))
+            }
             ExprKind::Ok(x) => {
                 let t = self.ty_of(x).materialized();
                 match &self.current_ret {
@@ -935,6 +980,7 @@ impl Gen {
         match t {
             Type::List(e) => Some(((**e).clone(), !e.is_copy())),
             Type::Iter(e, by_ref) => Some(((**e).clone(), *by_ref)),
+            Type::Map(k, v) => Some((Type::Tuple(vec![(**k).clone(), (**v).clone()]), true)),
             _ => None,
         }
     }
@@ -1084,6 +1130,8 @@ impl Gen {
         };
         let is_main = f.name == "main" && owner.is_none();
         let main_result = is_main && matches!(sig.ret, Type::Result(..));
+        // `-> () or E`: the body ends with statements, and finishes with Ok(()).
+        let unit_result = matches!(&sig.ret, Type::Result(t, _) if **t == Type::Unit);
         if is_main {
             let ok = f.params.is_empty()
                 && match &f.ret {
@@ -1111,7 +1159,7 @@ impl Gen {
                 return Err(LumeError::new(p.line, p.col, format!("parameter `{}` is listed twice", p.name)));
             }
             let rt = rust_type(&p.ty);
-            let rt = if p.ty.is_copy() { rt } else { format!("&{}", rt) };
+            let rt = if p.mutable { format!("&mut {}", rt) } else if p.ty.is_copy() { rt } else { format!("&{}", rt) };
             parts.push(format!("{}: {}", rust_name(&p.name), rt));
         }
         let mut header = format!("fn {}({})", fn_name, parts.join(", "));
@@ -1123,7 +1171,7 @@ impl Gen {
         self.indent += 1;
         self.push_scope();
         for p in &f.params {
-            self.declare(&p.name, false, !p.ty.is_copy(), p.ty.clone(), p.line);
+            self.declare(&p.name, p.mutable, !p.ty.is_copy(), p.ty.clone(), p.line);
         }
         self.current_ret = sig.ret.clone();
         self.current_type = owner.cloned();
@@ -1131,8 +1179,7 @@ impl Gen {
         self.current_fn = f.name.clone();
         let want_value = sig.ret != Type::Unit;
         self.tail_of_fn = true;
-        if main_result {
-            // `def main -> () or Error:` — the body's last statement is not a value.
+        if unit_result {
             self.block_body(&f.body, false)?;
             self.line("Ok(())");
         } else {
@@ -1290,6 +1337,52 @@ impl Gen {
                     return self.tail_unit(*line, *col);
                 }
             }
+            Stmt::IndexAssign { recv, index, op, value, line, col } => {
+                let rt = self.ty_of(recv).materialized();
+                match &rt {
+                    Type::List(_) | Type::Map(..) => {}
+                    Type::Unknown => {}
+                    other => return Err(LumeError::new(*line, *col, format!("`{}` values cannot be indexed", type_name(other)))),
+                }
+                let target = Expr::new(ExprKind::Index { recv: Box::new(recv.clone()), index: Box::new(index.clone()) }, *line, *col);
+                if let (Type::Map(k_ty, _), None) = (&rt, op) {
+                    // insert or replace: the value is computed first (it may read the
+                    // same key), and a non-Copy key is cloned so it stays usable after.
+                    let place = self.mutable_place(recv, "this map", *line, *col)?;
+                    let k = self.expr_val(index)?;
+                    let k = if k_ty.is_copy() || matches!(index.kind, ExprKind::Str(_) | ExprKind::Int(_)) { k } else { format!("({}).clone()", k) };
+                    let v = self.expr_owned(value)?;
+                    let tmp = self.fresh("v");
+                    self.line(&format!("{{ let {} = {}; {}.insert({}, {}); }}", tmp, v, place, k, tmp));
+                } else {
+                    let place = self.mutable_place(&target, "this position", *line, *col)?;
+                    let v = if op.is_some() { self.expr(value)? } else { self.expr_owned(value)? };
+                    self.line(&format!("{} {} {};", place, op.unwrap_or("="), v));
+                }
+                if is_tail {
+                    return self.tail_unit(*line, *col);
+                }
+            }
+            Stmt::FieldAssign { recv, field, op, value, line, col } if matches!(recv.kind, ExprKind::Index { .. }) => {
+                let rt = self.ty_of(recv).materialized();
+                let inner = match &rt {
+                    Type::Option(i) => (**i).clone(),
+                    other => other.clone(),
+                };
+                let sname = match &inner {
+                    Type::Named(s) if self.structs.contains_key(s) => s.clone(),
+                    other => return Err(LumeError::new(*line, *col, format!("`{}` values have no fields to assign", type_name(other)))),
+                };
+                if !self.structs[&sname].fields.iter().any(|(n, _)| n == field) {
+                    return Err(self.no_such_member(&sname, field, *line, *col));
+                }
+                let place = self.mutable_place(recv, &format!("the field `{}`", field), *line, *col)?;
+                let v = if op.is_some() { self.expr(value)? } else { self.expr_owned(value)? };
+                self.line(&format!("{}.{} {} {};", place, rust_name(field), op.unwrap_or("="), v));
+                if is_tail {
+                    return self.tail_unit(*line, *col);
+                }
+            }
             Stmt::FieldAssign { recv, field, op, value, line, col } => {
                 let rt = self.ty_of(recv);
                 let sname = match &rt {
@@ -1347,6 +1440,19 @@ impl Gen {
                     };
                     self.line(&v);
                 } else {
+                    // In a `() or E` function a bare error value is an early return.
+                    if !self.in_block {
+                        if let Type::Result(t, err_t) = self.current_ret.clone() {
+                            if *t == Type::Unit {
+                                let et = self.ty_of(e).materialized();
+                                if et == *err_t && et != Type::Unknown {
+                                    let v = self.expr_owned(e)?;
+                                    self.line(&format!("return Err({});", v));
+                                    return Ok(());
+                                }
+                            }
+                        }
+                    }
                     let v = self.expr_stmt(e)?;
                     self.line(&format!("{};", v));
                 }
@@ -1400,10 +1506,26 @@ impl Gen {
             }
             Stmt::For { vars, iter, filter, body, line, col } => {
                 let it_ty = self.ty_of(iter);
+                // Iterating a collection reached through `self` while the body may
+                // change `self` would be two borrows at once; iterate a copy instead.
+                let self_rooted = self.current_self == SelfKind::Mutate
+                    && matches!(self.place_root(iter).map(|r| &r.kind), Some(ExprKind::SelfRef))
+                    || (self.current_self == SelfKind::Mutate
+                        && matches!(self.place_root(iter).map(|r| &r.kind), Some(ExprKind::Ident(n)) if self.lookup(n).is_none() && self.field_type(n).is_some()));
                 let (it, elem_ty, borrowed) = match &it_ty {
                     Type::Iter(elem, by_ref) => (self.expr(iter)?, (**elem).clone(), *by_ref && !elem.is_copy()),
+                    Type::List(elem) | Type::Map(_, elem) if self_rooted => {
+                        let ex = self.expr(iter)?;
+                        let (et, is_map) = match &it_ty {
+                            Type::Map(k, v) => (Type::Tuple(vec![(**k).clone(), (**v).clone()]), true),
+                            _ => ((**elem).clone(), false),
+                        };
+                        let _ = is_map;
+                        (format!("({}).clone().into_iter()", ex), et, false)
+                    }
                     Type::List(elem) if elem.is_copy() || **elem == Type::Unknown => (format!("({}).iter().cloned()", self.expr(iter)?), (**elem).clone(), false),
                     Type::List(elem) => (format!("({}).iter()", self.expr(iter)?), (**elem).clone(), true),
+                    Type::Map(k, v) => (format!("({}).iter()", self.expr(iter)?), Type::Tuple(vec![(**k).clone(), (**v).clone()]), true),
                     Type::Unknown => (format!("({}).iter().cloned()", self.expr(iter)?), Type::Unknown, false),
                     other => {
                         return Err(LumeError::new(iter.line, iter.col, format!("cannot loop over a `{}`", type_name(other))).with_help("`for` needs a list or a range"));
@@ -1470,6 +1592,67 @@ impl Gen {
         }
         self.line(rs);
         Ok(())
+    }
+
+    /// The root name of a place expression (`a.b[c].d` -> `a`), if any.
+    fn place_root<'a>(&self, e: &'a Expr) -> Option<&'a Expr> {
+        match &e.kind {
+            ExprKind::Ident(_) | ExprKind::SelfRef => Some(e),
+            ExprKind::Method { recv, args, .. } if args.is_empty() => self.place_root(recv),
+            ExprKind::Index { recv, .. } | ExprKind::TupleIndex { recv, .. } => self.place_root(recv),
+            _ => None,
+        }
+    }
+
+    /// Checks that a place can be written through, and returns the Rust
+    /// text of the place as an lvalue.
+    fn mutable_place(&mut self, e: &Expr, what: &str, line: usize, col: usize) -> Result<String> {
+        let root = match self.place_root(e) {
+            Some(r) => r.clone(),
+            None => {
+                return Err(LumeError::new(line, col, format!("only a named value can be changed, not {}", what)).with_help("bind the value to a `var` first"));
+            }
+        };
+        match &root.kind {
+            ExprKind::SelfRef => self.require_var_self(what, line, col)?,
+            ExprKind::Ident(n) => match self.lookup(n).cloned() {
+                Some(b) if b.mutable => {}
+                Some(b) => {
+                    return Err(LumeError::new(line, col, format!("`{}` is immutable, so {} cannot be changed", n, what))
+                        .with_help(format!("declare it with `var {} = ...` on line {}", n, b.line)));
+                }
+                None if self.field_type(n).is_some() => self.require_var_self(n, line, col)?,
+                None => return Err(self.unknown_name(n, line, col)),
+            },
+            _ => unreachable!(),
+        }
+        self.lvalue(e)
+    }
+
+    /// Rust lvalue text for a place: indexes become `[i as usize]` on lists
+    /// and `get_mut` on maps.
+    fn lvalue(&mut self, e: &Expr) -> Result<String> {
+        match &e.kind {
+            ExprKind::Index { recv, index } => {
+                let rt = self.ty_of(recv).materialized();
+                let r = self.lvalue(recv)?;
+                match rt {
+                    Type::List(_) | Type::Unknown => Ok(format!("{}[({}) as usize]", r, self.expr(index)?)),
+                    Type::Map(..) => {
+                        let k = self.expr_val(index)?;
+                        let k = map_key(&rt, &k);
+                        Ok(format!("(*{}.get_mut({}).expect(\"no such key in map\"))", r, k))
+                    }
+                    other => Err(LumeError::new(e.line, e.col, format!("`{}` values cannot be indexed", type_name(&other)))),
+                }
+            }
+            ExprKind::Method { recv, name, args } if args.is_empty() => {
+                let r = self.lvalue(recv)?;
+                Ok(format!("{}.{}", r, rust_name(name)))
+            }
+            ExprKind::TupleIndex { recv, index } => Ok(format!("{}.{}", self.lvalue(recv)?, index)),
+            _ => self.expr(e),
+        }
     }
 
     fn require_var_self(&self, field: &str, line: usize, col: usize) -> Result<()> {
@@ -1600,6 +1783,26 @@ impl Gen {
         }
     }
 
+    /// An argument for a `var` parameter: must be a `var` binding (or a `var`
+    /// parameter, or a field of a `var self`), passed as `&mut`.
+    fn expr_var_arg(&mut self, e: &Expr, pname: &str, callee: &str) -> Result<String> {
+        match &e.kind {
+            ExprKind::Ident(n) => match self.lookup(n).cloned() {
+                Some(b) if b.mutable && b.borrowed => Ok(rust_name(n)), // a var parameter: reborrow
+                Some(b) if b.mutable => Ok(format!("&mut {}", rust_name(n))),
+                Some(b) => Err(LumeError::new(e.line, e.col, format!("`{}` may change `{}`, but `{}` is immutable", callee, pname, n))
+                    .with_help(format!("declare it with `var {} = ...` on line {}", n, b.line))),
+                None if self.field_type(n).is_some() => {
+                    self.require_var_self(n, e.line, e.col)?;
+                    Ok(format!("&mut self.{}", rust_name(n)))
+                }
+                None => Err(self.unknown_name(n, e.line, e.col)),
+            },
+            _ => Err(LumeError::new(e.line, e.col, format!("`{}` changes its `{}` argument, so it needs a named `var` value, not an expression", callee, pname))
+                .with_help("bind the value to a `var` first")),
+        }
+    }
+
     /// The iterator a list, range or chain yields: (rust, elem type, by_ref).
     fn iter_base(&mut self, recv: &Expr, e: &Expr) -> Result<(String, Type, bool)> {
         let rt = self.ty_of(recv);
@@ -1613,6 +1816,7 @@ impl Gen {
                 }
             }
             Type::Iter(elem, by_ref) => Ok((r, *elem, by_ref)),
+            Type::Map(k, v) => Ok((format!("({}).iter().map(|(k, v)| (k, v))", r), Type::Tuple(vec![*k, *v]), true)),
             Type::Unknown => Err(LumeError::new(e.line, e.col, "cannot tell what kind of value this block is applied to")
                 .with_help("add a type to the binding or parameter it comes from")),
             other => Err(LumeError::new(e.line, e.col, format!("`{}` values cannot take a block; only lists and ranges can", type_name(&other)))),
@@ -1983,7 +2187,8 @@ impl Gen {
                     cp.text = format!("{}({})", if name == "Ok" { "Ok" } else { "Err" }, sub.text);
                     return Ok(());
                 }
-                if (name == "Ok" || name == "Error") && *t != Type::Unknown && !matches!(t, Type::Named(n) if n == "Error") {
+                let enum_has_it = matches!(t, Type::Named(n) if self.enums.get(n).map(|e| e.variants.iter().any(|(v, _)| v == name)).unwrap_or(false));
+                if (name == "Ok" || name == "Error") && *t != Type::Unknown && !enum_has_it && !matches!(t, Type::Named(n) if n == "Error") {
                     return Err(LumeError::new(p.line, p.col, format!("`{}` matches a `T or E` value, but this is a `{}`", name, type_name(t))));
                 }
                 // Option
@@ -2308,6 +2513,11 @@ impl Gen {
                     rust_name(name)
                 } else if self.field_type(name).is_some() {
                     format!("self.{}", rust_name(name))
+                } else if let Some(m) = self.bare_method(name) {
+                    if m.self_kind == SelfKind::Mutate {
+                        self.require_var_self(name, e.line, e.col)?;
+                    }
+                    format!("self.{}()", rust_name(name))
                 } else if let Some(en) = self.resolve_variant(name, e.line, e.col)? {
                     self.variant_ctor(&en, name, &[], e)?
                 } else if self.fns.contains_key(name) {
@@ -2395,6 +2605,46 @@ impl Gen {
                 }
             }
             ExprKind::Ok(x) => format!("Ok({})", self.expr_owned(x)?),
+            ExprKind::Index { recv, index } => {
+                let rt = self.ty_of(recv).materialized();
+                let r = self.expr_val(recv)?;
+                match rt {
+                    Type::List(_) => {
+                        let i = self.expr(index)?;
+                        let it = self.ty_of(index);
+                        if it != Type::Int && it != Type::Unknown {
+                            return Err(LumeError::new(index.line, index.col, format!("a list position is an `Int`, but this is a `{}`", type_name(&it))));
+                        }
+                        format!("({}).get(({}) as usize).cloned()", r, i)
+                    }
+                    Type::Map(ref k, _) => {
+                        let key = self.expr_val(index)?;
+                        let kt = self.ty_of(index);
+                        if kt != **k && kt != Type::Unknown {
+                            return Err(LumeError::new(index.line, index.col, format!("this map's keys are `{}`, but the key is a `{}`", type_name(k), type_name(&kt))));
+                        }
+                        let key = map_key(&rt, &key);
+                        format!("({}).get({}).cloned()", r, key)
+                    }
+                    Type::Str => {
+                        return Err(LumeError::new(e.line, e.col, "strings cannot be indexed by position")
+                            .with_help("use `.chars`, `.first`, `.slice(from, len)` or `.split`"));
+                    }
+                    Type::Unknown => format!("({}).get(({}) as usize).cloned()", r, self.expr(index)?),
+                    other => return Err(LumeError::new(e.line, e.col, format!("`{}` values cannot be indexed", type_name(&other)))),
+                }
+            }
+            ExprKind::MapLit(pairs) => {
+                if pairs.is_empty() {
+                    "std::collections::BTreeMap::new()".to_string()
+                } else {
+                    let mut parts = Vec::new();
+                    for (k, v) in pairs {
+                        parts.push(format!("({}, {})", self.expr_owned(k)?, self.expr_owned(v)?));
+                    }
+                    format!("std::collections::BTreeMap::from([{}])", parts.join(", "))
+                }
+            }
             ExprKind::Rust(code) => {
                 self.has_rust_blocks = true;
                 if code.contains('\n') {
@@ -2458,8 +2708,12 @@ impl Gen {
                 if let Some(sig) = self.fns.get(name).cloned() {
                     let bound = self.bind_args(&format!("`{}`", name), &sig.params, args, e.line, e.col)?;
                     let mut parts = Vec::new();
-                    for (a, (_, t)) in bound.iter().zip(&sig.params) {
-                        parts.push(self.expr_arg(a, t)?);
+                    for (i, (a, (pname, t))) in bound.iter().zip(&sig.params).enumerate() {
+                        if sig.var_params[i] {
+                            parts.push(self.expr_var_arg(a, pname, name)?);
+                        } else {
+                            parts.push(self.expr_arg(a, t)?);
+                        }
                     }
                     format!("{}({})", rust_name(name), parts.join(", "))
                 } else if let Some(info) = self.structs.get(name).cloned() {
@@ -2475,7 +2729,13 @@ impl Gen {
                     return Err(LumeError::new(e.line, e.col, format!("`{}` is a value, not a function", name)));
                 } else if let Some(tn) = self.current_type.clone() {
                     if self.methods_of(&tn).map(|m| m.contains_key(name)).unwrap_or(false) {
-                        return Err(LumeError::new(e.line, e.col, format!("`{}` is a method of `{}`; call it as `self.{}(...)`", name, tn, name)));
+                        // a sibling method called bare: `deps_of(pkg)` is `self.deps_of(pkg)`
+                        let call = Expr::new(
+                            ExprKind::Method { recv: Box::new(Expr::new(ExprKind::SelfRef, e.line, e.col)), name: name.clone(), args: args.clone() },
+                            e.line,
+                            e.col,
+                        );
+                        return self.expr(&call);
                     }
                     return Err(self.unknown_fn(name, e.line, e.col));
                 } else {
@@ -2513,12 +2773,13 @@ impl Gen {
                             ("File", "exists?") => { need(1)?; format!("std::path::Path::new(&*{}).exists()", parts[0]) }
                             ("Env", "args") => { need(0)?; "lume_args()".to_string() }
                             ("Env", "get") => { need(1)?; format!("std::env::var(&*{}).ok()", parts[0]) }
+                            ("Time", "now") => { need(0)?; "lume_now()".to_string() }
                             _ => unreachable!(),
                         });
                     }
-                    if self.lookup(tn).is_none() && (tn == "File" || tn == "Env") {
+                    if self.lookup(tn).is_none() && (tn == "File" || tn == "Env" || tn == "Time") {
                         return Err(LumeError::new(e.line, e.col, format!("`{}` has no `{}`", tn, name))
-                            .with_help(if tn == "File" { "File has read(path), write(path, text) and exists?(path)" } else { "Env has args and get(name)" }));
+                            .with_help(match tn.as_str() { "File" => "File has read(path), write(path, text) and exists?(path)", "Env" => "Env has args and get(name)", _ => "Time has now" }));
                     }
                     if self.lookup(tn).is_none() && self.structs.contains_key(tn) {
                         return Err(LumeError::new(e.line, e.col, format!("`{}.{}` — static methods on a type are not supported yet", tn, name))
@@ -2580,11 +2841,19 @@ impl Gen {
                             return Ok(format!("{}.{}", r, rust_name(name)));
                         }
                     }
+                    // universal methods on user types
+                    if (name == "to_s" || name == "to_str") && args.is_empty() && self.methods_of(tname).map(|m| !m.contains_key(name)).unwrap_or(true) {
+                        return Ok(format!("({}).lume_str()", r));
+                    }
                     if let Some(m) = self.methods_of(tname).and_then(|m| m.get(name)).cloned() {
                         let bound = self.bind_args(&format!("`{}.{}`", tname, name), &m.params, args, e.line, e.col)?;
                         let mut parts = Vec::new();
-                        for (a, (_, t)) in bound.iter().zip(&m.params) {
-                            parts.push(self.expr_arg(a, t)?);
+                        for (i, (a, (pname, t))) in bound.iter().zip(&m.params).enumerate() {
+                            if m.var_params[i] {
+                                parts.push(self.expr_var_arg(a, pname, name)?);
+                            } else {
+                                parts.push(self.expr_arg(a, t)?);
+                            }
                         }
                         if m.self_kind == SelfKind::Mutate {
                             self.check_receiver_mutable(recv, name, e.line, e.col)?;
@@ -2692,6 +2961,13 @@ impl Gen {
         };
         let elem_copy = matches!(rt, Type::List(e) if e.is_copy());
         Ok(match name {
+            "pad" => { need(1)?; format!("lume_pad({}, {})", recv, args[0]) }
+            "keys" if matches!(rt, Type::Map(..)) => { need(0)?; format!("({}).keys().cloned().collect::<Vec<_>>()", recv) }
+            "values" if matches!(rt, Type::Map(..)) => { need(0)?; format!("({}).values().cloned().collect::<Vec<_>>()", recv) }
+            "to_list" if matches!(rt, Type::Map(..)) => { need(0)?; format!("({}).iter().map(|(k, v)| (k.clone(), v.clone())).collect::<Vec<_>>()", recv) }
+            "contains?" if matches!(rt, Type::Map(..)) => { need(1)?; format!("({}).contains_key({})", recv, map_key(rt, &args[0])) }
+            "remove" if matches!(rt, Type::Map(..)) => { need(1)?; format!("({}).remove({})", recv, map_key(rt, &args[0])) }
+            "get" if matches!(rt, Type::Map(..)) => { need(1)?; format!("({}).get({}).cloned()", recv, map_key(rt, &args[0])) }
             "len" => { need(0)?; format!("({}).lume_len()", recv) }
             "empty?" => { need(0)?; format!("({}).lume_empty()", recv) }
             "any?" => { need(0)?; format!("(!({}).lume_empty())", recv) }
@@ -2758,6 +3034,7 @@ impl Gen {
 fn sig_of(f: &FnDef) -> Sig {
     Sig {
         params: f.params.iter().map(|p| (p.name.clone(), p.ty.clone())).collect(),
+        var_params: f.params.iter().map(|p| p.mutable).collect(),
         ret: f.ret.clone().unwrap_or(Type::Unknown),
         self_kind: f.self_kind,
     }
@@ -2784,6 +3061,7 @@ fn is_builtin_name(name: &str) -> bool {
             | "contains?" | "reverse" | "sort" | "max" | "min" | "lines" | "split" | "join"
             | "starts_with?" | "ends_with?" | "chars" | "take" | "skip" | "to_list" | "enumerate"
             | "or" | "some?" | "none?" | "ok?" | "error?" | "or_error" | "error"
+            | "pad" | "keys" | "values" | "remove" | "get"
     )
 }
 
@@ -2796,6 +3074,7 @@ fn builtin_namespace_type(ns: &str, name: &str) -> Option<Type> {
         ("File", "exists?") => Type::Bool,
         ("Env", "args") => Type::List(Box::new(Type::Str)),
         ("Env", "get") => Type::Option(Box::new(Type::Str)),
+        ("Time", "now") => Type::Int,
         _ => return None,
     })
 }
@@ -2806,7 +3085,20 @@ fn builtin_method_type(recv: &Type, name: &str) -> Type {
         Type::List(e) | Type::Iter(e, _) => Some((**e).clone()),
         _ => None,
     };
+    if let Type::Map(k, v) = recv {
+        return match name {
+            "len" => Type::Int,
+            "empty?" | "any?" | "contains?" => Type::Bool,
+            "keys" => Type::List(k.clone()),
+            "values" => Type::List(v.clone()),
+            "to_list" => Type::List(Box::new(Type::Tuple(vec![(**k).clone(), (**v).clone()]))),
+            "remove" | "get" => Type::Option(v.clone()),
+            "to_s" | "to_str" => Type::Str,
+            _ => Type::Unknown,
+        };
+    }
     match name {
+        "pad" => Type::Str,
         "take" | "skip" => match recv {
             Type::List(e) => Type::Iter(e.clone(), !e.is_copy()),
             Type::Iter(..) => recv.clone(),
@@ -2881,7 +3173,7 @@ fn type_is_known(t: &Type) -> bool {
         Type::Unknown => false,
         Type::List(i) | Type::Option(i) | Type::Iter(i, _) => type_is_known(i),
         Type::Tuple(ts) => ts.iter().all(type_is_known),
-        Type::Result(a, b) => type_is_known(a) && type_is_known(b),
+        Type::Result(a, b) | Type::Map(a, b) => type_is_known(a) && type_is_known(b),
         _ => true,
     }
 }
@@ -2890,6 +3182,7 @@ fn suggest_type(t: &Type) -> String {
     match t {
         Type::List(i) if **i == Type::Unknown => "[Int]".into(),
         Type::Option(i) if **i == Type::Unknown => "Int?".into(),
+        Type::Map(k, v) if **k == Type::Unknown || **v == Type::Unknown => "{Str: Int}".into(),
         Type::Unknown => "Type".into(),
         other => type_name(other),
     }
@@ -2898,7 +3191,17 @@ fn suggest_type(t: &Type) -> String {
 fn describe_value(e: &Expr) -> String {
     match &e.kind {
         ExprKind::List(items) if items.is_empty() => "[]".into(),
+        ExprKind::MapLit(pairs) if pairs.is_empty() => "{}".into(),
         ExprKind::None => "None".into(),
         _ => "this value".into(),
+    }
+}
+
+/// A borrowed map key: `&*k` works whether `k` is owned or already a
+/// reference (for `String` it yields `&str`, which `Borrow` accepts).
+fn map_key(map_ty: &Type, k: &str) -> String {
+    match map_ty {
+        Type::Map(kt, _) if kt.is_copy() => format!("&({})", k),
+        _ => format!("&*({})", k),
     }
 }

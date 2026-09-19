@@ -121,6 +121,21 @@ impl Parser {
         }
     }
 
+    /// A field or method name: like `ident`, but a few keywords are allowed
+    /// because they are natural member names (`next`, `match`, `in`) and are
+    /// never ambiguous after a `.` or in a field list. Bare use inside a
+    /// method still means the keyword, so such fields are read as `self.next`.
+    fn member_name(&mut self, what: &str) -> Result<(String, usize, usize)> {
+        let (l, c) = self.here();
+        if let Tok::Ident(s) = self.peek().clone() {
+            if matches!(s.as_str(), "next" | "match" | "in" | "where" | "test" | "import" | "pub" | "extend" | "interface" | "assert") {
+                self.advance();
+                return Ok((s, l, c));
+            }
+        }
+        self.ident(what)
+    }
+
     /// `name (` — a space between a name and `(` is always an error: it is
     /// unclear whether it is a call or a value in parentheses.
     fn reject_spaced_paren(&self, name: &str) -> Result<()> {
@@ -216,7 +231,7 @@ impl Parser {
                         .err(format!("field `{}` comes after a method", fname))
                         .with_help("list all fields first, then the methods"));
                 }
-                let (fname, fl, fc) = self.ident("a field name")?;
+                let (fname, fl, fc) = self.member_name("a field name")?;
                 if !self.eat_sym(":") {
                     return Err(self
                         .err(format!("field `{}` needs a type", fname))
@@ -226,7 +241,7 @@ impl Parser {
                 if self.at_sym("=") {
                     return Err(self.err("field defaults are not supported yet"));
                 }
-                fields.push(Param { name: fname, ty, line: fl, col: fc });
+                fields.push(Param { name: fname, ty, mutable: false, line: fl, col: fc });
                 self.end_stmt()?;
             } else {
                 return Err(self.err(format!("expected a field or `def` inside `struct {}`, found {}", name, self.describe())));
@@ -335,7 +350,7 @@ impl Parser {
                                 .with_help(format!("write `{}({}: Float)`", vname, fname)));
                         }
                         let ty = self.parse_type()?;
-                        fields.push(Param { name: fname, ty, line: fl, col: fc });
+                        fields.push(Param { name: fname, ty, mutable: false, line: fl, col: fc });
                         if !self.eat_sym(",") {
                             break;
                         }
@@ -396,6 +411,7 @@ impl Parser {
                     continue;
                 }
                 first = false;
+                let mutable = self.eat_kw("var");
                 let (pname, pl, pc) = self.ident("a parameter name")?;
                 if !self.eat_sym(":") {
                     return Err(self
@@ -403,7 +419,11 @@ impl Parser {
                         .with_help(format!("write `{}: Int`, `{}: Str`, and so on", pname, pname)));
                 }
                 let ty = self.parse_type()?;
-                params.push(Param { name: pname, ty, line: pl, col: pc });
+                if mutable && ty.is_copy() {
+                    return Err(LumeError::new(pl, pc, format!("`var {}` needs a list, map, string or struct; `{}` values are copied, so changing the copy would do nothing", pname, crate::codegen::type_name(&ty)))
+                        .with_help("return the new value instead"));
+                }
+                params.push(Param { name: pname, ty, mutable, line: pl, col: pc });
                 if !self.eat_sym(",") {
                     break;
                 }
@@ -454,6 +474,15 @@ impl Parser {
     }
 
     fn parse_type_atom(&mut self) -> Result<Type> {
+        if self.eat_sym("{") {
+            let k = self.parse_type()?;
+            if !self.eat_sym(":") {
+                return Err(self.err("a map type is written `{Key: Value}`, like `{Str: Int}`"));
+            }
+            let v = self.parse_type()?;
+            self.expect_sym("}", "to close the map type")?;
+            return Ok(self.type_suffix(Type::Map(Box::new(k), Box::new(v))));
+        }
         if self.eat_sym("[") {
             let inner = self.parse_type()?;
             self.expect_sym("]", "to close the list type")?;
@@ -671,6 +700,17 @@ impl Parser {
         // Field assignment: `recv.field = value` / `recv.field += value`
         if let Tok::Sym(op) = self.peek().clone() {
             if matches!(op, "=" | "+=" | "-=" | "*=" | "/=" | "%=") {
+                if let ExprKind::Index { recv, index } = &e.kind {
+                    let recv = (**recv).clone();
+                    let index = (**index).clone();
+                    self.advance();
+                    let value = self.expr()?;
+                    let op = if op == "=" { None } else { Some(op) };
+                    let s = Stmt::IndexAssign { recv, index, op, value, line, col };
+                    let s = self.trailing_condition(s)?;
+                    self.end_stmt()?;
+                    return Ok(s);
+                }
                 if let ExprKind::Method { recv, name, args } = &e.kind {
                     if args.is_empty() {
                         let recv = (**recv).clone();
@@ -829,9 +869,8 @@ impl Parser {
             let body = if matches!(self.peek(), Tok::Newline) {
                 self.block()?
             } else {
-                let e = self.expr()?;
-                self.end_stmt()?;
-                Block { stmts: vec![Stmt::Expr(e)] }
+                // an inline arm holds one statement: a value, or an assignment
+                Block { stmts: vec![self.stmt()?] }
             };
             arms.push(MatchArm { pat, guard, body, line: al, col: ac });
             self.skip_newlines();
@@ -1138,8 +1177,16 @@ impl Parser {
                 e = Expr::new(ExprKind::Unwrap(Box::new(e)), line, col);
                 continue;
             }
-            if self.at_sym("[") {
-                return Err(self.err("indexing `[...]` is not implemented yet (milestone 2)"));
+            if self.at_sym("[") && !self.toks[self.pos].space_before {
+                let (line, col) = self.here();
+                self.advance();
+                let index = self.expr()?;
+                if self.eat_sym(",") {
+                    return Err(self.err("indexing takes one key or position"));
+                }
+                self.expect_sym("]", "to close the index")?;
+                e = Expr::new(ExprKind::Index { recv: Box::new(e), index: Box::new(index) }, line, col);
+                continue;
             }
             break;
         }
@@ -1315,9 +1362,26 @@ impl Parser {
                 self.expect_sym("]", "to close the list")?;
                 Ok(Expr::new(ExprKind::List(items), line, col))
             }
-            Tok::Sym("{") => Err(self
-                .err("a `{ |x| ... }` block goes after a method call, like `xs.map { |x| x * 2 }`")
-                .with_help("maps `{k: v}` are not implemented yet")),
+            Tok::Sym("{") => {
+                if matches!(self.peek_at(1), Tok::Sym("|")) {
+                    return Err(self.err("a `{ |x| ... }` block goes after a method call, like `xs.map { |x| x * 2 }`"));
+                }
+                self.advance();
+                let mut pairs = Vec::new();
+                while !self.at_sym("}") {
+                    let k = self.expr()?;
+                    if !self.eat_sym(":") {
+                        return Err(self.err("expected `:` between a map key and its value").with_help("a map literal is `{key: value, ...}`; an empty map is `{}`"));
+                    }
+                    let v = self.expr()?;
+                    pairs.push((k, v));
+                    if !self.eat_sym(",") {
+                        break;
+                    }
+                }
+                self.expect_sym("}", "to close the map")?;
+                Ok(Expr::new(ExprKind::MapLit(pairs), line, col))
+            }
             Tok::Ident(s) if s == "_" => {
                 self.advance();
                 Ok(Expr::new(ExprKind::Placeholder, line, col))
@@ -1493,6 +1557,8 @@ fn count_placeholders(e: &Expr) -> usize {
         ExprKind::Some(e) | ExprKind::Ok(e) | ExprKind::Try(e) | ExprKind::Unwrap(e) | ExprKind::TupleIndex { recv: e, .. } => count_placeholders(e),
         ExprKind::Tuple(items) => items.iter().map(count_placeholders).sum(),
         ExprKind::None | ExprKind::Rust(_) => 0,
+        ExprKind::Index { recv, index } => count_placeholders(recv) + count_placeholders(index),
+        ExprKind::MapLit(pairs) => pairs.iter().map(|(k, v)| count_placeholders(k) + count_placeholders(v)).sum(),
         ExprKind::Match { scrutinee, arms } => {
             count_placeholders(scrutinee)
                 + arms.iter().map(|a| a.guard.as_ref().map(count_placeholders).unwrap_or(0) + walk_block(&a.body)).sum::<usize>()
@@ -1550,6 +1616,16 @@ fn replace_placeholders(e: &mut Expr) {
         ExprKind::Puts(x) => replace_placeholders(x),
         ExprKind::Some(x) | ExprKind::Ok(x) | ExprKind::Try(x) | ExprKind::Unwrap(x) | ExprKind::TupleIndex { recv: x, .. } => replace_placeholders(x),
         ExprKind::Tuple(items) => items.iter_mut().for_each(replace_placeholders),
+        ExprKind::Index { recv, index } => {
+            replace_placeholders(recv);
+            replace_placeholders(index);
+        }
+        ExprKind::MapLit(pairs) => {
+            for (k, v) in pairs {
+                replace_placeholders(k);
+                replace_placeholders(v);
+            }
+        }
         ExprKind::Match { scrutinee, arms } => {
             replace_placeholders(scrutinee);
             for a in arms {
