@@ -1,0 +1,11 @@
+interface Shape:
+  def area -> Float
+
+struct Square:
+  side: Float
+
+def describe(s: Shape) -> Str:
+  "area #{s.area}"
+
+def main:
+  puts describe(Square(2.0))

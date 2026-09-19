@@ -1,0 +1,6 @@
+error: `extend Str with Shape` is missing `perimeter`
+  --> examples/errors/iface_extend_incomplete.lume:5:1
+  |
+5 | extend Str with Shape:
+  | ^
+  help: `Shape` needs: def perimeter -> Float. Add it inside this `extend` block

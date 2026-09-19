@@ -1,0 +1,20 @@
+warning: `shapes` holds values of different types behind `Shape`, so calls on its items go through a pointer
+  --> examples/interfaces.lume:78:3
+   |
+78 |   shapes: [Shape] = [c, r, "abcd"]
+   |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+circle with area 3.14159
+shape with area 6.0
+the string hello with area 5.0
+total: 13.14159
+  circle: 3.14159
+  shape: 6.0
+  the string abcd: 4.0
+Point(x: 4, y: 6)
+Point(x: 6, y: 10)
+true
+true
+[Money(cents: 2), Money(cents: 5), Money(cents: 9)]
+Some(Money(cents: 9))
+true

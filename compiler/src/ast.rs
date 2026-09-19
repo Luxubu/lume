@@ -127,12 +127,36 @@ impl Import {
     }
 }
 
+/// `interface Name:` — required methods (no body) and defaults (with a body).
+#[derive(Debug, Clone)]
+pub struct InterfaceDef {
+    pub name: String,
+    pub public: bool,
+    /// Required: signature only. `body` is None.
+    pub required: Vec<FnDef>,
+    pub defaults: Vec<FnDef>,
+    pub line: usize,
+    pub col: usize,
+}
+
+/// `extend Type with Iface:` — methods that make `Type` conform to `Iface`.
+#[derive(Debug, Clone)]
+pub struct ExtendDef {
+    pub target: Type,
+    pub iface: String,
+    pub methods: Vec<FnDef>,
+    pub line: usize,
+    pub col: usize,
+}
+
 #[derive(Debug, Clone)]
 pub enum Item {
     Fn(FnDef),
     Struct(StructDef),
     Enum(EnumDef),
     Import(Import),
+    Interface(InterfaceDef),
+    Extend(ExtendDef),
 }
 
 #[derive(Debug, Clone)]

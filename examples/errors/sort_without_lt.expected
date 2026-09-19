@@ -1,0 +1,6 @@
+error: `.sort` needs to compare `Money` values, but `Money` has no `<` operator
+  --> examples/errors/sort_without_lt.lume:6:10
+  |
+6 |   puts ms.sort
+  |          ^
+  help: add `def <(other: Money) -> Bool:` to `Money`, or use `.sort_by(_.field)`

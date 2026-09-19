@@ -1,0 +1,6 @@
+struct Money:
+  cents: Int
+
+def main:
+  ms = [Money(5), Money(2)]
+  puts ms.sort

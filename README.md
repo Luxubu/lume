@@ -20,7 +20,7 @@ program takes about 1 s in Python and 1.4 s in Ruby.
 The language design lives in the [Lume Language Design](https://claude.ai/code/artifact/1872fe63-1816-4b1e-9983-dec2774382fb)
 document. This repository is the compiler and the examples.
 
-## Status: milestones 1–9 done
+## Status: milestones 1–10 done
 
 | # | Milestone | Status |
 | --- | --- | --- |
@@ -33,6 +33,7 @@ document. This repository is the compiler and the examples.
 | 7 | Port the sample programs plus a graph program; settle the memory policy | done: Rust-faithful ownership, no ORC |
 | 8 | Stdlib speed: ordered hash map, entry updates, lazy `split`/`lines`, key liveness | done: 74 ms → 23 ms |
 | 9 | Lume modules: `import users.model`, `model.User`, `import a.b.Name`, `pub`, cycle detection | done |
+| 10 | `interface` with defaults, structural conformance, `extend T with I`, operator methods | done |
 
 What works today: functions (`def` block and one-liner forms, return type
 inferred when omitted), `struct` with fields and methods (fields used bare
@@ -65,7 +66,14 @@ block inside a Lume function is Rust with the parameters in scope and the
 declared return type as its Lume type), Lume modules (`import users.model`
 loads `users/model.lume`; `model.User`, `model.parse(x)`, `model.Role.Guest(7)`
 in expressions, types and patterns; `import users.model.User` for one name;
-`as` to rename; only `pub` items cross a file boundary), `if`/`elif`/`else` as
+`as` to rename; only `pub` items cross a file boundary), interfaces
+(`interface Shape:` lists required method signatures and default methods
+with bodies; a type conforms by having the methods, with nothing to declare;
+`def describe(s: Shape)` is a generic function, `[Shape]` holds mixed types
+behind a pointer and says so once; `extend Str with Shape:` adds the methods
+to a type you do not own; `pub interface` crosses modules), operator methods
+(`def +(o: Point)`, `-`, `*`, `/`, `%`, `==`, `<`; `!=` follows from `==`,
+and `<=`, `>`, `>=`, `sort`, `max`, `min` follow from `<`), `if`/`elif`/`else` as
 expressions, trailing `if`/`unless`, `while`, `for x in range` with `where`,
 lists, ranges (`1..10` inclusive, `1...10` exclusive), string interpolation,
 `and`/`or`/`not`, `**`, calls, a small set of built-in methods (`len`, `sum`,
@@ -78,7 +86,10 @@ mutating method on an immutable value, wrong or missing arguments and keywords,
 `if` used as a value without `else`, non-exhaustive `match`, `?` in a function
 that cannot return `None` or an error (with the right fix for each mismatch),
 a method or arithmetic on a `T?` or `T or E` without unwrapping, an empty
-`[]` binding with no type,
+`[]` binding with no type, a value used as an interface it does not satisfy
+(naming the missing method or the signature that differs), an `extend` that
+leaves a method out, an operator a type does not define, `sort` on a type
+without `<`,
 `name (` with a space (ambiguous call), bad indentation, tabs. Warnings:
 `return` inside a block.
 
@@ -141,5 +152,6 @@ compiler/src/main.rs     the CLI
 examples/                programs that must keep compiling
 examples/port/           the design doc's sample programs and the graph program
 examples/modules/        a three-file program: app.lume imports users/model and users/store
+examples/interfaces.lume interfaces, extend, operator methods
 examples/errors/         programs that must keep failing, with good messages
 ```

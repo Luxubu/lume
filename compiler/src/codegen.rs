@@ -56,6 +56,7 @@ impl<A: LumeShow, B: LumeShow, C: LumeShow> LumeShow for (A, B, C) {
     fn lume_str(&self) -> String { format!("({}, {}, {})", self.0.lume_str(), self.1.lume_str(), self.2.lume_str()) }
 }
 impl<T: LumeShow + ?Sized> LumeShow for &T { fn lume_str(&self) -> String { (**self).lume_str() } }
+impl<T: LumeShow + ?Sized> LumeShow for Box<T> { fn lume_str(&self) -> String { (**self).lume_str() } }
 #[derive(Debug, Clone, PartialEq)]
 struct Error { message: String }
 impl LumeShow for Error { fn lume_str(&self) -> String { format!("Error({})", self.message) } }
@@ -239,6 +240,24 @@ struct EnumInfo {
     methods: HashMap<String, Sig>,
 }
 
+#[derive(Clone)]
+struct IfaceInfo {
+    methods: HashMap<String, Sig>,
+    required: Vec<String>,
+    /// Methods with a body, emitted inside the trait.
+    defaults: Vec<FnDef>,
+    /// Which module owns the interface (for the emit-once rule).
+    local: bool,
+}
+
+/// Why a type does or does not satisfy an interface.
+#[derive(Clone)]
+enum Conformance {
+    Yes,
+    Missing(Vec<String>),
+    Mismatch { method: String, expected: String, actual: String },
+}
+
 /// A compiled pattern: the Rust pattern text, extra guard conditions (for
 /// string and float literals, which Rust cannot match directly), and the
 /// names it binds with their types.
@@ -267,6 +286,9 @@ pub struct Exports {
     structs: HashMap<String, StructInfo>,
     enums: HashMap<String, EnumInfo>,
     fns: HashMap<String, Sig>,
+    interfaces: HashMap<String, IfaceInfo>,
+    /// Methods types gained through `extend` in that module: type key -> methods.
+    ext_methods: HashMap<String, HashMap<String, Sig>>,
     private: Vec<String>,
 }
 
@@ -294,8 +316,19 @@ pub struct Gen {
     fns: HashMap<String, Sig>,
     structs: HashMap<String, StructInfo>,
     enums: HashMap<String, EnumInfo>,
+    interfaces: HashMap<String, IfaceInfo>,
+    /// Methods a type gained through `extend`: type key -> name -> signature.
+    ext_methods: HashMap<String, HashMap<String, Sig>>,
+    /// `extend` targets that are built-in types: key ("Str") -> the type.
+    ext_targets: HashMap<String, Type>,
+    /// Local types (struct/enum names) — interfaces are emitted for these.
+    local_types: HashSet<String>,
     /// The struct or enum whose method is being generated, if any.
     current_type: Option<String>,
+    /// The type of `self` when it is a built-in (inside `extend Str with ...`).
+    current_self_ty: Option<Type>,
+    /// Set while emitting methods that live inside a trait or trait impl (no `pub`).
+    in_trait_impl: bool,
     current_self: SelfKind,
     current_ret: Type,
     current_fn: String,
@@ -338,7 +371,13 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, deps: &[Dep]) -
         fns: HashMap::new(),
         structs: HashMap::new(),
         enums: HashMap::new(),
+        interfaces: HashMap::new(),
+        ext_methods: HashMap::new(),
+        ext_targets: HashMap::new(),
+        local_types: HashSet::new(),
         current_type: None,
+        current_self_ty: None,
+        in_trait_impl: false,
         current_self: SelfKind::Read,
         current_ret: Type::Unit,
         current_fn: String::new(),
@@ -407,6 +446,9 @@ fn qualify_sig(sig: &Sig, id: &str, ex: &Exports) -> Sig {
 fn rust_name(name: &str) -> String {
     if name == "_" {
         return "lume_it".into();
+    }
+    if let Some(op) = op_method_name(name) {
+        return op.into();
     }
     let base = name.replace('?', "_q");
     if RUST_RESERVED.contains(&base.as_str()) {
@@ -481,6 +523,7 @@ impl Gen {
     /// Rust spelling of a type; names of imported items go through their module path.
     fn rt(&self, t: &Type) -> String {
         match t {
+            Type::Named(_) if self.is_interface(t) => format!("Box<dyn {}>", self.path_of(match t { Type::Named(n) => n, _ => unreachable!() })),
             Type::Named(n) => self.path_of(n),
             Type::List(inner) => format!("Vec<{}>", self.rt(inner)),
             Type::Option(inner) => format!("Option<{}>", self.rt(inner)),
@@ -577,19 +620,139 @@ impl Gen {
     /// another method (`total` for `def total`).
     fn bare_method(&self, name: &str) -> Option<Sig> {
         let t = self.current_type.as_ref()?;
-        let m = self.methods_of(t)?.get(name)?;
+        let ms = self.methods_of(t)?;
+        let m = ms.get(name)?;
         if m.params.is_empty() { Some(m.clone()) } else { None }
     }
 
-    fn methods_of(&self, tname: &str) -> Option<&HashMap<String, Sig>> {
-        if let Some(s) = self.structs.get(tname) {
-            return Some(&s.methods);
+    /// Methods callable on a type: inherent ones plus those from `extend`;
+    /// for an interface, its methods; for a built-in, only `extend` methods.
+    fn methods_of(&self, tname: &str) -> Option<HashMap<String, Sig>> {
+        let mut m: HashMap<String, Sig> = if let Some(s) = self.structs.get(tname) {
+            s.methods.clone()
+        } else if let Some(e) = self.enums.get(tname) {
+            e.methods.clone()
+        } else if let Some(i) = self.interfaces.get(tname) {
+            i.methods.clone()
+        } else if self.ext_methods.contains_key(tname) {
+            HashMap::new()
+        } else {
+            return None;
+        };
+        if let Some(ext) = self.ext_methods.get(tname) {
+            for (k, v) in ext {
+                m.entry(k.clone()).or_insert_with(|| v.clone());
+            }
         }
-        self.enums.get(tname).map(|e| &e.methods)
+        Some(m)
     }
 
     fn is_type(&self, name: &str) -> bool {
-        self.structs.contains_key(name) || self.enums.contains_key(name)
+        self.structs.contains_key(name) || self.enums.contains_key(name) || self.interfaces.contains_key(name)
+    }
+
+    fn is_interface(&self, t: &Type) -> bool {
+        matches!(t, Type::Named(n) if self.interfaces.contains_key(&self.canon(n)))
+    }
+
+    /// The key under which `extend` methods and conformance are recorded
+    /// for a type: its name for structs/enums, its spelling for built-ins.
+    fn type_key(&self, t: &Type) -> String {
+        match t {
+            Type::Named(n) => self.canon(n),
+            other => type_name(other),
+        }
+    }
+
+    /// Does `t` satisfy interface `iface`? Structural: every required
+    /// method exists with the same parameters and result; defaults that the
+    /// type also defines must match too.
+    fn conformance(&self, t: &Type, iface: &str) -> Conformance {
+        let iface = self.canon(iface);
+        let info = match self.interfaces.get(&iface) {
+            Some(i) => i,
+            None => return Conformance::Missing(vec![]),
+        };
+        if self.is_interface(t) {
+            return if self.type_key(t) == iface { Conformance::Yes } else { Conformance::Missing(info.required.clone()) };
+        }
+        let have = self.methods_of(&self.type_key(t)).unwrap_or_default();
+        let mut missing = Vec::new();
+        for (name, want) in &info.methods {
+            match have.get(name) {
+                None => {
+                    if info.required.contains(name) {
+                        missing.push(name.clone());
+                    }
+                }
+                Some(got) => {
+                    let same = got.params.len() == want.params.len()
+                        && got.params.iter().zip(&want.params).all(|((_, a), (_, b))| a == b || *a == Type::Unknown || *b == Type::Unknown)
+                        && (got.ret == want.ret || got.ret == Type::Unknown || want.ret == Type::Unknown);
+                    if !same {
+                        return Conformance::Mismatch { method: name.clone(), expected: self.describe_sig(want), actual: self.describe_sig(got) };
+                    }
+                }
+            }
+        }
+        missing.sort();
+        if missing.is_empty() { Conformance::Yes } else { Conformance::Missing(missing) }
+    }
+
+    fn describe_sig(&self, s: &Sig) -> String {
+        let ps: Vec<String> = s.params.iter().map(|(n, t)| format!("{}: {}", n, type_name(t))).collect();
+        if ps.is_empty() { format!("-> {}", type_name(&s.ret)) } else { format!("({}) -> {}", ps.join(", "), type_name(&s.ret)) }
+    }
+
+    /// Error for a value of type `t` used where interface `iface` is needed.
+    fn require_conforms(&self, t: &Type, iface: &str, line: usize, col: usize) -> Result<()> {
+        match self.conformance(t, iface) {
+            Conformance::Yes => Ok(()),
+            Conformance::Missing(m) => {
+                let info = &self.interfaces[&self.canon(iface)];
+                let needs: Vec<String> = m.iter().filter_map(|n| info.methods.get(n).map(|s| format!("def {} {}", n, self.describe_sig(s)))).collect();
+                Err(LumeError::new(line, col, format!("`{}` is used as a `{}` here, but it has no `{}` method", type_name(t), iface, m.join("`, `")))
+                    .with_help(format!("`{}` needs: {}. Add {} to `{}`, or `extend {} with {}:`", iface, needs.join("; "), if m.len() == 1 { "it" } else { "them" }, type_name(t), type_name(t), iface)))
+            }
+            Conformance::Mismatch { method, expected, actual } => Err(LumeError::new(
+                line,
+                col,
+                format!("`{}` is used as a `{}`, but its `{}` is `{}` and `{}` needs `{}`", type_name(t), iface, method, actual, iface, expected),
+            )),
+        }
+    }
+
+    /// Boxes a concrete value where an interface value is stored.
+    fn coerce(&self, text: String, from: &Type, to: &Type, line: usize, col: usize) -> Result<String> {
+        if let Type::Named(iface) = to {
+            if self.is_interface(to) && !self.is_interface(from) && *from != Type::Unknown {
+                self.require_conforms(from, iface, line, col)?;
+                return Ok(format!("(Box::new({}) as Box<dyn {}>)", text, self.path_of(iface)));
+            }
+        }
+        Ok(text)
+    }
+
+    /// Emits the one-time note for a declaration whose type holds interface
+    /// values behind a pointer.
+    fn note_dynamic(&mut self, name: &str, t: &Type, line: usize, col: usize) {
+        fn boxed_iface<'a>(g: &'a Gen, t: &'a Type) -> Option<&'a str> {
+            match t {
+                Type::List(i) | Type::Option(i) | Type::Iter(i, _) => match &**i {
+                    Type::Named(n) if g.is_interface(i) => Some(n.as_str()),
+                    other => boxed_iface(g, other),
+                },
+                Type::Map(_, v) => boxed_iface(g, v),
+                Type::Tuple(ts) => ts.iter().find_map(|x| boxed_iface(g, x)),
+                _ => None,
+            }
+        }
+        if let Some(iface) = boxed_iface(self, t) {
+            self.warnings.push(
+                LumeError::new(line, col, format!("`{}` holds values of different types behind `{}`, so calls on its items go through a pointer", name, iface))
+                    .with_help("fine for most code; use a single concrete type or an enum if this is a hot loop"),
+            );
+        }
     }
 
     /// Enums that have a variant with this name.
@@ -680,6 +843,24 @@ impl Gen {
             self.fns.insert(key.clone(), qualify_sig(sig, id, ex));
             self.paths.insert(key, format!("{}::{}", ex.rust_mod, n));
         }
+        for (n, info) in &ex.interfaces {
+            let key = format!("{}.{}", key_prefix, n);
+            let qualified = IfaceInfo {
+                methods: info.methods.iter().map(|(m, sg)| (m.clone(), qualify_sig(sg, id, ex))).collect(),
+                required: info.required.clone(),
+                defaults: Vec::new(),
+                local: false,
+            };
+            self.interfaces.insert(key.clone(), qualified);
+            self.paths.insert(key, format!("{}::{}", ex.rust_mod, n));
+        }
+        for (tkey, ms) in &ex.ext_methods {
+            let tkey = if ex.structs.contains_key(tkey) || ex.enums.contains_key(tkey) { format!("{}.{}", key_prefix, tkey) } else { tkey.clone() };
+            let entry = self.ext_methods.entry(tkey).or_default();
+            for (m, sg) in ms {
+                entry.insert(m.clone(), qualify_sig(sg, id, ex));
+            }
+        }
     }
 
     fn register_deps(&mut self, deps: &[Dep]) -> Result<()> {
@@ -692,7 +873,7 @@ impl Gen {
                     self.module_aliases.insert(alias.clone(), id.clone());
                     self.module_private.insert(alias.clone(), exports.private.clone());
                     self.register_module_items(id, id, exports);
-                    for n in exports.structs.keys().chain(exports.enums.keys()).chain(exports.fns.keys()) {
+                    for n in exports.structs.keys().chain(exports.enums.keys()).chain(exports.fns.keys()).chain(exports.interfaces.keys()) {
                         self.canon.insert(format!("{}.{}", alias, n), format!("{}.{}", id, n));
                     }
                 }
@@ -700,7 +881,7 @@ impl Gen {
                     // the module's types must resolve for signatures that mention them
                     self.register_module_items(id, id, exports);
                     let full = format!("{}.{}", id, item);
-                    if self.structs.contains_key(&full) || self.enums.contains_key(&full) || self.fns.contains_key(&full) {
+                    if self.structs.contains_key(&full) || self.enums.contains_key(&full) || self.fns.contains_key(&full) || self.interfaces.contains_key(&full) {
                         self.canon.insert(local.clone(), full.clone());
                     } else if exports.private.contains(item) {
                         return Err(LumeError::new(*line, *col, format!("`{}` exists in module `{}` but is not `pub`", item, id))
@@ -736,9 +917,14 @@ impl Gen {
                     ex.enums.insert(en.name.clone(), self.enums[&en.name].clone());
                 }
                 Item::Enum(en) => ex.private.push(en.name.clone()),
-                Item::Import(_) => {}
+                Item::Interface(i) if i.public => {
+                    ex.interfaces.insert(i.name.clone(), self.interfaces[&i.name].clone());
+                }
+                Item::Interface(i) => ex.private.push(i.name.clone()),
+                Item::Import(_) | Item::Extend(_) => {}
             }
         }
+        ex.ext_methods = self.ext_methods.clone();
         ex
     }
 
@@ -750,7 +936,7 @@ impl Gen {
             None => return Ok(None),
         };
         let key = self.canon(&format!("{}.{}", alias, name));
-        if self.structs.contains_key(&key) || self.enums.contains_key(&key) || self.fns.contains_key(&key) {
+        if self.structs.contains_key(&key) || self.enums.contains_key(&key) || self.fns.contains_key(&key) || self.interfaces.contains_key(&key) {
             return Ok(Some(key));
         }
         if self.module_private.get(alias).map(|p| p.contains(&name.to_string())).unwrap_or(false) {
@@ -823,6 +1009,65 @@ impl Gen {
                         .map(|v| (v.name.clone(), v.fields.iter().map(|p| (p.name.clone(), self.ct(&p.ty))).collect()))
                         .collect();
                     self.enums.insert(e.name.clone(), EnumInfo { variants, methods });
+                    self.local_types.insert(e.name.clone());
+                }
+                Item::Interface(i) => {
+                    if !seen.insert(i.name.clone()) {
+                        return Err(LumeError::new(i.line, i.col, format!("`{}` is defined twice", i.name)));
+                    }
+                    let mut methods = HashMap::new();
+                    for m in i.required.iter().chain(&i.defaults) {
+                        if m.self_kind == SelfKind::Mutate {
+                            return Err(LumeError::new(m.line, m.col, format!("interface method `{}` cannot take `var self`", m.name))
+                                .with_help("interfaces describe reading behaviour; mutation stays on the concrete type"));
+                        }
+                        if methods.insert(m.name.clone(), self.sig_of(m)).is_some() {
+                            return Err(LumeError::new(m.line, m.col, format!("method `{}` is listed twice in `{}`", m.name, i.name)));
+                        }
+                    }
+                    self.interfaces.insert(
+                        i.name.clone(),
+                        IfaceInfo { methods, required: i.required.iter().map(|m| m.name.clone()).collect(), defaults: i.defaults.clone(), local: true },
+                    );
+                }
+                Item::Extend(_) => {}
+            }
+        }
+        for item in program {
+            if let Item::Struct(s) = item {
+                self.local_types.insert(s.name.clone());
+            }
+        }
+        // `extend Type with Iface:` adds methods to the type.
+        for item in program {
+            if let Item::Extend(x) = item {
+                let target = self.ct(&x.target);
+                self.check_type(&target, x.line, x.col)?;
+                let iface = self.canon(&x.iface);
+                if !self.interfaces.contains_key(&iface) {
+                    return Err(LumeError::new(x.line, x.col, format!("unknown interface `{}`", x.iface)));
+                }
+                if self.is_interface(&target) {
+                    return Err(LumeError::new(x.line, x.col, "an interface cannot be extended with another; extend the concrete types"));
+                }
+                let key = self.type_key(&target);
+                if !matches!(target, Type::Named(_)) {
+                    self.ext_targets.insert(key.clone(), target.clone());
+                }
+                let existing = self.methods_of(&key).unwrap_or_default();
+                for m in &x.methods {
+                    if m.self_kind == SelfKind::Mutate {
+                        return Err(LumeError::new(m.line, m.col, "methods in an `extend` block cannot take `var self`"));
+                    }
+                    if !self.interfaces[&iface].methods.contains_key(&m.name) {
+                        return Err(LumeError::new(m.line, m.col, format!("`{}` is not a method of `{}`", m.name, x.iface))
+                            .with_help(format!("`{}` has: {}", x.iface, self.interfaces[&iface].methods.keys().cloned().collect::<Vec<_>>().join(", "))));
+                    }
+                    if existing.contains_key(&m.name) {
+                        return Err(LumeError::new(m.line, m.col, format!("`{}` already has a `{}` method", type_name(&target), m.name)));
+                    }
+                    let sg = self.sig_of(m);
+                    self.ext_methods.entry(key.clone()).or_default().insert(m.name.clone(), sg);
                 }
             }
         }
@@ -849,16 +1094,36 @@ impl Gen {
                         self.check_sig_types(m)?;
                     }
                 }
+                Item::Interface(i) => {
+                    for m in i.required.iter().chain(&i.defaults) {
+                        self.check_sig_types(m)?;
+                        if m.params.iter().any(|p| self.is_interface(&self.ct(&p.ty))) || m.ret.as_ref().map(|r| self.is_interface(&self.ct(r))).unwrap_or(false) {
+                            return Err(LumeError::new(m.line, m.col, format!("interface method `{}` mentions an interface in its signature, which is not supported yet", m.name))
+                                .with_help("use concrete types in interface signatures for now"));
+                        }
+                    }
+                }
+                Item::Extend(x) => {
+                    for m in &x.methods {
+                        self.check_sig_types(m)?;
+                    }
+                }
             }
         }
         // Pass 2: infer missing return types (a few rounds so dependencies settle).
         for _round in 0..4 {
             let mut progressed = false;
             for item in program {
+                let ext_key;
                 let (fns, owner): (Vec<&FnDef>, Option<&String>) = match item {
                     Item::Fn(f) => (vec![f], None),
                     Item::Struct(s) => (s.methods.iter().collect(), Some(&s.name)),
                     Item::Enum(e) => (e.methods.iter().collect(), Some(&e.name)),
+                    Item::Interface(i) => (i.defaults.iter().collect(), Some(&i.name)),
+                    Item::Extend(x) => {
+                        ext_key = self.type_key(&self.ct(&x.target));
+                        (x.methods.iter().collect(), Some(&ext_key))
+                    }
                     Item::Import(_) => (vec![], None),
                 };
                 for f in fns {
@@ -877,10 +1142,16 @@ impl Gen {
             }
         }
         for item in program {
+            let ext_key;
             let (fns, owner): (Vec<&FnDef>, Option<&String>) = match item {
                 Item::Fn(f) => (vec![f], None),
                 Item::Struct(s) => (s.methods.iter().collect(), Some(&s.name)),
                 Item::Enum(e) => (e.methods.iter().collect(), Some(&e.name)),
+                Item::Interface(i) => (i.defaults.iter().collect(), Some(&i.name)),
+                Item::Extend(x) => {
+                    ext_key = self.type_key(&self.ct(&x.target));
+                    (x.methods.iter().collect(), Some(&ext_key))
+                }
                 Item::Import(_) => (vec![], None),
             };
             for f in fns {
@@ -913,10 +1184,12 @@ impl Gen {
                 Item::Fn(f) => self.fn_def(f, None)?,
                 Item::Struct(s) => self.struct_def(s)?,
                 Item::Enum(e) => self.enum_def(e)?,
-                Item::Import(_) => continue,
+                Item::Interface(i) => self.interface_def(i)?,
+                Item::Import(_) | Item::Extend(_) => continue,
             }
             self.out.push('\n');
         }
+        self.emit_conformances(program)?;
         if self.is_entry && !self.fns.contains_key("main") {
             return Err(LumeError::new(1, 1, "no `main` function").with_help("a program starts at `def main:`"));
         }
@@ -926,7 +1199,7 @@ impl Gen {
     fn sig_ret(&self, name: &str, owner: Option<&String>) -> Type {
         match owner {
             None => self.fns[name].ret.clone(),
-            Some(o) => self.methods_of(o).unwrap()[name].ret.clone(),
+            Some(o) => self.methods_of(o).and_then(|m| m.get(name).map(|s| s.ret.clone())).unwrap_or(Type::Unknown),
         }
     }
 
@@ -934,10 +1207,14 @@ impl Gen {
         match owner {
             None => self.fns.get_mut(name).unwrap().ret = t,
             Some(o) => {
-                if let Some(s) = self.structs.get_mut(o) {
-                    s.methods.get_mut(name).unwrap().ret = t;
-                } else {
-                    self.enums.get_mut(o).unwrap().methods.get_mut(name).unwrap().ret = t;
+                if let Some(s) = self.structs.get_mut(o).and_then(|s| s.methods.get_mut(name)) {
+                    s.ret = t;
+                } else if let Some(s) = self.enums.get_mut(o).and_then(|e| e.methods.get_mut(name)) {
+                    s.ret = t;
+                } else if let Some(s) = self.interfaces.get_mut(o).and_then(|i| i.methods.get_mut(name)) {
+                    s.ret = t;
+                } else if let Some(s) = self.ext_methods.get_mut(o).and_then(|m| m.get_mut(name)) {
+                    s.ret = t;
                 }
             }
         }
@@ -952,6 +1229,7 @@ impl Gen {
                     .keys()
                     .cloned()
                     .chain(self.enums.keys().cloned())
+                    .chain(self.interfaces.keys().cloned())
                     .chain(["Int", "Float", "Bool", "Str"].iter().map(|s| s.to_string()));
                 Err(match self.suggest_from(n, cands) {
                     Some(s) => e.with_help(format!("did you mean `{}`?", s)),
@@ -986,13 +1264,16 @@ impl Gen {
         }
         self.push_scope();
         let saved = self.current_type.clone();
+        let saved_self = self.current_self_ty.clone();
         self.current_type = owner.cloned();
+        self.current_self_ty = owner.and_then(|o| self.ext_targets.get(o).cloned());
         for p in &f.params {
             let pty = self.ct(&p.ty);
             self.declare(&p.name, false, !pty.is_copy(), pty, p.line);
         }
         let t = self.tail_type(&f.body);
         self.current_type = saved;
+        self.current_self_ty = saved_self;
         self.pop_scope();
         t
     }
@@ -1241,13 +1522,19 @@ impl Gen {
                     t
                 } else if let Some(m) = self.bare_method(n) {
                     m.ret
+                } else if let Some(st) = self.current_self_ty.clone() {
+                    if builtin_method_type(&st, n) != Type::Unknown || is_builtin_name(n) {
+                        builtin_method_type(&st, n)
+                    } else {
+                        Type::Unknown
+                    }
                 } else if let Ok(Some(en)) = self.resolve_variant(n, e.line, e.col) {
                     Type::Named(en)
                 } else {
                     Type::Unknown
                 }
             }
-            ExprKind::SelfRef => self.current_type.clone().map(Type::Named).unwrap_or(Type::Unknown),
+            ExprKind::SelfRef => self.current_self_ty.clone().or_else(|| self.current_type.clone().map(Type::Named)).unwrap_or(Type::Unknown),
             ExprKind::List(items) => {
                 let mut t = Type::Unknown;
                 for i in items {
@@ -1264,20 +1551,27 @@ impl Gen {
                 "not" => Type::Bool,
                 _ => self.ty_of(expr),
             },
-            ExprKind::Binary { op, lhs, rhs } => match *op {
-                "==" | "!=" | "<" | "<=" | ">" | ">=" | "and" | "or" => Type::Bool,
-                _ => {
-                    let l = self.ty_of(lhs);
-                    if l == Type::Unknown { self.ty_of(rhs) } else { l }
+            ExprKind::Binary { op, lhs, rhs } => {
+                if let Type::Named(tn) = self.ty_of(lhs).materialized() {
+                    if let Some(sg) = self.methods_of(&tn).and_then(|m| m.get(*op).cloned()) {
+                        return sg.ret;
+                    }
                 }
-            },
+                match *op {
+                    "==" | "!=" | "<" | "<=" | ">" | ">=" | "and" | "or" => Type::Bool,
+                    _ => {
+                        let l = self.ty_of(lhs);
+                        if l == Type::Unknown { self.ty_of(rhs) } else { l }
+                    }
+                }
+            }
             ExprKind::Call { name: raw_name, .. } => {
                 let cname = self.canon(raw_name);
                 let name = &cname;
                 if let Some(s) = self.fns.get(name) {
                     s.ret.clone()
-                } else if let Some(m) = self.current_type.as_ref().and_then(|t| self.methods_of(t)).and_then(|m| m.get(name)) {
-                    m.ret.clone()
+                } else if let Some(m) = self.current_type.as_ref().and_then(|t| self.methods_of(t)).and_then(|m| m.get(name).cloned()) {
+                    m.ret
                 } else if self.structs.contains_key(name) {
                     Type::Named(name.clone())
                 } else if let Ok(Some(en)) = self.resolve_variant(name, e.line, e.col) {
@@ -1312,12 +1606,15 @@ impl Gen {
                             return ft.clone();
                         }
                     }
-                    if let Some(m) = self.methods_of(sn).and_then(|m| m.get(name)) {
-                        return m.ret.clone();
+                    if let Some(m) = self.methods_of(sn).and_then(|m| m.get(name).cloned()) {
+                        return m.ret;
                     }
                     if name == "to_s" || name == "to_str" {
                         return Type::Str;
                     }
+                }
+                if let Some(m) = self.ext_methods.get(&self.type_key(&rt)).and_then(|m| m.get(name)) {
+                    return m.ret.clone();
                 }
                 builtin_method_type(&rt, name)
             }
@@ -1441,8 +1738,176 @@ impl Gen {
 
     // ----- items ------------------------------------------------------------
 
+    fn interface_def(&mut self, i: &InterfaceDef) -> Result<()> {
+        self.line(&format!("pub trait {}: LumeShow {{", i.name));
+        self.indent += 1;
+        let info = self.interfaces[&i.name].clone();
+        for m in &i.required {
+            let sg = &info.methods[&m.name];
+            self.line(&format!("fn {}({}) -> {};", rust_name(&m.name), self.sig_params_rust(sg, true), self.rt(&sg.ret)));
+        }
+        self.in_trait_impl = true;
+        for m in &i.defaults {
+            self.fn_def(m, Some(&i.name))?;
+        }
+        self.in_trait_impl = false;
+        self.indent -= 1;
+        self.line("}");
+        // Boxed values forward to the value inside.
+        self.line(&format!("impl<T: {} + ?Sized> {} for Box<T> {{", i.name, i.name));
+        self.indent += 1;
+        for (name, sg) in &info.methods {
+            let args: Vec<String> = sg.params.iter().map(|(n, _)| rust_name(n)).collect();
+            self.line(&format!(
+                "fn {}({}) -> {} {{ (**self).{}({}) }}",
+                rust_name(name),
+                self.sig_params_rust(sg, true),
+                self.rt(&sg.ret),
+                rust_name(name),
+                args.join(", ")
+            ));
+        }
+        self.indent -= 1;
+        self.line("}");
+        Ok(())
+    }
+
+    /// `&self, a: &A, b: i64` for a method signature.
+    fn sig_params_rust(&self, sg: &Sig, with_self: bool) -> String {
+        let mut parts: Vec<String> = Vec::new();
+        if with_self {
+            parts.push("&self".into());
+        }
+        for (i, (n, t)) in sg.params.iter().enumerate() {
+            let rt = self.rt(t);
+            let rt = if sg.var_params.get(i).copied().unwrap_or(false) { format!("&mut {}", rt) } else if t.is_copy() { rt } else if *t == Type::Str { "&str".into() } else { format!("&{}", rt) };
+            parts.push(format!("{}: {}", rust_name(n), rt));
+        }
+        parts.join(", ")
+    }
+
+    /// For every (type, interface) pair this module is responsible for, emit
+    /// the trait impl: inherent methods delegate, `extend` methods bring
+    /// their bodies, defaults are left to the trait.
+    fn emit_conformances(&mut self, program: &[Item]) -> Result<()> {
+        // extend blocks by (type key, iface)
+        let mut ext_bodies: HashMap<(String, String), Vec<FnDef>> = HashMap::new();
+        for item in program {
+            if let Item::Extend(x) = item {
+                let key = self.type_key(&self.ct(&x.target));
+                ext_bodies.entry((key, self.canon(&x.iface))).or_default().extend(x.methods.iter().cloned());
+            }
+        }
+        // candidate types: local structs/enums, extend targets, imported types (when the interface is local)
+        let mut types: Vec<(String, Type)> = Vec::new();
+        for n in &self.local_types {
+            types.push((n.clone(), Type::Named(n.clone())));
+        }
+        for (k, t) in &self.ext_targets {
+            types.push((k.clone(), t.clone()));
+        }
+        for n in self.structs.keys().chain(self.enums.keys()) {
+            if n != "Error" && !self.local_types.contains(n) && n.contains('.') {
+                types.push((n.clone(), Type::Named(n.clone())));
+            }
+        }
+        let ifaces: Vec<(String, IfaceInfo)> = self.interfaces.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+        let mut done: HashSet<(String, String)> = HashSet::new();
+        for (tkey, t) in &types {
+            for (iname, info) in &ifaces {
+                let type_local = self.local_types.contains(tkey) || self.ext_targets.contains_key(tkey);
+                let owns = info.local || (type_local && !tkey.contains('.'));
+                let has_extend = ext_bodies.contains_key(&(tkey.clone(), iname.clone()));
+                if !(owns || has_extend) {
+                    continue;
+                }
+                if !done.insert((tkey.clone(), iname.clone())) {
+                    continue;
+                }
+                if !matches!(self.conformance(t, iname), Conformance::Yes) {
+                    if let Some(x) = program.iter().find_map(|it| match it {
+                        Item::Extend(x) if self.type_key(&self.ct(&x.target)) == *tkey && self.canon(&x.iface) == *iname => Some(x),
+                        _ => None,
+                    }) {
+                        // an extend that still leaves methods missing is an error here
+                        if let Conformance::Missing(m) = self.conformance(t, iname) {
+                            let info = &self.interfaces[iname];
+                            let needs: Vec<String> = m.iter().filter_map(|n| info.methods.get(n).map(|s| format!("def {} {}", n, self.describe_sig(s)))).collect();
+                            return Err(LumeError::new(x.line, x.col, format!("`extend {} with {}` is missing `{}`", type_name(t), x.iface, m.join("`, `")))
+                                .with_help(format!("`{}` needs: {}. Add {} inside this `extend` block", x.iface, needs.join("; "), if m.len() == 1 { "it" } else { "them" })));
+                        }
+                        self.require_conforms(t, iname, x.line, x.col)?;
+                    }
+                    continue;
+                }
+                let bodies = ext_bodies.get(&(tkey.clone(), iname.clone())).cloned().unwrap_or_default();
+                let targets: Vec<String> = match t {
+                    Type::Str => vec!["str".into(), "String".into()],
+                    other => vec![self.rt(other)],
+                };
+                for target in targets {
+                    self.line(&format!("impl {} for {} {{", self.path_of(iname), target));
+                    self.indent += 1;
+                    let inherent = self.methods_of(tkey).unwrap_or_default();
+                    for (mname, sg) in &info.methods {
+                        if let Some(body) = bodies.iter().find(|b| b.name == *mname) {
+                            if target == "String" {
+                                // delegate to the str impl
+                                let args: Vec<String> = sg.params.iter().map(|(n, _)| rust_name(n)).collect();
+                                self.line(&format!("fn {}({}) -> {} {{ self.as_str().{}({}) }}", rust_name(mname), self.sig_params_rust(sg, true), self.rt(&sg.ret), rust_name(mname), args.join(", ")));
+                            } else {
+                                self.in_trait_impl = true;
+                                self.fn_def(body, Some(tkey))?;
+                                self.in_trait_impl = false;
+                            }
+                        } else if inherent.contains_key(mname) && !self.ext_methods.get(tkey).map(|m| m.contains_key(mname)).unwrap_or(false) {
+                            let args: Vec<String> = sg.params.iter().map(|(n, _)| rust_name(n)).collect();
+                            self.line(&format!(
+                                "fn {}({}) -> {} {{ {}::{}(self{}{}) }}",
+                                rust_name(mname),
+                                self.sig_params_rust(sg, true),
+                                self.rt(&sg.ret),
+                                self.rt(t),
+                                rust_name(mname),
+                                if args.is_empty() { "" } else { ", " },
+                                args.join(", ")
+                            ));
+                        }
+                    }
+                    self.indent -= 1;
+                    self.line("}");
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// `#[derive(...)]` for a user type: `PartialEq` is derived unless the
+    /// type defines `==` itself.
+    fn derive_line(&mut self, methods: &[FnDef]) {
+        if methods.iter().any(|m| m.name == "==") {
+            self.line("#[derive(Debug, Clone)]");
+        } else {
+            self.line("#[derive(Debug, Clone, PartialEq)]");
+        }
+    }
+
+    /// `def ==` becomes `PartialEq`, `def <` becomes `PartialOrd`, so the
+    /// type works with `contains?`, `sort`, `max`, `min` and `==` on lists.
+    fn op_impls(&mut self, name: &str, methods: &[FnDef]) {
+        if methods.iter().any(|m| m.name == "==") {
+            self.line(&format!("impl PartialEq for {} {{ fn eq(&self, o: &Self) -> bool {{ self.op_eq(o) }} }}", name));
+        }
+        if methods.iter().any(|m| m.name == "<") {
+            self.line(&format!(
+                "impl PartialOrd for {} {{ fn partial_cmp(&self, o: &Self) -> Option<std::cmp::Ordering> {{ Some(if self.op_lt(o) {{ std::cmp::Ordering::Less }} else if o.op_lt(self) {{ std::cmp::Ordering::Greater }} else {{ std::cmp::Ordering::Equal }}) }} }}",
+                name
+            ));
+        }
+    }
+
     fn struct_def(&mut self, s: &StructDef) -> Result<()> {
-        self.line("#[derive(Debug, Clone, PartialEq)]");
+        self.derive_line(&s.methods);
         self.line(&format!("pub struct {} {{", s.name));
         self.indent += 1;
         for f in &s.fields {
@@ -1458,6 +1923,7 @@ impl Gen {
         self.line(&format!("fn lume_str(&self) -> String {{ format!(\"{}({})\", {}) }}", s.name, fmt.join(", "), args.join(", ")));
         self.indent -= 1;
         self.line("}");
+        self.op_impls(&s.name, &s.methods);
         if !s.methods.is_empty() {
             self.line(&format!("impl {} {{", s.name));
             self.indent += 1;
@@ -1471,7 +1937,7 @@ impl Gen {
     }
 
     fn enum_def(&mut self, e: &EnumDef) -> Result<()> {
-        self.line("#[derive(Debug, Clone, PartialEq)]");
+        self.derive_line(&e.methods);
         self.line(&format!("pub enum {} {{", e.name));
         self.indent += 1;
         for v in &e.variants {
@@ -1514,6 +1980,7 @@ impl Gen {
         self.line("}");
         self.indent -= 1;
         self.line("}");
+        self.op_impls(&e.name, &e.methods);
         if !e.methods.is_empty() {
             self.line(&format!("impl {} {{", e.name));
             self.indent += 1;
@@ -1550,6 +2017,7 @@ impl Gen {
         }
         let fn_name = if main_result { "lume_main".to_string() } else { rust_name(&f.name) };
         let mut parts: Vec<String> = Vec::new();
+        let mut generics: Vec<String> = Vec::new();
         if owner.is_some() {
             parts.push(match f.self_kind {
                 SelfKind::Read => "&self".into(),
@@ -1562,11 +2030,21 @@ impl Gen {
                 return Err(LumeError::new(p.line, p.col, format!("parameter `{}` is listed twice", p.name)));
             }
             let pty = self.ct(&p.ty);
+            if self.is_interface(&pty) && !self.in_trait_impl {
+                // `s: Shape` — one generic parameter per interface-typed parameter (static dispatch)
+                let g = format!("T{}", generics.len());
+                let iface = match &pty { Type::Named(n) => self.path_of(n), _ => unreachable!() };
+                generics.push(format!("{}: {}", g, iface));
+                parts.push(format!("{}: &{}", rust_name(&p.name), g));
+                continue;
+            }
             let rt = self.rt(&pty);
             let rt = if p.mutable { format!("&mut {}", rt) } else if pty.is_copy() { rt } else if pty == Type::Str { "&str".to_string() } else { format!("&{}", rt) };
             parts.push(format!("{}: {}", rust_name(&p.name), rt));
         }
-        let mut header = format!("pub fn {}({})", fn_name, parts.join(", "));
+        let vis = if self.in_trait_impl { "" } else { "pub " };
+        let gen = if generics.is_empty() { String::new() } else { format!("<{}>", generics.join(", ")) };
+        let mut header = format!("{}fn {}{}({})", vis, fn_name, gen, parts.join(", "));
         if sig.ret != Type::Unit {
             header.push_str(&format!(" -> {}", self.rt(&sig.ret)));
         }
@@ -1580,6 +2058,7 @@ impl Gen {
         }
         self.current_ret = sig.ret.clone();
         self.current_type = owner.cloned();
+        self.current_self_ty = owner.and_then(|o| self.ext_targets.get(o).cloned());
         self.current_self = f.self_kind;
         self.current_fn = f.name.clone();
         let want_value = sig.ret != Type::Unit;
@@ -1593,6 +2072,7 @@ impl Gen {
         self.tail_of_fn = false;
         self.pop_scope();
         self.current_type = None;
+        self.current_self_ty = None;
         self.indent -= 1;
         self.line("}");
         if main_result {
@@ -1605,22 +2085,30 @@ impl Gen {
 
     /// In a function returning `T or E`, a result value of type `T` is
     /// wrapped in `Ok`, and one of type `E` in `Err`.
-    fn coerce_result(&mut self, text: String, e: &Expr) -> String {
+    fn coerce_result(&mut self, text: String, e: &Expr) -> Result<String> {
         if !self.tail_of_fn || self.in_block {
-            return text;
+            return Ok(text);
         }
-        let (ok_t, err_t) = match &self.current_ret {
+        if matches!(e.kind, ExprKind::Rust(_)) {
+            return Ok(text);
+        }
+        let ret = self.current_ret.clone();
+        if self.is_interface(&ret) {
+            let et = self.ty_of(e).materialized();
+            return self.coerce(text, &et, &ret, e.line, e.col);
+        }
+        let (ok_t, err_t) = match &ret {
             Type::Result(t, e) => ((**t).clone(), (**e).clone()),
-            _ => return text,
+            _ => return Ok(text),
         };
         let et = self.ty_of(e).materialized();
-        if matches!(et, Type::Result(..)) || matches!(e.kind, ExprKind::Rust(_)) {
-            return text;
+        if matches!(et, Type::Result(..)) {
+            return Ok(text);
         }
         if et == err_t && et != ok_t {
-            return format!("Err({})", text);
+            return Ok(format!("Err({})", text));
         }
-        format!("Ok({})", text)
+        Ok(format!("Ok({})", text))
     }
 
     fn block_body(&mut self, b: &Block, want_value: bool) -> Result<()> {
@@ -1671,7 +2159,10 @@ impl Gen {
                     return Err(LumeError::new(*line, *col, format!("cannot tell the type of `{}` from `{}` alone", name, describe_value(value)))
                         .with_help(format!("add the type: `var {}: {} = ...`", name, suggest_type(&inferred))));
                 }
-                let v = self.expr_owned(value)?;
+                let v = self.expr_owned_as(value, &vt)?;
+                if ty.is_some() {
+                    self.note_dynamic(name, &vt, *line, *col);
+                }
                 if self.scopes.last().unwrap().contains_key(name) {
                     return Err(LumeError::new(*line, *col, format!("`{}` is already declared in this block", name))
                         .with_help(format!("to change it, write `{} = ...`", name)));
@@ -1721,7 +2212,10 @@ impl Gen {
                             let v = self.expr_owned(value)?;
                             self.line(&format!("self.{} = {};", rust_name(name), v));
                         } else {
-                            let v = self.expr_owned(value)?;
+                            let v = self.expr_owned_as(value, &vt)?;
+                            if ty.is_some() {
+                                self.note_dynamic(name, &vt, *line, *col);
+                            }
                             self.declare(name, false, false, vt, *line);
                             self.line(&format!("let {}{} = {};", rust_name(name), ann, v));
                         }
@@ -1879,7 +2373,7 @@ impl Gen {
                         }
                         _ => {
                             let v = self.expr_owned(e)?;
-                            self.coerce_result(v, e)
+                            self.coerce_result(v, e)?
                         }
                     };
                     self.line(&v);
@@ -1927,6 +2421,7 @@ impl Gen {
                         self.tail_of_fn = true;
                         let v = self.coerce_result(v, e);
                         self.tail_of_fn = saved;
+                        let v = v?;
                         self.line(&format!("return {};", v));
                     }
                     None => {
@@ -2217,9 +2712,44 @@ impl Gen {
         }
     }
 
+    /// `expr_owned` for a position whose type is known: boxes a concrete
+    /// value stored as an interface, element by element for list literals.
+    fn expr_owned_as(&mut self, e: &Expr, expected: &Type) -> Result<String> {
+        match (&e.kind, expected) {
+            (ExprKind::List(items), Type::List(elem)) if self.is_interface(elem) => {
+                let mut parts = Vec::new();
+                for i in items {
+                    let it = self.ty_of(i).materialized();
+                    let v = self.expr_owned(i)?;
+                    parts.push(self.coerce(v, &it, elem, i.line, i.col)?);
+                }
+                Ok(format!("vec![{}]", parts.join(", ")))
+            }
+            (ExprKind::Some(inner), Type::Option(t)) if self.is_interface(t) => {
+                let it = self.ty_of(inner).materialized();
+                let v = self.expr_owned(inner)?;
+                Ok(format!("Some({})", self.coerce(v, &it, t, inner.line, inner.col)?))
+            }
+            _ => {
+                let from = self.ty_of(e).materialized();
+                let v = self.expr_owned(e)?;
+                self.coerce(v, &from, expected, e.line, e.col)
+            }
+        }
+    }
+
     /// An argument for a parameter of type `t`: Copy types by value,
     /// everything else by reference.
     fn expr_arg(&mut self, e: &Expr, t: &Type) -> Result<String> {
+        if self.is_interface(t) {
+            // static dispatch through a generic parameter; the value must conform
+            let at = self.ty_of(e).materialized();
+            if let Type::Named(iface) = t {
+                if at != Type::Unknown && !self.is_interface(&at) {
+                    self.require_conforms(&at, iface, e.line, e.col)?;
+                }
+            }
+        }
         if let Type::Iter(elem, by_ref) = self.ty_of(e) {
             let s = self.expr(e)?;
             let c = self.collect_iter_t(&s, by_ref, &elem);
@@ -2977,6 +3507,10 @@ impl Gen {
                         self.require_var_self(name, e.line, e.col)?;
                     }
                     format!("self.{}()", rust_name(name))
+                } else if self.current_self_ty.as_ref().map(|st| builtin_method_type(st, name) != Type::Unknown || is_builtin_name(name)).unwrap_or(false) {
+                    // inside `extend Str with ...`: a bare built-in method name is `self.name`
+                    let call = Expr::new(ExprKind::Method { recv: Box::new(Expr::new(ExprKind::SelfRef, e.line, e.col)), name: name.clone(), args: vec![] }, e.line, e.col);
+                    return self.expr(&call);
                 } else if let Some(en) = self.resolve_variant(name, e.line, e.col)? {
                     self.variant_ctor(&en, name, &[], e)?
                 } else if self.fns.contains_key(name) {
@@ -3128,6 +3662,44 @@ impl Gen {
                 }
             }
             ExprKind::Binary { op, lhs, rhs } => {
+                // user-defined operators: `def +(other)` on the left operand's type
+                let lt0 = self.ty_of(lhs).materialized();
+                if let Type::Named(tn) = &lt0 {
+                    let lookup = |g: &Self, o: &str| g.methods_of(tn).and_then(|m| m.get(o).cloned());
+                    // `!=` follows from `==`; `>`, `<=`, `>=` follow from `<`
+                    let (found, method, negate, swap) = match lookup(self, op) {
+                        Some(sg) => (Some(sg), *op, false, false),
+                        None if *op == "!=" => (lookup(self, "=="), "==", true, false),
+                        None if *op == ">" => (lookup(self, "<"), "<", false, true),
+                        None if *op == "<=" => (lookup(self, "<"), "<", true, true),
+                        None if *op == ">=" => (lookup(self, "<"), "<", true, false),
+                        None => (None, *op, false, false),
+                    };
+                    if let Some(sg) = found {
+                        let call = if swap {
+                            let l = self.expr_arg(lhs, &sg.params[0].1)?;
+                            let r = self.expr(rhs)?;
+                            format!("({}).{}({})", r, rust_name(method), l)
+                        } else {
+                            let l = self.expr(lhs)?;
+                            let r = self.expr_arg(rhs, &sg.params[0].1)?;
+                            format!("({}).{}({})", l, rust_name(method), r)
+                        };
+                        return Ok(if negate { format!("(!{})", call) } else { call });
+                    }
+                    let user_type = self.structs.contains_key(&self.canon(tn)) || self.enums.contains_key(&self.canon(tn));
+                    if user_type && matches!(*op, "+" | "-" | "*" | "/" | "%" | "<" | "<=" | ">" | ">=") {
+                        let (want, extra) = match *op {
+                            "<" | "<=" | ">" | ">=" => ("<", "; `<=`, `>` and `>=` then follow"),
+                            _ => (*op, ""),
+                        };
+                        return Err(LumeError::new(e.line, e.col, format!("`{}` has no `{}` operator", tn, op))
+                            .with_help(format!("add `def {}(other: {}) -> {}:` to `{}`{}", want, tn, if want == "<" { "Bool" } else { tn }, tn, extra)));
+                    }
+                    if user_type && *op == "**" {
+                        return Err(LumeError::new(e.line, e.col, format!("`{}` has no `**` operator", tn)).with_help("`**` is not overloadable; write a method such as `def pow(n: Int)`"));
+                    }
+                }
                 if matches!(*op, "+" | "-" | "*" | "/" | "%" | "**" | "<" | "<=" | ">" | ">=") {
                     for side in [lhs, rhs] {
                         let st = self.ty_of(side);
@@ -3181,8 +3753,8 @@ impl Gen {
                 } else if let Some(info) = self.structs.get(name).cloned() {
                     let bound = self.bind_args(&format!("`{}`", name), &info.fields, args, e.line, e.col)?;
                     let mut parts = Vec::new();
-                    for (a, (fname, _)) in bound.iter().zip(&info.fields) {
-                        parts.push(format!("{}: {}", rust_name(fname), self.expr_owned(a)?));
+                    for (a, (fname, fty)) in bound.iter().zip(&info.fields) {
+                        parts.push(format!("{}: {}", rust_name(fname), self.expr_owned_as(a, fty)?));
                     }
                     format!("{} {{ {} }}", self.path_of(name), parts.join(", "))
                 } else if let Some(en) = self.resolve_variant(name, e.line, e.col)? {
@@ -3276,6 +3848,10 @@ impl Gen {
                             return Ok(format!("{}.sum::<{}>()", r, t));
                         }
                         "max" | "min" if args.is_empty() && elem.is_copy() => {
+                            if **elem == Type::Float {
+                                let r = if *by_ref { format!("{}.cloned()", r) } else { r };
+                                return Ok(format!("{}.{}_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))", r, name));
+                            }
                             return Ok(format!("{}.{}()", r, name));
                         }
                         "first" if args.is_empty() => {
@@ -3310,7 +3886,7 @@ impl Gen {
                     if (name == "to_s" || name == "to_str") && args.is_empty() && self.methods_of(tname).map(|m| !m.contains_key(name)).unwrap_or(true) {
                         return Ok(format!("({}).lume_str()", r));
                     }
-                    if let Some(m) = self.methods_of(tname).and_then(|m| m.get(name)).cloned() {
+                    if let Some(m) = self.methods_of(tname).and_then(|m| m.get(name).cloned()) {
                         let bound = self.bind_args(&format!("`{}.{}`", tname, name), &m.params, args, e.line, e.col)?;
                         let mut parts = Vec::new();
                         for (i, (a, (pname, t))) in bound.iter().zip(&m.params).enumerate() {
@@ -3326,6 +3902,18 @@ impl Gen {
                         return Ok(format!("{}.{}({})", r, rust_name(name), parts.join(", ")));
                     }
                     return Err(self.no_such_member(tname, name, e.line, e.col));
+                }
+                // methods a built-in type gained through `extend`
+                if !matches!(rt, Type::Named(_)) {
+                    let key = self.type_key(&rt);
+                    if let Some(m) = self.ext_methods.get(&key).and_then(|m| m.get(name)).cloned() {
+                        let bound = self.bind_args(&format!("`{}.{}`", type_name(&rt), name), &m.params, args, e.line, e.col)?;
+                        let mut parts = Vec::new();
+                        for (a, (_, t)) in bound.iter().zip(&m.params) {
+                            parts.push(self.expr_arg(a, t)?);
+                        }
+                        return Ok(format!("({}).{}({})", r, rust_name(name), parts.join(", ")));
+                    }
                 }
                 if let Type::Option(inner) = &rt {
                     if !matches!(name.as_str(), "or" | "some?" | "none?" | "or_error" | "to_s" | "to_str") {
@@ -3357,7 +3945,11 @@ impl Gen {
                 let mut parts = Vec::new();
                 for a in args {
                     // `.or(default)` and `.push(x)` store their argument: owned position
-                    parts.push(if matches!(name.as_str(), "or" | "push") { self.expr_owned(&a.value)? } else { self.expr_val(&a.value)? });
+                    parts.push(match (name.as_str(), &rt) {
+                        ("push", Type::List(elem)) => self.expr_owned_as(&a.value, &elem.clone())?,
+                        ("or" | "push", _) => self.expr_owned(&a.value)?,
+                        _ => self.expr_val(&a.value)?,
+                    });
                 }
                 if let Type::List(elem) = &rt {
                     let base = if elem.is_copy() { format!("({}).iter().cloned()", r) } else { format!("({}).iter()", r) };
@@ -3424,7 +4016,6 @@ impl Gen {
                 Ok(())
             }
         };
-        let elem_copy = matches!(rt, Type::List(e) if e.is_copy());
         Ok(match name {
             "pad" => { need(1)?; format!("lume_pad({}, {})", recv, args[0]) }
             "keys" if matches!(rt, Type::Map(..)) => { need(0)?; format!("({}).keys().cloned().collect::<Vec<_>>()", recv) }
@@ -3457,13 +4048,28 @@ impl Gen {
                 }
             }
             "reverse" => { need(0)?; format!("{{ let mut v = ({}).clone(); v.reverse(); v }}", recv) }
-            "sort" => { need(0)?; format!("{{ let mut v = ({}).clone(); v.sort(); v }}", recv) }
-            "max" | "min" => {
+            "sort" | "max" | "min" => {
                 need(0)?;
-                if elem_copy || matches!(rt, Type::List(_)) {
-                    format!("({}).iter().cloned().{}()", recv, name)
-                } else {
-                    format!("({}).iter().cloned().{}()", recv, name)
+                let partial = match rt {
+                    Type::List(el) => {
+                        if let Type::Named(tn) = &**el {
+                            let key = self.canon(tn);
+                            if (self.structs.contains_key(&key) || self.enums.contains_key(&key)) && self.methods_of(tn).map(|m| !m.contains_key("<")).unwrap_or(true) {
+                                return Err(LumeError::new(e.line, e.col, format!("`.{}` needs to compare `{}` values, but `{}` has no `<` operator", name, tn, tn))
+                                    .with_help(format!("add `def <(other: {}) -> Bool:` to `{}`, or use `.{}_by(_.field)`", tn, tn, if name == "sort" { "sort" } else { name })));
+                            }
+                            true
+                        } else {
+                            **el == Type::Float
+                        }
+                    }
+                    _ => false,
+                };
+                match (name, partial) {
+                    ("sort", true) => format!("{{ let mut v = ({}).clone(); v.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)); v }}", recv),
+                    ("sort", false) => format!("{{ let mut v = ({}).clone(); v.sort(); v }}", recv),
+                    (_, true) => format!("({}).iter().cloned().{}_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))", recv, name),
+                    (_, false) => format!("({}).iter().cloned().{}()", recv, name),
                 }
             }
             "lines" => { need(0)?; format!("({}).lines()", recv) }
@@ -3510,6 +4116,18 @@ impl Gen {
         for m in methods {
             if fields.contains(&m.name) {
                 return Err(LumeError::new(m.line, m.col, format!("`{}` is both a field and a method of `{}`", m.name, owner)));
+            }
+            if op_method_name(&m.name).is_some() {
+                if m.params.len() != 1 {
+                    return Err(LumeError::new(m.line, m.col, format!("`def {}` on `{}` must take exactly one argument, the right-hand side", m.name, owner))
+                        .with_help(format!("write `def {}(other: {}) -> {}:`; the left-hand side is `self`", m.name, owner, if matches!(m.name.as_str(), "==" | "!=" | "<" | "<=" | ">" | ">=") { "Bool" } else { owner })));
+                }
+                if matches!(m.name.as_str(), "==" | "!=" | "<" | "<=" | ">" | ">=") && m.ret.as_ref().map(|t| *t != Type::Bool).unwrap_or(false) {
+                    return Err(LumeError::new(m.line, m.col, format!("`def {}` must return `Bool`", m.name)));
+                }
+                if m.self_kind == SelfKind::Mutate {
+                    return Err(LumeError::new(m.line, m.col, format!("`def {}` cannot take `var self`: operators produce a new value", m.name)));
+                }
             }
             if out.insert(m.name.clone(), self.sig_of(m)).is_some() {
                 return Err(LumeError::new(m.line, m.col, format!("method `{}` is defined twice in `{}`", m.name, owner)));
@@ -3725,4 +4343,22 @@ fn expr_mentions(e: &Expr, name: &str) -> bool {
         ExprKind::Match { scrutinee, arms } => expr_mentions(scrutinee, name) || arms.iter().any(|a| a.guard.as_ref().map(|g| expr_mentions(g, name)).unwrap_or(false) || blk(&a.body)),
         ExprKind::Lambda { body, .. } => blk(body),
     }
+}
+
+/// Rust method name for an operator method (`def +(o)` -> `op_add`).
+fn op_method_name(op: &str) -> Option<&'static str> {
+    Some(match op {
+        "+" => "op_add",
+        "-" => "op_sub",
+        "*" => "op_mul",
+        "/" => "op_div",
+        "%" => "op_rem",
+        "==" => "op_eq",
+        "!=" => "op_ne",
+        "<" => "op_lt",
+        "<=" => "op_le",
+        ">" => "op_gt",
+        ">=" => "op_ge",
+        _ => return None,
+    })
 }

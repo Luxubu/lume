@@ -1,0 +1,10 @@
+interface Shape:
+  def area -> Float
+  def perimeter -> Float
+
+extend Str with Shape:
+  def area -> Float:
+    len.to_float
+
+def main:
+  puts "x"

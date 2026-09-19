@@ -1,0 +1,6 @@
+error: `Square` is used as a `Shape` here, but it has no `area` method
+  --> examples/errors/iface_missing.lume:11:17
+   |
+11 |   puts describe(Square(2.0))
+   |                 ^
+  help: `Shape` needs: def area -> Float. Add it to `Square`, or `extend Square with Shape:`

@@ -1,0 +1,6 @@
+error: `Point` has no `+` operator
+  --> examples/errors/operator_missing.lume:6:20
+  |
+6 |   puts Point(1, 2) + Point(3, 4)
+  |                    ^
+  help: add `def +(other: Point) -> Point:` to `Point`

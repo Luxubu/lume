@@ -179,9 +179,21 @@ impl Parser {
             if public {
                 let (pl, pc) = self.here();
                 self.advance();
-                if !(self.at_kw("def") || self.at_kw("struct") || self.at_kw("enum")) {
-                    return Err(LumeError::new(pl, pc, "`pub` goes before `def`, `struct` or `enum`"));
+                if !(self.at_kw("def") || self.at_kw("struct") || self.at_kw("enum") || self.at_kw("interface")) {
+                    return Err(LumeError::new(pl, pc, "`pub` goes before `def`, `struct`, `enum` or `interface`"));
                 }
+            }
+            if self.at_kw("interface") {
+                let mut i = self.interface_def()?;
+                i.public = public;
+                items.push(Item::Interface(i));
+                self.skip_newlines();
+                continue;
+            }
+            if self.at_kw("extend") {
+                items.push(Item::Extend(self.extend_def()?));
+                self.skip_newlines();
+                continue;
             }
             if self.at_kw("def") {
                 let mut f = self.fn_def(false)?;
@@ -270,6 +282,121 @@ impl Parser {
                 .with_help("a struct needs at least one `name: Type` field"));
         }
         Ok(StructDef { name, public: false, fields, methods, line, col })
+    }
+
+    fn interface_def(&mut self) -> Result<InterfaceDef> {
+        let (line, col) = self.here();
+        self.advance(); // interface
+        let (name, nl, nc) = self.ident("an interface name")?;
+        if !name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+            return Err(LumeError::new(nl, nc, format!("interface names start with a capital letter: `{}`", name))
+                .with_help(format!("rename it `{}`", capitalize(&name))));
+        }
+        if !self.eat_sym(":") {
+            return Err(self.err(format!("expected `:` after `interface {}`", name)));
+        }
+        if !matches!(self.peek(), Tok::Newline) || !matches!(self.peek_at(1), Tok::Indent) {
+            return Err(self.err(format!("interface `{}` has no methods", name)).with_help("indent at least one `def name -> Type` under it"));
+        }
+        self.advance();
+        self.advance();
+        let mut required = Vec::new();
+        let mut defaults = Vec::new();
+        while !matches!(self.peek(), Tok::Dedent | Tok::Eof) {
+            if !self.at_kw("def") {
+                return Err(self.err(format!("expected `def` inside `interface {}`, found {}", name, self.describe())));
+            }
+            let (dl, dc) = self.here();
+            let f = self.fn_signature_or_def()?;
+            match f {
+                (f, false) => {
+                    if f.ret.is_none() {
+                        return Err(LumeError::new(dl, dc, format!("interface method `{}` needs a return type", f.name))
+                            .with_help("there is no body to infer it from: `def area -> Float`"));
+                    }
+                    required.push(f);
+                }
+                (f, true) => defaults.push(f),
+            }
+            self.skip_newlines();
+        }
+        if matches!(self.peek(), Tok::Dedent) {
+            self.advance();
+        }
+        if required.is_empty() && defaults.is_empty() {
+            return Err(LumeError::new(line, col, format!("interface `{}` has no methods", name)));
+        }
+        Ok(InterfaceDef { name, public: false, required, defaults, line, col })
+    }
+
+    /// `def name(params) -> T` alone (a required interface method) or with
+    /// `:`/`=` and a body. Returns (def, has_body).
+    fn fn_signature_or_def(&mut self) -> Result<(FnDef, bool)> {
+        // Look ahead: after the signature, is there a `:` or `=`?
+        let save = self.pos;
+        let f = self.fn_def(true);
+        match f {
+            Ok(f) => Ok((f, true)),
+            Err(e) => {
+                // retry as a bare signature
+                self.pos = save;
+                let (line, col) = self.here();
+                self.advance(); // def
+                let (name, _, _) = self.ident("a method name")?;
+                let mut params = Vec::new();
+                if self.eat_sym("(") {
+                    while !self.at_sym(")") {
+                        let mutable = self.eat_kw("var");
+                        let (pname, pl, pc) = self.ident("a parameter name")?;
+                        if !self.eat_sym(":") {
+                            return Err(self.err(format!("parameter `{}` needs a type", pname)));
+                        }
+                        let ty = self.parse_type()?;
+                        params.push(Param { name: pname, ty, mutable, line: pl, col: pc });
+                        if !self.eat_sym(",") {
+                            break;
+                        }
+                    }
+                    self.expect_sym(")", "to close the parameter list")?;
+                }
+                let ret = if self.eat_sym("->") { Some(self.parse_type()?) } else { None };
+                if self.at_sym(":") || self.at_sym("=") {
+                    return Err(e);
+                }
+                self.end_stmt()?;
+                Ok((FnDef { name, public: true, params, ret, self_kind: SelfKind::Read, body: Block::default(), line, col }, false))
+            }
+        }
+    }
+
+    fn extend_def(&mut self) -> Result<ExtendDef> {
+        let (line, col) = self.here();
+        self.advance(); // extend
+        let target = self.parse_type()?;
+        if !self.eat_kw("with") && !matches!(self.peek(), Tok::Ident(s) if s == "with") {
+            return Err(self.err("expected `with` and an interface name").with_help("write `extend Str with Shape:`"));
+        }
+        let (iface, _, _) = self.ident("an interface name")?;
+        if !self.eat_sym(":") {
+            return Err(self.err(format!("expected `:` after `extend ... with {}`", iface)));
+        }
+        if !matches!(self.peek(), Tok::Newline) || !matches!(self.peek_at(1), Tok::Indent) {
+            return Err(self.err("expected the methods of the extension on the following lines, indented"));
+        }
+        self.advance();
+        self.advance();
+        let mut methods = Vec::new();
+        while !matches!(self.peek(), Tok::Dedent | Tok::Eof) {
+            if !self.at_kw("def") {
+                return Err(self.err(format!("expected `def` inside `extend`, found {}", self.describe())));
+            }
+            methods.push(self.fn_def(true)?);
+            self.skip_newlines();
+        }
+        if matches!(self.peek(), Tok::Dedent) {
+            self.advance();
+        }
+        Ok(ExtendDef { target, iface, methods, line, col })
     }
 
     fn import_def(&mut self) -> Result<Import> {
@@ -406,7 +533,17 @@ impl Parser {
     fn fn_def(&mut self, in_struct: bool) -> Result<FnDef> {
         let (line, col) = self.here();
         self.advance(); // def
-        let (name, _, _) = self.ident("a function name")?;
+        let name = match self.peek().clone() {
+            Tok::Sym(op) if matches!(op, "+" | "-" | "*" | "/" | "%" | "==" | "!=" | "<" | "<=" | ">" | ">=") => {
+                let (ol, oc) = self.here();
+                if !in_struct {
+                    return Err(LumeError::new(ol, oc, format!("`def {}` defines an operator, which belongs inside a struct, enum or extend", op)));
+                }
+                self.advance();
+                op.to_string()
+            }
+            _ => self.ident("a function name")?.0,
+        };
         let mut params = Vec::new();
         let mut self_kind = SelfKind::Read;
         if self.eat_sym("(") {

@@ -1,0 +1,6 @@
+error: `def +` on `Point` must take exactly one argument, the right-hand side
+  --> examples/errors/operator_wrong_arity.lume:5:3
+  |
+5 |   def +(a: Point, b: Point) -> Point:
+  |   ^
+  help: write `def +(other: Point) -> Point:`; the left-hand side is `self`

@@ -1,0 +1,5 @@
+error: `Square` is used as a `Shape`, but its `area` is `-> Int` and `Shape` needs `-> Float`
+  --> examples/errors/iface_mismatch.lume:14:17
+   |
+14 |   puts describe(Square(2.0))
+   |                 ^

@@ -1,0 +1,9 @@
+struct Point:
+  x: Int
+  y: Int
+
+  def +(a: Point, b: Point) -> Point:
+    Point(a.x + b.x, a.y + b.y)
+
+def main:
+  puts Point(1, 2) + Point(3, 4)

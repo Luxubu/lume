@@ -1,0 +1,93 @@
+# Milestone 10: interfaces, extend, operator methods.
+#
+# An interface lists the methods a type must have. A type conforms by
+# having them — no `impl`, no `derive`, no declaration. Defaults are
+# methods every conforming type gets for free.
+
+interface Shape:
+  def area -> Float
+  def name -> Str:
+    "shape"
+
+struct Circle:
+  r: Float
+
+  def area -> Float:
+    3.14159 * r * r
+
+  def name -> Str:
+    "circle"
+
+struct Rect:
+  w: Float
+  h: Float
+
+  def area -> Float:
+    w * h
+
+# `Rect` says nothing about `Shape`; it has `area`, so it is one.
+# It never wrote `name`, so it gets the default.
+
+def describe(s: Shape) -> Str:
+  "#{s.name} with area #{s.area}"
+
+# A list of mixed shapes: values of different types behind one interface.
+def total_area(shapes: [Shape]) -> Float:
+  shapes.map(_.area).sum
+
+# `extend` adds methods to a type you do not own — here `Str` — so it
+# conforms to an interface of yours.
+extend Str with Shape:
+  def area -> Float:
+    len.to_float
+
+  def name -> Str:
+    "the string #{self}"
+
+# Operator methods: `+`, `-`, `*`, `/`, `%`, `<`, `<=`, `>`, `>=`, `==`, `!=`.
+struct Point:
+  x: Int
+  y: Int
+
+  def +(o: Point) -> Point:
+    Point(x + o.x, y + o.y)
+
+  def -(o: Point) -> Point:
+    Point(x - o.x, y - o.y)
+
+  def *(k: Int) -> Point:
+    Point(x * k, y * k)
+
+  def ==(o: Point) -> Bool:
+    x == o.x and y == o.y
+
+# `<` alone gives a type `<=`, `>`, `>=`, `sort`, `max` and `min`.
+struct Money:
+  cents: Int
+
+  def <(o: Money) -> Bool:
+    cents < o.cents
+
+def main:
+  c = Circle(1.0)
+  r = Rect(2.0, 3.0)
+  puts describe(c)
+  puts describe(r)
+  puts describe("hello")
+
+  shapes: [Shape] = [c, r, "abcd"]
+  puts "total: #{total_area(shapes)}"
+  for s in shapes:
+    puts "  #{s.name}: #{s.area}"
+
+  p = Point(1, 2) + Point(3, 4)
+  puts p
+  q = (p - Point(1, 1)) * 2
+  puts q
+  puts Point(1, 2) == Point(1, 2)
+  puts Point(1, 2) != Point(2, 1)
+
+  ms = [Money(5), Money(2), Money(9)]
+  puts ms.sort
+  puts ms.max
+  puts Money(3) >= Money(2)
