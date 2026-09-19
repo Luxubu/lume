@@ -260,6 +260,24 @@ enum BindKind {
     Owned,
 }
 
+/// What a module offers to the files that import it.
+#[derive(Clone, Default)]
+pub struct Exports {
+    pub rust_mod: String,
+    structs: HashMap<String, StructInfo>,
+    enums: HashMap<String, EnumInfo>,
+    fns: HashMap<String, Sig>,
+    private: Vec<String>,
+}
+
+/// One import of this module, already resolved to a file by the loader.
+pub enum Dep<'a> {
+    /// `import users.model [as m]`: the whole module under an alias
+    Module { alias: String, id: String, exports: &'a Exports, line: usize, col: usize },
+    /// `import users.model.User [as U]`: one public item under a local name
+    Single { local: String, id: String, item: String, exports: &'a Exports, line: usize, col: usize },
+}
+
 pub struct Output {
     pub rust: String,
     pub warnings: Vec<LumeError>,
@@ -293,9 +311,26 @@ pub struct Gen {
     has_rust_blocks: bool,
     /// Statements that follow the one being emitted, in the same block.
     rest_of_block: Vec<Stmt>,
+    /// Rust paths of imported items, keyed by canonical id ("users.model.User").
+    paths: HashMap<String, String>,
+    /// How this module spells imported items -> canonical id
+    /// ("model.User" and a single-imported "User" -> "users.model.User").
+    canon: HashMap<String, String>,
+    /// Module aliases in scope (`model` for `import users.model`).
+    module_aliases: HashMap<String, String>,
+    /// Private names of imported modules, for good error messages: alias -> names.
+    module_private: HashMap<String, Vec<String>>,
+    /// True for the file that holds `main`.
+    is_entry: bool,
 }
 
 pub fn generate(program: &[Item]) -> Result<Output> {
+    generate_module(program, None, &[]).map(|(o, _)| o)
+}
+
+/// Compiles one module. `rust_mod` is `Some(name)` for an imported file,
+/// which is emitted as `mod name { ... }`; `None` for the entry file.
+pub fn generate_module(program: &[Item], rust_mod: Option<&str>, deps: &[Dep]) -> Result<(Output, Exports)> {
     let mut g = Gen {
         out: String::new(),
         indent: 0,
@@ -315,17 +350,58 @@ pub fn generate(program: &[Item]) -> Result<Output> {
         warnings: Vec::new(),
         has_rust_blocks: false,
         rest_of_block: Vec::new(),
+        paths: HashMap::new(),
+        canon: HashMap::new(),
+        module_aliases: HashMap::new(),
+        module_private: HashMap::new(),
+        is_entry: true,
     };
     // The built-in Error type: a struct with one field, defined in the prelude.
     g.structs.insert("Error".into(), StructInfo { fields: vec![("message".into(), Type::Str)], methods: HashMap::new() });
+    g.is_entry = rust_mod.is_none();
+    g.register_deps(deps)?;
     g.program(program)?;
-    let mut deps = Vec::new();
+    let mut rust_deps = Vec::new();
     for item in program {
         if let Item::Import(imp) = item {
-            deps.push((imp.krate.clone(), imp.version.clone().unwrap_or_else(|| "*".into())));
+            if imp.is_rust {
+                rust_deps.push((imp.krate().to_string(), imp.version.clone().unwrap_or_else(|| "*".into())));
+            }
         }
     }
-    Ok(Output { rust: g.out, warnings: g.warnings, deps, has_rust_blocks: g.has_rust_blocks })
+    let exports = g.exports(program, rust_mod.unwrap_or("main"));
+    let rust = match rust_mod {
+        Some(m) => {
+            let body = g.out.lines().map(|l| if l.is_empty() { String::new() } else { format!("    {}", l) }).collect::<Vec<_>>().join("\n");
+            format!("pub mod {} {{\n    use super::*;\n{}\n}}\n", m, body)
+        }
+        None => g.out,
+    };
+    Ok((Output { rust, warnings: g.warnings, deps: rust_deps, has_rust_blocks: g.has_rust_blocks }, exports))
+}
+
+/// Rewrites a type from module `id` so its named types are keyed the way the
+/// importing module sees them (`User` -> `users.model.User`).
+fn qualify_type(t: &Type, id: &str, ex: &Exports) -> Type {
+    match t {
+        Type::Named(n) if n != "Error" && (ex.structs.contains_key(n) || ex.enums.contains_key(n)) => Type::Named(format!("{}.{}", id, n)),
+        Type::List(i) => Type::List(Box::new(qualify_type(i, id, ex))),
+        Type::Option(i) => Type::Option(Box::new(qualify_type(i, id, ex))),
+        Type::Iter(i, b) => Type::Iter(Box::new(qualify_type(i, id, ex)), *b),
+        Type::Tuple(ts) => Type::Tuple(ts.iter().map(|x| qualify_type(x, id, ex)).collect()),
+        Type::Result(a, b) => Type::Result(Box::new(qualify_type(a, id, ex)), Box::new(qualify_type(b, id, ex))),
+        Type::Map(a, b) => Type::Map(Box::new(qualify_type(a, id, ex)), Box::new(qualify_type(b, id, ex))),
+        other => other.clone(),
+    }
+}
+
+fn qualify_sig(sig: &Sig, id: &str, ex: &Exports) -> Sig {
+    Sig {
+        params: sig.params.iter().map(|(n, t)| (n.clone(), qualify_type(t, id, ex))).collect(),
+        var_params: sig.var_params.clone(),
+        ret: qualify_type(&sig.ret, id, ex),
+        self_kind: sig.self_kind,
+    }
 }
 
 fn rust_name(name: &str) -> String {
@@ -402,6 +478,57 @@ fn plural(n: usize, one: &str, many: &str) -> String {
 }
 
 impl Gen {
+    /// Rust spelling of a type; names of imported items go through their module path.
+    fn rt(&self, t: &Type) -> String {
+        match t {
+            Type::Named(n) => self.path_of(n),
+            Type::List(inner) => format!("Vec<{}>", self.rt(inner)),
+            Type::Option(inner) => format!("Option<{}>", self.rt(inner)),
+            Type::Tuple(ts) => format!("({})", ts.iter().map(|x| self.rt(x)).collect::<Vec<_>>().join(", ")),
+            Type::Result(a, b) => format!("Result<{}, {}>", self.rt(a), self.rt(b)),
+            Type::Map(k, v) => format!("LumeMap<{}, {}>", self.rt(k), self.rt(v)),
+            Type::Iter(inner, _) => format!("Vec<{}>", self.rt(inner)),
+            other => rust_type(other),
+        }
+    }
+
+    /// The Rust path of a struct/enum/function key as seen from this module.
+    fn path_of(&self, key: &str) -> String {
+        let key = self.canon(key);
+        match self.paths.get(&key) {
+            Some(p) => p.clone(),
+            None => key,
+        }
+    }
+
+    /// Canonical id of a name as written in this module.
+    fn canon(&self, name: &str) -> String {
+        self.canon.get(name).cloned().unwrap_or_else(|| name.to_string())
+    }
+
+    /// A type with its named parts canonicalised.
+    fn ct(&self, t: &Type) -> Type {
+        match t {
+            Type::Named(n) => Type::Named(self.canon(n)),
+            Type::List(i) => Type::List(Box::new(self.ct(i))),
+            Type::Option(i) => Type::Option(Box::new(self.ct(i))),
+            Type::Iter(i, b) => Type::Iter(Box::new(self.ct(i)), *b),
+            Type::Tuple(ts) => Type::Tuple(ts.iter().map(|x| self.ct(x)).collect()),
+            Type::Result(a, b) => Type::Result(Box::new(self.ct(a)), Box::new(self.ct(b))),
+            Type::Map(a, b) => Type::Map(Box::new(self.ct(a)), Box::new(self.ct(b))),
+            other => other.clone(),
+        }
+    }
+
+    fn sig_of(&self, f: &FnDef) -> Sig {
+        Sig {
+            params: f.params.iter().map(|p| (p.name.clone(), self.ct(&p.ty))).collect(),
+            var_params: f.params.iter().map(|p| p.mutable).collect(),
+            ret: f.ret.as_ref().map(|t| self.ct(t)).unwrap_or(Type::Unknown),
+            self_kind: f.self_kind,
+        }
+    }
+
     // ----- output helpers -------------------------------------------------
 
     fn line(&mut self, s: &str) {
@@ -468,7 +595,9 @@ impl Gen {
     /// Enums that have a variant with this name.
     fn enums_with_variant(&self, v: &str) -> Vec<String> {
         let mut out: Vec<String> = self.enums.iter().filter(|(_, e)| e.variants.iter().any(|(n, _)| n == v)).map(|(n, _)| n.clone()).collect();
-        out.sort();
+        out.sort_by_key(|k| (k.matches('.').count(), k.clone()));
+        let mut seen = HashSet::new();
+        out.retain(|k| seen.insert(self.path_of(k)));
         out
     }
 
@@ -525,6 +654,125 @@ impl Gen {
         self.suggest_from(name, self.all_names().into_iter())
     }
 
+    /// Makes an imported module's public items visible under `key_prefix`
+    /// ("model" for an alias, "users.model" for the full id).
+    fn register_module_items(&mut self, key_prefix: &str, id: &str, ex: &Exports) {
+        for (n, info) in &ex.structs {
+            let key = format!("{}.{}", key_prefix, n);
+            let qualified = StructInfo {
+                fields: info.fields.iter().map(|(f, t)| (f.clone(), qualify_type(t, id, ex))).collect(),
+                methods: info.methods.iter().map(|(m, sg)| (m.clone(), qualify_sig(sg, id, ex))).collect(),
+            };
+            self.structs.insert(key.clone(), qualified);
+            self.paths.insert(key, format!("{}::{}", ex.rust_mod, n));
+        }
+        for (n, info) in &ex.enums {
+            let key = format!("{}.{}", key_prefix, n);
+            let qualified = EnumInfo {
+                variants: info.variants.iter().map(|(v, fs)| (v.clone(), fs.iter().map(|(f, t)| (f.clone(), qualify_type(t, id, ex))).collect())).collect(),
+                methods: info.methods.iter().map(|(m, sg)| (m.clone(), qualify_sig(sg, id, ex))).collect(),
+            };
+            self.enums.insert(key.clone(), qualified);
+            self.paths.insert(key, format!("{}::{}", ex.rust_mod, n));
+        }
+        for (n, sig) in &ex.fns {
+            let key = format!("{}.{}", key_prefix, n);
+            self.fns.insert(key.clone(), qualify_sig(sig, id, ex));
+            self.paths.insert(key, format!("{}::{}", ex.rust_mod, n));
+        }
+    }
+
+    fn register_deps(&mut self, deps: &[Dep]) -> Result<()> {
+        for d in deps {
+            match d {
+                Dep::Module { alias, id, exports, line, col } => {
+                    if self.module_aliases.contains_key(alias) {
+                        return Err(LumeError::new(*line, *col, format!("`{}` is imported twice", alias)));
+                    }
+                    self.module_aliases.insert(alias.clone(), id.clone());
+                    self.module_private.insert(alias.clone(), exports.private.clone());
+                    self.register_module_items(id, id, exports);
+                    for n in exports.structs.keys().chain(exports.enums.keys()).chain(exports.fns.keys()) {
+                        self.canon.insert(format!("{}.{}", alias, n), format!("{}.{}", id, n));
+                    }
+                }
+                Dep::Single { local, id, item, exports, line, col } => {
+                    // the module's types must resolve for signatures that mention them
+                    self.register_module_items(id, id, exports);
+                    let full = format!("{}.{}", id, item);
+                    if self.structs.contains_key(&full) || self.enums.contains_key(&full) || self.fns.contains_key(&full) {
+                        self.canon.insert(local.clone(), full.clone());
+                    } else if exports.private.contains(item) {
+                        return Err(LumeError::new(*line, *col, format!("`{}` exists in module `{}` but is not `pub`", item, id))
+                            .with_help(format!("add `pub` in front of its definition in {}.lume", id.replace('.', "/"))));
+                    } else {
+                        let e = LumeError::new(*line, *col, format!("module `{}` has no `{}`", id, item));
+                        let names: Vec<String> = exports.structs.keys().chain(exports.enums.keys()).chain(exports.fns.keys()).cloned().collect();
+                        return Err(match self.suggest_from(item, names.iter().cloned()) {
+                            Some(sug) => e.with_help(format!("did you mean `{}`?", sug)),
+                            None => e.with_help(format!("its public items are: {}", names.join(", "))),
+                        });
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// This module's public items, for files that import it.
+    fn exports(&self, program: &[Item], rust_mod: &str) -> Exports {
+        let mut ex = Exports { rust_mod: rust_mod.to_string(), ..Default::default() };
+        for item in program {
+            match item {
+                Item::Fn(f) if f.public => {
+                    ex.fns.insert(f.name.clone(), self.fns[&f.name].clone());
+                }
+                Item::Fn(f) => ex.private.push(f.name.clone()),
+                Item::Struct(st) if st.public => {
+                    ex.structs.insert(st.name.clone(), self.structs[&st.name].clone());
+                }
+                Item::Struct(st) => ex.private.push(st.name.clone()),
+                Item::Enum(en) if en.public => {
+                    ex.enums.insert(en.name.clone(), self.enums[&en.name].clone());
+                }
+                Item::Enum(en) => ex.private.push(en.name.clone()),
+                Item::Import(_) => {}
+            }
+        }
+        ex
+    }
+
+    /// A `module.name` reference: the item key if `module` is an imported
+    /// module alias, plus a good error when the name is private or missing.
+    fn module_item(&self, alias: &str, name: &str, line: usize, col: usize) -> Result<Option<String>> {
+        let id = match self.module_aliases.get(alias) {
+            Some(id) => id.clone(),
+            None => return Ok(None),
+        };
+        let key = self.canon(&format!("{}.{}", alias, name));
+        if self.structs.contains_key(&key) || self.enums.contains_key(&key) || self.fns.contains_key(&key) {
+            return Ok(Some(key));
+        }
+        if self.module_private.get(alias).map(|p| p.contains(&name.to_string())).unwrap_or(false) {
+            return Err(LumeError::new(line, col, format!("`{}` exists in module `{}` but is not `pub`", name, id))
+                .with_help(format!("add `pub` in front of its definition in {}.lume", id.replace('.', "/"))));
+        }
+        let e = LumeError::new(line, col, format!("module `{}` has no `{}`", id, name));
+        let prefix = format!("{}.", id);
+        let names: Vec<String> = self
+            .structs
+            .keys()
+            .chain(self.enums.keys())
+            .chain(self.fns.keys())
+            .filter_map(|k| k.strip_prefix(&prefix).map(|s| s.to_string()))
+            .filter(|s| !s.contains('.'))
+            .collect();
+        Err(match self.suggest_from(name, names.iter().cloned()) {
+            Some(sug) => e.with_help(format!("did you mean `{}`?", sug)),
+            None => e.with_help(format!("its public items are: {}", names.join(", "))),
+        })
+    }
+
     // ----- program ----------------------------------------------------------
 
     fn program(&mut self, program: &[Item]) -> Result<()> {
@@ -533,17 +781,19 @@ impl Gen {
         let mut imported: HashSet<String> = HashSet::new();
         for item in program {
             match item {
-                Item::Import(imp) => {
-                    let key = imp.alias.clone().unwrap_or_else(|| imp.krate.clone());
+                Item::Import(imp) if imp.is_rust => {
+                    let key = imp.alias.clone().unwrap_or_else(|| imp.krate().to_string());
                     if !imported.insert(key.clone()) {
                         return Err(LumeError::new(imp.line, imp.col, format!("`{}` is imported twice", key)));
                     }
                 }
+                Item::Import(_) => {}
                 Item::Fn(f) => {
                     if !seen.insert(f.name.clone()) {
                         return Err(LumeError::new(f.line, f.col, format!("function `{}` is defined twice", f.name)));
                     }
-                    self.fns.insert(f.name.clone(), sig_of(f));
+                    let sg = self.sig_of(f);
+                    self.fns.insert(f.name.clone(), sg);
                 }
                 Item::Struct(s) => {
                     if s.name == "Error" {
@@ -558,28 +808,21 @@ impl Gen {
                             return Err(LumeError::new(fld.line, fld.col, format!("field `{}` is listed twice in `{}`", fld.name, s.name)));
                         }
                     }
-                    let methods = collect_methods(&s.methods, &s.name, &fnames)?;
-                    self.structs.insert(
-                        s.name.clone(),
-                        StructInfo { fields: s.fields.iter().map(|p| (p.name.clone(), p.ty.clone())).collect(), methods },
-                    );
+                    let methods = self.collect_methods(&s.methods, &s.name, &fnames)?;
+                    let fields = s.fields.iter().map(|p| (p.name.clone(), self.ct(&p.ty))).collect();
+                    self.structs.insert(s.name.clone(), StructInfo { fields, methods });
                 }
                 Item::Enum(e) => {
                     if !seen.insert(e.name.clone()) {
                         return Err(LumeError::new(e.line, e.col, format!("`{}` is defined twice", e.name)));
                     }
-                    let methods = collect_methods(&e.methods, &e.name, &HashSet::new())?;
-                    self.enums.insert(
-                        e.name.clone(),
-                        EnumInfo {
-                            variants: e
-                                .variants
-                                .iter()
-                                .map(|v| (v.name.clone(), v.fields.iter().map(|p| (p.name.clone(), p.ty.clone())).collect()))
-                                .collect(),
-                            methods,
-                        },
-                    );
+                    let methods = self.collect_methods(&e.methods, &e.name, &HashSet::new())?;
+                    let variants = e
+                        .variants
+                        .iter()
+                        .map(|v| (v.name.clone(), v.fields.iter().map(|p| (p.name.clone(), self.ct(&p.ty))).collect()))
+                        .collect();
+                    self.enums.insert(e.name.clone(), EnumInfo { variants, methods });
                 }
             }
         }
@@ -648,14 +891,19 @@ impl Gen {
             }
         }
 
-        // Pass 3: emit.
-        self.out.push_str(PRELUDE);
-        self.out.push('\n');
+        // Pass 3: emit. The prelude is shared: only the entry file carries it.
+        if self.is_entry {
+            self.out.push_str(PRELUDE);
+            self.out.push('\n');
+        }
         for item in program {
             if let Item::Import(imp) = item {
+                if !imp.is_rust {
+                    continue;
+                }
                 match &imp.alias {
-                    Some(a) => self.line(&format!("use {} as {};", imp.krate, a)),
-                    None => self.line(&format!("use {};", imp.krate)),
+                    Some(a) => self.line(&format!("use {} as {};", imp.krate(), a)),
+                    None => self.line(&format!("use {};", imp.krate())),
                 }
             }
         }
@@ -669,7 +917,7 @@ impl Gen {
             }
             self.out.push('\n');
         }
-        if !self.fns.contains_key("main") {
+        if self.is_entry && !self.fns.contains_key("main") {
             return Err(LumeError::new(1, 1, "no `main` function").with_help("a program starts at `def main:`"));
         }
         Ok(())
@@ -697,7 +945,7 @@ impl Gen {
 
     fn check_type(&self, t: &Type, line: usize, col: usize) -> Result<()> {
         match t {
-            Type::Named(n) if !self.is_type(n) => {
+            Type::Named(n) if !self.is_type(&self.canon(n)) => {
                 let e = LumeError::new(line, col, format!("unknown type `{}`", n));
                 let cands = self
                     .structs
@@ -740,7 +988,8 @@ impl Gen {
         let saved = self.current_type.clone();
         self.current_type = owner.cloned();
         for p in &f.params {
-            self.declare(&p.name, false, !p.ty.is_copy(), p.ty.clone(), p.line);
+            let pty = self.ct(&p.ty);
+            self.declare(&p.name, false, !pty.is_copy(), pty, p.line);
         }
         let t = self.tail_type(&f.body);
         self.current_type = saved;
@@ -756,7 +1005,7 @@ impl Gen {
             let last = i + 1 == n;
             match s {
                 Stmt::Bind { name, ty, value, line, .. } | Stmt::Var { name, ty, value, line, .. } => {
-                    let vt = ty.clone().unwrap_or_else(|| self.ty_of(value).materialized());
+                    let vt = ty.as_ref().map(|t| self.ct(t)).unwrap_or_else(|| self.ty_of(value).materialized());
                     let mutable = matches!(s, Stmt::Var { .. });
                     if self.lookup(name).is_none() || mutable {
                         self.declare(name, mutable, false, vt, *line);
@@ -872,6 +1121,43 @@ impl Gen {
         Ok(())
     }
 
+    /// Rewrites `model.f(x)` to a call of the key `model.f`, `model.User(..)`
+    /// to that constructor, and `model.Shape.Circle(..)` to a variant of the
+    /// key `model.Shape`, when `model` is an imported module alias.
+    fn module_ref(&mut self, e: &Expr) -> Result<Option<Expr>> {
+        let (recv, name, args) = match &e.kind {
+            ExprKind::Method { recv, name, args } => (recv, name, args),
+            _ => return Ok(None),
+        };
+        // model.Enum.Variant
+        if let ExprKind::Method { recv: r2, name: tname, args: a2 } = &recv.kind {
+            if a2.is_empty() {
+                if let ExprKind::Ident(alias) = &r2.kind {
+                    if self.lookup(alias).is_none() && self.module_aliases.contains_key(alias) {
+                        let key = self.canon(&format!("{}.{}", alias, tname));
+                        if self.enums.contains_key(&key) {
+                            let en = Expr::new(ExprKind::Ident(key), recv.line, recv.col);
+                            return Ok(Some(Expr::new(ExprKind::Method { recv: Box::new(en), name: name.clone(), args: args.clone() }, e.line, e.col)));
+                        }
+                    }
+                }
+            }
+        }
+        if let ExprKind::Ident(alias) = &recv.kind {
+            if self.lookup(alias).is_none() && self.module_aliases.contains_key(alias) {
+                let key = match self.module_item(alias, name, e.line, e.col)? {
+                    Some(k) => k,
+                    None => return Ok(None),
+                };
+                if self.enums.contains_key(&key) {
+                    return Err(LumeError::new(e.line, e.col, format!("`{}` is an enum; pick a variant like `{}.{}`", key, key, self.enums[&key].variants[0].0)));
+                }
+                return Ok(Some(Expr::new(ExprKind::Call { name: key, args: args.clone() }, e.line, e.col)));
+            }
+        }
+        Ok(None)
+    }
+
     /// `xs.map(f)` with `f` a function name: the same as `xs.map { |x| f(x) }`.
     fn fn_ref_as_block(&self, e: &Expr) -> Option<Expr> {
         let (recv, name, args) = match &e.kind {
@@ -939,6 +1225,9 @@ impl Gen {
             if let Some(ne) = self.fn_ref_as_block(e) {
                 return self.ty_of(&ne);
             }
+            if let Ok(Some(ne)) = self.module_ref(e) {
+                return self.ty_of(&ne);
+            }
         }
         match &e.kind {
             ExprKind::Int(_) => Type::Int,
@@ -982,7 +1271,9 @@ impl Gen {
                     if l == Type::Unknown { self.ty_of(rhs) } else { l }
                 }
             },
-            ExprKind::Call { name, .. } => {
+            ExprKind::Call { name: raw_name, .. } => {
+                let cname = self.canon(raw_name);
+                let name = &cname;
                 if let Some(s) = self.fns.get(name) {
                     s.ret.clone()
                 } else if let Some(m) = self.current_type.as_ref().and_then(|t| self.methods_of(t)).and_then(|m| m.get(name)) {
@@ -998,8 +1289,9 @@ impl Gen {
             ExprKind::Method { recv, name, args } => {
                 // Enum variant constructor: Shape.Circle(...)
                 if let ExprKind::Ident(tn) = &recv.kind {
-                    if self.lookup(tn).is_none() && self.enums.contains_key(tn) {
-                        return Type::Named(tn.clone());
+                    let ctn = self.canon(tn);
+                    if self.lookup(tn).is_none() && self.enums.contains_key(&ctn) {
+                        return Type::Named(ctn);
                     }
                     if self.lookup(tn).is_none() {
                         if let Some(t) = builtin_namespace_type(tn, name) {
@@ -1151,10 +1443,11 @@ impl Gen {
 
     fn struct_def(&mut self, s: &StructDef) -> Result<()> {
         self.line("#[derive(Debug, Clone, PartialEq)]");
-        self.line(&format!("struct {} {{", s.name));
+        self.line(&format!("pub struct {} {{", s.name));
         self.indent += 1;
         for f in &s.fields {
-            self.line(&format!("{}: {},", rust_name(&f.name), rust_type(&f.ty)));
+            let ft = self.rt(&f.ty);
+            self.line(&format!("pub {}: {},", rust_name(&f.name), ft));
         }
         self.indent -= 1;
         self.line("}");
@@ -1179,13 +1472,13 @@ impl Gen {
 
     fn enum_def(&mut self, e: &EnumDef) -> Result<()> {
         self.line("#[derive(Debug, Clone, PartialEq)]");
-        self.line(&format!("enum {} {{", e.name));
+        self.line(&format!("pub enum {} {{", e.name));
         self.indent += 1;
         for v in &e.variants {
             if v.fields.is_empty() {
                 self.line(&format!("{},", v.name));
             } else {
-                let fs: Vec<String> = v.fields.iter().map(|f| format!("{}: {}", rust_name(&f.name), rust_type(&f.ty))).collect();
+                let fs: Vec<String> = v.fields.iter().map(|f| format!("{}: {}", rust_name(&f.name), self.rt(&f.ty))).collect();
                 self.line(&format!("{} {{ {} }},", v.name, fs.join(", ")));
             }
         }
@@ -1238,7 +1531,7 @@ impl Gen {
             None => self.fns[&f.name].clone(),
             Some(s) => self.methods_of(s).unwrap()[&f.name].clone(),
         };
-        let is_main = f.name == "main" && owner.is_none();
+        let is_main = f.name == "main" && owner.is_none() && self.is_entry;
         let main_result = is_main && matches!(sig.ret, Type::Result(..));
         // `-> () or E`: the body ends with statements, and finishes with Ok(()).
         let unit_result = matches!(&sig.ret, Type::Result(t, _) if **t == Type::Unit);
@@ -1268,20 +1561,22 @@ impl Gen {
             if !names.insert(p.name.clone()) {
                 return Err(LumeError::new(p.line, p.col, format!("parameter `{}` is listed twice", p.name)));
             }
-            let rt = rust_type(&p.ty);
-            let rt = if p.mutable { format!("&mut {}", rt) } else if p.ty.is_copy() { rt } else if p.ty == Type::Str { "&str".to_string() } else { format!("&{}", rt) };
+            let pty = self.ct(&p.ty);
+            let rt = self.rt(&pty);
+            let rt = if p.mutable { format!("&mut {}", rt) } else if pty.is_copy() { rt } else if pty == Type::Str { "&str".to_string() } else { format!("&{}", rt) };
             parts.push(format!("{}: {}", rust_name(&p.name), rt));
         }
-        let mut header = format!("fn {}({})", fn_name, parts.join(", "));
+        let mut header = format!("pub fn {}({})", fn_name, parts.join(", "));
         if sig.ret != Type::Unit {
-            header.push_str(&format!(" -> {}", rust_type(&sig.ret)));
+            header.push_str(&format!(" -> {}", self.rt(&sig.ret)));
         }
         header.push_str(" {");
         self.line(&header);
         self.indent += 1;
         self.push_scope();
         for p in &f.params {
-            self.declare(&p.name, p.mutable, !p.ty.is_copy(), p.ty.clone(), p.line);
+            let pty = self.ct(&p.ty);
+            self.declare(&p.name, p.mutable, !pty.is_copy(), pty, p.line);
         }
         self.current_ret = sig.ret.clone();
         self.current_type = owner.cloned();
@@ -1371,7 +1666,7 @@ impl Gen {
                     self.check_type(t, *line, *col)?;
                 }
                 let inferred = self.ty_of(value).materialized();
-                let vt = ty.clone().unwrap_or_else(|| inferred.clone());
+                let vt = ty.as_ref().map(|t| self.ct(t)).unwrap_or_else(|| inferred.clone());
                 if ty.is_none() && !type_is_known(&inferred) {
                     return Err(LumeError::new(*line, *col, format!("cannot tell the type of `{}` from `{}` alone", name, describe_value(value)))
                         .with_help(format!("add the type: `var {}: {} = ...`", name, suggest_type(&inferred))));
@@ -1382,7 +1677,7 @@ impl Gen {
                         .with_help(format!("to change it, write `{} = ...`", name)));
                 }
                 self.declare(name, true, false, vt.clone(), *line);
-                let ann = if ty.is_some() { format!(": {}", rust_type(&vt)) } else { String::new() };
+                let ann = if ty.is_some() { format!(": {}", self.rt(&vt)) } else { String::new() };
                 self.line(&format!("let mut {}{} = {};", rust_name(name), ann, v));
                 if is_tail {
                     return self.tail_unit(*line, *col);
@@ -1396,12 +1691,12 @@ impl Gen {
                     }
                 }
                 let inferred = self.ty_of(value).materialized();
-                let vt = ty.clone().unwrap_or_else(|| inferred.clone());
+                let vt = ty.as_ref().map(|t| self.ct(t)).unwrap_or_else(|| inferred.clone());
                 if ty.is_none() && self.lookup(name).is_none() && self.field_type(name).is_none() && !type_is_known(&inferred) {
                     return Err(LumeError::new(*line, *col, format!("cannot tell the type of `{}` from `{}` alone", name, describe_value(value)))
                         .with_help(format!("add the type: `{}: {} = ...`", name, suggest_type(&inferred))));
                 }
-                let ann = if ty.is_some() { format!(": {}", rust_type(&vt)) } else { String::new() };
+                let ann = if ty.is_some() { format!(": {}", self.rt(&vt)) } else { String::new() };
                 match self.lookup(name).cloned() {
                     Some(b) if b.mutable => {
                         let v = self.expr_owned(value)?;
@@ -2094,7 +2389,7 @@ impl Gen {
                 let owned = self.collect_iter_t(&it, by_ref, &elem);
                 // annotate the closure's whole parameter pattern with the item type
                 let key = match f.strip_prefix('|').and_then(|rest| rest.find('|').map(|i| (&rest[..i], &rest[i + 1..]))) {
-                    Some((pat, body)) => format!("|{}: &{}|{}", pat, rust_type(&elem), body),
+                    Some((pat, body)) => format!("|{}: &{}|{}", pat, self.rt(&elem), body),
                     None => f.clone(),
                 };
                 match name {
@@ -2378,7 +2673,7 @@ impl Gen {
                     }
                 } else {
                     let en = match (enum_name, t) {
-                        (Some(en), _) => en.clone(),
+                        (Some(en), _) => self.canon(en),
                         (None, Type::Named(en)) if self.enums.contains_key(en) => en.clone(),
                         (None, _) => match self.resolve_variant(name, p.line, p.col)? {
                             Some(en) => en,
@@ -2415,11 +2710,12 @@ impl Gen {
                             });
                         }
                     };
+                    let epath = self.path_of(&en);
                     if fields.is_empty() {
                         if !args.is_empty() {
                             return Err(LumeError::new(p.line, p.col, format!("`{}` carries no values; write it without parentheses", name)));
                         }
-                        format!("{}::{}", en, name)
+                        format!("{}::{}", epath, name)
                     } else {
                         if args.len() != fields.len() {
                             return Err(LumeError::new(p.line, p.col, format!(
@@ -2439,7 +2735,7 @@ impl Gen {
                             cp.guards.extend(sub.guards);
                             cp.binds.extend(sub.binds);
                         }
-                        format!("{}::{} {{ {} }}", en, name, parts.join(", "))
+                        format!("{}::{} {{ {} }}", epath, name, parts.join(", "))
                     }
                 }
             }
@@ -2622,18 +2918,19 @@ impl Gen {
                 });
             }
         };
+        let epath = self.path_of(en);
         if fields.is_empty() {
             if !args.is_empty() {
                 return Err(LumeError::new(e.line, e.col, format!("`{}` carries no values; write `{}.{}` without parentheses", vname, en, vname)));
             }
-            return Ok(format!("{}::{}", en, vname));
+            return Ok(format!("{}::{}", epath, vname));
         }
         let bound = self.bind_args(&format!("`{}.{}`", en, vname), &fields, args, e.line, e.col)?;
         let mut parts = Vec::new();
         for (a, (fname, _)) in bound.iter().zip(&fields) {
             parts.push(format!("{}: {}", rust_name(fname), self.expr_owned(a)?));
         }
-        Ok(format!("{}::{} {{ {} }}", en, vname, parts.join(", ")))
+        Ok(format!("{}::{} {{ {} }}", epath, vname, parts.join(", ")))
     }
 
     fn expr(&mut self, e: &Expr) -> Result<String> {
@@ -2866,7 +3163,9 @@ impl Gen {
                     _ => format!("({} {} {})", l, op, r),
                 }
             }
-            ExprKind::Call { name, args } => {
+            ExprKind::Call { name: raw_name, args } => {
+                let cname = self.canon(raw_name);
+                let name = &cname;
                 if let Some(sig) = self.fns.get(name).cloned() {
                     let bound = self.bind_args(&format!("`{}`", name), &sig.params, args, e.line, e.col)?;
                     let mut parts = Vec::new();
@@ -2877,14 +3176,15 @@ impl Gen {
                             parts.push(self.expr_arg(a, t)?);
                         }
                     }
-                    format!("{}({})", rust_name(name), parts.join(", "))
+                    let callee = if self.paths.contains_key(name) { self.path_of(name) } else { rust_name(name) };
+                    format!("{}({})", callee, parts.join(", "))
                 } else if let Some(info) = self.structs.get(name).cloned() {
                     let bound = self.bind_args(&format!("`{}`", name), &info.fields, args, e.line, e.col)?;
                     let mut parts = Vec::new();
                     for (a, (fname, _)) in bound.iter().zip(&info.fields) {
                         parts.push(format!("{}: {}", rust_name(fname), self.expr_owned(a)?));
                     }
-                    format!("{} {{ {} }}", name, parts.join(", "))
+                    format!("{} {{ {} }}", self.path_of(name), parts.join(", "))
                 } else if let Some(en) = self.resolve_variant(name, e.line, e.col)? {
                     self.variant_ctor(&en, name, args, e)?
                 } else if self.lookup(name).is_some() {
@@ -2911,11 +3211,14 @@ impl Gen {
                 if let Some(ne) = self.fn_ref_as_block(e) {
                     return self.expr(&ne);
                 }
+                if let Some(ne) = self.module_ref(e)? {
+                    return self.expr(&ne);
+                }
                 // Enum.Variant(...) constructor
                 if let ExprKind::Ident(tn) = &recv.kind {
-                    if self.lookup(tn).is_none() && self.enums.contains_key(tn) {
-                        let tn = tn.clone();
-                        return self.variant_ctor(&tn, name, args, e);
+                    let ctn = self.canon(tn);
+                    if self.lookup(tn).is_none() && self.enums.contains_key(&ctn) {
+                        return self.variant_ctor(&ctn, name, args, e);
                     }
                     if self.lookup(tn).is_none() && builtin_namespace_type(tn, name).is_some() {
                         let mut parts = Vec::new();
@@ -3200,26 +3503,20 @@ impl Gen {
     }
 }
 
-fn sig_of(f: &FnDef) -> Sig {
-    Sig {
-        params: f.params.iter().map(|p| (p.name.clone(), p.ty.clone())).collect(),
-        var_params: f.params.iter().map(|p| p.mutable).collect(),
-        ret: f.ret.clone().unwrap_or(Type::Unknown),
-        self_kind: f.self_kind,
-    }
-}
 
-fn collect_methods(methods: &[FnDef], owner: &str, fields: &HashSet<String>) -> Result<HashMap<String, Sig>> {
-    let mut out = HashMap::new();
-    for m in methods {
-        if fields.contains(&m.name) {
-            return Err(LumeError::new(m.line, m.col, format!("`{}` is both a field and a method of `{}`", m.name, owner)));
+impl Gen {
+    fn collect_methods(&self, methods: &[FnDef], owner: &str, fields: &HashSet<String>) -> Result<HashMap<String, Sig>> {
+        let mut out = HashMap::new();
+        for m in methods {
+            if fields.contains(&m.name) {
+                return Err(LumeError::new(m.line, m.col, format!("`{}` is both a field and a method of `{}`", m.name, owner)));
+            }
+            if out.insert(m.name.clone(), self.sig_of(m)).is_some() {
+                return Err(LumeError::new(m.line, m.col, format!("method `{}` is defined twice in `{}`", m.name, owner)));
+            }
         }
-        if out.insert(m.name.clone(), sig_of(m)).is_some() {
-            return Err(LumeError::new(m.line, m.col, format!("method `{}` is defined twice in `{}`", m.name, owner)));
-        }
+        Ok(out)
     }
-    Ok(out)
 }
 
 fn is_builtin_name(name: &str) -> bool {

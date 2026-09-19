@@ -1,0 +1,16 @@
+# users/store.lume — keeps users; imports the model as `model`.
+
+import users.model
+
+pub struct Store:
+  users: [model.User]
+
+  def add(var self, u: model.User):
+    users.push(u)
+
+  def admins = users.filter(_.admin?).map(_.name)
+  def count = users.len
+
+  def find(name: Str) -> model.User? = users.find(_.name == name)
+
+pub def empty -> Store = Store([])

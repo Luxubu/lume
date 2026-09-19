@@ -1,0 +1,4 @@
+import mods.secret.gret
+
+def main:
+  puts gret("x")

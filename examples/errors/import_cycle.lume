@@ -1,0 +1,4 @@
+import mods.cycle_b
+
+def main:
+  puts cycle_b.b

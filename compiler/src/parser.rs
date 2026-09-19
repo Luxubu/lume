@@ -175,12 +175,26 @@ impl Parser {
         let mut items = Vec::new();
         self.skip_newlines();
         while !matches!(self.peek(), Tok::Eof) {
+            let public = self.at_kw("pub");
+            if public {
+                let (pl, pc) = self.here();
+                self.advance();
+                if !(self.at_kw("def") || self.at_kw("struct") || self.at_kw("enum")) {
+                    return Err(LumeError::new(pl, pc, "`pub` goes before `def`, `struct` or `enum`"));
+                }
+            }
             if self.at_kw("def") {
-                items.push(Item::Fn(self.fn_def(false)?));
+                let mut f = self.fn_def(false)?;
+                f.public = public;
+                items.push(Item::Fn(f));
             } else if self.at_kw("struct") {
-                items.push(Item::Struct(self.struct_def()?));
+                let mut s = self.struct_def()?;
+                s.public = public;
+                items.push(Item::Struct(s));
             } else if self.at_kw("enum") {
-                items.push(Item::Enum(self.enum_def()?));
+                let mut e = self.enum_def()?;
+                e.public = public;
+                items.push(Item::Enum(e));
             } else if self.at_kw("import") {
                 items.push(Item::Import(self.import_def()?));
             } else if matches!(self.peek(), Tok::Indent) {
@@ -255,7 +269,7 @@ impl Parser {
             return Err(LumeError::new(line, col, format!("struct `{}` has no fields", name))
                 .with_help("a struct needs at least one `name: Type` field"));
         }
-        Ok(StructDef { name, fields, methods, line, col })
+        Ok(StructDef { name, public: false, fields, methods, line, col })
     }
 
     fn import_def(&mut self) -> Result<Import> {
@@ -269,15 +283,28 @@ impl Parser {
             }
             _ => return Err(self.err(format!("expected a module name after `import`, found {}", self.describe()))),
         };
-        if head != "rust" {
-            return Err(LumeError::new(hl, hc, format!("importing Lume module `{}` is not supported yet", head))
-                .with_help("only `import rust.<crate>` works in this milestone; Lume modules arrive with the module system"));
+        let is_rust = head == "rust";
+        let mut path: Vec<String> = Vec::new();
+        if is_rust {
+            if !self.eat_sym(".") {
+                return Err(self.err("expected `.` and a crate name after `import rust`").with_help("for example `import rust.regex`"));
+            }
+            let (krate, _, _) = self.ident("a crate name")?;
+            path.push(krate);
+        } else {
+            if lexer::is_keyword(&head) {
+                return Err(LumeError::new(hl, hc, format!("`{}` is a keyword and cannot be a module name", head)));
+            }
+            path.push(head);
+            while self.eat_sym(".") {
+                let (seg, _, _) = self.member_name("a module or item name")?;
+                path.push(seg);
+            }
         }
-        if !self.eat_sym(".") {
-            return Err(self.err("expected `.` and a crate name after `import rust`").with_help("for example `import rust.regex`"));
-        }
-        let (krate, _, _) = self.ident("a crate name")?;
         let version = if self.eat_sym("=") {
+            if !is_rust {
+                return Err(self.err("only `import rust.<crate>` takes a version"));
+            }
             match self.peek().clone() {
                 Tok::Str(parts) => {
                     self.advance();
@@ -302,7 +329,7 @@ impl Parser {
             None
         };
         self.end_stmt()?;
-        Ok(Import { krate, version, alias, line, col })
+        Ok(Import { path, is_rust, version, alias, line, col })
     }
 
     fn enum_def(&mut self) -> Result<EnumDef> {
@@ -373,7 +400,7 @@ impl Parser {
         if variants.is_empty() {
             return Err(LumeError::new(line, col, format!("enum `{}` has no variants", name)));
         }
-        Ok(EnumDef { name, variants, methods, line, col })
+        Ok(EnumDef { name, public: false, variants, methods, line, col })
     }
 
     fn fn_def(&mut self, in_struct: bool) -> Result<FnDef> {
@@ -457,7 +484,7 @@ impl Parser {
                 .err(format!("expected `:` or `=` after the signature of `{}`, found {}", name, self.describe()))
                 .with_help("`def f(x: Int) -> Int:` starts a block; `def f(x: Int) -> Int = x * 2` is a one-liner"));
         };
-        Ok(FnDef { name, params, ret, self_kind, body, line, col })
+        Ok(FnDef { name, public: false, params, ret, self_kind, body, line, col })
     }
 
     fn parse_type(&mut self) -> Result<Type> {
@@ -510,10 +537,22 @@ impl Parser {
             }
             _ => return Err(self.err(format!("expected a type, found {}", self.describe()))),
         };
+        // qualified type from an imported module: `model.User`
+        let mut name = name;
+        while self.at_sym(".") && !self.toks[self.pos].space_before {
+            if let Tok::Ident(seg) = self.peek_at(1).clone() {
+                if seg.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) || self.enum_or_module_like(&seg) {
+                    self.advance();
+                    self.advance();
+                    name = format!("{}.{}", name, seg);
+                    continue;
+                }
+            }
+            break;
+        }
         // The lexer folds a trailing `?` into identifiers (`empty?`); for a
         // type it means optional: `Int?`.
         let mut optional = 0;
-        let mut name = name;
         while name.ends_with('?') {
             name.pop();
             optional += 1;
@@ -544,6 +583,10 @@ impl Parser {
             t = Type::Option(Box::new(t));
         }
         Ok(self.type_suffix(t))
+    }
+
+    fn enum_or_module_like(&self, seg: &str) -> bool {
+        !lexer::is_keyword(seg) && seg.chars().all(|c| c.is_alphanumeric() || c == '_')
     }
 
     /// `T?` — the `?` binds to the type directly before it.
@@ -990,20 +1033,21 @@ impl Parser {
                     _ => {}
                 }
                 let is_upper = name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false);
-                if !is_upper {
+                if !is_upper && !self.at_sym(".") {
                     if self.at_sym("(") {
                         return Err(self.err(format!("`{}` is a binding, so it takes no arguments; variants start with a capital letter", name)));
                     }
                     return Ok(mk(PatKind::Bind(name)));
                 }
-                // Variant, possibly qualified: Shape.Circle(r)
-                let (enum_name, vname) = if self.at_sym(".") {
+                // Variant, possibly qualified: Shape.Circle(r), model.Status.Draft
+                let mut segs = vec![name];
+                while self.at_sym(".") {
                     self.advance();
                     let (v, _, _) = self.ident("a variant name")?;
-                    (Some(name), v)
-                } else {
-                    (None, name)
-                };
+                    segs.push(v);
+                }
+                let vname = segs.pop().unwrap();
+                let enum_name = if segs.is_empty() { None } else { Some(segs.join(".")) };
                 let mut args = Vec::new();
                 if self.at_sym("(") {
                     self.advance();

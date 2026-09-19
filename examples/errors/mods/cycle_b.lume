@@ -1,0 +1,2 @@
+import import_cycle
+pub def b -> Int = 1

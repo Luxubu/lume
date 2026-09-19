@@ -1,0 +1,6 @@
+error: `hidden` exists in module `mods.secret` but is not `pub`
+  --> examples/errors/private_access.lume:4:14
+  |
+4 |   puts secret.hidden
+  |              ^
+  help: add `pub` in front of its definition in mods/secret.lume

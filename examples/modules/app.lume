@@ -1,0 +1,29 @@
+# app.lume — the entry file. `import users.model` gives `model.User`,
+# `model.parse`; `import users.store.Store` brings one name in directly.
+
+import users.model
+import users.store.Store
+import users.store as st
+
+def main -> () or Error:
+  var store = st.empty
+  lines = ["Ana, ana@x.com, admin", "Bo, bo@x.com, member", "Cy, cy@x.com, guest"]
+  for line in lines:
+    store.add(model.parse(line)?)
+  puts "#{store.count} users; admins: #{store.admins}"
+
+  match store.find("Cy"):
+    Some(u) -> puts u.label
+    None    -> puts "no Cy"
+
+  match model.parse("Di, di@x.com, wizard"):
+    Ok(_)    -> puts "unexpected"
+    Error(e) -> puts "rejected: #{e.message}"
+
+  guest = model.User("Ed", "ed@x.com", model.Role.Guest(7))
+  puts guest.label
+  match guest.role:
+    model.Role.Guest(d) -> puts "#{d} days left"
+    _                   -> puts "not a guest"
+  s2: Store = st.empty
+  puts s2.count

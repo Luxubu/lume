@@ -1,4 +1,4 @@
-import utils
+import mods.nothing
 
 def main:
   puts "x"

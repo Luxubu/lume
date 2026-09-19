@@ -9,6 +9,7 @@ mod ast;
 mod codegen;
 mod error;
 mod lexer;
+mod loader;
 mod parser;
 
 use std::env;
@@ -40,24 +41,48 @@ fn rustc_failed_banner(has_rust_blocks: bool, file: &Path, tool: &str, err: &str
     format!("error: the generated Rust did not compile. {}\n  generated file: {}\n\n{} said:\n{}", why, file.display(), tool, err)
 }
 
+/// Loads the entry file and its imports, compiles each module in dependency
+/// order, and concatenates the Rust: imported modules as `mod` blocks, then
+/// the entry file's items.
 fn compile_to_rust(path: &Path) -> Result<Compiled, String> {
-    let src = fs::read_to_string(path)
-        .map_err(|e| format!("error: cannot read `{}`: {}", path.display(), e))?;
-    let file = path.display().to_string();
-    let stage = || -> error::Result<codegen::Output> {
-        let toks = lexer::lex(&src)?;
-        let program = parser::parse_program(toks)?;
-        codegen::generate(&program)
-    };
-    match stage() {
-        Ok(out) => {
-            for w in out.warnings {
-                eprint!("{}", w.render(&file, &src).replacen("error:", "warning:", 1));
-            }
-            Ok(Compiled { rust: out.rust, deps: out.deps, has_rust_blocks: out.has_rust_blocks })
+    let modules = loader::load(path)?;
+    let mut exports: std::collections::HashMap<String, codegen::Exports> = std::collections::HashMap::new();
+    let mut rust = String::new();
+    let mut deps: Vec<(String, String)> = Vec::new();
+    let mut has_rust_blocks = false;
+    let n = modules.len();
+    for (i, m) in modules.iter().enumerate() {
+        let is_entry = i + 1 == n;
+        let file = m.path.display().to_string();
+        let dep_list: Vec<codegen::Dep> = m
+            .imports
+            .iter()
+            .map(|r| match r {
+                loader::Resolved::Module { alias, id, line, col } => codegen::Dep::Module { alias: alias.clone(), id: id.clone(), exports: &exports[id], line: *line, col: *col },
+                loader::Resolved::Single { local, id, item, line, col } => codegen::Dep::Single { local: local.clone(), id: id.clone(), item: item.clone(), exports: &exports[id], line: *line, col: *col },
+            })
+            .collect();
+        let rust_mod = if is_entry { None } else { Some(m.rust_mod()) };
+        let (out, ex) = codegen::generate_module(&m.items, rust_mod.as_deref(), &dep_list).map_err(|e| e.render(&file, &m.src))?;
+        for w in out.warnings {
+            eprint!("{}", w.render(&file, &m.src).replacen("error:", "warning:", 1));
         }
-        Err(e) => Err(e.render(&file, &src)),
+        if is_entry {
+            // the entry carries the prelude, so it goes first; modules follow
+            rust = format!("{}\n{}", out.rust, rust);
+        } else {
+            rust.push_str(&out.rust);
+            rust.push('\n');
+        }
+        for d in out.deps {
+            if !deps.contains(&d) {
+                deps.push(d);
+            }
+        }
+        has_rust_blocks |= out.has_rust_blocks;
+        exports.insert(m.id.clone(), ex);
     }
+    Ok(Compiled { rust, deps, has_rust_blocks })
 }
 
 /// Builds through cargo when the program imports Rust crates.

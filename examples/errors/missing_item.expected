@@ -1,0 +1,6 @@
+error: module `mods.secret` has no `gret`
+  --> examples/errors/missing_item.lume:1:1
+  |
+1 | import mods.secret.gret
+  | ^
+  help: did you mean `greet`?

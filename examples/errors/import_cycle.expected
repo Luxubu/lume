@@ -1,0 +1,6 @@
+error: circular import: import_cycle -> mods.cycle_b -> import_cycle
+  --> examples/errors/mods/cycle_b.lume:1:1
+  |
+1 | import import_cycle
+  | ^
+  help: move the shared definitions into a third module that both import

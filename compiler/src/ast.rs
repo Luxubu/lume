@@ -70,6 +70,8 @@ pub enum SelfKind {
 #[derive(Debug, Clone)]
 pub struct FnDef {
     pub name: String,
+    /// `pub def` — visible to importing modules
+    pub public: bool,
     pub params: Vec<Param>,
     /// `None` when the signature has no `-> Type`; inferred from the body.
     pub ret: Option<Type>,
@@ -82,6 +84,7 @@ pub struct FnDef {
 #[derive(Debug, Clone)]
 pub struct StructDef {
     pub name: String,
+    pub public: bool,
     pub fields: Vec<Param>,
     pub methods: Vec<FnDef>,
     pub line: usize,
@@ -99,6 +102,7 @@ pub struct Variant {
 #[derive(Debug, Clone)]
 pub struct EnumDef {
     pub name: String,
+    pub public: bool,
     pub variants: Vec<Variant>,
     pub methods: Vec<FnDef>,
     pub line: usize,
@@ -107,12 +111,20 @@ pub struct EnumDef {
 
 #[derive(Debug, Clone)]
 pub struct Import {
-    /// `import rust.regex` -> "regex"
-    pub krate: String,
+    /// `import rust.regex` -> ["regex"]; `import users.model` -> ["users", "model"]
+    pub path: Vec<String>,
+    /// `import rust.<crate>`
+    pub is_rust: bool,
     pub version: Option<String>,
     pub alias: Option<String>,
     pub line: usize,
     pub col: usize,
+}
+
+impl Import {
+    pub fn krate(&self) -> &str {
+        &self.path[0]
+    }
 }
 
 #[derive(Debug, Clone)]

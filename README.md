@@ -20,7 +20,7 @@ program takes about 1 s in Python and 1.4 s in Ruby.
 The language design lives in the [Lume Language Design](https://claude.ai/code/artifact/1872fe63-1816-4b1e-9983-dec2774382fb)
 document. This repository is the compiler and the examples.
 
-## Status: prototype milestones 1–7 done, milestone 8 done
+## Status: milestones 1–9 done
 
 | # | Milestone | Status |
 | --- | --- | --- |
@@ -32,6 +32,7 @@ document. This repository is the compiler and the examples.
 | 6 | `\|>`, `import rust.<crate>` + `rust:` blocks (signature mapping deferred) | done |
 | 7 | Port the sample programs plus a graph program; settle the memory policy | done: Rust-faithful ownership, no ORC |
 | 8 | Stdlib speed: ordered hash map, entry updates, lazy `split`/`lines`, key liveness | done: 74 ms → 23 ms |
+| 9 | Lume modules: `import users.model`, `model.User`, `import a.b.Name`, `pub`, cycle detection | done |
 
 What works today: functions (`def` block and one-liner forms, return type
 inferred when omitted), `struct` with fields and methods (fields used bare
@@ -61,7 +62,10 @@ typed bindings (`var xs: [User] = []`), `def main -> () or Error`,
 `|>` continue the expression), function names as blocks (`xs.map(parse)`),
 the Rust bridge (`import rust.regex = "1"` adds a cargo dependency; a `rust:`
 block inside a Lume function is Rust with the parameters in scope and the
-declared return type as its Lume type), `if`/`elif`/`else` as
+declared return type as its Lume type), Lume modules (`import users.model`
+loads `users/model.lume`; `model.User`, `model.parse(x)`, `model.Role.Guest(7)`
+in expressions, types and patterns; `import users.model.User` for one name;
+`as` to rename; only `pub` items cross a file boundary), `if`/`elif`/`else` as
 expressions, trailing `if`/`unless`, `while`, `for x in range` with `where`,
 lists, ranges (`1..10` inclusive, `1...10` exclusive), string interpolation,
 `and`/`or`/`not`, `**`, calls, a small set of built-in methods (`len`, `sum`,
@@ -132,8 +136,10 @@ compiler/src/parser.rs   hand-written recursive descent; all syntax errors
 compiler/src/ast.rs      the tree
 compiler/src/codegen.rs  Rust emission plus name/mutability checks
 compiler/src/error.rs    error rendering (line, caret, help)
+compiler/src/loader.rs   resolves imports to files, orders modules, rejects cycles
 compiler/src/main.rs     the CLI
 examples/                programs that must keep compiling
 examples/port/           the design doc's sample programs and the graph program
+examples/modules/        a three-file program: app.lume imports users/model and users/store
 examples/errors/         programs that must keep failing, with good messages
 ```

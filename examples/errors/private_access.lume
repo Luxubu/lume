@@ -1,0 +1,4 @@
+import mods.secret
+
+def main:
+  puts secret.hidden

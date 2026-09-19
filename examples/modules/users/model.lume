@@ -1,0 +1,35 @@
+# users/model.lume — the data model. Only `pub` items are visible to importers.
+
+pub enum Role:
+  Admin
+  Member
+  Guest(expires: Int)
+
+pub struct User:
+  name: Str
+  email: Str
+  role: Role
+
+  def admin? = match role:
+    Admin -> true
+    _     -> false
+
+  def label = "#{name} <#{email}> (#{describe_role(role)})"
+
+pub def parse(line: Str) -> User or Error:
+  match line.split(","):
+    [name, email, role] -> User(name.trim, email.trim, parse_role(role.trim)?)
+    parts               -> Error("expected name,email,role; got #{parts.len} fields")
+
+def parse_role(s: Str) -> Role or Error:
+  match s:
+    "admin"  -> Admin
+    "member" -> Member
+    "guest"  -> Guest(30)
+    other    -> Error("unknown role `#{other}`")
+
+def describe_role(r: Role) -> Str:
+  match r:
+    Admin      -> "admin"
+    Member     -> "member"
+    Guest(days) -> "guest for #{days} days"

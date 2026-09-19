@@ -42,7 +42,7 @@ check() {  # name, expected-file, actual-text
   fi
 }
 
-for f in examples/*.lume examples/port/*.lume; do
+for f in examples/*.lume examples/port/*.lume examples/modules/*.lume; do
   name=$(basename "$(dirname "$f")")/$(basename "$f" .lume); name=${name#examples/}
   [ "$(dirname "$f")" = "examples" ] && name=$(basename "$f" .lume)
   out=$("$LUME" run "$f" 2>&1); code=$?
@@ -67,7 +67,7 @@ for f in examples/errors/*.lume; do
   check "$name" "examples/errors/$(basename "$f" .lume).expected" "$out"
 done
 
-rm -rf examples/.lume examples/errors/.lume examples/port/.lume
+rm -rf examples/.lume examples/errors/.lume examples/port/.lume examples/modules/.lume
 if [ $UPDATE = 1 ]; then echo "expected files updated"; exit 0; fi
 echo "$pass passed, $fail failed"
 [ $fail -eq 0 ] || { printf '  %s\n' "${failed[@]}"; exit 1; }

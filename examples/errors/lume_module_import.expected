@@ -1,6 +1,0 @@
-error: importing Lume module `utils` is not supported yet
-  --> examples/errors/lume_module_import.lume:1:8
-  |
-1 | import utils
-  |        ^
-  help: only `import rust.<crate>` works in this milestone; Lume modules arrive with the module system

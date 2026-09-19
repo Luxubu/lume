@@ -1,0 +1,6 @@
+error: no module `mods.nothing`: neither `examples/errors/mods/nothing.lume` nor `examples/errors/mods.lume` exists
+  --> examples/errors/missing_module.lume:1:1
+  |
+1 | import mods.nothing
+  | ^
+  help: module paths are relative to the directory of the file that holds `main`
