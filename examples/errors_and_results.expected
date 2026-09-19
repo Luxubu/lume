@@ -1,0 +1,13 @@
+parsed 3 users; average age 30.666666666666668
+bad line: ` x` is not an integer
+bad line: expected 3 fields, got 2: Ed, ed@x.com
+bad line: age cannot be negative: -4
+ok: Gus
+Ok(42)
+Error(`abc` is not an integer)
+7 0
+ok? true  error? true
+Error(no users to average)
+read back 4 lines
+as expected: cannot read `/no/such/file`: No such file or directory (os error 2)
+first argument: (no args)

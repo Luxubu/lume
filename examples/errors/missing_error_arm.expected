@@ -1,0 +1,6 @@
+error: this `match` on `Int or Error` does not cover: Error(_)
+  --> examples/errors/missing_error_arm.lume:2:3
+  |
+2 |   match "42".to_int:
+  |   ^
+  help: add an arm for Error(_), or a final `_ ->` arm

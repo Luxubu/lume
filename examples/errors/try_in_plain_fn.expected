@@ -1,0 +1,6 @@
+error: `?` returns the error early, but `load` does not return `T or E`
+  --> examples/errors/try_in_plain_fn.lume:2:18
+  |
+2 |   File.read(path)?
+  |                  ^
+  help: write `def load(...) -> Type or Error`, or handle the error with `match` or `.or(default)`

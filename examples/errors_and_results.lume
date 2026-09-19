@@ -1,0 +1,55 @@
+# `T or E`: errors are values. `?` passes them up, `Ok` is implied,
+# `Error("...")` is the built-in error type, `match` handles both cases.
+
+struct User:
+  name: Str
+  email: Str
+  age: Int
+
+def parse_age(s: Str) -> Int or Error:
+  n = s.to_int?                       # Str.to_int is `Int or Error`; ? passes the error up
+  if n < 0: Error("age cannot be negative: #{n}")
+  elif n > 150: Error("nobody is #{n}")
+  else: n                             # bare value: Ok is implied
+
+def parse_user(line: Str) -> User or Error:
+  match line.split(","):
+    [name, email, age] -> User(name.trim, email.trim, parse_age(age)?)
+    parts              -> Error("expected 3 fields, got #{parts.len}: #{line}")
+
+def parse_all(text: Str) -> [User] or Error:
+  var users: [User] = []
+  for line in text.lines where not line.trim.empty?:
+    users.push(parse_user(line)?)
+  users
+
+def average_age(users: [User]) -> Float or Error:
+  first = users.first.or_error("no users to average")?
+  total = users.sum(_.age)
+  total.to_float / users.len.to_float
+
+def main -> () or Error:
+  good = "Ana, ana@x.com, 31\nBo, bo@x.com, 16\n\nCy, cy@x.com, 45\n"
+  users = parse_all(good)?
+  puts "parsed #{users.len} users; average age #{average_age(users)?}"
+
+  for line in ["Di, di@x.com, x", "Ed, ed@x.com", "Fay, fay@x.com, -4", "Gus, gus@x.com, 27"]:
+    match parse_user(line):
+      Ok(u)    -> puts "ok: #{u.name}"
+      Error(e) -> puts "bad line: #{e.message}"
+
+  puts parse_age("42")
+  puts parse_age("abc")
+  puts "#{parse_age("7").or(0)} #{parse_age("x").or(0)}"
+  puts "ok? #{parse_age("7").ok?}  error? #{parse_age("x").error?}"
+  puts average_age([])
+
+  File.write("/tmp/lume_users.csv", good)?
+  text = File.read("/tmp/lume_users.csv")?
+  puts "read back #{text.lines.len} lines"
+  match File.read("/no/such/file"):
+    Ok(_)    -> puts "unexpected"
+    Error(e) -> puts "as expected: #{e.message}"
+
+  first_arg = Env.args.first.or("(no args)")
+  puts "first argument: #{first_arg}"

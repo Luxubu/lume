@@ -56,6 +56,25 @@ impl<A: LumeShow, B: LumeShow, C: LumeShow> LumeShow for (A, B, C) {
     fn lume_str(&self) -> String { format!("({}, {}, {})", self.0.lume_str(), self.1.lume_str(), self.2.lume_str()) }
 }
 impl<T: LumeShow + ?Sized> LumeShow for &T { fn lume_str(&self) -> String { (**self).lume_str() } }
+#[derive(Debug, Clone, PartialEq)]
+struct Error { message: String }
+impl LumeShow for Error { fn lume_str(&self) -> String { format!("Error({})", self.message) } }
+impl<T: LumeShow, E: LumeShow> LumeShow for Result<T, E> {
+    fn lume_str(&self) -> String { match self { Ok(x) => format!("Ok({})", x.lume_str()), Err(e) => e.lume_str() } }
+}
+fn lume_to_int(s: &str) -> Result<i64, Error> {
+    s.trim().parse::<i64>().map_err(|_| Error { message: format!("`{}` is not an integer", s) })
+}
+fn lume_to_float(s: &str) -> Result<f64, Error> {
+    s.trim().parse::<f64>().map_err(|_| Error { message: format!("`{}` is not a number", s) })
+}
+fn lume_read_file(path: &str) -> Result<String, Error> {
+    std::fs::read_to_string(path).map_err(|e| Error { message: format!("cannot read `{}`: {}", path, e) })
+}
+fn lume_write_file(path: &str, text: &str) -> Result<(), Error> {
+    std::fs::write(path, text).map_err(|e| Error { message: format!("cannot write `{}`: {}", path, e) })
+}
+fn lume_args() -> Vec<String> { std::env::args().skip(1).collect() }
 fn lume_split(s: &str, sep: &str) -> Vec<String> {
     let mut v: Vec<String> = s.split(sep).map(|x| x.to_string()).collect();
     while v.last().map(|x| x.is_empty()).unwrap_or(false) { v.pop(); }
@@ -135,6 +154,11 @@ pub struct Gen {
     current_fn: String,
     loop_depth: usize,
     in_block: bool,
+    /// True while emitting statements whose value is the function's result
+    /// (so `T or E` returns get their implied `Ok`/`Err`).
+    tail_of_fn: bool,
+    /// Set just before emitting an if/match that sits in tail position.
+    at_tail: bool,
     tmp: usize,
     pub warnings: Vec<LumeError>,
 }
@@ -153,9 +177,13 @@ pub fn generate(program: &[Item]) -> Result<(String, Vec<LumeError>)> {
         current_fn: String::new(),
         loop_depth: 0,
         in_block: false,
+        tail_of_fn: false,
+        at_tail: false,
         tmp: 0,
         warnings: Vec::new(),
     };
+    // The built-in Error type: a struct with one field, defined in the prelude.
+    g.structs.insert("Error".into(), StructInfo { fields: vec![("message".into(), Type::Str)], methods: HashMap::new() });
     g.program(program)?;
     Ok((g.out, g.warnings))
 }
@@ -187,6 +215,7 @@ pub fn rust_type(t: &Type) -> String {
         Type::Named(n) => n.clone(),
         Type::Option(inner) => format!("Option<{}>", rust_type(inner)),
         Type::Tuple(ts) => format!("({})", ts.iter().map(rust_type).collect::<Vec<_>>().join(", ")),
+        Type::Result(t, e) => format!("Result<{}, {}>", rust_type(t), rust_type(e)),
         Type::Iter(inner, _) => format!("Vec<{}>", rust_type(inner)),
         Type::Unknown => "_".into(),
     }
@@ -203,6 +232,7 @@ pub fn type_name(t: &Type) -> String {
         Type::Named(n) => n.clone(),
         Type::Option(i) => format!("{}?", type_name(i)),
         Type::Tuple(ts) => format!("({})", ts.iter().map(type_name).collect::<Vec<_>>().join(", ")),
+        Type::Result(t, e) => format!("{} or {}", type_name(t), type_name(e)),
         Type::Iter(i, _) => format!("[{}]", type_name(i)),
         Type::Unknown => "?".into(),
     }
@@ -359,6 +389,9 @@ impl Gen {
                     self.fns.insert(f.name.clone(), sig_of(f));
                 }
                 Item::Struct(s) => {
+                    if s.name == "Error" {
+                        return Err(LumeError::new(s.line, s.col, "`Error` is the built-in error type").with_help("name yours differently, or define an `enum` of error kinds and return `T or MyError`"));
+                    }
                     if !seen.insert(s.name.clone()) {
                         return Err(LumeError::new(s.line, s.col, format!("`{}` is defined twice", s.name)));
                     }
@@ -509,6 +542,10 @@ impl Gen {
             }
             Type::List(inner) | Type::Option(inner) => self.check_type(inner, line, col),
             Type::Tuple(ts) => ts.iter().try_for_each(|t| self.check_type(t, line, col)),
+            Type::Result(t, e) => {
+                self.check_type(t, line, col)?;
+                self.check_type(e, line, col)
+            }
             _ => Ok(()),
         }
     }
@@ -548,8 +585,8 @@ impl Gen {
         for (i, s) in b.stmts.iter().enumerate() {
             let last = i + 1 == n;
             match s {
-                Stmt::Bind { name, value, line, .. } | Stmt::Var { name, value, line, .. } => {
-                    let vt = self.ty_of(value).materialized();
+                Stmt::Bind { name, ty, value, line, .. } | Stmt::Var { name, ty, value, line, .. } => {
+                    let vt = ty.clone().unwrap_or_else(|| self.ty_of(value).materialized());
                     let mutable = matches!(s, Stmt::Var { .. });
                     if self.lookup(name).is_none() || mutable {
                         self.declare(name, mutable, false, vt, *line);
@@ -614,6 +651,12 @@ impl Gen {
                             self.declare_pattern_types(a, inner)?;
                         }
                     }
+                    Type::Result(ok_t, err_t) => {
+                        if let Some(a) = args.first() {
+                            let inner = if name == "Ok" { ok_t } else { err_t };
+                            self.declare_pattern_types(a, inner)?;
+                        }
+                    }
                     Type::Named(en) => {
                         let _ = enum_name;
                         if let Some(info) = self.enums.get(en).cloned() {
@@ -659,9 +702,51 @@ impl Gen {
         Ok(())
     }
 
+    /// `x.name?` where no method `name?` exists but `name` does means
+    /// `x.name` followed by `?` (propagation). Returns the rewritten
+    /// expression in that case.
+    fn split_trailing_try(&mut self, e: &Expr) -> Option<Expr> {
+        let (recv, name, args) = match &e.kind {
+            ExprKind::Method { recv, name, args } => (recv, name, args),
+            _ => return None,
+        };
+        if !name.ends_with('?') || name.len() < 2 {
+            return None;
+        }
+        let base = &name[..name.len() - 1];
+        // built-in namespaces: File.read?
+        if let ExprKind::Ident(tn) = &recv.kind {
+            if self.lookup(tn).is_none() && builtin_namespace_type(tn, name).is_none() && builtin_namespace_type(tn, base).is_some() {
+                let inner = Expr::new(ExprKind::Method { recv: recv.clone(), name: base.to_string(), args: args.clone() }, e.line, e.col);
+                return Some(Expr::new(ExprKind::Try(Box::new(inner)), e.line, e.col));
+            }
+        }
+        let rt = self.ty_of(recv);
+        let exists = |g: &Self, n: &str| -> bool {
+            match &rt {
+                Type::Named(tn) => {
+                    g.methods_of(tn).map(|m| m.contains_key(n)).unwrap_or(false)
+                        || g.structs.get(tn).map(|s| s.fields.iter().any(|(f, _)| f == n)).unwrap_or(false)
+                }
+                Type::Unknown => false,
+                other => is_builtin_name(n) || builtin_method_type(other, n) != Type::Unknown,
+            }
+        };
+        if exists(self, name) || !exists(self, base) {
+            return None;
+        }
+        let inner = Expr::new(ExprKind::Method { recv: recv.clone(), name: base.to_string(), args: args.clone() }, e.line, e.col);
+        Some(Expr::new(ExprKind::Try(Box::new(inner)), e.line, e.col))
+    }
+
     // ----- type inference ---------------------------------------------------
 
     fn ty_of(&mut self, e: &Expr) -> Type {
+        if let ExprKind::Method { .. } = &e.kind {
+            if let Some(ne) = self.split_trailing_try(e) {
+                return self.ty_of(&ne);
+            }
+        }
         match &e.kind {
             ExprKind::Int(_) => Type::Int,
             ExprKind::Float(_) => Type::Float,
@@ -719,6 +804,11 @@ impl Gen {
                     if self.lookup(tn).is_none() && self.enums.contains_key(tn) {
                         return Type::Named(tn.clone());
                     }
+                    if self.lookup(tn).is_none() {
+                        if let Some(t) = builtin_namespace_type(tn, name) {
+                            return t;
+                        }
+                    }
                 }
                 let rt = self.ty_of(recv);
                 if let Some(Arg { value: lam, .. }) = args.last() {
@@ -764,10 +854,18 @@ impl Gen {
             },
             ExprKind::Some(x) => Type::Option(Box::new(self.ty_of(x).materialized())),
             ExprKind::None => Type::Option(Box::new(Type::Unknown)),
-            ExprKind::Try(x) => match self.ty_of(x) {
+            ExprKind::Try(x) | ExprKind::Unwrap(x) => match self.ty_of(x) {
                 Type::Option(inner) => *inner,
+                Type::Result(t, _) => *t,
                 _ => Type::Unknown,
             },
+            ExprKind::Ok(x) => {
+                let t = self.ty_of(x).materialized();
+                match &self.current_ret {
+                    Type::Result(_, e) => Type::Result(Box::new(t), e.clone()),
+                    _ => Type::Result(Box::new(t), Box::new(Type::Named("Error".into()))),
+                }
+            }
         }
     }
 
@@ -923,11 +1021,22 @@ impl Gen {
             None => self.fns[&f.name].clone(),
             Some(s) => self.methods_of(s).unwrap()[&f.name].clone(),
         };
-        if f.name == "main" && owner.is_none() {
-            if !f.params.is_empty() || matches!(f.ret, Some(ref r) if *r != Type::Unit) {
-                return Err(LumeError::new(f.line, f.col, "`main` takes no parameters and returns nothing").with_help("write `def main:`"));
+        let is_main = f.name == "main" && owner.is_none();
+        let main_result = is_main && matches!(sig.ret, Type::Result(..));
+        if is_main {
+            let ok = f.params.is_empty()
+                && match &f.ret {
+                    None => true,
+                    Some(Type::Unit) => true,
+                    Some(Type::Result(t, _)) => **t == Type::Unit,
+                    _ => false,
+                };
+            if !ok {
+                return Err(LumeError::new(f.line, f.col, "`main` takes no parameters and returns nothing, or `() or Error`")
+                    .with_help("write `def main:` or `def main -> () or Error:`"));
             }
         }
+        let fn_name = if main_result { "lume_main".to_string() } else { rust_name(&f.name) };
         let mut parts: Vec<String> = Vec::new();
         if owner.is_some() {
             parts.push(match f.self_kind {
@@ -944,7 +1053,7 @@ impl Gen {
             let rt = if p.ty.is_copy() { rt } else { format!("&{}", rt) };
             parts.push(format!("{}: {}", rust_name(&p.name), rt));
         }
-        let mut header = format!("fn {}({})", rust_name(&f.name), parts.join(", "));
+        let mut header = format!("fn {}({})", fn_name, parts.join(", "));
         if sig.ret != Type::Unit {
             header.push_str(&format!(" -> {}", rust_type(&sig.ret)));
         }
@@ -960,12 +1069,45 @@ impl Gen {
         self.current_self = f.self_kind;
         self.current_fn = f.name.clone();
         let want_value = sig.ret != Type::Unit;
-        self.block_body(&f.body, want_value)?;
+        self.tail_of_fn = true;
+        if main_result {
+            // `def main -> () or Error:` — the body's last statement is not a value.
+            self.block_body(&f.body, false)?;
+            self.line("Ok(())");
+        } else {
+            self.block_body(&f.body, want_value)?;
+        }
+        self.tail_of_fn = false;
         self.pop_scope();
         self.current_type = None;
         self.indent -= 1;
         self.line("}");
+        if main_result {
+            self.line("fn main() {");
+            self.line("    if let Err(e) = lume_main() { eprintln!(\"error: {}\", e.message); std::process::exit(1); }");
+            self.line("}");
+        }
         Ok(())
+    }
+
+    /// In a function returning `T or E`, a result value of type `T` is
+    /// wrapped in `Ok`, and one of type `E` in `Err`.
+    fn coerce_result(&mut self, text: String, e: &Expr) -> String {
+        if !self.tail_of_fn || self.in_block {
+            return text;
+        }
+        let (ok_t, err_t) = match &self.current_ret {
+            Type::Result(t, e) => ((**t).clone(), (**e).clone()),
+            _ => return text,
+        };
+        let et = self.ty_of(e).materialized();
+        if matches!(et, Type::Result(..)) {
+            return text;
+        }
+        if et == err_t && et != ok_t {
+            return format!("Err({})", text);
+        }
+        format!("Ok({})", text)
     }
 
     fn block_body(&mut self, b: &Block, want_value: bool) -> Result<()> {
@@ -983,6 +1125,7 @@ impl Gen {
     fn nested_block(&mut self, b: &Block, want_value: bool) -> Result<()> {
         self.indent += 1;
         self.push_scope();
+        self.at_tail = false;
         self.block_body(b, want_value)?;
         self.pop_scope();
         self.indent -= 1;
@@ -993,25 +1136,42 @@ impl Gen {
 
     fn stmt(&mut self, s: &Stmt, is_tail: bool) -> Result<()> {
         match s {
-            Stmt::Var { name, value, line, col } => {
-                let vt = self.ty_of(value).materialized();
-                if let ExprKind::None = value.kind {
-                    return Err(LumeError::new(*line, *col, format!("`var {} = None` needs a type", name))
-                        .with_help("the compiler cannot tell what may go in it later; this needs `var x: T? = None`, which arrives with typed bindings"));
+            Stmt::Var { name, ty, value, line, col } => {
+                if let Some(t) = ty {
+                    self.check_type(t, *line, *col)?;
+                }
+                let inferred = self.ty_of(value).materialized();
+                let vt = ty.clone().unwrap_or_else(|| inferred.clone());
+                if ty.is_none() && !type_is_known(&inferred) {
+                    return Err(LumeError::new(*line, *col, format!("cannot tell the type of `{}` from `{}` alone", name, describe_value(value)))
+                        .with_help(format!("add the type: `var {}: {} = ...`", name, suggest_type(&inferred))));
                 }
                 let v = self.expr_owned(value)?;
                 if self.scopes.last().unwrap().contains_key(name) {
                     return Err(LumeError::new(*line, *col, format!("`{}` is already declared in this block", name))
                         .with_help(format!("to change it, write `{} = ...`", name)));
                 }
-                self.declare(name, true, false, vt, *line);
-                self.line(&format!("let mut {} = {};", rust_name(name), v));
+                self.declare(name, true, false, vt.clone(), *line);
+                let ann = if ty.is_some() { format!(": {}", rust_type(&vt)) } else { String::new() };
+                self.line(&format!("let mut {}{} = {};", rust_name(name), ann, v));
                 if is_tail {
                     return self.tail_unit(*line, *col);
                 }
             }
-            Stmt::Bind { name, value, line, col } => {
-                let vt = self.ty_of(value).materialized();
+            Stmt::Bind { name, ty, value, line, col } => {
+                if let Some(t) = ty {
+                    self.check_type(t, *line, *col)?;
+                    if self.lookup(name).is_some() {
+                        return Err(LumeError::new(*line, *col, format!("`{}` already exists; a type goes only on a new binding", name)));
+                    }
+                }
+                let inferred = self.ty_of(value).materialized();
+                let vt = ty.clone().unwrap_or_else(|| inferred.clone());
+                if ty.is_none() && self.lookup(name).is_none() && self.field_type(name).is_none() && !type_is_known(&inferred) {
+                    return Err(LumeError::new(*line, *col, format!("cannot tell the type of `{}` from `{}` alone", name, describe_value(value)))
+                        .with_help(format!("add the type: `{}: {} = ...`", name, suggest_type(&inferred))));
+                }
+                let ann = if ty.is_some() { format!(": {}", rust_type(&vt)) } else { String::new() };
                 match self.lookup(name).cloned() {
                     Some(b) if b.mutable => {
                         let v = self.expr_owned(value)?;
@@ -1038,7 +1198,7 @@ impl Gen {
                         } else {
                             let v = self.expr_owned(value)?;
                             self.declare(name, false, false, vt, *line);
-                            self.line(&format!("let {} = {};", rust_name(name), v));
+                            self.line(&format!("let {}{} = {};", rust_name(name), ann, v));
                         }
                     }
                 }
@@ -1114,7 +1274,16 @@ impl Gen {
                         return Err(LumeError::new(e.line, e.col, "this `if` is the function's result but has no `else`")
                             .with_help("add an `else` branch, or add `return` before it if it is not the result"));
                     }
-                    let v = self.expr_owned(e)?;
+                    let v = match &e.kind {
+                        ExprKind::If { .. } | ExprKind::Match { .. } => {
+                            self.at_tail = self.tail_of_fn;
+                            self.expr_owned(e)?
+                        }
+                        _ => {
+                            let v = self.expr_owned(e)?;
+                            self.coerce_result(v, e)
+                        }
+                    };
                     self.line(&v);
                 } else {
                     let v = self.expr_stmt(e)?;
@@ -1143,13 +1312,20 @@ impl Gen {
                                 .with_help("add `-> Type` to the function signature"));
                         }
                         let v = self.expr_owned(e)?;
+                        let saved = self.tail_of_fn;
+                        self.tail_of_fn = true;
+                        let v = self.coerce_result(v, e);
+                        self.tail_of_fn = saved;
                         self.line(&format!("return {};", v));
                     }
                     None => {
-                        if self.current_ret != Type::Unit {
-                            return Err(LumeError::new(*line, *col, format!("this function returns `{}`, so `return` needs a value", type_name(&self.current_ret))));
+                        match &self.current_ret {
+                            Type::Unit => self.line("return;"),
+                            Type::Result(t, _) if **t == Type::Unit => self.line("return Ok(());"),
+                            other => {
+                                return Err(LumeError::new(*line, *col, format!("this function returns `{}`, so `return` needs a value", type_name(other))));
+                            }
                         }
-                        self.line("return;");
                     }
                 }
             }
@@ -1412,8 +1588,10 @@ impl Gen {
         self.declare_block_params(params, elem, item_borrowed, acc, at.line);
         let saved_loop = self.loop_depth;
         let saved_in_block = self.in_block;
+        let saved_tail = self.tail_of_fn;
         self.loop_depth = 0;
         self.in_block = true;
+        self.tail_of_fn = false;
         let saved_out = std::mem::take(&mut self.out);
         let base = self.indent;
         let inline = body.stmts.len() == 1 && matches!(body.stmts[0], Stmt::Expr(ref x) if !matches!(x.kind, ExprKind::If { .. } | ExprKind::Match { .. }));
@@ -1434,6 +1612,7 @@ impl Gen {
         self.out = saved_out;
         self.loop_depth = saved_loop;
         self.in_block = saved_in_block;
+        self.tail_of_fn = saved_tail;
         self.pop_scope();
         Ok(text)
     }
@@ -1511,6 +1690,17 @@ impl Gen {
     }
 
     fn if_chain(&mut self, branches: &[(Expr, Block)], else_block: Option<&Block>, want_value: bool) -> Result<String> {
+        let saved_tail = self.tail_of_fn;
+        if !self.at_tail {
+            self.tail_of_fn = false;
+        }
+        self.at_tail = false;
+        let r = self.if_chain_inner(branches, else_block, want_value);
+        self.tail_of_fn = saved_tail;
+        r
+    }
+
+    fn if_chain_inner(&mut self, branches: &[(Expr, Block)], else_block: Option<&Block>, want_value: bool) -> Result<String> {
         let saved = std::mem::take(&mut self.out);
         let base = self.indent;
         let mut first = true;
@@ -1536,6 +1726,17 @@ impl Gen {
     // ----- match --------------------------------------------------------------
 
     fn match_expr(&mut self, scrutinee: &Expr, arms: &[MatchArm], want_value: bool, e: &Expr) -> Result<String> {
+        let saved_tail = self.tail_of_fn;
+        if !self.at_tail {
+            self.tail_of_fn = false;
+        }
+        self.at_tail = false;
+        let r = self.match_expr_inner(scrutinee, arms, want_value, e);
+        self.tail_of_fn = saved_tail;
+        r
+    }
+
+    fn match_expr_inner(&mut self, scrutinee: &Expr, arms: &[MatchArm], want_value: bool, e: &Expr) -> Result<String> {
         let st = self.ty_of(scrutinee).materialized();
         if st == Type::Unknown {
             return Err(LumeError::new(scrutinee.line, scrutinee.col, "cannot tell the type of the value being matched")
@@ -1701,6 +1902,26 @@ impl Gen {
                 format!("[{}]", parts.join(", "))
             }
             PatKind::Variant { enum_name, name, args } => {
+                // Result
+                if (name == "Ok" || name == "Error") && matches!(t, Type::Result(..)) {
+                    let (ok_t, err_t) = match t {
+                        Type::Result(a, b) => ((**a).clone(), (**b).clone()),
+                        _ => unreachable!(),
+                    };
+                    if args.len() != 1 {
+                        return Err(LumeError::new(p.line, p.col, format!("`{}` takes exactly one pattern, like `{}(x)`", name, name)));
+                    }
+                    let inner_t = if name == "Ok" { ok_t } else { err_t };
+                    let mut sub = CompiledPat { text: String::new(), guards: Vec::new(), binds: Vec::new() };
+                    self.compile_pat_into(&args[0], &inner_t, by_ref, &mut sub)?;
+                    cp.guards.extend(sub.guards);
+                    cp.binds.extend(sub.binds);
+                    cp.text = format!("{}({})", if name == "Ok" { "Ok" } else { "Err" }, sub.text);
+                    return Ok(());
+                }
+                if (name == "Ok" || name == "Error") && *t != Type::Unknown && !matches!(t, Type::Named(n) if n == "Error") {
+                    return Err(LumeError::new(p.line, p.col, format!("`{}` matches a `T or E` value, but this is a `{}`", name, type_name(t))));
+                }
                 // Option
                 if name == "Some" || name == "None" {
                     let inner = match t {
@@ -1851,6 +2072,21 @@ impl Gen {
                 }
                 if !has_none {
                     m.push("None".to_string());
+                }
+                m
+            }
+            Type::Result(ok_t, err_t) => {
+                let mut m = Vec::new();
+                let has = |want: &str, inner: &Type| {
+                    arms.iter().any(|a| {
+                        a.guard.is_none() && matches!(&a.pat.kind, PatKind::Variant { name, args, .. } if name == want && args.len() == 1 && self.irrefutable(&args[0], inner))
+                    })
+                };
+                if !has("Ok", ok_t) {
+                    m.push("Ok(_)".to_string());
+                }
+                if !has("Error", err_t) {
+                    m.push("Error(_)".to_string());
                 }
                 m
             }
@@ -2051,20 +2287,50 @@ impl Gen {
             ExprKind::None => "None".into(),
             ExprKind::Try(x) => {
                 let xt = self.ty_of(x);
-                match xt {
-                    Type::Option(_) => {}
-                    Type::Unknown => {}
-                    other => return Err(LumeError::new(e.line, e.col, format!("`?` needs an optional value, but this is a `{}`", type_name(&other)))),
-                }
-                if !matches!(self.current_ret, Type::Option(_)) {
-                    return Err(LumeError::new(e.line, e.col, format!("`?` returns `None` early, but `{}` does not return an optional value", self.current_fn))
-                        .with_help(format!("make the function return `T?`, or handle the `None` case with `match` or `.or(default)`")));
-                }
                 if self.in_block {
-                    return Err(LumeError::new(e.line, e.col, "`?` cannot be used inside a block").with_help("handle the `None` with `match` or `.or(default)` inside the block"));
+                    return Err(LumeError::new(e.line, e.col, "`?` cannot be used inside a block").with_help("handle the missing or failed value with `match` or `.or(default)` inside the block"));
+                }
+                match (&xt, &self.current_ret) {
+                    (Type::Option(_), Type::Option(_)) | (Type::Result(..), Type::Result(..)) | (Type::Unknown, _) => {}
+                    (Type::Option(_), Type::Result(..)) => {
+                        return Err(LumeError::new(e.line, e.col, format!("`?` on an optional value returns `None`, but `{}` returns `{}`", self.current_fn, type_name(&self.current_ret)))
+                            .with_help("turn the absence into an error first: `.or_error(\"what went wrong\")?`"));
+                    }
+                    (Type::Result(..), Type::Option(_)) => {
+                        return Err(LumeError::new(e.line, e.col, format!("`?` on a `{}` returns the error, but `{}` returns `{}`", type_name(&xt), self.current_fn, type_name(&self.current_ret)))
+                            .with_help("make the function return `T or Error`, or handle the error with `match` or `.or(default)`"));
+                    }
+                    (Type::Option(_), _) => {
+                        return Err(LumeError::new(e.line, e.col, format!("`?` returns `None` early, but `{}` does not return an optional value", self.current_fn))
+                            .with_help("make the function return `T?`, or handle the `None` case with `match` or `.or(default)`"));
+                    }
+                    (Type::Result(..), _) => {
+                        return Err(LumeError::new(e.line, e.col, format!("`?` returns the error early, but `{}` does not return `T or E`", self.current_fn))
+                            .with_help(format!("write `def {}(...) -> Type or Error`, or handle the error with `match` or `.or(default)`", self.current_fn)));
+                    }
+                    (other, _) => {
+                        return Err(LumeError::new(e.line, e.col, format!("`?` needs an optional value or a `T or E`, but this is a `{}`", type_name(other))));
+                    }
                 }
                 format!("({})?", self.expr(x)?)
             }
+            ExprKind::Unwrap(x) => {
+                let xt = self.ty_of(x);
+                match xt {
+                    Type::Option(_) | Type::Result(..) | Type::Unknown => {}
+                    other => return Err(LumeError::new(e.line, e.col, format!("`!` unwraps an optional or a `T or E`, but this is a `{}`", type_name(&other)))),
+                }
+                self.warnings.push(
+                    LumeError::new(e.line, e.col, "`!` stops the program if the value is missing or an error")
+                        .with_help("fine in tests and quick scripts; elsewhere use `match`, `?` or `.or(default)`"),
+                );
+                let inner = self.expr(x)?;
+                match xt {
+                    Type::Result(..) => format!("({}).unwrap_or_else(|e| panic!(\"{{}}\", e.message))", inner),
+                    _ => format!("({}).expect(\"expected a value, found None\")", inner),
+                }
+            }
+            ExprKind::Ok(x) => format!("Ok({})", self.expr_owned(x)?),
             ExprKind::Range { lo, hi, inclusive } => {
                 let l = self.expr(lo)?;
                 let h = self.expr(hi)?;
@@ -2079,6 +2345,20 @@ impl Gen {
                 }
             }
             ExprKind::Binary { op, lhs, rhs } => {
+                if matches!(*op, "+" | "-" | "*" | "/" | "%" | "**" | "<" | "<=" | ">" | ">=") {
+                    for side in [lhs, rhs] {
+                        let st = self.ty_of(side);
+                        let what = match &st {
+                            Type::Option(_) => Some("may be absent"),
+                            Type::Result(..) => Some("may be an error"),
+                            _ => None,
+                        };
+                        if let Some(w) = what {
+                            return Err(LumeError::new(side.line, side.col, format!("this value is a `{}` — it {}, so it cannot be used with `{}` directly", type_name(&st), w, op))
+                                .with_help(if matches!(st, Type::Option(_)) { "unwrap it first: `match` on `Some(x)`/`None`, `?`, or `.or(default)`" } else { "unwrap it first: `?` to pass the error up, `match` on `Ok(x)`/`Error(e)`, or `.or(default)`" }));
+                        }
+                    }
+                }
                 let mut l = self.expr_val(lhs)?;
                 let mut r = self.expr_val(rhs)?;
                 let lt = self.ty_of(lhs);
@@ -2129,11 +2409,39 @@ impl Gen {
                 }
             }
             ExprKind::Method { recv, name, args } => {
+                if let Some(ne) = self.split_trailing_try(e) {
+                    return self.expr(&ne);
+                }
                 // Enum.Variant(...) constructor
                 if let ExprKind::Ident(tn) = &recv.kind {
                     if self.lookup(tn).is_none() && self.enums.contains_key(tn) {
                         let tn = tn.clone();
                         return self.variant_ctor(&tn, name, args, e);
+                    }
+                    if self.lookup(tn).is_none() && builtin_namespace_type(tn, name).is_some() {
+                        let mut parts = Vec::new();
+                        for a in args {
+                            parts.push(self.expr_val(&a.value)?);
+                        }
+                        let need = |n: usize| -> Result<()> {
+                            if parts.len() != n {
+                                Err(LumeError::new(e.line, e.col, format!("`{}.{}` takes {} {}", tn, name, n, plural(n, "argument", "arguments"))))
+                            } else {
+                                Ok(())
+                            }
+                        };
+                        return Ok(match (tn.as_str(), name.as_str()) {
+                            ("File", "read") => { need(1)?; format!("lume_read_file(&{})", parts[0]) }
+                            ("File", "write") => { need(2)?; format!("lume_write_file(&{}, &{})", parts[0], parts[1]) }
+                            ("File", "exists?") => { need(1)?; format!("std::path::Path::new(&*{}).exists()", parts[0]) }
+                            ("Env", "args") => { need(0)?; "lume_args()".to_string() }
+                            ("Env", "get") => { need(1)?; format!("std::env::var(&*{}).ok()", parts[0]) }
+                            _ => unreachable!(),
+                        });
+                    }
+                    if self.lookup(tn).is_none() && (tn == "File" || tn == "Env") {
+                        return Err(LumeError::new(e.line, e.col, format!("`{}` has no `{}`", tn, name))
+                            .with_help(if tn == "File" { "File has read(path), write(path, text) and exists?(path)" } else { "Env has args and get(name)" }));
                     }
                     if self.lookup(tn).is_none() && self.structs.contains_key(tn) {
                         return Err(LumeError::new(e.line, e.col, format!("`{}.{}` — static methods on a type are not supported yet", tn, name))
@@ -2209,7 +2517,7 @@ impl Gen {
                     return Err(self.no_such_member(tname, name, e.line, e.col));
                 }
                 if let Type::Option(inner) = &rt {
-                    if !matches!(name.as_str(), "or" | "some?" | "none?" | "to_s" | "to_str") {
+                    if !matches!(name.as_str(), "or" | "some?" | "none?" | "or_error" | "to_s" | "to_str") {
                         let known = match &**inner {
                             Type::Named(tn) => self.methods_of(tn).map(|m| m.contains_key(name)).unwrap_or(false)
                                 || self.structs.get(tn).map(|s| s.fields.iter().any(|(n, _)| n == name)).unwrap_or(false),
@@ -2221,6 +2529,12 @@ impl Gen {
                         } else {
                             err.with_help("unwrap it first with `match` on `Some(x)`/`None`, or `.or(default)`")
                         });
+                    }
+                }
+                if let Type::Result(..) = &rt {
+                    if !matches!(name.as_str(), "or" | "ok?" | "error?" | "error" | "to_s" | "to_str") {
+                        return Err(LumeError::new(e.line, e.col, format!("this value is a `{}` — it may be an error, so `.{}` cannot be called on it directly", type_name(&rt), name))
+                            .with_help("unwrap it first: `?` to pass the error up, `match` on `Ok(x)`/`Error(e)`, or `.or(default)`"));
                     }
                 }
                 if rt != Type::Unknown && builtin_method_type(&rt, name) == Type::Unknown && !is_builtin_name(name) {
@@ -2305,8 +2619,8 @@ impl Gen {
             "empty?" => { need(0)?; format!("({}).lume_empty()", recv) }
             "any?" => { need(0)?; format!("(!({}).lume_empty())", recv) }
             "to_str" | "to_s" => { need(0)?; format!("({}).lume_str()", recv) }
-            "to_float" => { need(0)?; format!("(({}) as f64)", recv) }
-            "to_int" => { need(0)?; format!("(({}) as i64)", recv) }
+            "to_float" => { need(0)?; if *rt == Type::Str { format!("lume_to_float(&{})", recv) } else { format!("(({}) as f64)", recv) } }
+            "to_int" => { need(0)?; if *rt == Type::Str { format!("lume_to_int(&{})", recv) } else { format!("(({}) as i64)", recv) } }
             "upcase" => { need(0)?; format!("({}).to_uppercase()", recv) }
             "downcase" => { need(0)?; format!("({}).to_lowercase()", recv) }
             "trim" => { need(0)?; format!("({}).trim().to_string()", recv) }
@@ -2336,13 +2650,29 @@ impl Gen {
             // Option
             "or" => {
                 need(1)?;
-                if !matches!(rt, Type::Option(_) | Type::Unknown) {
-                    return Err(LumeError::new(e.line, e.col, format!("`.or` supplies a default for an optional value, but this is a `{}`", type_name(rt))));
+                if !matches!(rt, Type::Option(_) | Type::Result(..) | Type::Unknown) {
+                    return Err(LumeError::new(e.line, e.col, format!("`.or` supplies a default for an optional value or a `T or E`, but this is a `{}`", type_name(rt))));
                 }
                 format!("({}).unwrap_or({})", recv, args[0])
             }
             "some?" => { need(0)?; format!("({}).is_some()", recv) }
             "none?" => { need(0)?; format!("({}).is_none()", recv) }
+            "ok?" => { need(0)?; format!("({}).is_ok()", recv) }
+            "error?" => { need(0)?; format!("({}).is_err()", recv) }
+            "or_error" => {
+                need(1)?;
+                if !matches!(rt, Type::Option(_) | Type::Unknown) {
+                    return Err(LumeError::new(e.line, e.col, format!("`.or_error` turns an optional value into a `T or Error`, but this is a `{}`", type_name(rt))));
+                }
+                format!("({}).ok_or_else(|| Error {{ message: ({}).lume_str() }})", recv, args[0])
+            }
+            "error" => {
+                need(0)?;
+                if !matches!(rt, Type::Result(..) | Type::Unknown) {
+                    return Err(LumeError::new(e.line, e.col, format!("`.error` reads the error of a `T or E`, but this is a `{}`", type_name(rt))));
+                }
+                format!("({}).clone().err()", recv)
+            }
             _ => format!("({}).{}({})", recv, rust_name(name), args.join(", ")),
         })
     }
@@ -2376,8 +2706,21 @@ fn is_builtin_name(name: &str) -> bool {
             | "sqrt" | "abs" | "floor" | "ceil" | "round" | "sum" | "push" | "pop" | "first" | "last"
             | "contains?" | "reverse" | "sort" | "max" | "min" | "lines" | "split" | "join"
             | "starts_with?" | "ends_with?" | "chars" | "take" | "skip" | "to_list" | "enumerate"
-            | "or" | "some?" | "none?"
+            | "or" | "some?" | "none?" | "ok?" | "error?" | "or_error" | "error"
     )
+}
+
+/// Types of the built-in `File` and `Env` namespaces.
+fn builtin_namespace_type(ns: &str, name: &str) -> Option<Type> {
+    let err = || Box::new(Type::Named("Error".into()));
+    Some(match (ns, name) {
+        ("File", "read") => Type::Result(Box::new(Type::Str), err()),
+        ("File", "write") => Type::Result(Box::new(Type::Unit), err()),
+        ("File", "exists?") => Type::Bool,
+        ("Env", "args") => Type::List(Box::new(Type::Str)),
+        ("Env", "get") => Type::Option(Box::new(Type::Str)),
+        _ => return None,
+    })
 }
 
 /// Result type of a built-in method on a value of type `recv`.
@@ -2398,10 +2741,20 @@ fn builtin_method_type(recv: &Type, name: &str) -> Type {
             _ => Type::Unknown,
         },
         "to_list" => recv.materialized(),
-        "len" | "to_int" => Type::Int,
-        "empty?" | "any?" | "contains?" | "starts_with?" | "ends_with?" | "some?" | "none?" => Type::Bool,
+        "len" => Type::Int,
+        "to_int" => if *recv == Type::Str { Type::Result(Box::new(Type::Int), Box::new(Type::Named("Error".into()))) } else { Type::Int },
+        "empty?" | "any?" | "contains?" | "starts_with?" | "ends_with?" | "some?" | "none?" | "ok?" | "error?" => Type::Bool,
+        "or_error" => match recv {
+            Type::Option(i) => Type::Result(i.clone(), Box::new(Type::Named("Error".into()))),
+            _ => Type::Unknown,
+        },
+        "error" => match recv {
+            Type::Result(_, e) => Type::Option(e.clone()),
+            _ => Type::Unknown,
+        },
         "to_str" | "to_s" | "upcase" | "downcase" | "trim" | "join" => Type::Str,
-        "to_float" | "sqrt" | "floor" | "ceil" | "round" => Type::Float,
+        "to_float" => if *recv == Type::Str { Type::Result(Box::new(Type::Float), Box::new(Type::Named("Error".into()))) } else { Type::Float },
+        "sqrt" | "floor" | "ceil" | "round" => Type::Float,
         "abs" => recv.clone(),
         "sum" => elem.unwrap_or(Type::Unknown),
         "first" | "last" | "max" | "min" | "pop" => elem.map(|e| Type::Option(Box::new(e))).unwrap_or(Type::Unknown),
@@ -2410,6 +2763,7 @@ fn builtin_method_type(recv: &Type, name: &str) -> Type {
         "lines" | "split" | "chars" => Type::List(Box::new(Type::Str)),
         "or" => match recv {
             Type::Option(i) => (**i).clone(),
+            Type::Result(t, _) => (**t).clone(),
             _ => Type::Unknown,
         },
         _ => Type::Unknown,
@@ -2442,4 +2796,32 @@ fn edit_distance(a: &str, b: &str) -> usize {
         prev = cur;
     }
     prev[b.len()]
+}
+
+/// A type with no unknown parts.
+fn type_is_known(t: &Type) -> bool {
+    match t {
+        Type::Unknown => false,
+        Type::List(i) | Type::Option(i) | Type::Iter(i, _) => type_is_known(i),
+        Type::Tuple(ts) => ts.iter().all(type_is_known),
+        Type::Result(a, b) => type_is_known(a) && type_is_known(b),
+        _ => true,
+    }
+}
+
+fn suggest_type(t: &Type) -> String {
+    match t {
+        Type::List(i) if **i == Type::Unknown => "[Int]".into(),
+        Type::Option(i) if **i == Type::Unknown => "Int?".into(),
+        Type::Unknown => "Type".into(),
+        other => type_name(other),
+    }
+}
+
+fn describe_value(e: &Expr) -> String {
+    match &e.kind {
+        ExprKind::List(items) if items.is_empty() => "[]".into(),
+        ExprKind::None => "None".into(),
+        _ => "this value".into(),
+    }
 }

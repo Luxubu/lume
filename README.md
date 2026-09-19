@@ -20,7 +20,7 @@ program takes about 1 s in Python and 1.4 s in Ruby.
 The language design lives in the [Lume Language Design](https://claude.ai/code/artifact/1872fe63-1816-4b1e-9983-dec2774382fb)
 document. This repository is the compiler and the examples.
 
-## Status: milestone 4 of 7
+## Status: milestone 5 of 7
 
 | # | Milestone | Status |
 | --- | --- | --- |
@@ -28,8 +28,8 @@ document. This repository is the compiler and the examples.
 | 2 | `struct` with methods, bare field access, keyword constructors | done |
 | 3 | `_` shorthand, inline blocks, `do` blocks, `for ... where` | done |
 | 4 | `enum`, `match` with exhaustiveness errors, tuples, `T?` | done |
-| 5 | `T or E`, `?` on Result, implicit `Ok` | next |
-| 6 | `\|>`, `import rust.<crate>` with automatic type mapping | |
+| 5 | `T or E`, `Error`, `?` on Result, implicit `Ok`, `!`, `File`/`Env` | done |
+| 6 | `\|>`, `import rust.<crate>` with automatic type mapping | next |
 | 7 | Port the sample programs plus a graph program; settle the memory policy | |
 
 What works today: functions (`def` block and one-liner forms, return type
@@ -48,7 +48,14 @@ list (`[]`, `[x]`, `[first, ..rest]`) and string patterns, guards, and a
 Lume-level error listing the cases a `match` misses, tuples (`(1, "a")`,
 `t.0`, `for i, x in xs.enumerate`), optional values (`T?`, `Some`/`None`,
 `.or(default)`, `?` early return in a function returning `T?`; `first`,
-`last`, `find`, `max`, `min`, `pop` all return `T?`), `if`/`elif`/`else` as
+`last`, `find`, `max`, `min`, `pop` all return `T?`), errors as values
+(`T or E`, the built-in `Error("message")` with `.message`, `?` passes the
+error up, a bare value in a `T or E` function is `Ok` and an `Error(...)` is
+`Err` automatically, `match` on `Ok(x)`/`Error(e)`, `.or(default)`, `.ok?`,
+`.error?`, `.or_error("msg")` to turn a `T?` into a `T or Error`, `!` to
+unwrap-or-stop with a warning, `Str.to_int`/`to_float` return `T or Error`),
+typed bindings (`var xs: [User] = []`), `def main -> () or Error`,
+`File.read`/`File.write`/`File.exists?`, `Env.args`/`Env.get`, `if`/`elif`/`else` as
 expressions, trailing `if`/`unless`, `while`, `for x in range` with `where`,
 lists, ranges (`1..10` inclusive, `1...10` exclusive), string interpolation,
 `and`/`or`/`not`, `**`, calls, a small set of built-in methods (`len`, `sum`,
@@ -59,7 +66,9 @@ a "did you mean"), assignment to an immutable binding (pointing at where it was
 declared), changing a field from a method without `var self`, calling a
 mutating method on an immutable value, wrong or missing arguments and keywords,
 `if` used as a value without `else`, non-exhaustive `match`, `?` in a function
-that cannot return `None`, a method called on a `T?` without unwrapping,
+that cannot return `None` or an error (with the right fix for each mismatch),
+a method or arithmetic on a `T?` or `T or E` without unwrapping, an empty
+`[]` binding with no type,
 `name (` with a space (ambiguous call), bad indentation, tabs. Warnings:
 `return` inside a block.
 

@@ -1,0 +1,3 @@
+def main:
+  match "42".to_int:
+    Ok(n) -> puts n

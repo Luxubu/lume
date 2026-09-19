@@ -1,0 +1,6 @@
+error: cannot tell the type of `items` from `[]` alone
+  --> examples/errors/untyped_empty.lume:2:3
+  |
+2 |   var items = []
+  |   ^
+  help: add the type: `var items: [Int] = ...`

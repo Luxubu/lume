@@ -1,0 +1,5 @@
+def load(path: Str) -> Str:
+  File.read(path)?
+
+def main:
+  puts load("x")

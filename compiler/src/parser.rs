@@ -392,6 +392,19 @@ impl Parser {
     }
 
     fn parse_type(&mut self) -> Result<Type> {
+        let t = self.parse_type_atom()?;
+        if self.at_kw("or") {
+            self.advance();
+            let e = self.parse_type_atom()?;
+            if self.at_kw("or") {
+                return Err(self.err("`T or E` takes one error type").with_help("group alternatives in an `enum` if a function can fail in several ways"));
+            }
+            return Ok(Type::Result(Box::new(t), Box::new(e)));
+        }
+        Ok(t)
+    }
+
+    fn parse_type_atom(&mut self) -> Result<Type> {
         if self.eat_sym("[") {
             let inner = self.parse_type()?;
             self.expect_sym("]", "to close the list type")?;
@@ -500,13 +513,14 @@ impl Parser {
         }
         if self.eat_kw("var") {
             let (name, _, _) = self.ident("a variable name")?;
+            let ty = if self.eat_sym(":") { Some(self.parse_type()?) } else { None };
             if !self.eat_sym("=") {
                 return Err(self
                     .err(format!("`var {}` needs an initial value", name))
                     .with_help(format!("write `var {} = ...`", name)));
             }
             let value = self.expr()?;
-            let s = Stmt::Var { name, value, line, col };
+            let s = Stmt::Var { name, ty, value, line, col };
             let s = self.trailing_condition(s)?;
             self.end_stmt()?;
             return Ok(s);
@@ -571,7 +585,21 @@ impl Parser {
                             self.advance();
                             self.advance();
                             let value = self.expr()?;
-                            let s = Stmt::Bind { name, value, line, col };
+                            let s = Stmt::Bind { name, ty: None, value, line, col };
+                            let s = self.trailing_condition(s)?;
+                            self.end_stmt()?;
+                            return Ok(s);
+                        }
+                        ":" => {
+                            // typed binding: `name: Type = value`
+                            self.advance();
+                            self.advance();
+                            let ty = self.parse_type()?;
+                            if !self.eat_sym("=") {
+                                return Err(self.err(format!("`{}: Type` needs a value", name)).with_help(format!("write `{}: Type = ...`", name)));
+                            }
+                            let value = self.expr()?;
+                            let s = Stmt::Bind { name, ty: Some(ty), value, line, col };
                             let s = self.trailing_condition(s)?;
                             self.end_stmt()?;
                             return Ok(s);
@@ -1027,7 +1055,10 @@ impl Parser {
                 continue;
             }
             if self.at_sym("!") && !self.toks[self.pos].space_before {
-                return Err(self.err("`!` (unwrap or panic) is not implemented yet").with_help("use `match` or `.or(default)` on the optional value"));
+                let (line, col) = self.here();
+                self.advance();
+                e = Expr::new(ExprKind::Unwrap(Box::new(e)), line, col);
+                continue;
             }
             if self.at_sym("[") {
                 return Err(self.err("indexing `[...]` is not implemented yet (milestone 2)"));
@@ -1248,6 +1279,15 @@ impl Parser {
                     }
                     Ok(Expr::new(ExprKind::None, line, col))
                 }
+                "Ok" => {
+                    self.advance();
+                    self.reject_spaced_paren("Ok")?;
+                    let mut a = self.call_args()?;
+                    if a.len() != 1 || a[0].name.is_some() {
+                        return Err(LumeError::new(line, col, "`Ok` takes exactly one value"));
+                    }
+                    Ok(Expr::new(ExprKind::Ok(Box::new(a.remove(0).value)), line, col))
+                }
                 "Some" => {
                     self.advance();
                     self.reject_spaced_paren("Some")?;
@@ -1333,7 +1373,7 @@ fn count_placeholders(e: &Expr) -> usize {
                 + else_block.as_ref().map(walk_block).unwrap_or(0)
         }
         ExprKind::Puts(e) => count_placeholders(e),
-        ExprKind::Some(e) | ExprKind::Try(e) | ExprKind::TupleIndex { recv: e, .. } => count_placeholders(e),
+        ExprKind::Some(e) | ExprKind::Ok(e) | ExprKind::Try(e) | ExprKind::Unwrap(e) | ExprKind::TupleIndex { recv: e, .. } => count_placeholders(e),
         ExprKind::Tuple(items) => items.iter().map(count_placeholders).sum(),
         ExprKind::None => 0,
         ExprKind::Match { scrutinee, arms } => {
@@ -1391,7 +1431,7 @@ fn replace_placeholders(e: &mut Expr) {
             }
         }
         ExprKind::Puts(x) => replace_placeholders(x),
-        ExprKind::Some(x) | ExprKind::Try(x) | ExprKind::TupleIndex { recv: x, .. } => replace_placeholders(x),
+        ExprKind::Some(x) | ExprKind::Ok(x) | ExprKind::Try(x) | ExprKind::Unwrap(x) | ExprKind::TupleIndex { recv: x, .. } => replace_placeholders(x),
         ExprKind::Tuple(items) => items.iter_mut().for_each(replace_placeholders),
         ExprKind::Match { scrutinee, arms } => {
             replace_placeholders(scrutinee);

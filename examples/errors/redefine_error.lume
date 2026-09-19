@@ -1,0 +1,5 @@
+struct Error:
+  code: Int
+
+def main:
+  puts "x"

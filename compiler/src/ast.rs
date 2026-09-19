@@ -16,6 +16,8 @@ pub enum Type {
     Option(Box<Type>),
     /// `(A, B, ...)`
     Tuple(Vec<Type>),
+    /// `T or E`
+    Result(Box<Type>, Box<Type>),
     /// A lazy chain (`xs.filter(...).map(...)`) not yet collected. The bool
     /// says whether items are references into the source list. Internal:
     /// becomes `[T]` wherever a value is needed, never reaches a signature.
@@ -147,9 +149,9 @@ pub struct Block {
 pub enum Stmt {
     /// `name = value` — a new immutable binding, an assignment to a `var`,
     /// a self-transform rebind, or a field assignment inside a method.
-    Bind { name: String, value: Expr, line: usize, col: usize },
-    /// `var name = value`
-    Var { name: String, value: Expr, line: usize, col: usize },
+    Bind { name: String, ty: Option<Type>, value: Expr, line: usize, col: usize },
+    /// `var name = value` / `var name: Type = value`
+    Var { name: String, ty: Option<Type>, value: Expr, line: usize, col: usize },
     /// `name += value` and friends
     OpAssign { name: String, op: &'static str, value: Expr, line: usize, col: usize },
     /// `recv.field = value` / `recv.field += value`
@@ -213,8 +215,12 @@ pub enum ExprKind {
     /// `Some(x)`
     Some(Box<Expr>),
     None,
-    /// `expr?` — early return on None (and, later, on Error)
+    /// `expr?` — early return on None or Error
     Try(Box<Expr>),
+    /// `Ok(x)` — explicit success value (usually implied)
+    Ok(Box<Expr>),
+    /// `expr!` — unwrap or panic; a warning outside tests
+    Unwrap(Box<Expr>),
 }
 
 impl Expr {

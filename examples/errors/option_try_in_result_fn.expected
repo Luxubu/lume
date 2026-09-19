@@ -1,0 +1,6 @@
+error: `?` on an optional value returns `None`, but `first_name` returns `Str or Error`
+  --> examples/errors/option_try_in_result_fn.lume:2:8
+  |
+2 |   names.first?
+  |        ^
+  help: turn the absence into an error first: `.or_error("what went wrong")?`

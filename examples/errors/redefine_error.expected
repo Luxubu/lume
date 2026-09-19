@@ -1,0 +1,6 @@
+error: `Error` is the built-in error type
+  --> examples/errors/redefine_error.lume:1:1
+  |
+1 | struct Error:
+  | ^
+  help: name yours differently, or define an `enum` of error kinds and return `T or MyError`

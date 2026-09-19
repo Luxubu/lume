@@ -1,0 +1,5 @@
+def first_name(names: [Str]) -> Str or Error:
+  names.first?
+
+def main:
+  puts first_name(["a"])

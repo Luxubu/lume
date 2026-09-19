@@ -1,0 +1,4 @@
+def main:
+  var items = []
+  items.push(1)
+  puts items

@@ -1,0 +1,3 @@
+def main:
+  n = "42".to_int
+  puts n + 1
