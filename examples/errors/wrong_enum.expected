@@ -1,0 +1,6 @@
+error: `Red` is a variant of `Color`, but the value is a `Shape`
+  --> examples/errors/wrong_enum.lume:9:5
+  |
+9 |     Red -> puts "red"
+  |     ^
+  help: the variants of `Shape` are: Dot

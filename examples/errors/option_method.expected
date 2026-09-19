@@ -1,0 +1,6 @@
+error: this value is a `User?` — it may be absent, so `.name` cannot be called on it directly
+  --> examples/errors/option_method.lume:6:19
+  |
+6 |   puts users.first.name
+  |                   ^
+  help: unwrap it first: `match` on `Some(x)`/`None`, or `.or(default).name`

@@ -1,0 +1,31 @@
+circle: area 3.14159
+rectangle: area 6.0
+square: area 16.0
+big circle: area 1256.636
+dot: area 0.0
+total area: 1281.77759
+draft
+submitted by Luan
+approved by Ana with score 5
+Order(id: 1, total: 99.5, status: Approved(by: Ana, score: 5))
+0 is zero
+7 is small
+42 is medium
+500 is large
+(empty)
+hello
+hello...
+Some(2)
+None
+None
+2 -1
+first over 10: 12
+None
+1 is one
+0: 3
+1: 8
+Some((3, 0))
+[3, 8]
+48
+3,8,12,5,20,
+biggest: 20

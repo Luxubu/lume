@@ -1,0 +1,6 @@
+error: `?` returns `None` early, but `first_even` does not return an optional value
+  --> examples/errors/try_no_option.lume:2:22
+  |
+2 |   xs.find(_ % 2 == 0)?
+  |                      ^
+  help: make the function return `T?`, or handle the `None` case with `match` or `.or(default)`

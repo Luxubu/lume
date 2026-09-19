@@ -1,0 +1,6 @@
+error: this `match` on `Int` does not cover: _
+  --> examples/errors/int_match.lume:3:10
+  |
+3 |   word = match n:
+  |          ^
+  help: values of this type have too many cases to list; add a final `_ ->` arm

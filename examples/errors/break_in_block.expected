@@ -3,4 +3,4 @@ error: `break` outside of a loop
   |
 3 |     break if n == 2
   |     ^
-  help: a block runs once per item and cannot `break`; use a `for` loop, or `filter`/`take` before `each`
+  help: a block runs once per item and cannot `break`; stop early with `find`, `take_while` or `filter` before `each`, or use a `for` loop

@@ -1,0 +1,6 @@
+error: this `match` on `Shape` does not cover: Rect
+  --> examples/errors/missing_arm.lume:7:3
+  |
+7 |   match s:
+  |   ^
+  help: add an arm for Rect, or a final `_ ->` arm

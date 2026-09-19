@@ -1,0 +1,6 @@
+error: `Rect` carries 2 values, but the pattern names 1
+  --> examples/errors/pattern_arity.lume:8:5
+  |
+8 |     Rect(w) -> puts w
+  |     ^
+  help: write `Rect(w, h)`; use `_` for values you do not need

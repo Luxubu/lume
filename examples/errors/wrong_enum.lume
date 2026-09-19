@@ -1,0 +1,10 @@
+enum Shape:
+  Dot
+enum Color:
+  Red
+
+def main:
+  s = Shape.Dot
+  match s:
+    Red -> puts "red"
+    Dot -> puts "dot"

@@ -164,14 +164,16 @@ impl Parser {
                 items.push(Item::Fn(self.fn_def(false)?));
             } else if self.at_kw("struct") {
                 items.push(Item::Struct(self.struct_def()?));
+            } else if self.at_kw("enum") {
+                items.push(Item::Enum(self.enum_def()?));
             } else if matches!(self.peek(), Tok::Indent) {
                 return Err(self
                     .err("unexpected indentation at the top level")
                     .with_help("top-level code goes inside `def main:`"));
             } else {
                 return Err(self
-                    .err(format!("expected `def` or `struct`, found {}", self.describe()))
-                    .with_help("a file is a list of `def` functions and `struct` types; statements go inside `def main:`"));
+                    .err(format!("expected `def`, `struct` or `enum`, found {}", self.describe()))
+                    .with_help("a file is a list of `def` functions, `struct` and `enum` types; statements go inside `def main:`"));
             }
             self.skip_newlines();
         }
@@ -237,6 +239,77 @@ impl Parser {
                 .with_help("a struct needs at least one `name: Type` field"));
         }
         Ok(StructDef { name, fields, methods, line, col })
+    }
+
+    fn enum_def(&mut self) -> Result<EnumDef> {
+        let (line, col) = self.here();
+        self.advance(); // enum
+        let (name, nl, nc) = self.ident("an enum name")?;
+        if !name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+            return Err(LumeError::new(nl, nc, format!("enum names start with a capital letter: `{}`", name))
+                .with_help(format!("rename it `{}`", capitalize(&name))));
+        }
+        if !self.eat_sym(":") {
+            return Err(self.err(format!("expected `:` after `enum {}`", name)));
+        }
+        if !matches!(self.peek(), Tok::Newline) || !matches!(self.peek_at(1), Tok::Indent) {
+            return Err(self
+                .err(format!("enum `{}` has no variants", name))
+                .with_help("indent at least one variant under it, like `Circle(r: Float)` or `Empty`"));
+        }
+        self.advance();
+        self.advance();
+        let mut variants: Vec<Variant> = Vec::new();
+        let mut methods = Vec::new();
+        while !matches!(self.peek(), Tok::Dedent | Tok::Eof) {
+            if self.at_kw("def") {
+                methods.push(self.fn_def(true)?);
+            } else if let Tok::Ident(vname) = self.peek().clone() {
+                if !methods.is_empty() {
+                    return Err(self.err(format!("variant `{}` comes after a method", vname)).with_help("list all variants first, then the methods"));
+                }
+                let (vname, vl, vc) = self.ident("a variant name")?;
+                if !vname.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+                    return Err(LumeError::new(vl, vc, format!("variant names start with a capital letter: `{}`", vname))
+                        .with_help(format!("rename it `{}`", capitalize(&vname))));
+                }
+                if variants.iter().any(|v| v.name == vname) {
+                    return Err(LumeError::new(vl, vc, format!("variant `{}` is listed twice", vname)));
+                }
+                let mut fields = Vec::new();
+                if self.at_sym("(") {
+                    self.advance();
+                    while !self.at_sym(")") {
+                        let (fname, fl, fc) = self.ident("a field name")?;
+                        if !self.eat_sym(":") {
+                            return Err(self.err(format!("field `{}` of `{}` needs a type", fname, vname))
+                                .with_help(format!("write `{}({}: Float)`", vname, fname)));
+                        }
+                        let ty = self.parse_type()?;
+                        fields.push(Param { name: fname, ty, line: fl, col: fc });
+                        if !self.eat_sym(",") {
+                            break;
+                        }
+                    }
+                    self.expect_sym(")", "to close the variant's fields")?;
+                    if fields.is_empty() {
+                        return Err(LumeError::new(vl, vc, format!("`{}()` has no fields; write `{}` without parentheses", vname, vname)));
+                    }
+                }
+                variants.push(Variant { name: vname, fields, line: vl, col: vc });
+                self.end_stmt()?;
+            } else {
+                return Err(self.err(format!("expected a variant or `def` inside `enum {}`, found {}", name, self.describe())));
+            }
+            self.skip_newlines();
+        }
+        if matches!(self.peek(), Tok::Dedent) {
+            self.advance();
+        }
+        if variants.is_empty() {
+            return Err(LumeError::new(line, col, format!("enum `{}` has no variants", name)));
+        }
+        Ok(EnumDef { name, variants, methods, line, col })
     }
 
     fn fn_def(&mut self, in_struct: bool) -> Result<FnDef> {
@@ -322,11 +395,21 @@ impl Parser {
         if self.eat_sym("[") {
             let inner = self.parse_type()?;
             self.expect_sym("]", "to close the list type")?;
-            return Ok(Type::List(Box::new(inner)));
+            return Ok(self.type_suffix(Type::List(Box::new(inner))));
         }
         if self.eat_sym("(") {
-            self.expect_sym(")", "for the unit type `()`")?;
-            return Ok(Type::Unit);
+            if self.eat_sym(")") {
+                return Ok(Type::Unit);
+            }
+            let mut parts = vec![self.parse_type()?];
+            while self.eat_sym(",") {
+                parts.push(self.parse_type()?);
+            }
+            self.expect_sym(")", "to close the tuple type")?;
+            if parts.len() == 1 {
+                return Err(self.err("a tuple type needs at least two parts, like `(Int, Str)`"));
+            }
+            return Ok(self.type_suffix(Type::Tuple(parts)));
         }
         let (name, l, c) = match self.peek().clone() {
             Tok::Ident(s) => {
@@ -336,7 +419,15 @@ impl Parser {
             }
             _ => return Err(self.err(format!("expected a type, found {}", self.describe()))),
         };
-        Ok(match name.as_str() {
+        // The lexer folds a trailing `?` into identifiers (`empty?`); for a
+        // type it means optional: `Int?`.
+        let mut optional = 0;
+        let mut name = name;
+        while name.ends_with('?') {
+            name.pop();
+            optional += 1;
+        }
+        let base = match name.as_str() {
             "Int" => Type::Int,
             "Float" => Type::Float,
             "Bool" => Type::Bool,
@@ -351,8 +442,27 @@ impl Parser {
                 return Err(LumeError::new(l, c, format!("unknown type `{}`", name))
                     .with_help(format!("Lume spells it `{}`", fix)));
             }
+            "Option" => {
+                return Err(LumeError::new(l, c, "an optional value is written `T?`, not `Option[T]`")
+                    .with_help("for example `Int?` or `User?`"));
+            }
             _ => Type::Named(name),
-        })
+        };
+        let mut t = base;
+        for _ in 0..optional {
+            t = Type::Option(Box::new(t));
+        }
+        Ok(self.type_suffix(t))
+    }
+
+    /// `T?` — the `?` binds to the type directly before it.
+    fn type_suffix(&mut self, t: Type) -> Type {
+        let mut t = t;
+        while self.at_sym("?") && !self.toks[self.pos].space_before {
+            self.advance();
+            t = Type::Option(Box::new(t));
+        }
+        t
     }
 
     // ----- blocks and statements ------------------------------------------
@@ -433,16 +543,24 @@ impl Parser {
         }
         if self.eat_kw("for") {
             let (var, _, _) = self.ident("a loop variable")?;
+            let mut vars = vec![var];
+            while self.eat_sym(",") {
+                let (v, vl, vc) = self.ident("a loop variable")?;
+                if vars.contains(&v) {
+                    return Err(LumeError::new(vl, vc, format!("loop variable `{}` is listed twice", v)));
+                }
+                vars.push(v);
+            }
             if !self.eat_kw("in") {
                 return Err(self
-                    .err(format!("expected `in` after `for {}`", var))
-                    .with_help(format!("write `for {} in <collection or range>:`", var)));
+                    .err(format!("expected `in` after `for {}`", vars.join(", ")))
+                    .with_help(format!("write `for {} in <collection or range>:`", vars.join(", "))));
             }
             let iter = self.expr()?;
             let filter = if self.eat_kw("where") { Some(self.expr()?) } else { None };
             self.expect_sym(":", "after the `for` header")?;
             let body = self.block()?;
-            return Ok(Stmt::For { var, iter, filter, body, line, col });
+            return Ok(Stmt::For { vars, iter, filter, body, line, col });
         }
         // Binding / assignment: `name = ...`, `name += ...`
         if let Tok::Ident(name) = self.peek().clone() {
@@ -529,6 +647,9 @@ impl Parser {
         if self.at_kw("if") {
             return self.if_expr();
         }
+        if self.at_kw("match") {
+            return self.match_expr();
+        }
         if self.at_kw("unless") {
             return Err(self
                 .err("`unless` cannot start an expression")
@@ -604,6 +725,184 @@ impl Parser {
             }
         }
         Ok(Expr::new(ExprKind::If { branches, else_block }, line, col))
+    }
+
+    fn match_expr(&mut self) -> Result<Expr> {
+        let (line, col) = self.here();
+        self.advance(); // match
+        let scrutinee = self.expr()?;
+        if !self.eat_sym(":") {
+            return Err(self.err(format!("expected `:` after the value to match, found {}", self.describe())));
+        }
+        if !matches!(self.peek(), Tok::Newline) || !matches!(self.peek_at(1), Tok::Indent) {
+            return Err(self.err("the arms of a `match` go on the following lines, indented").with_help("each arm is `pattern -> value`"));
+        }
+        self.advance();
+        self.advance();
+        let mut arms = Vec::new();
+        while !matches!(self.peek(), Tok::Dedent | Tok::Eof) {
+            let (al, ac) = self.here();
+            let pat = self.pattern()?;
+            let guard = if self.eat_kw("if") { Some(self.expr()?) } else { None };
+            if !self.eat_sym("->") {
+                return Err(self
+                    .err(format!("expected `->` after the pattern, found {}", self.describe()))
+                    .with_help("an arm is `pattern -> value`, or `pattern ->` with an indented body"));
+            }
+            let body = if matches!(self.peek(), Tok::Newline) {
+                self.block()?
+            } else {
+                let e = self.expr()?;
+                self.end_stmt()?;
+                Block { stmts: vec![Stmt::Expr(e)] }
+            };
+            arms.push(MatchArm { pat, guard, body, line: al, col: ac });
+            self.skip_newlines();
+        }
+        if matches!(self.peek(), Tok::Dedent) {
+            self.advance();
+        }
+        if arms.is_empty() {
+            return Err(LumeError::new(line, col, "`match` has no arms"));
+        }
+        Ok(Expr::new(ExprKind::Match { scrutinee: Box::new(scrutinee), arms }, line, col))
+    }
+
+    fn pattern(&mut self) -> Result<Pattern> {
+        let (line, col) = self.here();
+        let mk = |k: PatKind| Pattern { kind: k, line, col };
+        match self.peek().clone() {
+            Tok::Int(v) => {
+                self.advance();
+                if self.at_sym("..") || self.at_sym("...") {
+                    let inclusive = self.at_sym("..");
+                    self.advance();
+                    match self.peek().clone() {
+                        Tok::Int(hi) => {
+                            self.advance();
+                            Ok(mk(PatKind::Range { lo: v, hi, inclusive }))
+                        }
+                        _ => Err(self.err("a range pattern needs a number after `..`")),
+                    }
+                } else {
+                    Ok(mk(PatKind::Int(v)))
+                }
+            }
+            Tok::Sym("-") => {
+                self.advance();
+                match self.peek().clone() {
+                    Tok::Int(v) => {
+                        self.advance();
+                        Ok(mk(PatKind::Int(-v)))
+                    }
+                    Tok::Float(v) => {
+                        self.advance();
+                        Ok(mk(PatKind::Float(-v)))
+                    }
+                    _ => Err(self.err("expected a number after `-` in the pattern")),
+                }
+            }
+            Tok::Float(v) => {
+                self.advance();
+                Ok(mk(PatKind::Float(v)))
+            }
+            Tok::Str(parts) => {
+                self.advance();
+                let mut text = String::new();
+                for p in parts {
+                    match p {
+                        StrPart::Lit(s) => text.push_str(&s),
+                        StrPart::Expr(..) => return Err(LumeError::new(line, col, "a string pattern cannot contain `#{}` interpolation")),
+                    }
+                }
+                Ok(mk(PatKind::Str(text)))
+            }
+            Tok::Sym("(") => {
+                self.advance();
+                let mut items = Vec::new();
+                while !self.at_sym(")") {
+                    items.push(self.pattern()?);
+                    if !self.eat_sym(",") {
+                        break;
+                    }
+                }
+                self.expect_sym(")", "to close the tuple pattern")?;
+                if items.len() < 2 {
+                    return Err(LumeError::new(line, col, "a tuple pattern needs at least two parts, like `(a, b)`"));
+                }
+                Ok(mk(PatKind::Tuple(items)))
+            }
+            Tok::Sym("[") => {
+                self.advance();
+                let mut items = Vec::new();
+                let mut rest = None;
+                while !self.at_sym("]") {
+                    if self.eat_sym("..") {
+                        rest = Some(match self.peek().clone() {
+                            Tok::Ident(n) if !lexer::is_keyword(&n) && n != "_" => {
+                                self.advance();
+                                Some(n)
+                            }
+                            Tok::Ident(n) if n == "_" => {
+                                self.advance();
+                                None
+                            }
+                            _ => None,
+                        });
+                        if !self.at_sym("]") {
+                            return Err(self.err("`..rest` must be the last thing in a list pattern"));
+                        }
+                        break;
+                    }
+                    items.push(self.pattern()?);
+                    if !self.eat_sym(",") {
+                        break;
+                    }
+                }
+                self.expect_sym("]", "to close the list pattern")?;
+                Ok(mk(PatKind::List { items, rest }))
+            }
+            Tok::Ident(name) => {
+                self.advance();
+                match name.as_str() {
+                    "_" => return Ok(mk(PatKind::Wild)),
+                    "true" => return Ok(mk(PatKind::Bool(true))),
+                    "false" => return Ok(mk(PatKind::Bool(false))),
+                    _ if lexer::is_keyword(&name) => {
+                        return Err(LumeError::new(line, col, format!("`{}` is a keyword and cannot be a pattern", name)));
+                    }
+                    _ => {}
+                }
+                let is_upper = name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false);
+                if !is_upper {
+                    if self.at_sym("(") {
+                        return Err(self.err(format!("`{}` is a binding, so it takes no arguments; variants start with a capital letter", name)));
+                    }
+                    return Ok(mk(PatKind::Bind(name)));
+                }
+                // Variant, possibly qualified: Shape.Circle(r)
+                let (enum_name, vname) = if self.at_sym(".") {
+                    self.advance();
+                    let (v, _, _) = self.ident("a variant name")?;
+                    (Some(name), v)
+                } else {
+                    (None, name)
+                };
+                let mut args = Vec::new();
+                if self.at_sym("(") {
+                    self.advance();
+                    while !self.at_sym(")") {
+                        args.push(self.pattern()?);
+                        if !self.eat_sym(",") {
+                            break;
+                        }
+                    }
+                    self.expect_sym(")", "to close the variant pattern")?;
+                }
+                Ok(mk(PatKind::Variant { enum_name, name: vname, args }))
+            }
+            _ => Err(self.err(format!("expected a pattern, found {}", self.describe()))),
+        }
     }
 
     /// After `if cond` / `elif cond` / `else`: either `: <inline expr>` or
@@ -699,6 +998,11 @@ impl Parser {
                         self.advance();
                         s
                     }
+                    Tok::Int(i) if i >= 0 => {
+                        self.advance();
+                        e = Expr::new(ExprKind::TupleIndex { recv: Box::new(e), index: i as usize }, line, col);
+                        continue;
+                    }
                     _ => {
                         return Err(self
                             .err(format!("expected a method name after `.`, found {}", self.describe())))
@@ -716,10 +1020,14 @@ impl Parser {
                 e = Expr::new(ExprKind::Method { recv: Box::new(e), name, args }, line, col);
                 continue;
             }
-            if self.at_sym("?") || self.at_sym("!") {
-                let which = if self.at_sym("?") { "?" } else { "!" };
-                return Err(self
-                    .err(format!("error propagation `{}` is not implemented yet (milestone 5)", which)));
+            if self.at_sym("?") && !self.toks[self.pos].space_before {
+                let (line, col) = self.here();
+                self.advance();
+                e = Expr::new(ExprKind::Try(Box::new(e)), line, col);
+                continue;
+            }
+            if self.at_sym("!") && !self.toks[self.pos].space_before {
+                return Err(self.err("`!` (unwrap or panic) is not implemented yet").with_help("use `match` or `.or(default)` on the optional value"));
             }
             if self.at_sym("[") {
                 return Err(self.err("indexing `[...]` is not implemented yet (milestone 2)"));
@@ -871,9 +1179,20 @@ impl Parser {
             }
             Tok::Sym("(") => {
                 self.advance();
-                let e = self.expr()?;
+                let first = self.expr()?;
+                if self.eat_sym(",") {
+                    let mut items = vec![first];
+                    while !self.at_sym(")") {
+                        items.push(self.expr()?);
+                        if !self.eat_sym(",") {
+                            break;
+                        }
+                    }
+                    self.expect_sym(")", "to close the tuple")?;
+                    return Ok(Expr::new(ExprKind::Tuple(items), line, col));
+                }
                 self.expect_sym(")", "to close the parenthesis")?;
-                Ok(e)
+                Ok(first)
             }
             Tok::Sym("[") => {
                 self.advance();
@@ -920,13 +1239,30 @@ impl Parser {
                     Ok(Expr::new(ExprKind::Puts(Box::new(arg)), line, col))
                 }
                 "if" => self.if_expr(),
-                "nil" | "null" | "None" => Err(LumeError::new(line, col, format!("there is no `{}` in Lume", s))
-                    .with_help("absence is an Option (`T?`), coming in milestone 5")),
+                "nil" | "null" => Err(LumeError::new(line, col, format!("there is no `{}` in Lume", s))
+                    .with_help("absence is `None`, and a value that may be absent has type `T?`")),
+                "None" => {
+                    self.advance();
+                    if self.at_sym("(") {
+                        return Err(self.err("`None` takes no value"));
+                    }
+                    Ok(Expr::new(ExprKind::None, line, col))
+                }
+                "Some" => {
+                    self.advance();
+                    self.reject_spaced_paren("Some")?;
+                    let mut a = self.call_args()?;
+                    if a.len() != 1 || a[0].name.is_some() {
+                        return Err(LumeError::new(line, col, "`Some` takes exactly one value"));
+                    }
+                    Ok(Expr::new(ExprKind::Some(Box::new(a.remove(0).value)), line, col))
+                }
+                "match" => self.match_expr(),
                 "self" => {
                     self.advance();
                     Ok(Expr::new(ExprKind::SelfRef, line, col))
                 }
-                "enum" | "match" | "interface" | "extend" | "import" | "test" => {
+                "interface" | "extend" | "import" | "test" => {
                     Err(LumeError::new(line, col, format!("`{}` is not implemented yet in this milestone", s)))
                 }
                 _ if lexer::is_keyword(&s) => {
@@ -997,6 +1333,13 @@ fn count_placeholders(e: &Expr) -> usize {
                 + else_block.as_ref().map(walk_block).unwrap_or(0)
         }
         ExprKind::Puts(e) => count_placeholders(e),
+        ExprKind::Some(e) | ExprKind::Try(e) | ExprKind::TupleIndex { recv: e, .. } => count_placeholders(e),
+        ExprKind::Tuple(items) => items.iter().map(count_placeholders).sum(),
+        ExprKind::None => 0,
+        ExprKind::Match { scrutinee, arms } => {
+            count_placeholders(scrutinee)
+                + arms.iter().map(|a| a.guard.as_ref().map(count_placeholders).unwrap_or(0) + walk_block(&a.body)).sum::<usize>()
+        }
     }
 }
 
@@ -1048,6 +1391,17 @@ fn replace_placeholders(e: &mut Expr) {
             }
         }
         ExprKind::Puts(x) => replace_placeholders(x),
+        ExprKind::Some(x) | ExprKind::Try(x) | ExprKind::TupleIndex { recv: x, .. } => replace_placeholders(x),
+        ExprKind::Tuple(items) => items.iter_mut().for_each(replace_placeholders),
+        ExprKind::Match { scrutinee, arms } => {
+            replace_placeholders(scrutinee);
+            for a in arms {
+                if let Some(g) = &mut a.guard {
+                    replace_placeholders(g);
+                }
+                walk_block(&mut a.body);
+            }
+        }
         _ => {}
     }
 }

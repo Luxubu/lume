@@ -1,0 +1,5 @@
+def first_even(xs: [Int]) -> Int:
+  xs.find(_ % 2 == 0)?
+
+def main:
+  puts first_even([1, 2])

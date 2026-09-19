@@ -1,0 +1,12 @@
+enum Shape:
+  Circle(r: Float)
+  Rect(w: Float, h: Float)
+  Dot
+
+def describe(s: Shape) -> Str:
+  match s:
+    Circle(r) -> "circle #{r}"
+    Dot       -> "dot"
+
+def main:
+  puts describe(Shape.Dot)

@@ -1,0 +1,9 @@
+enum Shape:
+  Rect(w: Float, h: Float)
+  Dot
+
+def main:
+  s = Shape.Rect(1.0, 2.0)
+  match s:
+    Rect(w) -> puts w
+    Dot     -> puts "dot"

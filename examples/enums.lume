@@ -1,0 +1,106 @@
+# Enums with data, match as an expression, Option, tuples, and the
+# early-exit methods (find, take_while, fold).
+
+enum Shape:
+  Circle(r: Float)
+  Rect(w: Float, h: Float)
+  Dot
+
+  def area = match self:
+    Circle(r)  -> 3.14159 * r * r
+    Rect(w, h) -> w * h
+    Dot        -> 0.0
+
+  def name = match self:
+    Circle(r) if r > 10.0 -> "big circle"
+    Circle(_)             -> "circle"
+    Rect(w, h) if w == h  -> "square"
+    Rect(_, _)            -> "rectangle"
+    Dot                   -> "dot"
+
+enum Status:
+  Draft
+  Submitted(by: Str)
+  Approved(by: Str, score: Int)
+  Rejected(reason: Str)
+
+struct Order:
+  id: Int
+  total: Float
+  status: Status
+
+  def submit(var self, who: Str):
+    status = Submitted(who)
+
+  def label = match status:
+    Draft             -> "draft"
+    Submitted(by)     -> "submitted by #{by}"
+    Approved(by, s)   -> "approved by #{by} with score #{s}"
+    Rejected(reason)  -> "rejected: #{reason}"
+
+def classify(n: Int) -> Str:
+  match n:
+    0        -> "zero"
+    1..9     -> "small"
+    10...100 -> "medium"
+    _        -> "large"
+
+def first_word(s: Str) -> Str:
+  match s.split(" "):
+    []           -> "(empty)"
+    [only]       -> only
+    [first, ..]  -> "#{first}..."
+
+def half_of_even(n: Int) -> Int?:
+  if n % 2 == 0: Some(n / 2) else: None
+
+def quarter(n: Int) -> Int?:
+  half = half_of_even(n)?      # returns None early when n is odd
+  half_of_even(half)
+
+def main:
+  shapes = [Shape.Circle(1.0), Shape.Rect(2.0, 3.0), Shape.Rect(4.0, 4.0), Shape.Circle(20.0), Shape.Dot]
+  for s in shapes:
+    puts "#{s.name}: area #{s.area}"
+  puts "total area: #{shapes.sum(_.area)}"
+
+  var o = Order(1, 99.5, Status.Draft)
+  puts o.label
+  o.submit("Luan")
+  puts o.label
+  o.status = Status.Approved("Ana", 5)
+  puts o.label
+  puts o
+
+  for n in [0, 7, 42, 500]:
+    puts "#{n} is #{classify(n)}"
+  puts first_word("")
+  puts first_word("hello")
+  puts first_word("hello big world")
+
+  # Option
+  puts quarter(8)
+  puts quarter(6)
+  puts quarter(7)
+  puts "#{quarter(8).or(-1)} #{quarter(7).or(-1)}"
+  nums = [3, 8, 12, 5, 20]
+  match nums.find(_ > 10):
+    Some(n) -> puts "first over 10: #{n}"
+    None    -> puts "none over 10"
+  puts nums.find(_ > 100)
+
+  # tuples and enumerate
+  pair = (1, "one")
+  puts "#{pair.0} is #{pair.1}"
+  for i, n in nums.enumerate:
+    puts "#{i}: #{n}" if i < 2
+  pairs = nums.enumerate.map { |i, n| (n, i) }
+  puts pairs.first
+
+  # early exit without a loop
+  puts nums.take_while(_ < 10)
+  puts nums.fold(0) { |acc, n| acc + n }
+  puts nums.fold("") { |acc, n| "#{acc}#{n}," }
+  match nums.sort_by(_ * -1).first:
+    Some(biggest) -> puts "biggest: #{biggest}"
+    None -> puts "empty"

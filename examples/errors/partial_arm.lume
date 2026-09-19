@@ -1,0 +1,11 @@
+enum Shape:
+  Circle(r: Float)
+  Dot
+
+def describe(s: Shape) -> Str:
+  match s:
+    Circle(r) if r > 1.0 -> "big"
+    Dot                  -> "dot"
+
+def main:
+  puts describe(Shape.Dot)

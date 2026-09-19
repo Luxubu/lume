@@ -12,6 +12,10 @@ pub enum Type {
     Unit,
     List(Box<Type>),
     Named(String),
+    /// `T?`
+    Option(Box<Type>),
+    /// `(A, B, ...)`
+    Tuple(Vec<Type>),
     /// A lazy chain (`xs.filter(...).map(...)`) not yet collected. The bool
     /// says whether items are references into the source list. Internal:
     /// becomes `[T]` wherever a value is needed, never reaches a signature.
@@ -24,7 +28,12 @@ impl Type {
     /// Types that Rust copies bitwise; everything else is borrowed when
     /// passed to a function.
     pub fn is_copy(&self) -> bool {
-        matches!(self, Type::Int | Type::Float | Type::Bool | Type::Unit)
+        match self {
+            Type::Int | Type::Float | Type::Bool | Type::Unit => true,
+            Type::Option(t) => t.is_copy(),
+            Type::Tuple(ts) => ts.iter().all(|t| t.is_copy()),
+            _ => false,
+        }
     }
 
     /// The type a value of this type has once materialised.
@@ -74,9 +83,59 @@ pub struct StructDef {
 }
 
 #[derive(Debug, Clone)]
+pub struct Variant {
+    pub name: String,
+    pub fields: Vec<Param>,
+    pub line: usize,
+    pub col: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct EnumDef {
+    pub name: String,
+    pub variants: Vec<Variant>,
+    pub methods: Vec<FnDef>,
+    pub line: usize,
+    pub col: usize,
+}
+
+#[derive(Debug, Clone)]
 pub enum Item {
     Fn(FnDef),
     Struct(StructDef),
+    Enum(EnumDef),
+}
+
+#[derive(Debug, Clone)]
+pub struct Pattern {
+    pub kind: PatKind,
+    pub line: usize,
+    pub col: usize,
+}
+
+#[derive(Debug, Clone)]
+pub enum PatKind {
+    Wild,
+    Bind(String),
+    Int(i64),
+    Float(f64),
+    Bool(bool),
+    Str(String),
+    Range { lo: i64, hi: i64, inclusive: bool },
+    /// `Circle(r)`, `Some(x)`, `None`, `Shape.Circle(r)`
+    Variant { enum_name: Option<String>, name: String, args: Vec<Pattern> },
+    Tuple(Vec<Pattern>),
+    /// `[a, b]`, `[]`, `[first, ..rest]`
+    List { items: Vec<Pattern>, rest: Option<Option<String>> },
+}
+
+#[derive(Debug, Clone)]
+pub struct MatchArm {
+    pub pat: Pattern,
+    pub guard: Option<Expr>,
+    pub body: Block,
+    pub line: usize,
+    pub col: usize,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -98,7 +157,8 @@ pub enum Stmt {
     Expr(Expr),
     Return { value: Option<Expr>, line: usize, col: usize },
     While { cond: Expr, body: Block },
-    For { var: String, iter: Expr, filter: Option<Expr>, body: Block, line: usize, col: usize },
+    /// `for x in xs` or `for i, x in xs.enumerate` (vars.len() == 2 destructures a tuple)
+    For { vars: Vec<String>, iter: Expr, filter: Option<Expr>, body: Block, line: usize, col: usize },
     Break { line: usize, col: usize },
     Next { line: usize, col: usize },
 }
@@ -146,6 +206,15 @@ pub enum ExprKind {
     Placeholder,
     /// `{ |x| expr }`, `do |x| ... end-of-block`, or a wrapped `_` argument.
     Lambda { params: Vec<String>, body: Block },
+    Match { scrutinee: Box<Expr>, arms: Vec<MatchArm> },
+    Tuple(Vec<Expr>),
+    /// `t.0`, `t.1`
+    TupleIndex { recv: Box<Expr>, index: usize },
+    /// `Some(x)`
+    Some(Box<Expr>),
+    None,
+    /// `expr?` — early return on None (and, later, on Error)
+    Try(Box<Expr>),
 }
 
 impl Expr {

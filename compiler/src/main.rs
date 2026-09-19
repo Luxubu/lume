@@ -29,13 +29,18 @@ fn compile_to_rust(path: &Path) -> Result<(String, String), String> {
     let src = fs::read_to_string(path)
         .map_err(|e| format!("error: cannot read `{}`: {}", path.display(), e))?;
     let file = path.display().to_string();
-    let stage = || -> error::Result<String> {
+    let stage = || -> error::Result<(String, Vec<error::LumeError>)> {
         let toks = lexer::lex(&src)?;
         let program = parser::parse_program(toks)?;
         codegen::generate(&program)
     };
     match stage() {
-        Ok(rust) => Ok((src, rust)),
+        Ok((rust, warnings)) => {
+            for w in warnings {
+                eprint!("{}", w.render(&file, &src).replacen("error:", "warning:", 1));
+            }
+            Ok((src, rust))
+        }
         Err(e) => Err(e.render(&file, &src)),
     }
 }

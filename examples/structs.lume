@@ -29,7 +29,7 @@ struct Stack:
   def push(var self, n: Int):
     items.push(n)
 
-  def top = items.last
+  def top = items.last.or(0)
   def size = items.len
 
 def describe(u: User) -> Str:
@@ -54,9 +54,11 @@ def main:
     puts describe(u)
   for u in users where u.adult?:
     puts u.greeting
-  ana = users.first
-  puts "Ana older than Cy? #{ana.older_than(users.last)}"
-  puts "equal? #{ana == User("Ana", "ana@x.com", 31)}"
+  # first and last return User? — the list might be empty
+  match users.first:
+    Some(ana) -> puts "Ana older than Cy? #{ana.older_than(users.last.or(ana))}"
+    None      -> puts "no users"
+  puts "equal? #{users.first == Some(User("Ana", "ana@x.com", 31))}"
 
   var s = Stack([])
   s.push(1)

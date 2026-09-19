@@ -1,0 +1,6 @@
+struct User:
+  name: Str
+
+def main:
+  users = [User("Ana")]
+  puts users.first.name

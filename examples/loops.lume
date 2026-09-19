@@ -23,7 +23,7 @@ def main:
   for n in nums:
     biggest = n if n > biggest
   puts "biggest of #{nums.len} numbers: #{biggest}"
-  puts "sum: #{nums.sum}, sorted: #{nums.sort.first}..#{nums.sort.last}"
+  puts "sum: #{nums.sum}, sorted: #{nums.sort.first.or(0)}..#{nums.sort.last.or(0)}"
 
   size = if biggest > 5: "big" else: "small"
   puts "that is #{size}"
