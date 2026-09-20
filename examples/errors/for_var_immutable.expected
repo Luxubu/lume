@@ -1,0 +1,6 @@
+error: `xs` is immutable, but `for var` changes it
+  --> examples/errors/for_var_immutable.lume:8:16
+  |
+8 |   for var a in xs:
+  |                ^
+  help: declare it with `var xs = ...` on line 7

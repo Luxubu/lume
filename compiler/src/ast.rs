@@ -234,8 +234,9 @@ pub enum Stmt {
     Expr(Expr),
     Return { value: Option<Expr>, line: usize, col: usize },
     While { cond: Expr, body: Block },
-    /// `for x in xs` or `for i, x in xs.enumerate` (vars.len() == 2 destructures a tuple)
-    For { vars: Vec<String>, iter: Expr, filter: Option<Expr>, body: Block, line: usize, col: usize },
+    /// `for x in xs` or `for i, x in xs.enumerate` (vars.len() == 2 destructures a tuple);
+    /// `for var x in xs` lets the body change each element in place
+    For { vars: Vec<String>, mutable: bool, iter: Expr, filter: Option<Expr>, body: Block, line: usize, col: usize },
     Break { line: usize, col: usize },
     Next { line: usize, col: usize },
     /// `assert cond` — stops the test (or program) with both sides printed

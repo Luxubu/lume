@@ -20,7 +20,7 @@ program takes about 1 s in Python and 1.4 s in Ruby.
 The language design lives in the [Lume Language Design](https://claude.ai/code/artifact/1872fe63-1816-4b1e-9983-dec2774382fb)
 document. This repository is the compiler and the examples.
 
-## Status: milestones 1–15 done
+## Status: milestones 1–16 done
 
 | # | Milestone | Status |
 | --- | --- | --- |
@@ -39,6 +39,7 @@ document. This repository is the compiler and the examples.
 | 13 | Rust bridge phase 2: crate signatures from rustdoc JSON; `regex.Regex.new(p)` with no bindings | done |
 | 14 | Compile time: incremental rustc, one shared cargo cache per machine, skip when unchanged | done: edit-and-run 0.2 s plain, 0.7–0.9 s with crates |
 | 15 | Soundness: nested rebinding is an error, argument/return/operand/branch type checks, `Str + Int` rejected, per-type method tables, overflow stops the program | done: review corpus leaks 14 → 6, all remaining are ownership (milestone 16) |
+| 16 | Ownership by analysis: liveness-based copy or move, recursive enums boxed, `.or` on optional fields, string comparisons in blocks, `for var a in xs`, `xs[i].method` | done: review corpus leaks 6 → 0 |
 
 What works today: functions (`def` block and one-liner forms, return type
 inferred when omitted), `struct` with fields and methods (fields used bare
@@ -141,8 +142,8 @@ The suite also runs `lume test` on `examples/tests/`, `lume fmt` on
 `examples/fmt/`, checks that formatting every example is idempotent and leaves
 the generated Rust unchanged, and runs the review corpus (`corpus/`: 66
 programs written by an independent reviewer who did not know the compiler).
-`tests/corpus.sh` classifies the corpus: after milestone 15, 32 run, 28 stop
-with a Lume error, 6 still leak a rustc error, all six about ownership.
+`tests/corpus.sh` classifies the corpus: after milestone 16, 37 run, 29 stop
+with a Lume error, none leaks a rustc error.
 
 Tests in a Lume file:
 
@@ -164,9 +165,18 @@ test this one fails on purpose ... FAILED
 ```
 
 Ownership: `Int`/`Float`/`Bool` pass by value; `Str`, lists, maps and structs
-are passed by reference and cloned only where an owned value is needed. The
-programmer writes mutability, never ownership: `var self` on a method that
-changes fields, `var xs: [Int]` on a parameter changed in place. Milestone 7
+are passed by reference and copied only where an owned value is needed. Since
+milestone 16 that decision is an analysis, not a guess: when a value is given
+away (stored in a list, bound to another name, returned) the compiler copies
+it if the name is used again later in the function, or inside a loop or block
+that will run again, and moves it if not. `us = [u]; puts u` works, and `kept
+= big` with no later use of `big` costs nothing. The programmer writes
+mutability, never ownership: `var self` on a method that changes fields, `var
+xs: [Int]` on a parameter changed in place, `for var a in xs` to change the
+items of a list, and `xs[i].method(...)` / `xs[i].field = v` to reach one
+item. A recursive `enum Tree: Leaf / Node(left: Tree, ...)` works as written;
+the `Box` Rust needs is emitted for you (a nested pattern on such a field is
+an error that says to `match` the field in the arm). Milestone 7
 measured zero ownership syntax across 202 lines of ported programs
 (`examples/port/`), so the memory policy is settled: Rust-faithful inferred
 ownership, no reference-counting fallback. Milestone 12 measured the last
@@ -250,6 +260,7 @@ compiler/src/main.rs     the CLI
 examples/                programs that must keep compiling
 examples/port/           the design doc's sample programs and the graph program; app_async.lume is sample 3 on threads
 examples/async.lume      async/await, spawn, Task[T], shared var
+examples/ownership.lume  copy or move by analysis, a recursive enum, for var, xs[i].method
 examples/crate.lume      regex through the bridge: types, iterators, errors, a rust: block
 examples/crates.lume     hex and urlencoding, with nothing written for them
 examples/modules/        a three-file program: app.lume imports users/model and users/store

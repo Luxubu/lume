@@ -1,0 +1,6 @@
+error: `for var` over `Int` values would change copies
+  --> examples/errors/for_var_copy.lume:3:3
+  |
+3 |   for var n in nums:
+  |   ^
+  help: build the new list instead: `xs = xs.map { |x| x + 1 }.to_list`

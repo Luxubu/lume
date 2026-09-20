@@ -1,0 +1,69 @@
+# Ownership is inferred; the programmer writes mutability. Milestone 16 made
+# the inference an analysis instead of a guess:
+#   - a value used again later is copied at the point it is given away;
+#     a value used for the last time is moved (no copy)
+#   - a recursive enum is boxed for Rust without a word in Lume
+#   - `for var a in xs` changes the items of a list in place
+#   - `xs[i].field` and `xs[i].method(...)` reach the item itself
+
+struct User:
+  name: Str
+  tags: [Str]
+
+  def tag(var self, t: Str):
+    tags.push(t)
+
+def names(us: [User]) -> [Str] = us.map(_.name).to_list
+
+enum Tree:
+  Leaf
+  Node(left: Tree, value: Int, right: Tree)
+
+  def insert(v: Int) -> Tree = match self:
+    Leaf -> Node(Leaf, v, Leaf)
+    Node(l, x, r) ->
+      if v < x: Node(l.insert(v), x, r)
+      elif v > x: Node(l, x, r.insert(v))
+      else: self
+
+  def to_list -> [Int] = match self:
+    Leaf -> []
+    Node(l, x, r) ->
+      var out = l.to_list
+      out.push(x)
+      for v in r.to_list:
+        out.push(v)
+      out
+
+def main:
+  # `u` is stored in a list and used again: the compiler copies it there
+  u = User("ana", ["admin"])
+  v = User("bo", [])
+  us = [u]
+  puts us
+  puts u.name                      # still here
+  puts names([u, v])
+  var b = u                        # `b` is a copy of `u`, not another name for it
+  b.name = "changed"
+  puts "#{u.name} / #{b.name}"
+
+  # a value used for the last time is moved, not copied
+  big = ["x"].map(_.repeat(3)).to_list
+  kept = big                       # `big` is not used again: no copy made
+  puts kept
+
+  # recursive data without an arena
+  var t = Tree.Leaf
+  for n in [50, 30, 70, 20, 40]:
+    t = t.insert(n)
+  puts t.to_list
+
+  # changing the items of a list
+  var team = [User("cy", []), User("di", ["ops"])]
+  for var m in team:
+    m.tag("2026")
+  team[0].tag("lead")
+  puts team.map(_.tags).to_list
+  puts team[1].name
+  team[1].name = "dee"
+  puts team[1].name

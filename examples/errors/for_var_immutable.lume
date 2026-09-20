@@ -1,0 +1,9 @@
+struct A:
+  n: Int
+  def bump(var self):
+    n += 1
+
+def main:
+  xs = [A(1)]
+  for var a in xs:
+    a.bump

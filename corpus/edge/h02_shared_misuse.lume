@@ -10,4 +10,4 @@ async def main:
   puts xs.len
   n = xs.len + xs.len
   puts n
-  puts xs.map(_ * 2).to_list
+  puts xs.map(_ * 2).to_list.sort

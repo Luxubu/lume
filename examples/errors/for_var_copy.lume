@@ -1,0 +1,4 @@
+def main:
+  nums = [1, 2, 3]
+  for var n in nums:
+    n += 1

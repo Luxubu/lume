@@ -948,8 +948,12 @@ impl Parser {
             return Ok(Stmt::While { cond, body });
         }
         if self.eat_kw("for") {
+            let mutable = self.eat_kw("var");
             let (var, _, _) = self.ident("a loop variable")?;
             let mut vars = vec![var];
+            if mutable && self.at_sym(",") {
+                return Err(self.err("`for var` takes one loop variable").with_help("write `for var item in items:`; pairs from `.enumerate` cannot be changed in place"));
+            }
             while self.eat_sym(",") {
                 let (v, vl, vc) = self.ident("a loop variable")?;
                 if vars.contains(&v) {
@@ -966,7 +970,7 @@ impl Parser {
             let filter = if self.eat_kw("where") { Some(self.expr()?) } else { None };
             self.expect_sym(":", "after the `for` header")?;
             let body = self.block()?;
-            return Ok(Stmt::For { vars, iter, filter, body, line, col });
+            return Ok(Stmt::For { vars, mutable, iter, filter, body, line, col });
         }
         // Binding / assignment: `name = ...`, `name += ...`
         if let Tok::Ident(name) = self.peek().clone() {

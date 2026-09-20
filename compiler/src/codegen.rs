@@ -17,6 +17,12 @@ pub const PRELUDE: &str = r#"#![allow(unused, non_snake_case, non_camel_case_typ
 trait LumePow { fn lume_pow(self, e: Self) -> Self; }
 impl LumePow for i64 { fn lume_pow(self, e: Self) -> Self { self.pow(e as u32) } }
 impl LumePow for f64 { fn lume_pow(self, e: Self) -> Self { self.powf(e) } }
+/// A string however it is held: `String`, `&str`, `&&String`, ... Comparisons
+/// go through this so closure parameters need no deref guessing.
+trait LumeAsStr { fn lume_as_str(&self) -> &str; }
+impl LumeAsStr for str { fn lume_as_str(&self) -> &str { self } }
+impl LumeAsStr for String { fn lume_as_str(&self) -> &str { self.as_str() } }
+impl<T: LumeAsStr + ?Sized> LumeAsStr for &T { fn lume_as_str(&self) -> &str { (**self).lume_as_str() } }
 trait LumeLen { fn lume_len(&self) -> i64; }
 impl<T> LumeLen for Vec<T> { fn lume_len(&self) -> i64 { self.len() as i64 } }
 impl<T> LumeLen for [T] { fn lume_len(&self) -> i64 { self.len() as i64 } }
@@ -321,6 +327,8 @@ struct CompiledPat {
 enum BindKind {
     /// Copy value reached through a reference: rebind with `let x = *x;`
     Deref,
+    /// A recursive field (`Box<T>`) reached through a reference: `let x = &**x;`
+    Boxed,
     /// Reference into the scrutinee
     Ref,
     /// Slice from `..rest`: rebind with `let rest = rest.to_vec();`
@@ -405,7 +413,12 @@ pub struct Gen {
     pub warnings: Vec<LumeError>,
     has_rust_blocks: bool,
     /// Statements that follow the one being emitted, in the same block.
-    rest_of_block: Vec<Stmt>,
+    /// For each enclosing block, the statements after the one being emitted
+    /// (innermost last): the liveness pass reads these.
+    rest_stack: Vec<Vec<Stmt>>,
+    /// Scope depths at which a loop or a block body began: a binding from
+    /// outside is used again on the next iteration or call.
+    barriers: Vec<usize>,
     /// Rust paths of imported items, keyed by canonical id ("users.model.User").
     paths: HashMap<String, String>,
     /// How this module spells imported items -> canonical id
@@ -463,7 +476,8 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, deps: &[Dep], t
         tmp: 0,
         warnings: Vec::new(),
         has_rust_blocks: false,
-        rest_of_block: Vec::new(),
+        rest_stack: Vec::new(),
+        barriers: Vec::new(),
         paths: HashMap::new(),
         canon: HashMap::new(),
         module_aliases: HashMap::new(),
@@ -1920,6 +1934,15 @@ impl Gen {
                         ForeignRef::Type(_) => Type::Unknown,
                     };
                 }
+                // `xs[i].field` / `xs[i].method(...)`: the element itself, as a place
+                if let Some(elem) = self.indexed_element(recv, name) {
+                    let inner = Expr::new(ExprKind::Method { recv: Box::new(Expr::new(ExprKind::Ident("lume_elem".into()), recv.line, recv.col)), name: name.clone(), args: args.clone() }, e.line, e.col);
+                    self.push_scope();
+                    self.declare("lume_elem", true, true, elem, recv.line);
+                    let t = self.ty_of(&inner);
+                    self.pop_scope();
+                    return t;
+                }
                 let rt = match self.ty_of(recv) {
                     // a shared value behaves as the value it holds
                     Type::Shared(inner, _) => *inner,
@@ -2085,6 +2108,62 @@ impl Gen {
             err = err.with_help(h);
         }
         Err(err)
+    }
+
+    /// `xs[i]` where `xs` is a list of structs/enums: the element type, when
+    /// the expression is used as a place (`xs[i].field`, `xs[i].method`).
+    fn indexed_element(&mut self, recv: &Expr, member: &str) -> Option<Type> {
+        if let ExprKind::Index { recv: lst, .. } = &recv.kind {
+            if let Type::List(elem) = self.ty_of(lst).materialized() {
+                if let Type::Named(n) = &*elem {
+                    let key = self.canon(n);
+                    let has_member = self.structs.get(&key).map(|s| s.fields.iter().any(|(f, _)| f == member)).unwrap_or(false)
+                        || self.methods_of(&key).map(|m| m.contains_key(member)).unwrap_or(false);
+                    if has_member {
+                        return Some(*elem);
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// Emits `xs[i].name(args)` against the element in place: a mutating
+    /// method needs `xs` to be a `var`; an out-of-range position stops the
+    /// program like any other index write.
+    fn indexed_member(&mut self, recv: &Expr, elem: Type, name: &str, args: &[Arg], e: &Expr) -> Result<String> {
+        let (lst, index) = match &recv.kind {
+            ExprKind::Index { recv, index } => (recv, index),
+            _ => unreachable!(),
+        };
+        let mutates = match &elem {
+            Type::Named(tn) => self.methods_of(tn).and_then(|m| m.get(name).map(|s| s.self_kind == SelfKind::Mutate)).unwrap_or(false),
+            _ => false,
+        };
+        if mutates {
+            self.check_receiver_mutable(lst, name, e.line, e.col)?;
+        }
+        let l = self.expr(lst)?;
+        let i = self.expr_val(index)?;
+        let it = self.ty_of(index).materialized();
+        if it != Type::Int && it != Type::Unknown {
+            return Err(LumeError::new(index.line, index.col, format!("a list position is an `Int`, but this is a `{}`", type_name(&it))));
+        }
+        // emit the member call against a synthetic place binding
+        let tmp = self.fresh("el");
+        self.push_scope();
+        self.declare(&tmp, true, true, elem, recv.line);
+        let inner = Expr::new(ExprKind::Method { recv: Box::new(Expr::new(ExprKind::Ident(tmp.clone()), recv.line, recv.col)), name: name.to_string(), args: args.to_vec() }, e.line, e.col);
+        let text = self.expr(&inner);
+        self.pop_scope();
+        let text = text?;
+        // `tmp` stands for the place `xs[i]`
+        Ok(text.replacen(&tmp, &format!("{}[({}) as usize]", l, i), 1))
+    }
+
+    /// A variant field whose type is the enum itself lives behind a `Box`.
+    fn boxed_field(&self, en: &str, fty: &Type) -> bool {
+        matches!(fty, Type::Named(n) if self.canon(n) == self.canon(en))
     }
 
     /// Can a value of type `have` be used where `want` is expected?
@@ -2709,7 +2788,15 @@ impl Gen {
             if v.fields.is_empty() {
                 self.line(&format!("{},", v.name));
             } else {
-                let fs: Vec<String> = v.fields.iter().map(|f| format!("{}: {}", rust_name(&f.name), self.rt(&f.ty))).collect();
+                let fs: Vec<String> = v
+                    .fields
+                    .iter()
+                    .map(|f| {
+                        let t = self.rt(&f.ty);
+                        // a variant that holds its own enum: `Node(left: Tree, ...)` — boxed for Rust, invisible in Lume
+                        if self.boxed_field(&e.name, &self.ct(&f.ty)) { format!("{}: Box<{}>", rust_name(&f.name), t) } else { format!("{}: {}", rust_name(&f.name), t) }
+                    })
+                    .collect();
                 self.line(&format!("{} {{ {} }},", v.name, fs.join(", ")));
             }
         }
@@ -2971,21 +3058,33 @@ impl Gen {
         }
         for (i, s) in b.stmts.iter().enumerate() {
             let last = i + 1 == n;
-            let saved = std::mem::replace(&mut self.rest_of_block, b.stmts[i + 1..].to_vec());
+            self.rest_stack.push(b.stmts[i + 1..].to_vec());
             let r = self.stmt(s, want_value && last);
-            self.rest_of_block = saved;
+            self.rest_stack.pop();
             r?;
         }
         Ok(())
     }
 
-    /// True when a name bound in the current block is not used by any later
-    /// statement of that block, so its value may be moved instead of cloned.
-    fn dead_after_this(&self, name: &str) -> bool {
-        if !self.scopes.last().map(|sc| sc.contains_key(name)).unwrap_or(false) {
-            return false;
+    /// Liveness: is the local `name` used again after the statement being
+    /// emitted? True when a later statement of this block or of an enclosing
+    /// block mentions it, or when it was bound outside a loop or block body
+    /// that is being emitted (the next iteration or call uses it again).
+    fn used_after(&self, name: &str) -> bool {
+        let idx = match self.scopes.iter().rposition(|sc| sc.contains_key(name)) {
+            Some(i) => i,
+            None => return true,
+        };
+        if self.barriers.iter().any(|b| idx < *b) {
+            return true;
         }
-        !self.rest_of_block.iter().any(|st| stmt_mentions(st, name))
+        self.rest_stack.iter().any(|rest| rest.iter().any(|st| stmt_uses(st, name)))
+    }
+
+    /// True when a name bound in the current block is not used by any later
+    /// statement, so its value may be moved instead of cloned.
+    fn dead_after_this(&self, name: &str) -> bool {
+        self.lookup(name).is_some() && !self.used_after(name)
     }
 
     fn nested_block(&mut self, b: &Block, want_value: bool) -> Result<()> {
@@ -3385,12 +3484,48 @@ impl Gen {
                 let c = self.expr(cond)?;
                 self.line(&format!("while {} {{", c));
                 self.loop_depth += 1;
-                self.nested_block(body, false)?;
+                self.barriers.push(self.scopes.len());
+                let r = self.nested_block(body, false);
+                self.barriers.pop();
                 self.loop_depth -= 1;
+                r?;
                 self.line("}");
             }
-            Stmt::For { vars, iter, filter, body, line, col } => {
+            Stmt::For { vars, mutable, iter, filter, body, line, col } => {
                 let it_ty = self.ty_of(iter);
+                if *mutable {
+                    // `for var a in xs`: each element is changed in place
+                    let elem = match it_ty.materialized() {
+                        Type::List(e) => *e,
+                        other => {
+                            return Err(LumeError::new(iter.line, iter.col, format!("`for var` walks a list and changes its items, but this is a `{}`", type_name(&other))));
+                        }
+                    };
+                    if elem.is_copy() {
+                        return Err(LumeError::new(*line, *col, format!("`for var` over `{}` values would change copies", type_name(&elem)))
+                            .with_help("build the new list instead: `xs = xs.map { |x| x + 1 }.to_list`"));
+                    }
+                    self.check_receiver_mutable(iter, "for var", iter.line, iter.col)?;
+                    let ex = self.expr(iter)?;
+                    self.line(&format!("for {} in ({}).iter_mut() {{", rust_name(&vars[0]), ex));
+                    self.indent += 1;
+                    self.push_scope();
+                    self.declare(&vars[0], true, true, elem, *line);
+                    if let Some(f) = filter {
+                        let fc = self.expr(f)?;
+                        self.line(&format!("if !({}) {{ continue; }}", fc));
+                    }
+                    self.loop_depth += 1;
+                    self.barriers.push(self.scopes.len() - 1);
+                    let r = self.block_body(body, false);
+                    self.barriers.pop();
+                    self.loop_depth -= 1;
+                    r?;
+                    self.pop_scope();
+                    self.indent -= 1;
+                    self.line("}");
+                    return Ok(());
+                }
                 // Iterating a collection reached through `self` while the body may
                 // change `self` would be two borrows at once; iterate a copy instead.
                 let self_rooted = self.current_self == SelfKind::Mutate
@@ -3447,8 +3582,11 @@ impl Gen {
                     self.line(&format!("if !({}) {{ continue; }}", fc));
                 }
                 self.loop_depth += 1;
-                self.block_body(body, false)?;
+                self.barriers.push(self.scopes.len() - 1);
+                let r = self.block_body(body, false);
+                self.barriers.pop();
                 self.loop_depth -= 1;
+                r?;
                 self.pop_scope();
                 self.indent -= 1;
                 self.line("}");
@@ -3672,6 +3810,9 @@ impl Gen {
         if !t.is_copy() && self.is_borrowed_place(e) {
             // a borrowed string may be a `&str`: to_string covers both
             if t == Type::Str { Ok(format!("{}.to_string()", s)) } else { Ok(format!("{}.clone()", s)) }
+        } else if !t.is_copy() && matches!(&e.kind, ExprKind::Ident(n) if self.lookup(n).is_some() && self.used_after(n)) {
+            // an owned local that is used again later: give away a copy, keep the value
+            Ok(format!("{}.clone()", s))
         } else {
             Ok(s)
         }
@@ -3835,6 +3976,7 @@ impl Gen {
         self.loop_depth = 0;
         self.in_block = true;
         self.tail_of_fn = false;
+        self.barriers.push(self.scopes.len() - 1);
         let saved_out = std::mem::take(&mut self.out);
         let base = self.indent;
         let inline = body.stmts.len() == 1 && matches!(body.stmts[0], Stmt::Expr(ref x) if !matches!(x.kind, ExprKind::If { .. } | ExprKind::Match { .. }));
@@ -3853,6 +3995,7 @@ impl Gen {
             std::mem::take(&mut self.out)
         };
         self.out = saved_out;
+        self.barriers.pop();
         self.loop_depth = saved_loop;
         self.in_block = saved_in_block;
         self.tail_of_fn = saved_tail;
@@ -4093,6 +4236,10 @@ impl Gen {
                         rebinds.push(format!("let {} = {}.to_vec();", rust_name(name), rust_name(name)));
                         self.declare(name, false, false, ty.clone(), arm.line);
                     }
+                    BindKind::Boxed => {
+                        rebinds.push(format!("let {} = &**{};", rust_name(name), rust_name(name)));
+                        self.declare(name, false, true, ty.clone(), arm.line);
+                    }
                     BindKind::Ref => self.declare(name, false, true, ty.clone(), arm.line),
                     BindKind::Owned => self.declare(name, false, false, ty.clone(), arm.line),
                 }
@@ -4322,7 +4469,22 @@ impl Gen {
                         let mut parts = Vec::new();
                         for (a, (fname, fty)) in args.iter().zip(&fields) {
                             let mut sub = CompiledPat { text: String::new(), guards: Vec::new(), binds: Vec::new() };
-                            self.compile_pat_into(a, fty, by_ref, &mut sub)?;
+                            if self.boxed_field(&en, fty) {
+                                // a recursive field sits behind a Box: bind it (or ignore it), no nested pattern
+                                match &a.kind {
+                                    PatKind::Bind(n) => {
+                                        sub.text = rust_name(n);
+                                        sub.binds.push((n.clone(), fty.clone(), if by_ref { BindKind::Boxed } else { BindKind::Owned }));
+                                    }
+                                    PatKind::Wild => sub.text = "_".into(),
+                                    _ => {
+                                        return Err(LumeError::new(a.line, a.col, format!("`{}` holds a `{}` inside a `{}`; give it a name here and `match` it in the arm", fname, type_name(fty), en))
+                                            .with_help(format!("write `{}(..., {}, ...)` and then `match {}:` on the next line", name, fname, fname)));
+                                    }
+                                }
+                            } else {
+                                self.compile_pat_into(a, fty, by_ref, &mut sub)?;
+                            }
                             parts.push(format!("{}: {}", rust_name(fname), sub.text));
                             cp.guards.extend(sub.guards);
                             cp.binds.extend(sub.binds);
@@ -4521,7 +4683,12 @@ impl Gen {
         let mut parts = Vec::new();
         for (a, (fname, fty)) in bound.iter().zip(&fields) {
             self.check_assign(a, fty, &format!("`{}.{}` takes `{}: {}`", en, vname, fname, type_name(fty)))?;
-            parts.push(format!("{}: {}", rust_name(fname), self.expr_owned_as(a, fty)?));
+            let v = self.expr_owned_as(a, fty)?;
+            if self.boxed_field(en, fty) {
+                parts.push(format!("{}: Box::new({})", rust_name(fname), v));
+            } else {
+                parts.push(format!("{}: {}", rust_name(fname), v));
+            }
         }
         Ok(format!("{}::{} {{ {} }}", epath, vname, parts.join(", ")))
     }
@@ -4848,6 +5015,8 @@ impl Gen {
                     "or" => format!("({} || {})", l, r),
                     "**" => format!("({}).lume_pow({})", l, r),
                     "+" if lt == Type::Str => format!("format!(\"{{}}{{}}\", {}, {})", l, r),
+                    // strings compare as `&str` whatever they are held as
+                    "==" | "!=" | "<" | "<=" | ">" | ">=" if lt == Type::Str => format!("(({}).lume_as_str() {} ({}).lume_as_str())", l, op, r),
                     _ => format!("({} {} {})", l, op, r),
                 }
             }
@@ -4903,6 +5072,9 @@ impl Gen {
                 }
                 if let Some(ne) = self.module_ref(e)? {
                     return self.expr(&ne);
+                }
+                if let Some(elem) = self.indexed_element(recv, name) {
+                    return self.indexed_member(recv, elem, name, args, e);
                 }
                 if let Some(fr) = self.foreign_ref(e) {
                     return match fr {
@@ -5048,7 +5220,21 @@ impl Gen {
                         }
                     }
                 }
-                let r = self.expr(recv)?;
+                let mut r = self.expr(recv)?;
+                // `.or(default)` consumes the optional: take a copy when the place lives on
+                if matches!(name.as_str(), "or" | "or_error") {
+                    let inner_copy = match &rt {
+                        Type::Option(i) => i.is_copy(),
+                        Type::Result(t, _) => t.is_copy(),
+                        _ => true,
+                    };
+                    let lives_on = self.is_borrowed_place(recv) || matches!(&recv.kind, ExprKind::Ident(n) if self.lookup(n).is_some() && self.used_after(n));
+                    if !inner_copy && lives_on {
+                        r = format!("({}).clone()", r);
+                    } else if inner_copy && self.is_borrowed_ident(recv) {
+                        r = format!("(*{})", r);
+                    }
+                }
                 if let Type::Named(tname) = &rt {
                     if let Some(info) = self.structs.get(tname).cloned() {
                         if info.fields.iter().any(|(n, _)| n == name) {
@@ -5235,7 +5421,7 @@ impl Gen {
                 need(1)?;
                 match rt {
                     Type::Str => format!("({}).contains(&*({}))", recv, args[0]),
-                    Type::List(e) if **e == Type::Str => format!("({}).iter().any(|x| x.as_str() == &*({}))", recv, args[0]),
+                    Type::List(e) if **e == Type::Str => format!("({}).iter().any(|x| x.lume_as_str() == ({}).lume_as_str())", recv, args[0]),
                     _ => format!("({}).contains(&({}))", recv, args[0]),
                 }
             }

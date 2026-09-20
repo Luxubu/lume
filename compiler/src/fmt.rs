@@ -558,8 +558,8 @@ impl Fmt {
                 self.indent -= 1;
                 out
             }
-            Stmt::For { vars, iter, filter, body, .. } => {
-                let mut out = format!("for {} in {}", vars.join(", "), self.expr(iter));
+            Stmt::For { vars, mutable, iter, filter, body, .. } => {
+                let mut out = format!("for {}{} in {}", if *mutable { "var " } else { "" }, vars.join(", "), self.expr(iter));
                 if let Some(f) = filter {
                     out.push_str(&format!(" where {}", self.expr(f)));
                 }
