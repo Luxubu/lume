@@ -1,0 +1,7 @@
+error: a space between `puts` and `(` is ambiguous: a call, or a value in parentheses?
+  --> corpus/edge/e06_enum_eq.lume:11:8
+   |
+11 |   puts (1, "a") == (1, "a")
+   |        ^
+  help: for a call write `puts(...)` with no space; for a value in parentheses, drop the outer parentheses or wrap the whole argument: `puts((a + b) * 2)`
+exit: 1

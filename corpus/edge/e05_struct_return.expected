@@ -1,0 +1,7 @@
+[P(x: 1, y: 1), P(x: 2, y: 4), P(x: 3, y: 9)]
+Some(P(x: 2, y: 4))
+true
+true
+14
+1
+exit: 0

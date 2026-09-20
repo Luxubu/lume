@@ -1,0 +1,5 @@
+NUM(12) OP(+) NUM(30) OP(*) NUM(2) OP(-) NUM(4)
+= 80
+error: unexpected character '$'
+Error(parens not supported)
+exit: 0

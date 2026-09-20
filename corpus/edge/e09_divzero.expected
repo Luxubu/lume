@@ -1,0 +1,3 @@
+error: division by zero
+  (set LUME_BACKTRACE=1 to see where in the generated Rust)
+exit: 101

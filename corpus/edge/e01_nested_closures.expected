@@ -1,0 +1,6 @@
+error: a `{ |x| ... }` block goes after a method call, like `xs.map { |x| x * 2 }`
+  --> corpus/edge/e01_nested_closures.lume:6:11
+  |
+6 |   adder = { |a| a + k }
+  |           ^
+exit: 1

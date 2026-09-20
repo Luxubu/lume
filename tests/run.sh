@@ -10,6 +10,9 @@
 # examples/fmt/*.lume     `lume fmt --stdout` is compared; every example
 #                         must also format idempotently without changing
 #                         the generated Rust
+# corpus/**/*.lume        programs written by an independent reviewer; output
+#                         and exit code are compared where a .expected exists
+#                         (a file without one is a known gap: see tests/corpus.sh)
 #
 # The suite is the contract: a milestone is done when this passes.
 
@@ -87,6 +90,22 @@ for f in examples/fmt/*.lume; do
   fi
   check "$name" "${f%.lume}.expected" "$out"
 done
+
+# The review corpus: real-user programs. A leaked rustc error is never accepted.
+for f in corpus/*.lume corpus/edge/*.lume; do
+  name="corpus/${f#corpus/}"; name=${name%.lume}
+  exp="${f%.lume}.expected"
+  out=$("$LUME" run "$f" 2>&1); code=$?
+  if printf '%s' "$out" | grep -q "generated Rust did not compile"; then
+    if [ -f "$exp" ]; then echo "FAIL $name: rustc error leaked"; fail=$((fail+1)); failed+=("$name"); fi
+    continue
+  fi
+  if [ $UPDATE = 1 ] || [ -f "$exp" ]; then
+    check "$name" "$exp" "$out
+exit: $code"
+  fi
+done
+rm -rf corpus/.lume corpus/edge/.lume
 
 # The formatter must be idempotent and must not change what a program means.
 tmp=$(mktemp -d)

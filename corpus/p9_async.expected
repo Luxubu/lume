@@ -1,0 +1,18 @@
+warning: `total` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/p9_async.lume:10:3
+   |
+10 |   shared var total = 0
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+warning: `seen` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/p9_async.lume:11:3
+   |
+11 |   shared var seen: {Str: Int} = {}
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+[4, 2, 6, 0]
+total 12
+distinct 10
+the: 2
+Stats(words: 12, longest: )
+exit: 0

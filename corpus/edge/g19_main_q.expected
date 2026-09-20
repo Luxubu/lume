@@ -1,0 +1,7 @@
+error: `?` returns the error early, but `main` does not return `T or E`
+  --> corpus/edge/g19_main_q.lume:2:11
+  |
+2 |   n = "12".to_int?
+  |           ^
+  help: write `def main(...) -> Type or Error`, or handle the error with `match` or `.or(default)`
+exit: 1

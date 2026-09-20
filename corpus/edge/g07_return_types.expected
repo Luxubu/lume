@@ -1,0 +1,7 @@
+error: the branches of this `if` give different types: `Str` on line 2 and `Int` here
+  --> corpus/edge/g07_return_types.lume:3:9
+  |
+3 |   else: 0
+  |         ^
+  help: a value chosen by a branch must have one type; convert one side, or return an `Error`/`None` instead
+exit: 1

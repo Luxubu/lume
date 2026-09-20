@@ -1,0 +1,7 @@
+error: `?` cannot be used inside a block
+  --> corpus/edge/g20_nested_result.lume:5:24
+  |
+5 |   xs.map { |x| inner(x)? }.to_list
+  |                        ^
+  help: handle the missing or failed value with `match` or `.or(default)` inside the block
+exit: 1

@@ -1,0 +1,7 @@
+error: unknown name `continue`
+  --> corpus/edge/e17_while_break.lume:6:20
+  |
+6 |     if i % 2 == 0: continue
+  |                    ^
+  help: names must be bound with `name = value` or `var name = value` before use
+exit: 1

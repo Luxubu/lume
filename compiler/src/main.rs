@@ -246,7 +246,7 @@ fn write_cargo_project(path: &Path, deps: &[(String, String)]) -> Result<PathBuf
     }
     // `release` is what `lume run` uses: the program at opt-level 1 with an
     // incremental cache, every crate at opt-level 3. `ship` is `lume build`.
-    toml.push_str("\n[profile.release]\nopt-level = 1\ndebug = false\nincremental = true\n\n[profile.release.package.\"*\"]\nopt-level = 3\n\n[profile.ship]\ninherits = \"release\"\nopt-level = 3\nincremental = false\n");
+    toml.push_str("\n[profile.release]\nopt-level = 1\ndebug = false\nincremental = true\noverflow-checks = true\n\n[profile.release.package.\"*\"]\nopt-level = 3\noverflow-checks = false\n\n[profile.ship]\ninherits = \"release\"\nopt-level = 3\nincremental = false\n");
     let toml_path = proj.join("Cargo.toml");
     if fs::read_to_string(&toml_path).ok().as_deref() != Some(toml.as_str()) {
         fs::write(&toml_path, toml).map_err(|e| format!("error: cannot write Cargo.toml: {}", e))?;
@@ -355,7 +355,8 @@ fn build(path: &Path, out: Option<PathBuf>, quiet: bool, test_mode: bool, mode: 
     }
 
     let mut cmd = Command::new("rustc");
-    cmd.args(["--edition", "2021", "-O", "-C", "debuginfo=0"]);
+    // overflow checks stay on in every mode: Int arithmetic that overflows stops the program
+    cmd.args(["--edition", "2021", "-O", "-C", "debuginfo=0", "-C", "overflow-checks=on"]);
     if mode == Mode::Iterate {
         // rustc's incremental cache: a rebuild after an edit takes a fraction of a fresh compile
         let inc = build_dir.join(format!("inc-{}", stem));

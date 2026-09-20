@@ -1,0 +1,8 @@
+a	b
+c
+quote " inside
+backslash \ done
+unicode é ü 日本
+len of 日本: 2
+[日, 本]
+exit: 0

@@ -1,0 +1,7 @@
+error: `show_all` takes `xs: [Str]`, but this is a `[Int]`
+  --> corpus/edge/g09_generic_fn.lume:9:12
+  |
+9 |   show_all([1, 2])
+  |            ^
+  help: the items are `Int`; `.map` them into `Str` first
+exit: 1

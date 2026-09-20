@@ -1,0 +1,7 @@
+error: string literal is not closed before the end of the line
+  --> corpus/edge/e18_interp_quotes.lume:7:15
+  |
+7 |   puts "#{"}"}"
+  |               ^
+  help: add the closing `"`
+exit: 1

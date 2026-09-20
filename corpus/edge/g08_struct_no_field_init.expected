@@ -1,0 +1,6 @@
+error: `P` is missing an argument: y
+  --> corpus/edge/g08_struct_no_field_init.lume:6:7
+  |
+6 |   p = P(1)
+  |       ^
+exit: 1

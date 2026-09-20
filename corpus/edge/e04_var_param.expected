@@ -1,0 +1,7 @@
+error: `var n` needs a list, map, string or struct; `Int` values are copied, so changing the copy would do nothing
+  --> corpus/edge/e04_var_param.lume:4:16
+  |
+4 | def bump_n(var n: Int):
+  |                ^
+  help: return the new value instead
+exit: 1

@@ -20,7 +20,7 @@ program takes about 1 s in Python and 1.4 s in Ruby.
 The language design lives in the [Lume Language Design](https://claude.ai/code/artifact/1872fe63-1816-4b1e-9983-dec2774382fb)
 document. This repository is the compiler and the examples.
 
-## Status: milestones 1–14 done
+## Status: milestones 1–15 done
 
 | # | Milestone | Status |
 | --- | --- | --- |
@@ -38,6 +38,7 @@ document. This repository is the compiler and the examples.
 | 12 | `async def`/`await`, `spawn:` tasks, `Task[T]`, `shared`/`shared var` | done: sample 3 runs on threads, 5 `shared` words in 97 lines |
 | 13 | Rust bridge phase 2: crate signatures from rustdoc JSON; `regex.Regex.new(p)` with no bindings | done |
 | 14 | Compile time: incremental rustc, one shared cargo cache per machine, skip when unchanged | done: edit-and-run 0.2 s plain, 0.7–0.9 s with crates |
+| 15 | Soundness: nested rebinding is an error, argument/return/operand/branch type checks, `Str + Int` rejected, per-type method tables, overflow stops the program | done: review corpus leaks 14 → 6, all remaining are ownership (milestone 16) |
 
 What works today: functions (`def` block and one-liner forms, return type
 inferred when omitted), `struct` with fields and methods (fields used bare
@@ -105,7 +106,14 @@ lists, ranges (`1..10` inclusive, `1...10` exclusive), string interpolation,
 
 Errors are Lume errors, not rustc errors: unknown names, fields and types (with
 a "did you mean"), assignment to an immutable binding (pointing at where it was
-declared), changing a field from a method without `var self`, calling a
+declared), rebinding an outer name inside a loop or branch (`total = total + i`
+would silently make a new `total`; the error says to declare it `var`), an
+argument, field, return value or typed binding of the wrong type (`add(1,
+"2")`, with the conversion to use), operands that do not go together (`"n=" +
+5`, `7.0 / 2`, with the interpolation or `.to_float` to write), branches of an
+`if`/`match` used as a value that give different types, a method a type does
+not have (`"abc".reverse` is fine; `"abc".skip(1)` lists what `Str` has),
+`9223372036854775807 + 1` and `10 / 0` on literals, changing a field from a method without `var self`, calling a
 mutating method on an immutable value, wrong or missing arguments and keywords,
 `if` used as a value without `else`, non-exhaustive `match`, `?` in a function
 that cannot return `None` or an error (with the right fix for each mismatch),
@@ -130,8 +138,11 @@ tests/run.sh --update   # accept current output as the new expectation
 ```
 
 The suite also runs `lume test` on `examples/tests/`, `lume fmt` on
-`examples/fmt/`, and checks that formatting every example is idempotent and
-leaves the generated Rust unchanged.
+`examples/fmt/`, checks that formatting every example is idempotent and leaves
+the generated Rust unchanged, and runs the review corpus (`corpus/`: 66
+programs written by an independent reviewer who did not know the compiler).
+`tests/corpus.sh` classifies the corpus: after milestone 15, 32 run, 28 stop
+with a Lume error, 6 still leak a rustc error, all six about ownership.
 
 Tests in a Lume file:
 
@@ -163,7 +174,11 @@ case, values shared between threads: 5 `shared` words in 97 lines of async
 code, all of them at the declaration of the shared thing (`shared var
 store`), none at its uses. That is the one ownership word in Lume.
 
-Speed: computation runs at Rust speed (`fib(35)`: 30 ms vs Python 1.04 s).
+Speed: computation runs at Rust speed (`fib(35)`: 56 ms with Lume's always-on
+integer overflow checks, 27 ms without them; Python 1.04 s). Overflow, division
+by zero and an out-of-range position stop the program with a one-line Lume
+message (`error: Int overflow in `+``), never a silent wrap and never a Rust
+trace unless `LUME_BACKTRACE=1` is set.
 String-and-map code is within 20% of hand-written Rust after milestone 8
 (word count over 360k words: hand-written Rust 19 ms, Lume 23 ms, Python
 79 ms). What made the difference: `split`/`lines` are lazy and yield string

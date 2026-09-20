@@ -1,0 +1,7 @@
+error: `y` is immutable and cannot be reassigned
+  --> corpus/edge/e02_shadow.lume:6:3
+  |
+6 |   y = 2
+  |   ^
+  help: declare it with `var y = ...` on line 5 if it needs to change; `y = y.something` is allowed as a transform of the same value
+exit: 1

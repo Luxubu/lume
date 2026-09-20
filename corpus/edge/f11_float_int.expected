@@ -1,0 +1,7 @@
+error: `/` cannot combine a `Float` and a `Int`
+  --> corpus/edge/f11_float_int.lume:3:12
+  |
+3 |   puts 7.0 / 2
+  |            ^
+  help: write `2.to_float`, or a float literal like `2.0`
+exit: 1

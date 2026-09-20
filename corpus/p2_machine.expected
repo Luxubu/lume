@@ -1,0 +1,5 @@
+GREEN -> YELLOW(2) -> YELLOW(1) -> YELLOW(0) -> RED -> RED -> GREEN -> GREEN -> YELLOW(2)
+ended on YELLOW(2)
+red 2 times
+true
+exit: 0

@@ -1,0 +1,7 @@
+error: `add` takes `b: Int`, but this is a `Str`
+  --> corpus/edge/g06_types_mismatch.lume:4:15
+  |
+4 |   puts add(1, "2")
+  |               ^
+  help: parse it: `.to_int` gives `Int or Error`, so `x.to_int?` or `x.to_int.or(0)`
+exit: 1

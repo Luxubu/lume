@@ -1,0 +1,7 @@
+error: unknown escape `\u` in string
+  --> corpus/edge/e07_escapes.lume:6:9
+  |
+6 |   puts "\u{1F600}"
+  |         ^
+  help: valid escapes are \n \t \0 \" \\ \#
+exit: 1

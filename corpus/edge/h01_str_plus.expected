@@ -1,0 +1,7 @@
+error: `+` cannot combine a `Str` and a `Int`
+  --> corpus/edge/h01_str_plus.lume:2:13
+  |
+2 |   puts "n=" + 5
+  |             ^
+  help: to build a string, interpolate: `"...#{5}..."`; `+` joins two strings or adds two numbers
+exit: 1

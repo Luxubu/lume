@@ -1,0 +1,7 @@
+error: `name` is declared on line 2, outside this block; a new `name` here would hide it and be lost when the block ends
+  --> corpus/edge/h06_shadow_if.lume:4:5
+  |
+4 |     name = name.upcase
+  |     ^
+  help: to change it from here, declare it `var name` on line 2; to make a separate value, give it another name
+exit: 1

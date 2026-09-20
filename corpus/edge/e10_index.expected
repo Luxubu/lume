@@ -1,0 +1,7 @@
+error: strings cannot be indexed by position
+  --> corpus/edge/e10_index.lume:7:9
+  |
+7 |   puts s[0]
+  |         ^
+  help: use `.chars`, `.first`, `.slice(from, len)` or `.split`
+exit: 1

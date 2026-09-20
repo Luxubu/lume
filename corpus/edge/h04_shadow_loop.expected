@@ -1,0 +1,7 @@
+error: `total` is declared on line 2, outside this block; a new `total` here would hide it and be lost when the block ends
+  --> corpus/edge/h04_shadow_loop.lume:4:5
+  |
+4 |     total = total + i
+  |     ^
+  help: to change it from here, declare it `var total` on line 2; to make a separate value, give it another name
+exit: 1

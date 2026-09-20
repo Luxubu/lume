@@ -1,0 +1,7 @@
+error: `a` is immutable, but `deposit` changes it
+  --> corpus/edge/g11_mut_elems.lume:9:6
+  |
+9 |     a.deposit(10)
+  |      ^
+  help: declare it with `var a = ...` on line 8
+exit: 1

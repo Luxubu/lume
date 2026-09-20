@@ -1,0 +1,10 @@
+warning: `xs` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/edge/h02_shared_misuse.lume:2:3
+  |
+2 |   shared var xs: [Int] = []
+  |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+3
+6
+[2, 6, 4]
+exit: 0

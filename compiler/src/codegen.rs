@@ -12,7 +12,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use crate::ast::*;
 use crate::error::{LumeError, Result};
 
-pub const PRELUDE: &str = r#"#![allow(unused, non_snake_case, non_camel_case_types, unused_parens, unused_mut, clippy::all)]
+pub const PRELUDE: &str = r#"#![allow(unused, non_snake_case, non_camel_case_types, unused_parens, unused_mut, arithmetic_overflow, unconditional_panic, clippy::all)]
 // ---- Lume prelude ----
 trait LumePow { fn lume_pow(self, e: Self) -> Self; }
 impl LumePow for i64 { fn lume_pow(self, e: Self) -> Self { self.pow(e as u32) } }
@@ -203,6 +203,41 @@ impl<'a> Iterator for LumeSplit<'a> {
     }
 }
 fn lume_pad<T: LumeShow>(x: T, width: i64) -> String { format!("{:>w$}", x.lume_str(), w = width.max(0) as usize) }
+/// Run-time failures speak Lume: no Rust file paths, no "attempt to".
+#[allow(dead_code)]
+fn lume_install_panic_hook() {
+    std::panic::set_hook(Box::new(|info| {
+        let raw = if let Some(a) = info.payload().downcast_ref::<LumeAssert>() {
+            a.0.clone()
+        } else if let Some(s) = info.payload().downcast_ref::<String>() {
+            s.clone()
+        } else if let Some(s) = info.payload().downcast_ref::<&str>() {
+            s.to_string()
+        } else {
+            String::from("the program stopped")
+        };
+        let msg = match raw.as_str() {
+            "attempt to add with overflow" => "Int overflow in `+`".to_string(),
+            "attempt to subtract with overflow" => "Int overflow in `-`".to_string(),
+            "attempt to multiply with overflow" => "Int overflow in `*`".to_string(),
+            "attempt to negate with overflow" => "Int overflow in `-`".to_string(),
+            "attempt to divide by zero" => "division by zero".to_string(),
+            "attempt to calculate the remainder with a divisor of zero" => "`%` by zero".to_string(),
+            "attempt to divide with overflow" => "Int overflow in `/`".to_string(),
+            m if m.starts_with("index out of bounds") => "list position out of range".to_string(),
+            m => m.to_string(),
+        };
+        eprintln!("error: {}", msg);
+        if std::env::var("LUME_BACKTRACE").is_ok() {
+            if let Some(loc) = info.location() {
+                eprintln!("  at {}:{} in the generated Rust", loc.file(), loc.line());
+            }
+        } else {
+            eprintln!("  (set LUME_BACKTRACE=1 to see where in the generated Rust)");
+        }
+    }));
+}
+
 fn lume_now() -> i64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
 }
@@ -1896,7 +1931,14 @@ impl Gen {
                 if let Some(Arg { value: lam, .. }) = args.last() {
                     if let ExprKind::Lambda { params, body } = &lam.kind {
                         let init = if args.len() > 1 { Some(self.ty_of(&args[0].value)) } else { None };
-                        return self.block_method_type(&rt, name, params, body, init);
+                        let t = self.block_method_type(&rt, name, params, body, init);
+                        // a chain that starts at a `shared var` is materialised inside the lock
+                        if let Type::Iter(el, _) = &t {
+                            if self.shared_root(recv).is_some() {
+                                return Type::List(el.clone());
+                            }
+                        }
+                        return t;
                     }
                 }
                 if let Type::Named(sn) = &rt {
@@ -2003,6 +2045,131 @@ impl Gen {
             }
             _ => Type::Unit,
         }
+    }
+
+    /// The rules of the binary operators: arithmetic needs two `Int`s or two
+    /// `Float`s, `+` also joins two `Str`s, ordering needs numbers or strings
+    /// of one kind, `==` needs one type on both sides, `and`/`or` need `Bool`.
+    fn check_operands(&mut self, op: &str, lt: &Type, rhs: &Expr, line: usize, col: usize) -> Result<()> {
+        let rt = self.ty_of(rhs).materialized();
+        if rt == Type::Unknown {
+            return Ok(());
+        }
+        let op = op.trim_end_matches('=').to_string();
+        let op = if op.is_empty() { "=".to_string() } else { op };
+        let op = op.as_str();
+        let numeric = |t: &Type| matches!(t, Type::Int | Type::Float);
+        let same = self.assignable(&rt, lt) && self.assignable(lt, &rt);
+        let ok = match op {
+            "and" | "or" => *lt == Type::Bool && rt == Type::Bool,
+            "+" => (numeric(lt) && same) || (*lt == Type::Str && rt == Type::Str),
+            "-" | "*" | "/" | "%" | "**" => numeric(lt) && same,
+            "<" | "<=" | ">" | ">=" => same && (numeric(lt) || *lt == Type::Str),
+            "==" | "!=" => same,
+            _ => true,
+        };
+        if ok {
+            return Ok(());
+        }
+        let mut err = LumeError::new(line, col, format!("`{}` cannot combine a `{}` and a `{}`", op, type_name(lt), type_name(&rt)));
+        let help = match (op, lt, &rt) {
+            ("+", Type::Str, _) | ("+", _, Type::Str) => Some(format!("to build a string, interpolate: `\"...#{{{}}}...\"`; `+` joins two strings or adds two numbers", snippet(rhs))),
+            (_, Type::Int, Type::Float) => Some("convert one side: `.to_float` on the Int, or `.round`/`.floor` on the Float".to_string()),
+            (_, Type::Float, Type::Int) => Some(format!("write `{}.to_float`, or a float literal like `2.0`", snippet(rhs))),
+            (_, Type::Option(inner), _) if self.assignable(inner, &rt) => Some("the left side may be absent: unwrap it with `match`, `?` or `.or(default)`".to_string()),
+            (_, _, Type::Option(inner)) if self.assignable(lt, inner) => Some("the right side may be absent: unwrap it with `match`, `?` or `.or(default)`".to_string()),
+            ("and", _, _) | ("or", _, _) => Some("both sides must be `Bool`; compare first, as in `x > 0 and y > 0`".to_string()),
+            _ => None,
+        };
+        if let Some(h) = help {
+            err = err.with_help(h);
+        }
+        Err(err)
+    }
+
+    /// Can a value of type `have` be used where `want` is expected?
+    /// Unknown on either side is trusted (inference did not reach it).
+    fn assignable(&self, have: &Type, want: &Type) -> bool {
+        match (have, want) {
+            (Type::Unknown, _) | (_, Type::Unknown) => true,
+            (Type::Future(_), _) | (_, Type::Future(_)) => true,
+            (Type::Shared(h, _), w) => self.assignable(h, w),
+            (h, Type::Shared(w, _)) => self.assignable(h, w),
+            (Type::Iter(a, _), Type::List(b)) | (Type::List(a), Type::Iter(b, _)) | (Type::List(a), Type::List(b)) | (Type::Iter(a, _), Type::Iter(b, _)) => self.assignable(a, b),
+            (Type::Option(a), Type::Option(b)) | (Type::Task(a), Type::Task(b)) => self.assignable(a, b),
+            (Type::Result(a, b), Type::Result(c, d)) | (Type::Map(a, b), Type::Map(c, d)) => self.assignable(a, c) && self.assignable(b, d),
+            (Type::Tuple(xs), Type::Tuple(ys)) => xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| self.assignable(x, y)),
+            (Type::Named(a), Type::Named(b)) if self.canon(a) == self.canon(b) => true,
+            (_, Type::Named(iface)) if self.is_interface(want) => {
+                // a value where an interface is wanted: it must have the methods
+                matches!(self.conformance(have, &self.canon(iface)), Conformance::Yes)
+            }
+            (Type::Named(_), _) | (_, Type::Named(_)) => false,
+            (a, b) => a == b,
+        }
+    }
+
+    /// The error for a value of the wrong type. `what` names the slot:
+    /// "`add` takes `b: Int`", "`User` field `age` is `Int`", "`f` returns `Str`".
+    fn type_mismatch(&self, e: &Expr, have: &Type, want: &Type, what: &str) -> LumeError {
+        let err = LumeError::new(e.line, e.col, format!("{}, but this is a `{}`", what, type_name(have)));
+        let help = match (have, want) {
+            (Type::Str, Type::Int) => Some("parse it: `.to_int` gives `Int or Error`, so `x.to_int?` or `x.to_int.or(0)`".to_string()),
+            (Type::Str, Type::Float) => Some("parse it: `.to_float` gives `Float or Error`".to_string()),
+            (Type::Int, Type::Str) | (Type::Float, Type::Str) | (Type::Bool, Type::Str) => Some(format!("write `\"#{{{}}}\"` or `{}.to_s`", snippet(e), snippet(e))),
+            (Type::Int, Type::Float) => Some(format!("write `{}.to_float`, or a float literal like `2.0`", snippet(e))),
+            (Type::Float, Type::Int) => Some(format!("write `{}.round`, `.floor` or `.ceil` to get an `Int`", snippet(e))),
+            (Type::Option(inner), w) if self.assignable(inner, w) => Some("this may be absent: unwrap it with `match`, `?` or `.or(default)`".to_string()),
+            (Type::Result(inner, _), w) if self.assignable(inner, w) => Some("this may be an error: `?` passes it up, `match` handles it, `.or(default)` ignores it".to_string()),
+            (Type::List(a), Type::List(b)) if **a != Type::Unknown && **b != Type::Unknown => Some(format!("the items are `{}`; `.map` them into `{}` first", type_name(a), type_name(b))),
+            _ => None,
+        };
+        match help {
+            Some(h) => err.with_help(h),
+            None => err,
+        }
+    }
+
+    /// Checks `e` against `want`; implied `Some`/`Ok` wrapping is decided by
+    /// the caller, so a plain `T` where `T?` is wanted passes here.
+    fn check_assign(&mut self, e: &Expr, want: &Type, what: &str) -> Result<()> {
+        let have = self.ty_of(e);
+        if let Type::Named(iface) = want {
+            // an interface slot: the detailed conformance error says what is missing
+            if self.is_interface(want) && have != Type::Unknown && !self.is_interface(&have.materialized()) {
+                let iface = iface.clone();
+                return self.require_conforms(&have.materialized(), &iface, e.line, e.col);
+            }
+        }
+        if self.assignable(&have, want) {
+            return Ok(());
+        }
+        // a bare value where an optional or a result is wanted is wrapped, not rejected
+        match want {
+            Type::Option(inner) if self.assignable(&have, inner) && !matches!(have, Type::Option(_)) => return Ok(()),
+            Type::Result(ok, _) if self.assignable(&have, ok) && !matches!(have, Type::Result(..)) => return Ok(()),
+            _ => {}
+        }
+        Err(self.type_mismatch(e, &have.materialized(), want, what))
+    }
+
+    /// `expr_arg` with the type check and the message naming the parameter.
+    fn expr_arg_named(&mut self, a: &Expr, t: &Type, callee: &str, pname: &str) -> Result<String> {
+        self.check_assign(a, t, &format!("`{}` takes `{}: {}`", callee, pname, type_name(t)))?;
+        let have = self.ty_of(a);
+        // a plain value where `T?` / `T or E` is expected: wrap it
+        match t {
+            Type::Option(inner) if !matches!(have, Type::Option(_) | Type::Unknown) && self.assignable(&have, inner) => {
+                let v = self.expr_owned(a)?;
+                return Ok(format!("Some({})", v));
+            }
+            Type::Result(ok, _) if !matches!(have, Type::Result(..) | Type::Unknown) && self.assignable(&have, ok) => {
+                let v = self.expr_owned(a)?;
+                return Ok(format!("Ok({})", v));
+            }
+            _ => {}
+        }
+        self.expr_arg(a, t)
     }
 
     /// Is `t` a value that must be awaited before use?
@@ -2666,6 +2833,9 @@ impl Gen {
         header.push_str(" {");
         self.line(&header);
         self.indent += 1;
+        if is_main && !self.test_mode {
+            self.line("lume_install_panic_hook();");
+        }
         self.push_scope();
         for p in &f.params {
             let pty = self.ct(&p.ty);
@@ -2759,6 +2929,15 @@ impl Gen {
             return Ok(text);
         }
         let ret = self.current_ret.clone();
+        if ret != Type::Unknown && ret != Type::Unit {
+            let what = if self.current_fn.starts_with("test ") { format!("{} produces nothing", self.current_fn) } else { format!("`{}` returns `{}`", self.current_fn, type_name(&ret)) };
+            // a bare error value in a `T or E` function is the implied `Err`
+            let have = self.ty_of(e).materialized();
+            let is_err_value = matches!(&ret, Type::Result(_, err_t) if have == **err_t);
+            if !is_err_value {
+                self.check_assign(e, &ret, &what)?;
+            }
+        }
         if self.is_interface(&ret) {
             let et = self.ty_of(e).materialized();
             return self.coerce(text, &et, &ret, e.line, e.col);
@@ -2869,6 +3048,8 @@ impl Gen {
             Stmt::Var { name, ty, value, line, col } => {
                 if let Some(t) = ty {
                     self.check_type(t, *line, *col)?;
+                    let ct = self.ct(t);
+                    self.check_assign(value, &ct, &format!("`{}` is declared `{}`", name, type_name(&ct)))?;
                 }
                 let inferred = self.ty_of(value).materialized();
                 self.no_future(&inferred, value)?;
@@ -2895,6 +3076,16 @@ impl Gen {
             Stmt::Bind { name, ty, value, line, col } => {
                 let vt0 = self.ty_of(value);
                 self.no_future(&vt0, value)?;
+                if let Some(t) = ty {
+                    let ct = self.ct(t);
+                    self.check_assign(value, &ct, &format!("`{}` is declared `{}`", name, type_name(&ct)))?;
+                } else if let Some(b) = self.lookup(name).cloned() {
+                    if b.mutable && leftmost_ident(value) != Some(name.as_str()) {
+                        self.check_assign(value, &b.ty, &format!("`{}` is a `{}`", name, type_name(&b.ty)))?;
+                    } else if b.mutable {
+                        self.check_assign(value, &b.ty, &format!("`{}` is a `{}`", name, type_name(&b.ty)))?;
+                    }
+                }
                 if self.spawn_captured.contains(name) && self.lookup(name).map(|b| !b.mutable).unwrap_or(false) {
                     return Err(LumeError::new(*line, *col, format!("`{}` inside `spawn:` is a copy, so changing it here would not be seen outside", name))
                         .with_help(format!("declare it `shared var {}` before the `spawn:` if tasks are meant to change it, or bind a new name here", name)));
@@ -2927,6 +3118,13 @@ impl Gen {
                         self.line(&format!("{} = {};", rust_name(name), v));
                     }
                     Some(b) => {
+                        let same_scope = self.scopes.last().map(|s| s.contains_key(name)).unwrap_or(false);
+                        if leftmost_ident(value) == Some(name.as_str()) && !same_scope {
+                            // `total = total + i` inside a loop or branch: a new binding here
+                            // would hide the outer one and vanish at the end of the block
+                            return Err(LumeError::new(*line, *col, format!("`{}` is declared on line {}, outside this block; a new `{}` here would hide it and be lost when the block ends", name, b.line, name))
+                                .with_help(format!("to change it from here, declare it `var {}` on line {}; to make a separate value, give it another name", name, b.line)));
+                        }
                         if leftmost_ident(value) == Some(name.as_str()) {
                             let v = self.expr_owned(value)?;
                             self.declare(name, false, false, vt, *line);
@@ -2959,6 +3157,12 @@ impl Gen {
                 }
             }
             Stmt::OpAssign { name, op, value, line, col } => {
+                if let Some(b) = self.lookup(name).cloned() {
+                    let bt = b.ty.materialized();
+                    if bt != Type::Unknown {
+                        self.check_operands(*op, &bt, value, *line, *col)?;
+                    }
+                }
                 let v = self.expr(value)?;
                 match self.lookup(name).cloned() {
                     Some(Binding { ty: Type::Shared(_, true), .. }) => {
@@ -3742,7 +3946,65 @@ impl Gen {
         r
     }
 
+    /// The value type of a block that is one branch of an `if`/`match`, or
+    /// None when the branch does not produce one (it returns, breaks, ...).
+    fn branch_value(&mut self, b: &Block) -> Option<(Type, usize, usize)> {
+        match b.stmts.last() {
+            Some(Stmt::Expr(e)) => {
+                let t = self.tail_type(b);
+                if t == Type::Unknown { None } else { Some((t, e.line, e.col)) }
+            }
+            _ => None,
+        }
+    }
+
+    /// Every branch that yields a value must agree with the first one.
+    fn check_branches(&mut self, what: &str, values: Vec<(Type, usize, usize)>) -> Result<()> {
+        // At a function's tail, a branch may give the plain value, the error, or `None`:
+        // each is the implied form of the declared result type.
+        let ret = self.current_ret.clone();
+        let at_tail = self.tail_of_fn && !self.in_block;
+        let normalize = |g: &Self, t: Type| -> Type {
+            if !at_tail {
+                return t;
+            }
+            match &ret {
+                Type::Result(ok, err) if g.assignable(&t, ok) || g.assignable(&t, err) || g.assignable(&t, &ret) => ret.clone(),
+                Type::Option(inner) if g.assignable(&t, inner) || g.assignable(&t, &ret) => ret.clone(),
+                _ => t,
+            }
+        };
+        let values: Vec<(Type, usize, usize)> = values.into_iter().map(|(t, l, c)| (normalize(self, t), l, c)).collect();
+        let mut first: Option<(Type, usize)> = None;
+        for (t, line, col) in values {
+            match &first {
+                None => first = Some((t, line)),
+                Some((ft, fl)) => {
+                    if !(self.assignable(&t, ft) || self.assignable(ft, &t)) {
+                        return Err(LumeError::new(line, col, format!("the branches of this `{}` give different types: `{}` on line {} and `{}` here", what, type_name(ft), fl, type_name(&t)))
+                            .with_help("a value chosen by a branch must have one type; convert one side, or return an `Error`/`None` instead"));
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn if_chain_inner(&mut self, branches: &[(Expr, Block)], else_block: Option<&Block>, want_value: bool) -> Result<String> {
+        if want_value {
+            let mut values = Vec::new();
+            for (_, body) in branches {
+                if let Some(v) = self.branch_value(body) {
+                    values.push(v);
+                }
+            }
+            if let Some(eb) = else_block {
+                if let Some(v) = self.branch_value(eb) {
+                    values.push(v);
+                }
+            }
+            self.check_branches("if", values)?;
+        }
         let saved = std::mem::take(&mut self.out);
         let base = self.indent;
         let mut first = true;
@@ -3783,6 +4045,19 @@ impl Gen {
         if st == Type::Unknown {
             return Err(LumeError::new(scrutinee.line, scrutinee.col, "cannot tell the type of the value being matched")
                 .with_help("bind it to a name with a known type first"));
+        }
+        if want_value {
+            let mut values = Vec::new();
+            for arm in arms {
+                self.push_scope();
+                let _ = self.declare_pattern_types(&arm.pat, &st);
+                let v = self.branch_value(&arm.body);
+                self.pop_scope();
+                if let Some(v) = v {
+                    values.push(v);
+                }
+            }
+            self.check_branches("match", values)?;
         }
         let uses_list_pat = arms.iter().any(|a| matches!(a.pat.kind, PatKind::List { .. }));
         let s = self.expr_val(scrutinee)?;
@@ -4244,8 +4519,9 @@ impl Gen {
         }
         let bound = self.bind_args(&format!("`{}.{}`", en, vname), &fields, args, e.line, e.col)?;
         let mut parts = Vec::new();
-        for (a, (fname, _)) in bound.iter().zip(&fields) {
-            parts.push(format!("{}: {}", rust_name(fname), self.expr_owned(a)?));
+        for (a, (fname, fty)) in bound.iter().zip(&fields) {
+            self.check_assign(a, fty, &format!("`{}.{}` takes `{}: {}`", en, vname, fname, type_name(fty)))?;
+            parts.push(format!("{}: {}", rust_name(fname), self.expr_owned_as(a, fty)?));
         }
         Ok(format!("{}::{} {{ {} }}", epath, vname, parts.join(", ")))
     }
@@ -4535,9 +4811,30 @@ impl Gen {
                         }
                     }
                 }
+                let lt = self.ty_of(lhs).materialized();
+                if lt != Type::Unknown {
+                    self.check_operands(op, &lt, rhs, e.line, e.col)?;
+                }
+                // two Int literals: the answer is known now, and so is a mistake
+                if let (Some(a), Some(b)) = (int_literal(lhs), int_literal(rhs)) {
+                    let folded = match *op {
+                        "+" => a.checked_add(b),
+                        "-" => a.checked_sub(b),
+                        "*" => a.checked_mul(b),
+                        "/" | "%" if b == 0 => {
+                            return Err(LumeError::new(e.line, e.col, format!("{} by zero", if *op == "/" { "division" } else { "`%`" })));
+                        }
+                        "/" => a.checked_div(b),
+                        "%" => a.checked_rem(b),
+                        _ => Some(0),
+                    };
+                    if folded.is_none() {
+                        return Err(LumeError::new(e.line, e.col, format!("`{} {} {}` overflows `Int`", a, op, b))
+                            .with_help("Int is 64-bit; the largest value is 9223372036854775807"));
+                    }
+                }
                 let mut l = self.expr_val(lhs)?;
                 let mut r = self.expr_val(rhs)?;
-                let lt = self.ty_of(lhs);
                 let lb = self.is_borrowed_ident(lhs);
                 let rb = self.is_borrowed_ident(rhs);
                 if lb && !rb {
@@ -4550,9 +4847,7 @@ impl Gen {
                     "and" => format!("({} && {})", l, r),
                     "or" => format!("({} || {})", l, r),
                     "**" => format!("({}).lume_pow({})", l, r),
-                    "+" if lt == Type::Str || self.ty_of(rhs) == Type::Str => {
-                        format!("format!(\"{{}}{{}}\", ({}).lume_str(), ({}).lume_str())", l, r)
-                    }
+                    "+" if lt == Type::Str => format!("format!(\"{{}}{{}}\", {}, {})", l, r),
                     _ => format!("({} {} {})", l, op, r),
                 }
             }
@@ -4564,9 +4859,10 @@ impl Gen {
                     let mut parts = Vec::new();
                     for (i, (a, (pname, t))) in bound.iter().zip(&sig.params).enumerate() {
                         if sig.var_params[i] {
+                            self.check_assign(a, t, &format!("`{}` takes `var {}: {}`", name, pname, type_name(t)))?;
                             parts.push(self.expr_var_arg(a, pname, name)?);
                         } else {
-                            parts.push(self.expr_arg(a, t)?);
+                            parts.push(self.expr_arg_named(a, t, name, pname)?);
                         }
                     }
                     let callee = if self.paths.contains_key(name) { self.path_of(name) } else { rust_name(name) };
@@ -4575,6 +4871,7 @@ impl Gen {
                     let bound = self.bind_args(&format!("`{}`", name), &info.fields, args, e.line, e.col)?;
                     let mut parts = Vec::new();
                     for (a, (fname, fty)) in bound.iter().zip(&info.fields) {
+                        self.check_assign(a, fty, &format!("`{}` field `{}` is `{}`", name, fname, type_name(fty)))?;
                         parts.push(format!("{}: {}", rust_name(fname), self.expr_owned_as(a, fty)?));
                     }
                     format!("{} {{ {} }}", self.path_of(name), parts.join(", "))
@@ -4768,11 +5065,13 @@ impl Gen {
                     if let Some(m) = self.methods_of(tname).and_then(|m| m.get(name).cloned()) {
                         let bound = self.bind_args(&format!("`{}.{}`", tname, name), &m.params, args, e.line, e.col)?;
                         let mut parts = Vec::new();
+                        let callee = format!("{}.{}", tname, name);
                         for (i, (a, (pname, t))) in bound.iter().zip(&m.params).enumerate() {
                             if m.var_params[i] {
+                                self.check_assign(a, t, &format!("`{}` takes `var {}: {}`", callee, pname, type_name(t)))?;
                                 parts.push(self.expr_var_arg(a, pname, name)?);
                             } else {
-                                parts.push(self.expr_arg(a, t)?);
+                                parts.push(self.expr_arg_named(a, t, &callee, pname)?);
                             }
                         }
                         if m.self_kind == SelfKind::Mutate {
@@ -4788,8 +5087,9 @@ impl Gen {
                     if let Some(m) = self.ext_methods.get(&key).and_then(|m| m.get(name)).cloned() {
                         let bound = self.bind_args(&format!("`{}.{}`", type_name(&rt), name), &m.params, args, e.line, e.col)?;
                         let mut parts = Vec::new();
-                        for (a, (_, t)) in bound.iter().zip(&m.params) {
-                            parts.push(self.expr_arg(a, t)?);
+                        let callee = format!("{}.{}", type_name(&rt), name);
+                        for (a, (pname, t)) in bound.iter().zip(&m.params) {
+                            parts.push(self.expr_arg_named(a, t, &callee, pname)?);
                         }
                         return Ok(format!("({}).{}({})", r, rust_name(name), parts.join(", ")));
                     }
@@ -4815,8 +5115,18 @@ impl Gen {
                             .with_help("unwrap it first: `?` to pass the error up, `match` on `Ok(x)`/`Error(e)`, or `.or(default)`"));
                     }
                 }
-                if rt != Type::Unknown && builtin_method_type(&rt, name) == Type::Unknown && !is_builtin_name(name) {
-                    return Err(LumeError::new(e.line, e.col, format!("`{}` values have no method `{}`", type_name(&rt), name)));
+                if matches!(&rt, Type::List(el) if **el == Type::Unknown) && matches!(recv.kind, ExprKind::List(ref items) if items.is_empty()) && name != "len" && name != "empty?" {
+                    return Err(LumeError::new(recv.line, recv.col, format!("cannot tell what this empty list holds, so `.{}` has no type", name))
+                        .with_help("bind it with a type first: `xs: [Int] = []`"));
+                }
+                if rt != Type::Unknown && !builtin_applies(&rt, name) {
+                    let err = LumeError::new(e.line, e.col, format!("`{}` values have no method `{}`", type_name(&rt), name));
+                    let names = builtins_for(&rt);
+                    return Err(match self.suggest_from(name, names.iter().map(|s| s.to_string())) {
+                        Some(sug) => err.with_help(format!("did you mean `{}`?", sug)),
+                        None if names.is_empty() => err,
+                        None => err.with_help(format!("`{}` has: {}", type_name(&rt), names.join(", "))),
+                    });
                 }
                 if args.iter().any(|a| a.name.is_some()) {
                     return Err(LumeError::new(e.line, e.col, format!("built-in method `{}` does not take keyword arguments", name)));
@@ -4929,7 +5239,11 @@ impl Gen {
                     _ => format!("({}).contains(&({}))", recv, args[0]),
                 }
             }
+            "reverse" if *rt == Type::Str => { need(0)?; format!("({}).chars().rev().collect::<String>()", recv) }
             "reverse" => { need(0)?; format!("{{ let mut v = ({}).clone(); v.reverse(); v }}", recv) }
+            "slice" => { need(2)?; format!("({}).chars().skip(({}).max(0) as usize).take(({}).max(0) as usize).collect::<String>()", recv, args[0], args[1]) }
+            "replace" => { need(2)?; format!("({}).replace(&*{}, &*{})", recv, args[0], args[1]) }
+            "repeat" => { need(1)?; format!("({}).repeat(({}).max(0) as usize)", recv, args[0]) }
             "sort" | "max" | "min" => {
                 need(0)?;
                 let partial = match rt {
@@ -5019,6 +5333,44 @@ impl Gen {
     }
 }
 
+/// Which built-in methods a receiver type has. The one source for
+/// acceptance and for the "`Str` has: ..." help.
+fn builtins_for(recv: &Type) -> Vec<&'static str> {
+    let common = ["to_s", "to_str"];
+    let mut v: Vec<&str> = match recv {
+        Type::Str => vec![
+            "len", "empty?", "to_int", "to_float", "upcase", "downcase", "trim", "lines", "split", "chars", "contains?", "starts_with?",
+            "ends_with?", "pad", "reverse", "slice", "replace", "repeat",
+        ],
+        Type::List(_) => vec![
+            "len", "empty?", "any?", "all?", "first", "last", "max", "min", "sum", "sort", "sort_by", "reverse", "push", "pop", "contains?",
+            "join", "map", "filter", "reject", "each", "count", "find", "take", "skip", "take_while", "fold", "min_by", "max_by", "enumerate",
+            "to_list",
+        ],
+        Type::Iter(..) => vec![
+            "len", "empty?", "any?", "all?", "first", "last", "max", "min", "sum", "sort", "sort_by", "reverse", "contains?", "join", "map",
+            "filter", "reject", "each", "count", "find", "take", "skip", "take_while", "fold", "min_by", "max_by", "enumerate", "to_list",
+        ],
+        Type::Map(..) => vec!["len", "empty?", "any?", "contains?", "keys", "values", "to_list", "remove", "get"],
+        Type::Option(_) => vec!["or", "some?", "none?", "or_error"],
+        Type::Result(..) => vec!["or", "ok?", "error?", "error"],
+        Type::Int => vec!["to_float", "to_int", "abs", "pad"],
+        Type::Float => vec!["to_int", "to_float", "sqrt", "floor", "ceil", "round", "abs", "pad"],
+        Type::Bool => vec!["pad"],
+        _ => vec![],
+    };
+    v.extend(common);
+    v
+}
+
+fn builtin_applies(recv: &Type, name: &str) -> bool {
+    match recv {
+        // user types, interfaces and crate types are checked elsewhere
+        Type::Named(_) | Type::Unknown | Type::Shared(..) | Type::Task(_) | Type::Future(_) | Type::Tuple(_) | Type::Unit => true,
+        _ => builtins_for(recv).contains(&name),
+    }
+}
+
 fn is_builtin_name(name: &str) -> bool {
     matches!(
         name,
@@ -5027,7 +5379,7 @@ fn is_builtin_name(name: &str) -> bool {
             | "contains?" | "reverse" | "sort" | "max" | "min" | "lines" | "split" | "join"
             | "starts_with?" | "ends_with?" | "chars" | "take" | "skip" | "to_list" | "enumerate"
             | "or" | "some?" | "none?" | "ok?" | "error?" | "or_error" | "error"
-            | "pad" | "keys" | "values" | "remove" | "get"
+            | "pad" | "keys" | "values" | "remove" | "get" | "slice" | "replace" | "repeat"
     )
 }
 
@@ -5088,7 +5440,7 @@ fn builtin_method_type(recv: &Type, name: &str) -> Type {
             Type::Result(_, e) => Type::Option(e.clone()),
             _ => Type::Unknown,
         },
-        "to_str" | "to_s" | "upcase" | "downcase" | "trim" | "join" => Type::Str,
+        "to_str" | "to_s" | "upcase" | "downcase" | "trim" | "join" | "slice" | "replace" | "repeat" => Type::Str,
         "to_float" => if *recv == Type::Str { Type::Result(Box::new(Type::Float), Box::new(Type::Named("Error".into()))) } else { Type::Float },
         "sqrt" | "floor" | "ceil" | "round" => Type::Float,
         "abs" => recv.clone(),
@@ -5162,6 +5514,27 @@ fn describe_value(e: &Expr) -> String {
         ExprKind::MapLit(pairs) if pairs.is_empty() => "{}".into(),
         ExprKind::None => "None".into(),
         _ => "this value".into(),
+    }
+}
+
+/// A short spelling of an expression for help text: `x`, `n + 1`, `f(...)`, `x.name`.
+fn snippet(e: &Expr) -> String {
+    match &e.kind {
+        ExprKind::Ident(n) => n.clone(),
+        ExprKind::Int(v) => v.to_string(),
+        ExprKind::Float(v) => format!("{:?}", v),
+        ExprKind::Bool(b) => b.to_string(),
+        ExprKind::Str(_) => "\"...\"".into(),
+        ExprKind::Call { name, args } => if args.is_empty() { format!("{}()", name) } else { format!("{}(...)", name) },
+        ExprKind::Method { recv, name, args } => {
+            let r = snippet(recv);
+            if args.is_empty() { format!("{}.{}", r, name) } else { format!("{}.{}(...)", r, name) }
+        }
+        ExprKind::Binary { op, lhs, rhs } => format!("{} {} {}", snippet(lhs), op, snippet(rhs)),
+        ExprKind::SelfRef => "self".into(),
+        ExprKind::Index { recv, .. } => format!("{}[...]", snippet(recv)),
+        ExprKind::TupleIndex { recv, index } => format!("{}.{}", snippet(recv), index),
+        _ => "x".into(),
     }
 }
 
@@ -5308,5 +5681,14 @@ fn types_compatible(have: &Type, want: &Type) -> bool {
         (Type::List(a), Type::List(b)) | (Type::Option(a), Type::Option(b)) => types_compatible(a, b),
         (Type::Iter(a, _), Type::List(b)) => types_compatible(a, b),
         (a, b) => a == b,
+    }
+}
+
+/// The value of an `Int` literal, possibly negated.
+fn int_literal(e: &Expr) -> Option<i64> {
+    match &e.kind {
+        ExprKind::Int(v) => Some(*v),
+        ExprKind::Unary { op: "-", expr } => int_literal(expr).and_then(|v| v.checked_neg()),
+        _ => None,
     }
 }

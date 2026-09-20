@@ -1,0 +1,15 @@
+warning: `things` holds values of different types behind `Priced`, so calls on its items go through a pointer
+  --> corpus/p4_inventory.lume:52:3
+   |
+52 |   things: [Priced] = [Item("pin", 0.01, 1000), Service("install", 2.0, 80.0)]
+   |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+total value: 50.3
+low: [nut, gear]
+gear x2
+bolt x110
+Some(Item(name: bolt, unit: 0.25, qty: 100))
+pin x1000 @ 10.0
+install @ 160.0
+170.0
+exit: 0

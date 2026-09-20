@@ -1,0 +1,7 @@
+error: `a` is immutable, but `deposit` changes it
+  --> corpus/edge/g04_struct_in_map_update.lume:10:17
+   |
+10 |     Some(a) -> a.deposit(5)
+   |                 ^
+  help: declare it with `var a = ...` on line 10
+exit: 1

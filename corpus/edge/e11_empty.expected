@@ -1,0 +1,7 @@
+error: cannot tell what this empty list holds, so `.first` has no type
+  --> corpus/edge/e11_empty.lume:8:8
+  |
+8 |   puts [].first
+  |        ^
+  help: bind it with a type first: `xs: [Int] = []`
+exit: 1
