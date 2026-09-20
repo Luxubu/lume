@@ -1,0 +1,32 @@
+# New Str methods, in struct methods and chained.
+struct Word:
+  text: Str
+
+  def shout -> Str = text.upcase.pad_right(8) + "!"
+  def title -> Str = text.capitalize
+  def pos(c: Str) -> Int = text.index_of(c).or(-1)
+
+def main:
+  w = Word("hello")
+  puts w.shout
+  puts w.title
+  puts w.pos("l")
+  puts w.pos("z")
+  puts "[#{"ab".capitalize.pad_right(4)}]"
+  words = "  the quick   brown fox ".split.to_list
+  puts words
+  puts words.map(_.capitalize).join(" ")
+  puts words.map(_.len).to_list
+  puts "".capitalize.empty?
+  puts "".split.to_list.len
+  puts "a1 ".chars.map(_.digit?).to_list
+  puts "a1 ".chars.map(_.alpha?).to_list
+  puts "a1 ".chars.map(_.space?).to_list
+  puts "hELLO wORLD".capitalize
+  puts "Hello World".index_of("World")
+  puts "abc".pad_right(2)
+  puts "x".pad_right(3).len
+  puts "".digit?
+  puts "".alpha?
+  puts "".space?
+  puts "über".capitalize

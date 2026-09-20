@@ -1,0 +1,22 @@
+# Word frequency: split with no arg, map writes in inline blocks, group_by, zip.
+def main:
+  text = "the cat and the hat and the bat sat"
+  words = text.split.to_list
+  var freq: {Str: Int} = {}
+  words.each { |w| freq[w] = freq[w].or(0) + 1 }
+  puts freq
+  puts freq.filter { |k, v| v > 1 }
+  puts freq.keys.sort_by { |k| -freq[k].or(0) }.take(3).to_list
+  lengths = words.group_by(_.len)
+  puts lengths.keys
+  puts lengths.map_values { |ws| ws.uniq.len }
+  puts words.uniq.map(_.capitalize).join(" ")
+  puts words.index_of("hat")
+  puts words.map(_.len).max.map { |m| m.pow(2) }
+  by_first = words.uniq.group_by { |w| w.slice(0, 1) }
+  puts by_first.reject { |k, ws| ws.len > 1 }.keys
+  puts words.zip(words.skip(1).to_list).filter { |a, b| a == b }.to_list.len
+  var chars = 0
+  words.each { |w| chars += w.len if w.alpha? }
+  puts chars
+  puts freq.reject { |k, v| v.odd? }.keys

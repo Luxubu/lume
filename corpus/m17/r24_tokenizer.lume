@@ -1,0 +1,42 @@
+# Tokenizer: digit?/alpha? in the scanner, `|` on strings and Word(w) | Sym(w) bindings.
+enum Tok:
+  Num(v: Int)
+  Word(s: Str)
+  Sym(c: Str)
+
+def tokenize(src: Str) -> [Tok]:
+  var out: [Tok] = []
+  var cur = ""
+  for ch in (src + " ").chars:
+    if ch.digit? or ch.alpha?:
+      cur = cur + ch
+    else:
+      if not cur.empty?:
+        out.push(if cur.digit?: Num(cur.to_int!) else: Word(cur))
+        cur = ""
+      match ch:
+        " " | "\t"                          -> cur = ""
+        "+" | "-" | "*" | "/" | "(" | ")"   -> out.push(Sym(ch))
+        _                                   -> out.push(Word("?"))
+  out
+
+def show(t: Tok) -> Str = match t:
+  Num(v) if v < 10   -> "d#{v}"
+  Num(v)             -> "n#{v}"
+  Word("let" | "in") -> "kw"
+  Word(w) | Sym(w)   -> w
+
+def kind(t: Tok) -> Str = match t:
+  Num(_)  -> "num"
+  Word(_) -> "word"
+  Sym(_)  -> "sym"
+
+def main:
+  toks = tokenize("let x = 42 + (y*3)")
+  puts toks.map(show).join(" ")
+  g = toks.group_by { |t| kind(t) }
+  for k in ["word", "num", "sym", "other"]:
+    puts "#{k}=#{g[k].or([]).len}"
+  puts toks.filter { |t| kind(t) == "num" }.map(show).to_list
+  puts toks.map(kind).to_list.uniq
+  puts toks.map(show).to_list.index_of("kw")

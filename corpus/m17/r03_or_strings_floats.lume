@@ -1,0 +1,20 @@
+# `|` with string literals and float literals.
+def kind(w: Str) -> Str:
+  match w:
+    "if" | "else" | "while" -> "keyword"
+    "+" | "-" | "*" | "/"   -> "operator"
+    ""                      -> "empty"
+    _                       -> "ident"
+
+def temp(t: Float) -> Str:
+  match t:
+    0.0 | 100.0  -> "boundary"
+    _ if t < 0.0 -> "freezing"
+    _            -> "liquid"
+
+def main:
+  for w in ["if", "*", "", "foo", "while"]:
+    puts "#{w}: #{kind(w)}"
+  for t in [0.0, 50.0, -4.5, 100.0]:
+    puts "#{t} #{temp(t)}"
+  puts ["x", "+", "y", "-"].filter { |w| kind(w) == "operator" }.to_list.len

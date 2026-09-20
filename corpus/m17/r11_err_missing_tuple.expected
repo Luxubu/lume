@@ -1,0 +1,7 @@
+error: this `match` on `(Light, Bool)` does not cover: (Green, false)
+  --> corpus/m17/r11_err_missing_tuple.lume:7:3
+  |
+7 |   match (l, b):
+  |   ^
+  help: add an arm for (Green, false), or a final `_ ->` arm
+exit: 1

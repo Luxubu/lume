@@ -212,7 +212,11 @@ fn lume_pad<T: LumeShow>(x: T, width: i64) -> String { format!("{:>w$}", x.lume_
 fn lume_pad_right<T: LumeShow>(x: T, width: i64) -> String { format!("{:<w$}", x.lume_str(), w = width.max(0) as usize) }
 fn lume_capitalize(s: &str) -> String {
     let mut c = s.chars();
-    match c.next() { Some(f) => f.to_uppercase().collect::<String>() + c.as_str(), None => String::new() }
+    match c.next() { Some(f) => f.to_uppercase().collect::<String>() + &c.as_str().to_lowercase(), None => String::new() }
+}
+fn lume_clamp<T: PartialOrd + LumeShow + Copy>(x: T, lo: T, hi: T) -> T {
+    if lo > hi { panic!("clamp: the low bound {} is above the high bound {}", lo.lume_str(), hi.lume_str()); }
+    if x < lo { lo } else if x > hi { hi } else { x }
 }
 /// Run-time failures speak Lume: no Rust file paths, no "attempt to".
 #[allow(dead_code)]
@@ -1785,7 +1789,10 @@ impl Gen {
             ExprKind::Method { recv, name, args } => (recv, name, args),
             _ => return None,
         };
-        const BLOCK_METHODS: &[&str] = &["map", "filter", "reject", "each", "sum", "count", "any?", "all?", "find", "take_while", "sort_by", "min_by", "max_by"];
+        const BLOCK_METHODS: &[&str] = &[
+            "map", "filter", "reject", "each", "sum", "count", "any?", "all?", "find", "take_while", "sort_by", "min_by", "max_by", "group_by", "partition", "flat_map",
+            "map_values",
+        ];
         if !BLOCK_METHODS.contains(&name.as_str()) || args.len() != 1 || args[0].name.is_some() {
             return None;
         }
@@ -4101,6 +4108,7 @@ impl Gen {
                 let v = (**v).clone();
                 let r = self.expr(recv)?;
                 let f = self.gen_lambda(params, body, &v, true, true, true, None, lam)?;
+                let f = annotate_closure(&f, &format!("&{}", self.rt(&v)));
                 return Ok(format!("{{ let lume_f = {}; let mut lume_m = LumeMap::new(); for (k, v) in ({}).iter() {{ lume_m.insert(k.clone(), lume_f(v)); }} lume_m }}", f, r));
             }
             _ => {}
@@ -4688,12 +4696,23 @@ impl Gen {
         }
     }
 
-    fn check_exhaustive(&self, t: &Type, arms: &[MatchArm], e: &Expr) -> Result<()> {
-        // Rows of the pattern matrix: the unguarded arms, `|` expanded.
+    fn check_exhaustive(&mut self, t: &Type, arms: &[MatchArm], e: &Expr) -> Result<()> {
+        // Rows of the pattern matrix: the unguarded arms, `|` expanded. An arm
+        // that adds nothing to the rows above it can never run.
         let mut rows: Vec<Vec<Pat>> = Vec::new();
-        for a in arms.iter().filter(|a| a.guard.is_none()) {
-            for p in self.flat_pats(&a.pat, t) {
-                rows.push(vec![p]);
+        for a in arms {
+            let pats = self.flat_pats(&a.pat, t);
+            let reachable = pats.iter().any(|p| self.useful(&rows, std::slice::from_ref(p), std::slice::from_ref(t)).is_some());
+            if !reachable && !rows.is_empty() {
+                self.warnings.push(
+                    LumeError::new(a.line, a.col, "this arm can never match: the arms above it already cover these values")
+                        .with_help("remove it, or move it above the arm that shadows it"),
+                );
+            }
+            if a.guard.is_none() {
+                for p in pats {
+                    rows.push(vec![p]);
+                }
             }
         }
         // Each witness found becomes a row, so the next search finds a different one.
@@ -5290,11 +5309,14 @@ impl Gen {
                 let mut r = self.expr_val(rhs)?;
                 let lb = self.is_borrowed_ident(lhs);
                 let rb = self.is_borrowed_ident(rhs);
-                if lb && !rb {
-                    l = format!("(*{})", l);
-                }
-                if rb && !lb {
-                    r = format!("(*{})", r);
+                // strings are formatted, never dereferenced (`&str` has no `*`)
+                if lt != Type::Str {
+                    if lb && !rb {
+                        l = format!("(*{})", l);
+                    }
+                    if rb && !lb {
+                        r = format!("(*{})", r);
+                    }
                 }
                 match *op {
                     "and" => format!("({} && {})", l, r),
@@ -5700,7 +5722,7 @@ impl Gen {
             "alpha?" => { need(0)?; format!("{{ let lume_s = &({}); !lume_s.is_empty() && lume_s.chars().all(|c| c.is_alphabetic()) }}", recv) }
             "space?" => { need(0)?; format!("{{ let lume_s = &({}); !lume_s.is_empty() && lume_s.chars().all(|c| c.is_whitespace()) }}", recv) }
             "max" | "min" if matches!(rt, Type::Int | Type::Float) => { need(1)?; format!("({}).{}({})", recv, name, args[0]) }
-            "clamp" => { need(2)?; format!("({}).clamp({}, {})", recv, args[0], args[1]) }
+            "clamp" => { need(2)?; format!("lume_clamp({}, {}, {})", recv, args[0], args[1]) }
             "pow" => {
                 need(1)?;
                 if *rt == Type::Float { format!("({}).powf({})", recv, args[0]) } else { format!("({}).pow(({}) as u32)", recv, args[0]) }

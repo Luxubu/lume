@@ -1,0 +1,26 @@
+# merge / filter / reject / map_values / each on maps.
+def main:
+  stock = {"apple": 3, "pear": 0, "fig": 7}
+  prices = {"apple": 0.5, "fig": 2.0, "kiwi": 0.75}
+  merged = stock.merge({"pear": 5, "plum": 1})
+  puts merged
+  puts stock
+  in_stock = stock.filter { |k, v| v > 0 }
+  puts in_stock.keys
+  puts stock.reject { |k, v| k.len > 3 }
+  puts stock.map_values { |v| v * 2 }.values
+  doubled = stock.map_values { |v| v * 2 }
+  var total = 0
+  doubled.each { |k, v| total += v }
+  puts total
+  var copy: {Str: Int} = {}
+  stock.each { |k, v| copy[k] = v }
+  puts copy.len == stock.len
+  puts prices.filter { |k, v| stock.contains?(k) }.map_values { |p| p * 100.0 }
+  puts stock.merge(prices.map_values { |p| p.to_int }).len
+  puts stock.filter { |k, v| v > 100 }.len
+  puts stock.map_values { |v| "#{v} left" }.get("fig")
+  names = stock.filter { |k, v| v.odd? }.keys.map(_.upcase).to_list
+  puts names
+  puts stock.merge(stock).len
+  puts stock.map_values { |v| v.clamp(1, 5) }.reject { |k, v| v == 5 }

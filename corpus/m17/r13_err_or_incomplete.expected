@@ -1,0 +1,7 @@
+error: this `match` on `Int?` does not cover: Some(_)
+  --> corpus/m17/r13_err_or_incomplete.lume:3:3
+  |
+3 |   match o:
+  |   ^
+  help: add an arm for Some(_), or a final `_ ->` arm
+exit: 1

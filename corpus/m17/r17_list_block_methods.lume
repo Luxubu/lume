@@ -1,0 +1,21 @@
+# group_by / partition / flat_map on a list of structs.
+struct Student:
+  name: Str
+  grade: Int
+  house: Str
+
+def main:
+  students = [Student("ann", 91, "red"), Student("bo", 78, "blue"), Student("cy", 85, "red"), Student("di", 62, "blue"), Student("ed", 99, "green")]
+  by_house = students.group_by(_.house)
+  for h in ["red", "blue", "green", "none"]:
+    puts "#{h}: #{by_house[h].or([]).map(_.name).to_list}"
+  parts = students.partition(_.grade >= 80)
+  puts parts.0.map(_.name).to_list
+  puts parts.1.len
+  puts students.flat_map { |s| [s.name, s.grade.pad(3)] }
+  puts students.map(_.grade).group_by { |g| g / 10 * 10 }.keys
+  puts students.map(_.grade).partition(_.even?)
+  puts students.flat_map { |s| s.name.chars.to_list }.uniq.len
+  puts students.group_by { |s| s.grade >= 90 }.map_values { |ss| ss.map(_.name).join("+") }
+  puts students.map(_.grade).to_list.partition(_ > 1000).0
+  puts students.flat_map { |s| s.house.chars.take(1).to_list }.uniq

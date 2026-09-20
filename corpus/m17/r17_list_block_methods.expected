@@ -1,0 +1,14 @@
+red: [ann, cy]
+blue: [bo, di]
+green: [ed]
+none: []
+[ann, cy, ed]
+2
+[ann,  91, bo,  78, cy,  85, di,  62, ed,  99]
+[90, 70, 80, 60]
+([78, 62], [91, 85, 99])
+9
+{true: ann+ed, false: bo+cy+di}
+[]
+[r, b, g]
+exit: 0

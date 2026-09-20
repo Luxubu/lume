@@ -1,0 +1,22 @@
+# List patterns of Bool and a recursive walk over [x, y, ..rest].
+def describe(xs: [Bool]) -> Str:
+  match xs:
+    []                 -> "none"
+    [true]             -> "one on"
+    [false]            -> "one off"
+    [true, ..rest]     -> "on then #{rest.len}"
+    [false, _, ..rest] -> "off then #{rest.len + 1}"
+
+def sum_pairs(xs: [Int]) -> Int:
+  match xs:
+    []             -> 0
+    [x]            -> x
+    [x, y, ..rest] -> x + y + sum_pairs(rest)
+
+def main:
+  puts describe([])
+  puts describe([true])
+  puts describe([false, true, true])
+  puts describe([true, false])
+  puts sum_pairs([1, 2, 3, 4, 5])
+  puts sum_pairs([])

@@ -1,0 +1,8 @@
+# NOT exhaustive: Some(1 | 2) and None do not cover Some(3).
+def f(o: Int?) -> Str:
+  match o:
+    Some(1 | 2) -> "low"
+    None        -> "none"
+
+def main:
+  puts f(Some(3))

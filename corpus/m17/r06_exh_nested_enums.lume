@@ -1,0 +1,26 @@
+# Exhaustive through two levels of enums, with `|` completing the sets.
+enum Inner:
+  A(n: Int)
+  B
+  C
+
+enum Outer:
+  Wrap(i: Inner)
+  Pair(x: Inner, y: Inner)
+  Empty
+
+def d(o: Outer) -> Str:
+  match o:
+    Wrap(A(n)) if n > 0 -> "pos"
+    Wrap(A(_))          -> "nonpos"
+    Wrap(B | C)         -> "bc"
+    Pair(A(_), _)       -> "pair a"
+    Pair(B | C, A(_))   -> "pair ba"
+    Pair(B, B | C)      -> "pair bb"
+    Pair(C, B)          -> "pair cb"
+    Pair(C, C)          -> "pair cc"
+    Empty               -> "empty"
+
+def main:
+  for o in [Wrap(A(3)), Wrap(A(-1)), Wrap(C), Pair(A(1), B), Pair(B, A(0)), Pair(B, C), Pair(C, B), Pair(C, C), Empty]:
+    puts d(o)

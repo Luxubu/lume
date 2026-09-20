@@ -1,0 +1,29 @@
+# Methods on unusual receivers: call results, xs[i], fields, chains of chains.
+struct Bag:
+  items: [Int]
+  names: [Str]
+
+  def top -> Int? = items.max
+  def desc -> Str = names.map(_.capitalize).join("/")
+
+def make -> [Int] = [5, 3, 9, 3]
+
+def main:
+  b = Bag([4, 8, 15, 16, 23, 42], ["lost", "island"])
+  puts make().uniq
+  puts make().max.map(_.pow(2))
+  puts b.items[2].or(0).max(b.items[3].or(0)).clamp(0, 10)
+  puts b.names[0].or("").capitalize.pad_right(6).len
+  puts b.items.filter(_.even?).to_list.avg
+  puts b.top.map { |t| t.even? }
+  puts b.desc
+  puts b.desc.split("/").to_list.index_of("Island")
+  puts b.items.zip(make()).map { |a, c| a.min(c) }.to_list
+  puts b.items.take(3).to_list.zip(b.names)
+  puts [b.items, make()].flatten.uniq.len
+  puts b.items.skip(4).to_list.flat_map { |x| [x, x.clamp(0, 30)] }
+  puts make().index_of(3).map(_ + 1).or(0)
+  puts "#{b.items.first.map(_.odd?).or(false)} #{make().avg.max(4.5)}"
+  puts b.items.group_by(_.odd?)
+  puts b.items.partition(_ > 10).0.avg
+  puts make().sort.uniq.zip(make()).len

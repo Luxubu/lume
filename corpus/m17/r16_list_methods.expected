@@ -1,0 +1,15 @@
+[tea: 3.5, milk: 1.25, jam: 4.0]
+8.75
+2.9166666666666665
+true
+false
+tea: 3.5 | jam: 4.0
+Some(1)
+[bread, tea, jam]
+3
+2.0
+[]
+[]
+None
+0.0
+exit: 0

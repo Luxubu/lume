@@ -1,0 +1,38 @@
+# `T?` of an enum, `T or E` of a Bool, and an optional tuple.
+enum Level:
+  Low
+  High
+
+def a(o: Level?) -> Str:
+  match o:
+    Some(Low)  -> "low"
+    Some(High) -> "high"
+    None       -> "none"
+
+def b(r: Bool or Error) -> Str:
+  match r:
+    Ok(true)  -> "yes"
+    Ok(false) -> "no"
+    Error(e)  -> "err: #{e.message}"
+
+def c(o: (Level, Bool)?) -> Str:
+  match o:
+    Some((Low, _)) | None -> "meh"
+    Some((High, true))    -> "yes!"
+    Some((High, false))   -> "hm"
+
+def parse(s: Str) -> Bool or Error:
+  match s:
+    "y" | "yes" -> true
+    "n" | "no"  -> false
+    _           -> Error("bad #{s}")
+
+def main:
+  puts a(Some(High))
+  puts a(None)
+  puts b(parse("yes"))
+  puts b(parse("n"))
+  puts b(parse("?"))
+  puts c(Some((High, true)))
+  puts c(Some((Low, false)))
+  puts c(None)

@@ -1,0 +1,30 @@
+# Grades: ranges in match, group_by with a `do` block over a map, zip + partition.
+struct Grade:
+  student: Str
+  score: Int
+
+def letter(s: Int) -> Str:
+  match s:
+    90..100      -> "A"
+    80..89       -> "B"
+    70..79       -> "C"
+    60..69       -> "D"
+    _ if s > 100 -> "?"
+    _            -> "F"
+
+def main:
+  grades = [Grade("ann", 93), Grade("bo", 71), Grade("cy", 88), Grade("ann", 79), Grade("bo", 65), Grade("cy", 100)]
+  by = grades.group_by(_.student)
+  by.each do |name, gs|
+    scores = gs.map(_.score).to_list
+    puts "#{name.capitalize.pad_right(5)}avg=#{scores.avg} best=#{scores.max.or(0)} letters=#{scores.map(letter).to_list.join("")}"
+  letters = grades.map { |g| letter(g.score) }.to_list
+  counts = letters.group_by { |l| l }.map_values { |ls| ls.len }
+  puts counts
+  puts letters.uniq.sort
+  top = grades.filter { |g| letter(g.score) == "A" }.map(_.student).to_list.uniq
+  puts top
+  puts grades.map(_.score).partition { |s| s >= 80 }
+  curve = grades.map { |g| (g.score + 5).clamp(0, 100) }.to_list
+  puts curve.zip(grades.map(_.score).to_list).filter { |a, b| a == b }.to_list
+  puts curve.zip(grades.map(_.score).to_list).map { |a, b| a - b }.to_list

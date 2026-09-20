@@ -1,0 +1,26 @@
+# Alternatives that bind the same name in each branch, with and without guards.
+enum Shape:
+  Circle(r: Float)
+  Square(s: Float)
+  Rect(w: Float, h: Float)
+  Dot
+
+def side(s: Shape) -> Float:
+  match s:
+    Circle(x) | Square(x) -> x
+    Rect(w, _)            -> w
+    Dot                   -> 0.0
+
+def describe(s: Shape) -> Str:
+  match s:
+    Circle(x) | Square(x) if x > 10.0 -> "large #{x}"
+    Circle(x) | Square(x)             -> "small #{x}"
+    Rect(a, b) if a == b              -> "square rect #{a}"
+    Rect(a, b)                        -> "rect #{a}x#{b}"
+    Dot                               -> "dot"
+
+def main:
+  shapes = [Circle(12.0), Square(2.0), Rect(3.0, 3.0), Rect(2.0, 5.0), Dot]
+  for s in shapes:
+    puts "#{side(s)} #{describe(s)}"
+  puts shapes.map(side).sum

@@ -1,0 +1,7 @@
+vowel: 3
+consonant: 4
+space: 2
+digit: 2
+paren: 2
+other: 1
+exit: 0

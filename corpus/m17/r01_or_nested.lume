@@ -1,0 +1,26 @@
+# Nested `|` alternatives inside Some(...) and inside tuple patterns.
+enum Color:
+  Red
+  Green
+  Blue
+
+def classify(o: Int?) -> Str:
+  match o:
+    Some(1 | 2)      -> "low"
+    Some(3 | 4 | 5)  -> "mid"
+    Some(n) if n < 0 -> "negative"
+    Some(_)          -> "high"
+    None             -> "none"
+
+def pair(c: Color, b: Bool) -> Str:
+  match (c, b):
+    (Red | Green, true)  -> "warm on"
+    (Red | Green, false) -> "warm off"
+    (Blue, _)            -> "cool"
+
+def main:
+  for v in [Some(1), Some(2), Some(4), Some(9), Some(-3), None]:
+    puts classify(v)
+  puts pair(Red, true)
+  puts pair(Green, false)
+  puts pair(Blue, true)

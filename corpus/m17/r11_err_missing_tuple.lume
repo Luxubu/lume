@@ -1,0 +1,12 @@
+# NOT exhaustive: (Green, false) is missing.
+enum Light:
+  Red
+  Green
+
+def f(l: Light, b: Bool) -> Int:
+  match (l, b):
+    (Red, _)      -> 1
+    (Green, true) -> 2
+
+def main:
+  puts f(Red, true)

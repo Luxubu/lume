@@ -1,0 +1,43 @@
+# `|` completing a set through T? tuples and `T or E` of an enum; a top-level tuple `|`.
+enum Suit:
+  Hearts
+  Diamonds
+  Clubs
+  Spades
+
+def color(s: Suit) -> Str:
+  match s:
+    Hearts | Diamonds -> "red"
+    Clubs | Spades    -> "black"
+
+def two(a: Suit?, b: Suit?) -> Str:
+  match (a, b):
+    (None, None)                                        -> "nothing"
+    (Some(Hearts | Diamonds), Some(Hearts | Diamonds))  -> "both red"
+    (Some(Clubs | Spades), Some(Clubs | Spades))        -> "both black"
+    (Some(_), Some(_))                                  -> "mixed"
+    (Some(s), None) | (None, Some(s))                   -> "one #{color(s)}"
+
+def parse(s: Str) -> Suit or Error:
+  match s:
+    "H" -> Hearts
+    "D" -> Diamonds
+    "C" -> Clubs
+    "S" -> Spades
+    _   -> Error("bad suit #{s}")
+
+def show(r: Suit or Error) -> Str:
+  match r:
+    Ok(Hearts | Diamonds)  -> "red card"
+    Ok(Clubs) | Ok(Spades) -> "black card"
+    Error(e)               -> e.message
+
+def main:
+  puts two(Some(Hearts), Some(Diamonds))
+  puts two(Some(Clubs), None)
+  puts two(None, Some(Hearts))
+  puts two(Some(Spades), Some(Hearts))
+  puts two(None, None)
+  puts show(parse("H"))
+  puts show(parse("S"))
+  puts show(parse("X"))

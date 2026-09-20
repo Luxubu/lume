@@ -1,0 +1,7 @@
+error: every alternative of `|` must bind the same names
+  --> corpus/m17/r30_err_or_names.lume:9:18
+  |
+9 |     Move(x, y) | Jump(a, b) -> x + y
+  |                  ^
+  help: the first alternative binds `x`, `y`, this one binds `a`, `b`
+exit: 1

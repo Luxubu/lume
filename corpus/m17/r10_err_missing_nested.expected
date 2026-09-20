@@ -1,0 +1,7 @@
+error: this `match` on `Outer` does not cover: Wrap(A(_))
+  --> corpus/m17/r10_err_missing_nested.lume:11:3
+   |
+11 |   match o:
+   |   ^
+  help: add an arm for Wrap(A(_)), or a final `_ ->` arm
+exit: 1

@@ -1,0 +1,15 @@
+warning: `!` stops the program if the value is missing or an error
+  --> corpus/m17/r24_tokenizer.lume:15:47
+   |
+15 |         out.push(if cur.digit?: Num(cur.to_int!) else: Word(cur))
+   |                                               ^
+  help: fine in tests and quick scripts; elsewhere use `match`, `?` or `.or(default)`
+kw x ? n42 + ( y * d3 )
+word=4
+num=2
+sym=4
+other=0
+[n42, d3]
+[word, num, sym]
+Some(0)
+exit: 0

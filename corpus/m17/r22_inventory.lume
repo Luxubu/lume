@@ -1,0 +1,37 @@
+# Inventory: enum status with `|` arms and guards, partition/group_by/avg/clamp.
+enum Status:
+  InStock(qty: Int)
+  Backordered(days: Int)
+  Discontinued
+
+struct Item:
+  name: Str
+  price: Float
+  status: Status
+
+  def label -> Str = match status:
+    InStock(0) | Discontinued -> "#{name.capitalize}: unavailable"
+    InStock(q) if q < 5       -> "#{name.capitalize}: low (#{q})"
+    InStock(q)                -> "#{name.capitalize}: #{q}"
+    Backordered(1 | 2)        -> "#{name.capitalize}: soon"
+    Backordered(d)            -> "#{name.capitalize}: #{d} days"
+
+  def available? -> Bool = match status:
+    InStock(q)                    -> q > 0
+    Backordered(_) | Discontinued -> false
+
+def main:
+  items = [Item("bolt", 0.25, InStock(100)), Item("nut", 0.1, InStock(3)), Item("gear", 12.5, Backordered(2)), Item("cog", 3.0, Backordered(9)), Item("pin", 0.05, Discontinued), Item("axle", 20.0, InStock(0))]
+  items.each { |i| puts i.label }
+  parts = items.partition(_.available?)
+  puts parts.0.map(_.name).to_list
+  puts parts.1.len
+  puts items.map(_.price).avg
+  groups = items.group_by(_.available?)
+  puts groups[true].or([]).len
+  puts items.filter(_.available?).map(_.price).max.map { |p| p.clamp(0.0, 1.0) }
+  puts items.map(_.name).sort.join(",")
+  var total = 0.0
+  items.filter(_.available?).each { |i| total += i.price }
+  puts total
+  puts items.map(_.name.len).uniq.sort

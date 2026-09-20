@@ -1,0 +1,17 @@
+# A many-arm classifier over characters, counted into a map.
+def classify(c: Str) -> Str:
+  match c:
+    "a" | "e" | "i" | "o" | "u"                               -> "vowel"
+    " " | "\t" | "\n"                                         -> "space"
+    "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" -> "digit"
+    "(" | ")"                                                 -> "paren"
+    _ if c.alpha?                                             -> "consonant"
+    _                                                         -> "other"
+
+def main:
+  var counts: {Str: Int} = {}
+  for c in "hi there (42)!".chars:
+    k = classify(c)
+    counts[k] = counts[k].or(0) + 1
+  for k in ["vowel", "consonant", "space", "digit", "paren", "other"]:
+    puts "#{k}: #{counts[k].or(0)}"

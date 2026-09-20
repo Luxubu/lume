@@ -1,3 +1,9 @@
+warning: this arm can never match: the arms above it already cover these values
+  --> corpus/p2_machine.lume:20:5
+   |
+20 |     _                       -> Red
+   |     ^
+  help: remove it, or move it above the arm that shadows it
 GREEN -> YELLOW(2) -> YELLOW(1) -> YELLOW(0) -> RED -> RED -> GREEN -> GREEN -> YELLOW(2)
 ended on YELLOW(2)
 red 2 times

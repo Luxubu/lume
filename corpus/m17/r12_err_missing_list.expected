@@ -1,0 +1,7 @@
+error: this `match` on `[Int]` does not cover: [_, _, _, ..rest]
+  --> corpus/m17/r12_err_missing_list.lume:3:3
+  |
+3 |   match xs:
+  |   ^
+  help: add an arm for [_, _, _, ..rest], or a final `_ ->` arm
+exit: 1

@@ -1,0 +1,10 @@
+# NOT exhaustive: a list of three or more not starting with 0 is missing.
+def f(xs: [Int]) -> Str:
+  match xs:
+    []          -> "e"
+    [x]         -> "one"
+    [x, y]      -> "two"
+    [0, ..rest] -> "zero-led"
+
+def main:
+  puts f([1, 2, 3])

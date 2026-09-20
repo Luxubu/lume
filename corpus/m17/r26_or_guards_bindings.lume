@@ -1,0 +1,19 @@
+# Same names bound in different positions of each alternative, guards that use them.
+enum Msg:
+  Move(x: Int, y: Int)
+  Jump(y: Int, x: Int)
+  Say(text: Str)
+  Quit
+
+def handle(m: Msg) -> Str:
+  match m:
+    Move(x, y) | Jump(y, x) if x == y -> "diag #{x}"
+    Move(x, y) | Jump(y, x)           -> "at #{x},#{y}"
+    Say("hi" | "hello")               -> "greeting"
+    Say(t) if t.len > 5               -> "long"
+    Say(t)                            -> t
+    Quit                              -> "bye"
+
+def main:
+  for m in [Move(1, 1), Move(2, 3), Jump(4, 5), Jump(6, 6), Say("hello"), Say("whatever"), Say("ok"), Quit]:
+    puts handle(m)

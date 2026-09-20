@@ -1,0 +1,13 @@
+# Deliberate error: alternatives that bind different names.
+enum Msg:
+  Move(x: Int, y: Int)
+  Jump(a: Int, b: Int)
+  Quit
+
+def handle(m: Msg) -> Int:
+  match m:
+    Move(x, y) | Jump(a, b) -> x + y
+    Quit                    -> 0
+
+def main:
+  puts handle(Move(1, 2))

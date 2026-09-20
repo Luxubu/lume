@@ -1,0 +1,15 @@
+Bolt: 100
+Nut: low (3)
+Gear: soon
+Cog: 9 days
+Pin: unavailable
+Axle: unavailable
+[bolt, nut]
+4
+5.983333333333333
+2
+Some(0.25)
+axle,bolt,cog,gear,nut,pin
+0.35
+[3, 4]
+exit: 0

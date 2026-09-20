@@ -1,0 +1,37 @@
+# insert/remove_at/uniq on `self.items` from `var self` methods, then chains on the result.
+struct Queue:
+  items: [Str]
+  log: [Str]
+
+  def push_front(var self, s: Str):
+    items.insert(0, s)
+    log.push("push #{s}")
+
+  def drop_named(var self, s: Str) -> Str?:
+    match items.index_of(s):
+      Some(i) -> Some(items.remove_at(i))
+      None    -> None
+
+  def dedupe(var self):
+    items = items.uniq
+
+  def summary -> Str = "#{items.len} items, #{log.len} ops, uniq=#{items.uniq.len}"
+
+def main:
+  var q = Queue(["b", "c"], [])
+  q.push_front("a")
+  q.push_front("b")
+  puts q.items
+  puts q.summary
+  puts q.drop_named("c")
+  puts q.drop_named("zz")
+  q.dedupe
+  puts q.items
+  puts q.log
+  q.items.insert(q.items.len, "end")
+  puts q.items.index_of("end")
+  puts q.items.zip(q.log)
+  m = {"k": q.items}
+  m.each { |k, v| puts "#{k}: #{v.len}" }
+  q.log.each { |l| puts l.capitalize if l.ends_with?("b") }
+  puts q.items[0].or("").capitalize.index_of("B")

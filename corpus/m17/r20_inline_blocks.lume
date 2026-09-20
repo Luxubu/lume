@@ -1,0 +1,34 @@
+# One statement inside an inline block: assignments, pushes, map writes, trailing if/unless.
+def main:
+  xs = [1, 2, 3, 4, 5]
+  var total = 0
+  xs.each { |x| total += x }
+  puts total
+  var names: [Str] = []
+  ["bo", "al", "cy"].each { |n| names.push(n) }
+  puts names
+  m = {"a": 1, "b": 2}
+  var m2: {Str: Int} = {}
+  m.each { |k, v| m2[k] = v * 10 }
+  puts m2
+  var count = 0
+  xs.each { |x| count += 1 if x > 2 }
+  puts count
+  var evens: [Int] = []
+  xs.each { |x| evens.push(x) if x.even? }
+  puts evens
+  var log = ""
+  xs.filter(_.odd?).each { |x| log = log + "#{x};" }
+  puts log
+  var last = 0
+  xs.each { |x| last = x }
+  puts last
+  var seen: {Int: Bool} = {}
+  [3, 3, 4].each { |x| seen[x] = true }
+  puts seen.len
+  var product = 1
+  xs.each { |x| product *= x unless x == 3 }
+  puts product
+  var hits: [Str] = []
+  m.each { |k, v| hits.push(k.upcase) if v.odd? }
+  puts hits

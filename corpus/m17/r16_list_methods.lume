@@ -1,0 +1,42 @@
+# zip / index_of / insert / remove_at / uniq / avg / flatten on struct fields.
+struct Cart:
+  items: [Str]
+  prices: [Float]
+
+  def lines -> [Str] = items.zip(prices).map { |n, p| "#{n}: #{p}" }.to_list
+  def total -> Float = prices.sum
+  def avg_price -> Float = prices.avg
+
+  def add(var self, n: Str, p: Float):
+    items.push(n)
+    prices.push(p)
+
+  def drop(var self, n: Str) -> Bool:
+    match items.index_of(n):
+      Some(i) ->
+        items.remove_at(i)
+        prices.remove_at(i)
+        true
+      None -> false
+
+def main:
+  var c = Cart([], [])
+  c.add("tea", 3.5)
+  c.add("milk", 1.25)
+  c.add("jam", 4.0)
+  puts c.lines
+  puts c.total
+  puts c.avg_price
+  puts c.drop("milk")
+  puts c.drop("bread")
+  puts c.lines.join(" | ")
+  puts c.items.index_of("jam")
+  c.items.insert(0, "bread")
+  puts c.items
+  puts c.items.uniq.len
+  puts [[1], [2, 3], []].flatten.avg
+  empty: [Int] = []
+  puts empty.uniq
+  puts empty.zip([1, 2])
+  puts empty.index_of(1)
+  puts empty.avg

@@ -115,12 +115,14 @@ methods: on `Str` `len`, `empty?`, `upcase`, `downcase`, `capitalize`, `trim`,
 `pad_right`, `reverse`, `slice`, `replace`, `repeat`, `to_int`, `to_float`; on
 `Int`/`Float` `abs`, `max(x)`, `min(x)`, `clamp(lo, hi)`, `pow`, `even?`,
 `odd?`, `sqrt`, `floor`, `ceil`, `round`, `to_float`, `to_int`, `pad`; on lists
-`len`, `empty?`, `first`, `last`, `max`, `min`, `sum`, `avg`, `sort`,
+`len`, `empty?`, `first`, `last`, `max`, `min`, `sum`, `avg` (a `Float`; `0.0`
+for an empty list), `sort`,
 `sort_by`, `reverse`, `uniq`, `flatten`, `zip`, `index_of`, `contains?`,
 `join`, `push`, `pop`, `insert`, `remove_at`, `take`, `skip`, `enumerate`,
 `to_list`, and the block methods `map`, `filter`, `reject`, `each`, `sum`,
 `count`, `any?`, `all?`, `find`, `take_while`, `fold`, `min_by`, `max_by`,
-`group_by`, `partition`, `flat_map`; on maps `len`, `keys`, `values`, `get`,
+`group_by`, `partition`, `flat_map` (a function name works as the block for
+all of these: `xs.map(parse)`, `xs.group_by(kind)`); on maps `len`, `keys`, `values`, `get`,
 `remove`, `contains?`, `merge`, `to_list`, `each`, `filter`, `reject`,
 `map_values`; on `T?` `or`, `some?`, `none?`, `or_error`, `map`; on `T or E`
 `or`, `ok?`, `error?`, `error`, `ok`, `map`.
@@ -136,7 +138,8 @@ argument, field, return value or typed binding of the wrong type (`add(1,
 not have (`"abc".reverse` is fine; `"abc".skip(1)` lists what `Str` has),
 `9223372036854775807 + 1` and `10 / 0` on literals, changing a field from a method without `var self`, calling a
 mutating method on an immutable value, wrong or missing arguments and keywords,
-`if` used as a value without `else`, non-exhaustive `match`, `?` in a function
+`if` used as a value without `else`, non-exhaustive `match`, `clamp` with
+its bounds reversed (at run time, in Lume's words), `?` in a function
 that cannot return `None` or an error (with the right fix for each mismatch),
 a method or arithmetic on a `T?` or `T or E` without unwrapping, an empty
 `[]` binding with no type, a value used as an interface it does not satisfy
@@ -152,7 +155,8 @@ crate value with no text form printed, a borrowing crate type in a field,
 (`struct Option`), `|` alternatives that bind different names, bad
 indentation, tabs, and the spellings other languages use (`continue`, `'single
 quotes'`, `null`, `print`, `;`, each with the Lume form). Warnings:
-`return` inside a block.
+`return` inside a block, a `match` arm that can never run because the arms
+above it already cover its values.
 
 ## Tests
 
@@ -165,9 +169,11 @@ The suite also runs `lume test` on `examples/tests/`, `lume fmt` on
 `examples/fmt/`, checks that formatting every example is idempotent and leaves
 the generated Rust unchanged, and runs the review corpus (`corpus/`: 66
 programs written by an independent reviewer who did not know the compiler).
-`tests/corpus.sh` classifies the corpus: after milestone 17, 40 run, 26 stop
-with a Lume error (each a deliberate rule: no first-class closures, no
-shadowing, no `Float / Int`, ...), none leaks a rustc error.
+`tests/corpus.sh` classifies the corpus (now 96 programs from two review
+rounds; `corpus/m17/` targets the milestone 17 surface): 64 run, 32 stop
+with a Lume error (each a deliberate rule or a deliberate error test: no
+first-class closures, no shadowing, no `Float / Int`, ...), none leaks a
+rustc error.
 
 Tests in a Lume file:
 
@@ -198,7 +204,9 @@ that will run again, and moves it if not. `us = [u]; puts u` works, and `kept
 mutability, never ownership: `var self` on a method that changes fields, `var
 xs: [Int]` on a parameter changed in place, `for var a in xs` to change the
 items of a list, and `xs[i].method(...)` / `xs[i].field = v` to reach one
-item. A recursive `enum Tree: Leaf / Node(left: Tree, ...)` works as written;
+item (a bare `xs[i]` as a value is a `T?`, since the position may be out of
+range; the method and field forms reach the item directly and stop the
+program if it is missing). A recursive `enum Tree: Leaf / Node(left: Tree, ...)` works as written;
 the `Box` Rust needs is emitted for you (a nested pattern on such a field is
 an error that says to `match` the field in the arm). Milestone 7
 measured zero ownership syntax across 202 lines of ported programs

@@ -1,0 +1,11 @@
+if: keyword
+*: operator
+: empty
+foo: ident
+while: keyword
+0.0 boundary
+50.0 liquid
+-4.5 freezing
+100.0 boundary
+2
+exit: 0

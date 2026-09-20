@@ -1,0 +1,31 @@
+# `T?.map`, `T or E`.ok and .map, in fields and chains.
+struct Config:
+  port: Int?
+  name: Str
+
+  def port_text -> Str = port.map { |p| "port #{p}" }.or("no port")
+  def doubled -> Int? = port.map(_ * 2)
+
+def parse_port(s: Str) -> Int or Error:
+  n = s.to_int?
+  if n < 1 or n > 65535: return Error("out of range: #{n}")
+  n
+
+def main:
+  cs = [Config(Some(80), "web"), Config(None, "cli")]
+  for c in cs:
+    puts "#{c.name}: #{c.port_text} #{c.doubled}"
+  puts parse_port("8080").map { |p| p + 1 }
+  puts parse_port("99999").map { |p| p + 1 }.ok?
+  puts parse_port("abc").ok
+  puts parse_port("443").ok.map(_.to_float)
+  puts parse_port("443").ok.or(0)
+  ports = ["80", "x", "22"].map { |s| parse_port(s).ok }.to_list
+  puts ports
+  puts ports.map { |o| o.or(-1) }.sum
+  puts Some(3).map { |x| x.even? }
+  puts [1, 2, 3].first.map { |x| x * 10 }.or(0)
+  puts [1, 2, 3].find(_ > 5).map(_ * 10)
+  puts "7".to_int.map(_ + 1).map(_ * 2)
+  puts "7".to_int.map(_ + 1).ok.map(_ * 2).or(0)
+  puts parse_port("0").map(_ * 2).or(-1)

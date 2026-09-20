@@ -1,0 +1,34 @@
+# Tuples of enums and bools: exhaustive only when all pairs/triples are counted.
+enum Dir:
+  N
+  S
+  E
+  W
+
+def turn(d: Dir, left: Bool) -> Dir:
+  match (d, left):
+    (N, true)      -> W
+    (N, false)     -> E
+    (S, true)      -> E
+    (S, false)     -> W
+    (E | W, true)  -> if d == E: N else: S
+    (E | W, false) -> if d == E: S else: N
+
+def logic(a: Bool, b: Bool, c: Bool) -> Int:
+  match (a, b, c):
+    (true, true, _)       -> 1
+    (true, false, true)   -> 2
+    (true, false, false)  -> 3
+    (false, _, true)      -> 4
+    (false, true, false)  -> 5
+    (false, false, false) -> 6
+
+def main:
+  puts turn(N, true)
+  puts turn(E, true)
+  puts turn(W, false)
+  puts turn(S, false)
+  puts logic(true, true, false)
+  puts logic(false, false, true)
+  puts logic(false, false, false)
+  puts logic(true, false, false)

@@ -1,0 +1,31 @@
+# Inline statement blocks nested inside `do` blocks and after filter chains.
+struct Team:
+  name: Str
+  scores: [Int]
+
+def main:
+  teams = [Team("a", [3, 4]), Team("b", [10]), Team("c", [])]
+  var grand = 0
+  var per: {Str: Int} = {}
+  teams.each do |t|
+    var sub = 0
+    t.scores.each { |s| sub += s }
+    per[t.name] = sub
+    grand += sub
+    t.scores.each { |s| puts "#{t.name} has a high score #{s}" if s > 5 }
+  puts per
+  puts grand
+  var flat: [Int] = []
+  teams.each do |t|
+    t.scores.each { |s| flat.push(s * 2) }
+  puts flat
+  var counts: {Str: Int} = {}
+  teams.each { |t| counts[t.name] = t.scores.len }
+  puts counts
+  var big: [Str] = []
+  teams.filter { |t| t.scores.len > 0 }.each { |t| big.push(t.name.upcase) }
+  puts big
+  per.each { |k, v| puts "#{k}=#{v}" if v > 0 }
+  var best = 0
+  teams.each { |t| t.scores.each { |s| best = best.max(s) } }
+  puts best

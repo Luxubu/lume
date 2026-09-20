@@ -1,0 +1,23 @@
+# Alternatives combined with ranges, and inside list patterns.
+def bucket(n: Int) -> Str:
+  match n:
+    0 | 1..3   -> "small"
+    4..6 | 10  -> "mid"
+    7 | 8 | 9  -> "high"
+    _ if n < 0 -> "neg"
+    _          -> "huge"
+
+def head(xs: [Int]) -> Str:
+  match xs:
+    []                          -> "empty"
+    [0 | 1, ..]                 -> "starts binary"
+    [x, ..rest] if rest.len > 2 -> "long from #{x}"
+    [x, ..]                     -> "from #{x}"
+
+def main:
+  for n in [0, 2, 5, 10, 8, -1, 42]:
+    puts "#{n} #{bucket(n)}"
+  puts head([])
+  puts head([1, 5])
+  puts head([7, 1, 2, 3])
+  puts head([7, 1])
