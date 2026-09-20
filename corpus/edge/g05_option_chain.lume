@@ -1,0 +1,15 @@
+struct U:
+  name: Str
+  boss: Str?
+
+def main:
+  u = U("a", Some("b"))
+  v = U("c", None)
+  puts u.boss.or("nobody")
+  puts v.boss.or("nobody")
+  puts u.boss.some?
+  us = [u, v]
+  puts us.filter(_.boss.some?).map(_.name).to_list
+  puts us.map(_.boss).to_list
+  n: Int? = Some(3)
+  puts n.or(0) + 1

@@ -1,0 +1,16 @@
+def main:
+  s = "b"
+  r = match s:
+    "a" -> 1
+    "b" -> 2
+    _ -> 0
+  puts r
+  n = 5
+  puts match n:
+    1 | 2 -> "one or two"
+    3..6 -> "mid"
+    _ -> "other"
+  b = true
+  match b:
+    true -> puts "t"
+    false -> puts "f"

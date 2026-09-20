@@ -1,0 +1,7 @@
+def main:
+  var total = 0
+  [1, 2, 3].each { |x| total += x }
+  puts total
+  var names: [Str] = []
+  ["a", "b"].each { |s| names.push(s.upcase) }
+  puts names

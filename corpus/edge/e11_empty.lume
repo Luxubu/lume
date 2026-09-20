@@ -1,0 +1,8 @@
+def main:
+  xs: [Int] = []
+  puts xs.first
+  puts xs.max
+  puts xs.sum
+  puts xs.min.or(0)
+  puts [].len
+  puts [].first

@@ -1,0 +1,32 @@
+# String processing: split/join/interpolation, a slug maker, word stats.
+def clean(w: Str) -> Str:
+  var out = ""
+  for c in w.chars where "abcdefghijklmnopqrstuvwxyz".contains?(c):
+    out = out + c
+  out
+
+def slug(title: Str) -> Str:
+  title.downcase.split(" ").reject(_.empty?).map(clean).join("-")
+
+def title_case(s: Str) -> Str:
+  s.split(" ").map { |w| w.chars.first.or("").upcase + w.chars.skip(1).join("") }.join(" ")
+
+def stats(text: Str) -> Str:
+  words = text.split(" ").reject(_.empty?).to_list
+  longest = words.max_by(_.len).or("")
+  "#{words.len} words, longest \"#{longest}\" (#{longest.len} chars)"
+
+def main:
+  t = "  Hello, World!  This is Lume  "
+  puts "[#{t.trim}]"
+  puts slug(t)
+  puts title_case("the quick brown fox")
+  puts stats(t)
+  puts t.contains?("World")
+  puts t.trim.starts_with?("Hello")
+  parts = "a=1;b=2;c=3".split(";").map { |kv| kv.split("=").to_list }
+  for kv in parts:
+    puts "#{kv[0].or("?")} -> #{kv[1].or("?")}"
+  puts "abc".chars.reverse.join("")
+  puts "tab:\there, quote:\"q\", newline:\\n, hash: \#{not}"
+  puts "#{"nested #{1 + 1} quotes"}"

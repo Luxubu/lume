@@ -1,0 +1,6 @@
+def f(n: Int) -> Str:
+  if n > 0: "pos"
+  else: 0
+
+def main:
+  puts f(1)

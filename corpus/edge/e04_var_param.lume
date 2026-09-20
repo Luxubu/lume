@@ -1,0 +1,13 @@
+def bump(var xs: [Int]):
+  xs.push(99)
+
+def bump_n(var n: Int):
+  n += 1
+
+def main:
+  var xs = [1]
+  bump(xs)
+  puts xs
+  var n = 1
+  bump_n(n)
+  puts n

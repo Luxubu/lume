@@ -1,0 +1,24 @@
+enum Inner:
+  A(n: Int)
+  B
+
+enum Outer:
+  Wrap(i: Inner)
+  Empty
+
+def f(o: Outer) -> Str:
+  match o:
+    Wrap(A(n)) if n > 5 -> "big #{n}"
+    Wrap(A(n)) -> "small #{n}"
+    Wrap(B) -> "b"
+    Empty -> "empty"
+
+def main:
+  puts f(Wrap(A(9)))
+  puts f(Wrap(A(1)))
+  puts f(Wrap(B))
+  puts f(Empty)
+  o = Some(Wrap(A(3)))
+  match o:
+    Some(Wrap(A(n))) -> puts n
+    _ -> puts "other"

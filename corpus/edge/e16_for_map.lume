@@ -1,0 +1,12 @@
+def main:
+  m = {"b": 2, "a": 1, "c": 3}
+  for k, v in m:
+    puts "#{k}=#{v}"
+  for k in m.keys:
+    puts k
+  puts m.len
+  puts m
+  var t = 0
+  for _, v in m:
+    t += v
+  puts t

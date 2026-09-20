@@ -1,0 +1,17 @@
+struct Acc:
+  bal: Int
+  def deposit(var self, n: Int):
+    bal += n
+
+def main:
+  var m: {Str: Acc} = {}
+  m["a"] = Acc(1)
+  match m["a"]:
+    Some(a) -> a.deposit(5)
+    None -> puts "none"
+  puts m
+  var xs = [Acc(1), Acc(2)]
+  for a in xs:
+    a.deposit(10)
+  puts xs
+  puts xs

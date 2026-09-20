@@ -1,0 +1,16 @@
+def main:
+  var xs = [3, 1, 2]
+  xs.push(4)
+  puts xs.pop
+  puts xs
+  puts xs.reverse
+  puts xs.sort
+  puts xs.contains?(3)
+  puts xs.enumerate.map { |i, x| "#{i}:#{x}" }.join(" ")
+  ys = xs.map(_ * 2)
+  puts ys.len
+  puts ys.take(2)
+  puts ys.skip(1).to_list
+  puts xs.min_by(_ * -1)
+  puts [[1, 2], [3]].map(_.len).to_list
+  puts [1, 2, 3].fold(1) { |a, b| a * b }

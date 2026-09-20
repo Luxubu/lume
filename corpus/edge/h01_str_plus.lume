@@ -1,0 +1,7 @@
+def main:
+  puts "n=" + 5
+  puts 5 + "n"
+  puts "a" + true
+  puts "a" + [1, 2]
+  x = "3"
+  puts x + 4

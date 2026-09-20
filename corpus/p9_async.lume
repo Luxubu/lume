@@ -1,0 +1,27 @@
+# shared var + spawn + await: a parallel word counter.
+struct Stats:
+  words: Int
+  longest: Str
+
+def count_words(line: Str) -> Int = line.split(" ").reject(_.empty?).len
+
+async def main:
+  lines = ["the quick brown fox", "jumps over", "the lazy dog again and again", ""]
+  shared var total = 0
+  shared var seen: {Str: Int} = {}
+  var tasks: [Task[Int]] = []
+  for line in lines:
+    t = spawn:
+      n = count_words(line)
+      total += n
+      for w in line.split(" ") where not w.empty?:
+        seen[w] = seen[w].or(0) + 1
+      n
+    tasks.push(t)
+  per_line = await tasks
+  puts per_line
+  puts "total #{total}"
+  puts "distinct #{seen.len}"
+  puts "the: #{seen["the"].or(0)}"
+  var s = Stats(total, "")
+  puts s

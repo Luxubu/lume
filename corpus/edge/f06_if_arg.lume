@@ -1,0 +1,10 @@
+def main:
+  n = 3
+  puts((if n == 3: 1 else: 0) + 10)
+  xs = [if n > 1: "y" else: "n", "z"]
+  puts xs
+  v = if n > 1:
+    "multi"
+  else:
+    "line"
+  puts v

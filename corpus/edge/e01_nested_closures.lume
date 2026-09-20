@@ -1,0 +1,7 @@
+def main:
+  k = 10
+  xs = [1, 2, 3]
+  ys = xs.map { |x| [1, 2].map { |y| x * y + k }.sum }
+  puts ys
+  adder = { |a| a + k }
+  puts adder(1)

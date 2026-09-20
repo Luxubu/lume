@@ -1,0 +1,13 @@
+async def main:
+  shared var xs: [Int] = []
+  var ts: [Task[()]] = []
+  for i in 1..3:
+    t = spawn:
+      xs.push(i)
+      if xs.len > 100: puts "big"
+    ts.push(t)
+  await ts
+  puts xs.len
+  n = xs.len + xs.len
+  puts n
+  puts xs.map(_ * 2).to_list

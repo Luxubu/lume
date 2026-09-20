@@ -1,0 +1,9 @@
+def f(m: {Str: [Int]}) -> Int = m.values.map(_.len).sum
+def g(t: (Int, Str)) -> Str = "#{t.0}#{t.1}"
+def h(x: Int?) -> Int = x.or(0)
+def main:
+  puts f({"a": [1, 2], "b": [3]})
+  puts g((1, "x"))
+  puts h(None)
+  puts h(Some(2))
+  puts h(2)

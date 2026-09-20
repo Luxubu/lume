@@ -1,0 +1,4 @@
+def main:
+  a = 10
+  b = 0
+  puts a / b

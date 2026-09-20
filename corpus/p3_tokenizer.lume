@@ -1,0 +1,58 @@
+# A tiny arithmetic tokenizer + evaluator (no precedence: left to right).
+enum Token:
+  Num(value: Int)
+  Op(sym: Str)
+  LParen
+  RParen
+
+def tokenize(src: Str) -> [Token] or Error:
+  var out: [Token] = []
+  var cur = ""
+  for ch in src.chars:
+    if "0123456789".contains?(ch):
+      cur = cur + ch
+    else:
+      if not cur.empty?:
+        out.push(Num(cur.to_int?))
+        cur = ""
+      match ch:
+        " " -> cur = ""
+        "+" -> out.push(Op(ch))
+        "-" -> out.push(Op(ch))
+        "*" -> out.push(Op(ch))
+        "(" -> out.push(LParen)
+        ")" -> out.push(RParen)
+        _   -> return Error("unexpected character '#{ch}'")
+  if not cur.empty?: out.push(Num(cur.to_int?))
+  out
+
+def show(t: Token) -> Str:
+  match t:
+    Num(v)  -> "NUM(#{v})"
+    Op(s)   -> "OP(#{s})"
+    LParen  -> "("
+    RParen  -> ")"
+
+def eval_flat(tokens: [Token]) -> Int or Error:
+  var acc = 0
+  var op = "+"
+  for t in tokens:
+    match t:
+      Num(v) ->
+        acc = match op:
+          "+" -> acc + v
+          "-" -> acc - v
+          "*" -> acc * v
+          _   -> return Error("bad op #{op}")
+      Op(s) -> op = s
+      _     -> return Error("parens not supported")
+  acc
+
+def main -> () or Error:
+  toks = tokenize("12 + 30 * 2 - 4")?
+  puts toks.map(show).join(" ")
+  puts "= #{eval_flat(toks)?}"
+  match tokenize("3 $ 4"):
+    Ok(_)    -> puts "should not parse"
+    Error(e) -> puts "error: #{e.message}"
+  puts eval_flat(tokenize("(1)")?)

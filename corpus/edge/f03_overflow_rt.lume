@@ -1,0 +1,5 @@
+def main:
+  x = Env.args.first.or("9223372036854775807").to_int.or(0)
+  puts x + 1
+  y = Env.args.first.or("0").to_int.or(0)
+  puts 10 / y

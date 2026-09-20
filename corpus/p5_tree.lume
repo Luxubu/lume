@@ -1,0 +1,44 @@
+# Recursive binary search tree via enum.
+enum Tree:
+  Leaf
+  Node(left: Tree, value: Int, right: Tree)
+
+def insert(t: Tree, v: Int) -> Tree:
+  match t:
+    Leaf -> Node(Leaf, v, Leaf)
+    Node(l, x, r) ->
+      if v < x: Node(insert(l, v), x, r)
+      elif v > x: Node(l, x, insert(r, v))
+      else: t
+
+def to_list(t: Tree) -> [Int]:
+  match t:
+    Leaf -> []
+    Node(l, x, r) ->
+      var out = to_list(l)
+      out.push(x)
+      for v in to_list(r):
+        out.push(v)
+      out
+
+def depth(t: Tree) -> Int:
+  match t:
+    Leaf -> 0
+    Node(l, _, r) -> 1 + [depth(l), depth(r)].max.or(0)
+
+def contains(t: Tree, v: Int) -> Bool:
+  match t:
+    Leaf -> false
+    Node(l, x, r) ->
+      if v == x: true
+      elif v < x: contains(l, v)
+      else: contains(r, v)
+
+def main:
+  var t = Tree.Leaf
+  for v in [50, 30, 70, 20, 40, 60, 80, 30]:
+    t = insert(t, v)
+  puts to_list(t)
+  puts "depth #{depth(t)}"
+  puts "has 60? #{contains(t, 60)}  has 65? #{contains(t, 65)}"
+  puts to_list(Leaf).len

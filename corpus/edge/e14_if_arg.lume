@@ -1,0 +1,8 @@
+def show(s: Str) = puts s
+
+def main:
+  n = 3
+  show(if n > 2: "big" else: "small")
+  puts (if n == 3: 1 else: 0) + 10
+  xs = [if n > 1: "y" else: "n", "z"]
+  puts xs

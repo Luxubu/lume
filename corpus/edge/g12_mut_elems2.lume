@@ -1,0 +1,10 @@
+struct Acc:
+  bal: Int
+  def deposit(var self, n: Int):
+    bal += n
+
+def main:
+  var xs = [Acc(1), Acc(2)]
+  for i in 0...xs.len:
+    xs[i].bal += 10
+  puts xs

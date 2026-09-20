@@ -1,0 +1,13 @@
+struct U:
+  name: Str
+  age: Int
+
+def main:
+  us = [U("a", 30), U("b", 20), U("c", 40), U("d", 10)]
+  puts us.filter(_.age > 15).sort_by(_.age).map(_.name).first
+  puts us.map(_.age).filter(_ > 15).sort.reverse.first.or(0)
+  puts us.sort_by(_.name).reverse.take(2).map(_.name).to_list
+  puts us.filter(_.age > 100).first
+  puts us.map(_.age).max
+  puts us.filter(_.age > 15).len
+  puts us.sort_by(_.age).first.or(U("?", 0)).name

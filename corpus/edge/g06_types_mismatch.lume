@@ -1,0 +1,7 @@
+def add(a: Int, b: Int) -> Int = a + b
+
+def main:
+  puts add(1, "2")
+  puts add(1.0, 2)
+  x: Str = 5
+  puts x

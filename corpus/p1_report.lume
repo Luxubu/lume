@@ -1,0 +1,38 @@
+# CSV-ish sales report: parse lines, group by region in a map, sort and print.
+struct Sale:
+  region: Str
+  product: Str
+  amount: Float
+
+def parse_sale(line: Str) -> Sale or Error:
+  match line.split(","):
+    [r, p, a] -> Sale(r.trim, p.trim, a.trim.to_float?)
+    parts     -> Error("bad line (#{parts.len} fields): #{line}")
+
+def main -> () or Error:
+  data = "north, pen, 1.5\nsouth, book, 12.0\nnorth, book, 12.0\neast, mug, 4.25\nsouth, pen, 1.5\nnorth, mug, 4.25\n"
+  var sales: [Sale] = []
+  for line in data.lines where not line.trim.empty?:
+    sales.push(parse_sale(line)?)
+
+  var by_region: {Str: Float} = {}
+  var count: {Str: Int} = {}
+  for s in sales:
+    key = s.region
+    by_region[key] = by_region[key].or(0.0) + s.amount
+    count[key] = count[key].or(0) + 1
+
+  puts "Region   Total   Count"
+  rows = by_region.to_list.sort_by { |r, t| -t }
+  for r, t in rows:
+    puts "#{r.pad(8)} #{t}   #{count[r].or(0)}"
+
+  best = sales.max_by(_.amount)
+  match best:
+    Some(s) -> puts "largest sale: #{s.product} in #{s.region} (#{s.amount})"
+    None    -> puts "no sales"
+
+  products = sales.map(_.product).sort.to_list
+  puts "products: #{products.join("/")}"
+  total = sales.sum(_.amount)
+  puts "grand total #{total}, average #{total / sales.len.to_float}"

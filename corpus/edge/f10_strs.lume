@@ -1,0 +1,14 @@
+def main:
+  s = "Hello"
+  puts s + " " + "world"
+  puts s.len
+  puts s.chars.len
+  puts s.downcase == "hello"
+  t = "a,b,,c"
+  puts t.split(",").to_list
+  puts t.split(",").len
+  puts "  x ".trim.len
+  puts s.contains?("ell")
+  var u = "a"
+  u = u + "b"
+  puts u

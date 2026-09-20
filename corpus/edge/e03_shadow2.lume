@@ -1,0 +1,10 @@
+def main:
+  n = 5
+  n = n.to_float
+  puts n
+  s = "12"
+  s = s.to_int.or(0)
+  puts s + 1
+  for i in 1..3:
+    i = i * 2
+    puts i

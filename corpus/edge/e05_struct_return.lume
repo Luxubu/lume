@@ -1,0 +1,17 @@
+struct P:
+  x: Int
+  y: Int
+
+def mk(i: Int) -> P = P(i, i * i)
+
+def main:
+  var ps: [P] = []
+  for i in 1..3:
+    ps.push(mk(i))
+  puts ps
+  puts ps[1]
+  puts mk(2) == P(2, 4)
+  puts ps.contains?(P(3, 9))
+  puts ps.map(_.y).sum
+  q = ps[0].or(mk(0))
+  puts q.x

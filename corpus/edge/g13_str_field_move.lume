@@ -1,0 +1,14 @@
+struct U:
+  name: Str
+  tags: [Str]
+
+def main:
+  u = U("ana", ["a", "b"])
+  n = u.name
+  t = u.tags
+  puts u
+  puts n
+  puts t
+  us = [u]
+  puts us
+  puts u

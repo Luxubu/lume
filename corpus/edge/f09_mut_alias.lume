@@ -1,0 +1,17 @@
+struct Bx:
+  n: Int
+  def inc(var self):
+    n += 1
+
+def main:
+  var a = Bx(1)
+  var b = a
+  b.inc
+  puts "a=#{a.n} b=#{b.n}"
+  var xs = [Bx(1)]
+  var first = xs[0].or(Bx(0))
+  first.inc
+  puts xs
+  puts xs
+  xs[0].n = 5
+  puts xs

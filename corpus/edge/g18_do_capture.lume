@@ -1,0 +1,10 @@
+def main:
+  var total = 0
+  [1, 2, 3].each do |x|
+    total += x
+  puts total
+  var names: [Str] = []
+  ["a", "b"].each do |s|
+    names.push(s.upcase)
+  puts names
+  puts [1, 2, 3].map { |x| x + total }.to_list

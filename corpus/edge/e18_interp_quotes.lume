@@ -1,0 +1,7 @@
+def main:
+  name = "lume"
+  puts "say \"#{name.upcase}\""
+  puts "#{"a" + "b"}"
+  puts "#{if name == "lume": "yes" else: "no"}"
+  puts "#{[1,2].map { |x| "<#{x}>" }.join(",")}"
+  puts "#{"}"}"

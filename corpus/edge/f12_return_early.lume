@@ -1,0 +1,15 @@
+def find_big(xs: [Int]) -> Int?:
+  for x in xs:
+    if x > 10: return Some(x)
+  None
+
+def first_neg(xs: [Int]) -> Int:
+  for x in xs:
+    return x if x < 0
+  0
+
+def main:
+  puts find_big([1, 20, 30])
+  puts find_big([1])
+  puts first_neg([3, -2, -5])
+  puts first_neg([])

@@ -1,0 +1,16 @@
+def inner(n: Int) -> Int or Error:
+  if n < 0: Error("neg") else: n * 2
+
+def outer(xs: [Int]) -> [Int] or Error:
+  xs.map { |x| inner(x)? }.to_list
+
+def outer2(xs: [Int]) -> [Int] or Error:
+  var out: [Int] = []
+  for x in xs:
+    out.push(inner(x)?)
+  out
+
+def main:
+  puts outer2([1, 2])
+  puts outer2([1, -2])
+  puts outer([1, 2])

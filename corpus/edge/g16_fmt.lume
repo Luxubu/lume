@@ -1,0 +1,4 @@
+def main:
+  x=[1,2,3].map{|n|n*2}
+  puts   x
+  if x.len>2:puts "long"

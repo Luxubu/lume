@@ -1,0 +1,7 @@
+def check(n: Int) -> () or Error:
+  if n < 0: return Error("neg")
+
+def main -> () or Error:
+  check(1)?
+  check(-1)?
+  puts "unreachable"

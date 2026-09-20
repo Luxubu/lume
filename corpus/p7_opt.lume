@@ -1,0 +1,41 @@
+# T? and T or Error with ? propagation through several layers.
+struct Config:
+  host: Str
+  port: Int
+  debug: Bool
+
+def lookup(pairs: {Str: Str}, key: Str) -> Str? = pairs[key]
+
+def parse_bool(s: Str) -> Bool or Error:
+  match s:
+    "true"  -> true
+    "false" -> false
+    _       -> Error("not a bool: #{s}")
+
+def load(pairs: {Str: Str}) -> Config or Error:
+  host = lookup(pairs, "host").or_error("missing host")?
+  port = lookup(pairs, "port").or_error("missing port")?.to_int?
+  debug = parse_bool(lookup(pairs, "debug").or("false"))?
+  if port < 1 or port > 65535: return Error("port out of range: #{port}")
+  Config(host, port, debug)
+
+def port_of(pairs: {Str: Str}) -> Int?:
+  p = lookup(pairs, "port")?
+  match p.to_int:
+    Ok(n) -> Some(n)
+    Error(_) -> None
+
+def main:
+  good = {"host": "example.com", "port": "8080", "debug": "true"}
+  puts load(good)
+  puts load({"host": "x"})
+  puts load({"host": "x", "port": "abc"})
+  puts load({"host": "x", "port": "99999"})
+  puts load({"host": "x", "port": "80", "debug": "maybe"})
+  puts port_of(good)
+  puts port_of({})
+  puts port_of({"port": "zz"})
+  c = load(good)!
+  puts "#{c.host}:#{c.port} debug=#{c.debug}"
+  cfgs = [good, {"host": "y", "port": "1"}].map(load)
+  puts cfgs.count(_.ok?)

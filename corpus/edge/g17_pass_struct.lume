@@ -1,0 +1,24 @@
+struct U:
+  name: Str
+  tags: [Str]
+  def first_tag -> Str = tags.first.or("none")
+  def title -> Str = name
+
+def show(u: U) = puts u.name
+def keep(u: U) -> U = u
+def names(us: [U]) -> [Str] = us.map(_.name).to_list
+
+def main:
+  u = U("ana", ["a"])
+  show(u)
+  show(u)
+  v = keep(u)
+  puts v
+  puts u
+  puts u.title
+  puts u.first_tag
+  puts names([u, v])
+  puts u
+  w = u
+  puts w
+  puts u

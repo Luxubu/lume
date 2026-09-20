@@ -1,0 +1,9 @@
+def main:
+  name = "x"
+  if true:
+    name = name.upcase
+  puts name
+  count = 1
+  [1, 2].each do |i|
+    count = count + i
+  puts count

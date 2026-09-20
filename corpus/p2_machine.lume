@@ -1,0 +1,41 @@
+# Traffic-light / door state machine with enums and match.
+enum Light:
+  Red
+  Green
+  Yellow(remaining: Int)
+
+enum Event:
+  Tick
+  Emergency
+  Reset
+
+def step(l: Light, e: Event) -> Light:
+  match (l, e):
+    (_, Emergency)          -> Red
+    (_, Reset)              -> Green
+    (Red, Tick)             -> Green
+    (Green, Tick)           -> Yellow(2)
+    (Yellow(0), Tick)       -> Red
+    (Yellow(n), Tick)       -> Yellow(n - 1)
+    _                       -> Red
+
+def name(l: Light) -> Str:
+  match l:
+    Red       -> "RED"
+    Green     -> "GREEN"
+    Yellow(n) -> "YELLOW(#{n})"
+
+def main:
+  events = [Tick, Tick, Tick, Tick, Tick, Emergency, Tick, Reset, Tick]
+  var light = Light.Red
+  var history: [Str] = []
+  for e in events:
+    light = step(light, e)
+    history.push(name(light))
+  puts history.join(" -> ")
+  puts "ended on #{name(light)}"
+  var reds = 0
+  for h in history where h == "RED":
+    reds += 1
+  puts "red #{reds} times"
+  puts light == Light.Yellow(2)

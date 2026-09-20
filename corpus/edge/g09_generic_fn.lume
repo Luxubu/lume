@@ -1,0 +1,9 @@
+def first_or(xs: [Int], d: Int) -> Int = xs.first.or(d)
+def show_all(xs: [Str]):
+  for x in xs:
+    puts x
+
+def main:
+  puts first_or([], 7)
+  show_all(["a", "b"])
+  show_all([1, 2])

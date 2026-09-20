@@ -1,0 +1,9 @@
+def len(xs: [Int]) -> Int = 42
+def push(n: Int) = puts n
+
+def main:
+  puts len([1])
+  push(3)
+  match [1]:
+    [x] -> puts x
+    _ -> puts "?"

@@ -1,0 +1,12 @@
+def main:
+  puts 7 / 2
+  puts 7.0 / 2
+  puts 7 % 3
+  puts -7 % 3
+  puts 2 ** 10
+  puts 2 ** 0.5
+  puts 1 + 1.5
+  puts 3.7.round
+  puts 10.to_float / 4
+  puts((1.0 / 3.0))
+  puts 0.1 + 0.2

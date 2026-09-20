@@ -1,0 +1,9 @@
+struct P:
+  x: Int
+  y: Int
+
+def main:
+  p = P(1)
+  q = P(x: 1, z: 2)
+  puts p
+  puts q

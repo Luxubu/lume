@@ -1,0 +1,37 @@
+# A test file.
+def rpn(expr: Str) -> Int or Error:
+  var stack: [Int] = []
+  for tok in expr.split(" ") where not tok.empty?:
+    match tok:
+      "+" ->
+        b = stack.pop.or_error("underflow")?
+        a = stack.pop.or_error("underflow")?
+        stack.push(a + b)
+      "*" ->
+        b = stack.pop.or_error("underflow")?
+        a = stack.pop.or_error("underflow")?
+        stack.push(a * b)
+      _ -> stack.push(tok.to_int?)
+  if stack.len != 1: return Error("leftover: #{stack}")
+  stack[0].or_error("empty")?
+
+def main -> () or Error:
+  puts rpn("1 2 + 3 *")?
+
+test "adds":
+  assert rpn("1 2 +")! == 3
+
+test "multiplies and nests":
+  assert rpn("2 3 4 * +")! == 14
+
+test "underflow is an error":
+  assert rpn("+").error?
+  match rpn("+"):
+    Error(e) -> assert e.message == "underflow"
+    Ok(_)    -> assert false
+
+test "leftover":
+  assert rpn("1 2").error?
+
+test "bad token":
+  assert rpn("1 x +").error?

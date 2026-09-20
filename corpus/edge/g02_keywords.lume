@@ -1,0 +1,6 @@
+def main:
+  fn = "a"
+  impl = "b"
+  ref = 3
+  mod = 4
+  puts "#{fn}#{impl}#{ref}#{mod}"

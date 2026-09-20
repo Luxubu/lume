@@ -1,0 +1,7 @@
+def main:
+  xs = [1, 2, 3]
+  puts xs[99]
+  puts xs[-1]
+  puts xs[0]
+  s = "abc"
+  puts s[0]

@@ -1,0 +1,7 @@
+def main:
+  x = "  hi "
+  x = x.trim
+  puts x
+  y = 1
+  y = 2
+  puts y

@@ -1,0 +1,8 @@
+def main:
+  puts "a\tb\nc"
+  puts "quote \" inside"
+  puts "backslash \\ done"
+  puts "unicode é ü 日本"
+  puts "\u{1F600}"
+  puts 'single quotes'
+  puts "len of 日本: #{"日本".len}"

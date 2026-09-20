@@ -1,0 +1,13 @@
+enum C:
+  R
+  G(n: Int)
+
+def main:
+  puts C.R == C.R
+  puts C.G(1) == C.G(2)
+  puts C.G(1) != C.R
+  xs = [C.R, C.G(1)]
+  puts xs.contains?(C.G(1))
+  puts (1, "a") == (1, "a")
+  puts [1, 2] == [1, 2]
+  puts Some(1) == None

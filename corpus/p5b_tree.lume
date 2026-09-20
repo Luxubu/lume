@@ -1,0 +1,20 @@
+# Rose tree: children in a list (Vec gives the indirection).
+enum Tree:
+  Leaf(value: Int)
+  Branch(name: Str, kids: [Tree])
+
+def total(t: Tree) -> Int:
+  match t:
+    Leaf(v) -> v
+    Branch(_, kids) -> kids.sum(total)
+
+def render(t: Tree, indent: Int) -> Str:
+  pad = " ".chars.take(0).join("")
+  match t:
+    Leaf(v) -> "#{pad}- #{v}"
+    Branch(n, kids) -> "#{pad}#{n}:\n" + kids.map { |k| render(k, indent + 2) }.join("\n")
+
+def main:
+  t = Branch("root", [Leaf(1), Branch("a", [Leaf(2), Leaf(3)]), Leaf(4)])
+  puts total(t)
+  puts render(t, 0)

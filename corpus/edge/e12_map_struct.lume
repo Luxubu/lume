@@ -1,0 +1,15 @@
+struct Acc:
+  owner: Str
+  bal: Int
+
+def main:
+  var m: {Str: Acc} = {}
+  m["a"] = Acc("ana", 10)
+  m["b"] = Acc("bo", 20)
+  puts m["a"]
+  puts m.values.sum(_.bal)
+  match m["a"]:
+    Some(acc) -> puts acc.owner
+    None -> puts "none"
+  m["a"].bal = 99
+  puts m["a"]

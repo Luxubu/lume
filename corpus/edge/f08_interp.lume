@@ -1,0 +1,8 @@
+def main:
+  name = "lume"
+  puts "say \"#{name.upcase}\""
+  puts "#{"a" + "b"}"
+  puts "#{if name == "lume": "yes" else: "no"}"
+  puts "#{[1,2].map { |x| "<#{x}>" }.join(",")}"
+  puts "#{name.len > 3 and true}"
+  puts "cost: $#{3 * 2}.00 (#{100}%)"
