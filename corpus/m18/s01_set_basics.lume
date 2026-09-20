@@ -1,0 +1,27 @@
+# Set literals, add/remove, contains?, len, iteration order
+def main:
+  s = {5, 3, 5, 1, 3}
+  puts s
+  puts s.len
+  var t: {Int} = {}
+  puts t.len
+  puts t.add(4)
+  puts t.add(4)
+  puts t.add(2)
+  puts t
+  t.remove(4)
+  puts t
+  t.remove(99)
+  puts t
+  puts t.contains?(2)
+  puts t.contains?(4)
+  total = 0
+  var acc = 0
+  for x in s:
+    acc += x
+  puts acc
+  puts s.first
+  e: {Str} = {}
+  puts e.first
+  puts e
+  puts e.len

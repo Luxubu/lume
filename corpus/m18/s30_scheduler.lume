@@ -1,0 +1,39 @@
+# Scheduler: jobs with dependencies; run in waves of spawned tasks; shared done-set
+struct Job:
+  name: Str
+  deps: {Str}
+  cost: Int
+
+async def run_job(j: Job) -> Str:
+  await Time.sleep(j.cost)
+  j.name.upcase
+
+def ready(jobs: [Job], done: {Str}) -> [Job]:
+  jobs.filter { |j| not done.contains?(j.name) and j.deps.subset?(done) }.to_list
+
+async def main:
+  jobs = [
+    Job("fetch", {}, 5),
+    Job("parse", {"fetch"}, 3),
+    Job("lint", {"fetch"}, 1),
+    Job("build", {"parse", "lint"}, 2),
+    Job("ship", {"build"}, 1),
+    Job("orphan", {"missing"}, 1),
+  ]
+  shared var log: [Str] = []
+  var done: {Str} = {}
+  var wave = 0
+  while true:
+    batch = ready(jobs, done)
+    break if batch.empty?
+    wave += 1
+    tasks = batch.map { |j| spawn: await run_job(j) }.to_list
+    results = await tasks
+    for r in results:
+      log.push("w#{wave}:#{r}")
+    for j in batch:
+      done.add(j.name)
+  puts wave
+  puts log
+  stuck = jobs.map(_.name).to_list.to_set.diff(done)
+  puts "stuck: #{stuck}"

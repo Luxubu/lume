@@ -1,0 +1,6 @@
+# repro: a bare `None` as a statement (e.g. a do-nothing match arm) leaks
+def main:
+  x = 1
+  match x:
+    1 -> puts "one"
+    _ -> None

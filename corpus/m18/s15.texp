@@ -1,0 +1,9 @@
+test uniq chars of banana ... ok
+test middle strips ends ... ok
+test set algebra ... ok
+test this fails on purpose ... FAILED
+    s15_tests_with_sets.lume:28: assert uniq_chars("aab") == {"a"}
+      left:  {a, b}
+      right: {a}
+
+4 tests: 3 passed, 1 failed

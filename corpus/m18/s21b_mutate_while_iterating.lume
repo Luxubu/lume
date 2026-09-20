@@ -1,0 +1,7 @@
+# repro: changing a set while a `for` walks it leaks a rustc borrow error (lists too);
+# a Lume error (or iterating a copy) is expected
+def main:
+  var s = {1, 2}
+  for x in s:
+    s.add(x + 10)
+  puts s

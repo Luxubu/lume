@@ -1,0 +1,25 @@
+# shared var {Str} changed by several spawned tasks
+async def label(i: Int) -> Str:
+  await Time.sleep(5 - i)
+  "job#{i % 3}"
+
+async def main:
+  shared var seen: {Str} = {}
+  var tasks: [Task[Bool]] = []
+  for i in 1..5:
+    t = spawn:
+      l = await label(i)
+      seen.add(l)
+    tasks.push(t)
+  await tasks
+  puts seen.len
+  puts seen.sort
+  puts seen.contains?("job0")
+  words = ["a", "b", "a", "c"]
+  counts = await words.map { |w| spawn: w.upcase }.to_list
+  puts counts.to_set
+  base = {1, 2}
+  t2 = spawn:
+    base.union({3})
+  puts await t2
+  puts base

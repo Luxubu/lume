@@ -48,6 +48,7 @@ pub fn parse_program_shaped(toks: Vec<Token>) -> Result<(Vec<Item>, Shape)> {
 pub fn stmt_pos(s: &Stmt) -> (usize, usize) {
     match s {
         Stmt::Bind { line, col, .. }
+        | Stmt::Destructure { line, col, .. }
         | Stmt::Var { line, col, .. }
         | Stmt::OpAssign { line, col, .. }
         | Stmt::FieldAssign { line, col, .. }
@@ -1022,6 +1023,26 @@ impl Parser {
             }
         }
         let e = self.expr()?;
+        // `(a, b) = pair`
+        if let ExprKind::Tuple(items) = &e.kind {
+            if self.at_sym("=") && !items.is_empty() {
+                let mut names = Vec::new();
+                for it in items {
+                    match &it.kind {
+                        ExprKind::Ident(n) => names.push(n.clone()),
+                        ExprKind::Placeholder => names.push("_".into()),
+                        _ => {
+                            return Err(LumeError::new(it.line, it.col, "each part on the left of `(a, b) = ...` must be a new name, or `_` to skip it"));
+                        }
+                    }
+                }
+                self.advance();
+                let value = self.expr()?;
+                let s = Stmt::Destructure { names, value, line, col };
+                self.end_stmt()?;
+                return Ok(s);
+            }
+        }
         // Field assignment: `recv.field = value` / `recv.field += value`
         if let Tok::Sym(op) = self.peek().clone() {
             if matches!(op, "=" | "+=" | "-=" | "*=" | "/=" | "%=") {
@@ -1062,6 +1083,11 @@ impl Parser {
     /// `stmt if cond` / `stmt unless cond` — Ruby's trailing forms.
     fn trailing_condition(&mut self, stmt: Stmt) -> Result<Stmt> {
         let (line, col) = self.here();
+        // `stmt if cond` shares a line; after an indented block has closed,
+        // `if`/`unless` begins the next statement
+        if matches!(self.prev_tok(), Some(Tok::Dedent)) {
+            return Ok(stmt);
+        }
         if self.eat_kw("if") {
             let cond = self.expr()?;
             self.shape.trailing.insert((line, col), false);
@@ -1726,6 +1752,10 @@ impl Parser {
             }
             Tok::Sym("(") => {
                 self.advance();
+                // `()`: the empty value, for an arm or block that does nothing
+                if self.eat_sym(")") {
+                    return Ok(Expr::new(ExprKind::Tuple(Vec::new()), line, col));
+                }
                 let first = self.expr()?;
                 if self.eat_sym(",") {
                     let mut items = vec![first];
@@ -1942,7 +1972,7 @@ fn count_placeholders(e: &Expr) -> usize {
             .iter()
             .map(|s| match s {
                 Stmt::Expr(e) => count_placeholders(e),
-                Stmt::Bind { value, .. } | Stmt::Var { value, .. } | Stmt::OpAssign { value, .. } => count_placeholders(value),
+                Stmt::Bind { value, .. } | Stmt::Var { value, .. } | Stmt::OpAssign { value, .. } | Stmt::Destructure { value, .. } => count_placeholders(value),
                 Stmt::Return { value: Some(e), .. } => count_placeholders(e),
                 _ => 0,
             })
@@ -1994,7 +2024,7 @@ fn replace_placeholders(e: &mut Expr) {
         for s in &mut b.stmts {
             match s {
                 Stmt::Expr(e) => replace_placeholders(e),
-                Stmt::Bind { value, .. } | Stmt::Var { value, .. } | Stmt::OpAssign { value, .. } => replace_placeholders(value),
+                Stmt::Bind { value, .. } | Stmt::Var { value, .. } | Stmt::OpAssign { value, .. } | Stmt::Destructure { value, .. } => replace_placeholders(value),
                 Stmt::Return { value: Some(e), .. } => replace_placeholders(e),
                 _ => {}
             }

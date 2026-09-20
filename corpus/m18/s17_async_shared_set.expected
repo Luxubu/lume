@@ -1,0 +1,13 @@
+warning: `seen` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/m18/s17_async_shared_set.lume:7:3
+  |
+7 |   shared var seen: {Str} = {}
+  |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+3
+[job0, job1, job2]
+true
+{A, B, C}
+{1, 2, 3}
+{1, 2}
+exit: 0

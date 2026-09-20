@@ -1,0 +1,7 @@
+# repro: == on an enum/struct block param inside filter/reject leaks (sets and lists)
+enum E:
+  A
+  B
+
+def main:
+  puts {A, B}.reject { |c| c == B }

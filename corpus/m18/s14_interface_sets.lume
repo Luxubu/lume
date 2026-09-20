@@ -1,0 +1,44 @@
+# Sets and slices inside interface default methods and extend
+interface Tagged:
+  def tags -> {Str}
+  def has?(t: Str) -> Bool:
+    tags.contains?(t)
+  def common(o: {Str}) -> {Str}:
+    tags.intersect(o)
+  def tag_line -> Str:
+    tags.sort.join(",")
+
+struct Post:
+  title: Str
+  labels: {Str}
+
+  def tags -> {Str}:
+    labels
+
+interface Short:
+  def text -> Str
+  def preview -> Str:
+    t = text
+    if t.len > 5: t[0...5] + "..."
+    else: t
+
+extend Str with Short:
+  def text -> Str:
+    self
+
+extend Str with Tagged:
+  def tags -> {Str}:
+    self.split(" ").to_set
+
+def describe(t: Tagged) -> Str:
+  "#{t.tag_line} has rust: #{t.has?("rust")}"
+
+def main:
+  p = Post("Lume", {"rust", "lang", "rust", "compilers"})
+  puts p.has?("lang")
+  puts p.common({"lang", "go"})
+  puts describe(p)
+  puts describe("rust is a rust")
+  puts "hello world".preview
+  puts "hi".preview
+  puts "日本語のテキスト".preview

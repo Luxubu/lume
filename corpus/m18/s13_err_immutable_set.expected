@@ -1,0 +1,7 @@
+error: `s` is immutable, but `add` changes it
+  --> corpus/m18/s13_err_immutable_set.lume:4:4
+  |
+4 |   s.add(3)
+  |    ^
+  help: declare it with `var s = ...` on line 3
+exit: 1

@@ -1,0 +1,11 @@
+# repro: an interface default method is not callable on a conforming struct directly
+interface Shape:
+  def area -> Int
+  def name -> Str:
+    "shape"
+struct Sq:
+  s: Int
+  def area -> Int = s * s
+def main:
+  q = Sq(2)
+  puts q.name

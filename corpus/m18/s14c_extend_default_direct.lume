@@ -1,0 +1,11 @@
+# repro: even after `extend Str with Short`, the default `preview` is not a Str method
+interface Short:
+  def text -> Str
+  def preview -> Str:
+    text + "!"
+extend Str with Short:
+  def text -> Str:
+    self
+def main:
+  puts "hi".text
+  puts "hi".preview

@@ -1,0 +1,25 @@
+# union / intersect / diff / subset? / superset? / ==
+def main:
+  a = {1, 2, 3, 4}
+  b = {3, 4, 5}
+  puts a.union(b)
+  puts b.union(a)
+  puts a.intersect(b)
+  puts b.intersect(a)
+  puts a.diff(b)
+  puts b.diff(a)
+  puts a.diff(a)
+  puts a.diff(a).len
+  puts {3, 4}.subset?(a)
+  puts {3, 4}.subset?(b)
+  puts {3, 9}.subset?(a)
+  puts a.superset?({1})
+  puts a.superset?(a)
+  e: {Int} = {}
+  puts e.subset?(a)
+  puts a.superset?(e)
+  puts a == {4, 3, 2, 1}
+  puts a == b
+  puts a != b
+  puts a.union(b).intersect({1, 5, 7}).diff({5})
+  puts a.intersect(b) == b.intersect(a)

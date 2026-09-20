@@ -522,6 +522,7 @@ impl Fmt {
 
     fn stmt_text(&mut self, s: &Stmt) -> String {
         match s {
+            Stmt::Destructure { names, value, .. } => format!("({}) = {}", names.join(", "), self.expr(value)),
             Stmt::Bind { name, ty, value, .. } => match ty {
                 Some(t) => format!("{}: {} = {}", name, type_str(t), self.expr(value)),
                 None => format!("{} = {}", name, self.expr(value)),
@@ -644,13 +645,20 @@ impl Fmt {
 
     /// `[a, b]` on one line, or one item per line when the source did that.
     fn bracketed(&mut self, open: &str, close: &str, items: Vec<String>, multi: bool) -> String {
+        self.bracketed_at(open, close, items.into_iter().map(|i| (i, 0)).collect(), multi)
+    }
+
+    /// The same, with each item's source line, so a comment written after an
+    /// item stays with that item instead of drifting past the closing bracket.
+    fn bracketed_at(&mut self, open: &str, close: &str, items: Vec<(String, usize)>, multi: bool) -> String {
         if !multi || items.is_empty() {
-            return format!("{}{}{}", open, items.join(", "), close);
+            return format!("{}{}{}", open, items.into_iter().map(|(i, _)| i).collect::<Vec<_>>().join(", "), close);
         }
         let inner = ind(self.indent + 1);
         let mut out = format!("{}\n", open);
-        for it in items {
-            out.push_str(&format!("{}{},\n", inner, it));
+        for (it, line) in items {
+            let trailing = if line > 0 { self.take_trailing(line) } else { String::new() };
+            out.push_str(&format!("{}{},{}\n", inner, it, trailing));
         }
         out.push_str(&format!("{}{}", ind(self.indent), close));
         out
@@ -704,10 +712,8 @@ impl Fmt {
             }
             if self.is_inline(body) {
                 if let Some(st) = body.stmts.first() {
-                    let text = match st {
-                        Stmt::Expr(x) => self.expr(x),
-                        other => self.stmt_text(other),
-                    };
+                    // `stmt_text` keeps a trailing `if`/`unless` on one line
+                    let text = self.stmt_text(st);
                     return format!("{{ |{}| {} }}", params.join(", "), text);
                 }
             }
@@ -767,11 +773,11 @@ impl Fmt {
                 if multi {
                     self.indent += 1;
                 }
-                let texts: Vec<String> = items.iter().map(|i| self.expr(i)).collect();
+                let texts: Vec<(String, usize)> = items.iter().map(|i| (self.expr(i), i.line)).collect();
                 if multi {
                     self.indent -= 1;
                 }
-                self.bracketed("[", "]", texts, multi)
+                self.bracketed_at("[", "]", texts, multi)
             }
             ExprKind::Tuple(items) => {
                 let texts: Vec<String> = items.iter().map(|i| self.expr(i)).collect();
@@ -782,22 +788,22 @@ impl Fmt {
                 if multi {
                     self.indent += 1;
                 }
-                let texts: Vec<String> = items.iter().map(|i| self.expr(i)).collect();
+                let texts: Vec<(String, usize)> = items.iter().map(|i| (self.expr(i), i.line)).collect();
                 if multi {
                     self.indent -= 1;
                 }
-                self.bracketed("{", "}", texts, multi)
+                self.bracketed_at("{", "}", texts, multi)
             }
             ExprKind::MapLit(pairs) => {
                 let multi = pairs.len() >= 2 && Self::spread(pairs.first().map(|p| &p.0), pairs.last().map(|p| &p.0));
                 if multi {
                     self.indent += 1;
                 }
-                let texts: Vec<String> = pairs.iter().map(|(k, v)| format!("{}: {}", self.expr(k), self.expr(v))).collect();
+                let texts: Vec<(String, usize)> = pairs.iter().map(|(k, v)| (format!("{}: {}", self.expr(k), self.expr(v)), k.line)).collect();
                 if multi {
                     self.indent -= 1;
                 }
-                self.bracketed("{", "}", texts, multi)
+                self.bracketed_at("{", "}", texts, multi)
             }
             ExprKind::Range { lo, hi, inclusive } => {
                 format!("{}{}{}", self.expr_p(lo, 6), if *inclusive { ".." } else { "..." }, self.expr_p(hi, 6))

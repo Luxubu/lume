@@ -1,0 +1,5 @@
+Ok([Num(v: 12), Op(c: +), LParen, Num(v: 3), Op(c: *), Num(v: 45), RParen])
+Error(bad char `%` at 2)
+70
+31
+Error(bad char `€` at 2)

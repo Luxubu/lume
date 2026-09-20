@@ -1,0 +1,33 @@
+# List slicing: negative, out-of-range, reversed, empty; slices of slices
+def total(xs: [Int]) -> Int:
+  match xs:
+    [] -> 0
+    [x, ..rest] -> x + total(rest)
+
+def rsum(xs: [Int]) -> Int:
+  if xs.empty?: 0
+  else: xs[0].or(0) + rsum(xs[1..xs.len])
+
+def main:
+  xs = [10, 20, 30, 40, 50]
+  puts xs[0..1]
+  puts xs[0...1]
+  puts xs[3..10]
+  puts xs[-2..1]
+  puts xs[4..2]
+  puts xs[5..5]
+  puts xs[1..3][1..1]
+  puts xs[1..3][1..1][0]
+  puts xs[1..3].len
+  puts total(xs[1..3])
+  puts rsum(xs)
+  puts rsum(xs[2...4])
+  e: [Int] = []
+  puts e[0..3]
+  puts xs[1..2] + xs[4..4]
+  words = ["x", "y", "z"]
+  puts words[1..2].join("/")
+  puts xs[1..3].map { |x| x / 10 }.to_list
+  n = 2
+  puts xs[n - 1..n + 1]
+  puts xs[xs.len - 2..xs.len]

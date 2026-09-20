@@ -1,0 +1,62 @@
+# Working with collections: an index of words, taking tuples apart, and the
+# small forms review round 3 asked for.
+
+struct Doc:
+  name: Str
+  words: [Str]
+
+interface Described:
+  def label -> Str
+
+  # a default: every conforming type has it, with nothing to declare
+  def describe -> Str:
+    "<#{label}>"
+
+extend Doc with Described:
+  def label -> Str:
+    name
+
+def index(docs: [Doc]) -> {Str: {Str}}:
+  var idx: {Str: {Str}} = {}
+  for d in docs:
+    for w in d.words:
+      # the stored set is changed where it lives; a missing key starts empty
+      idx[w].add(d.name)
+  idx
+
+def split_name(full: Str) -> (Str, Str):
+  i = full.index_of(" ").or(full.len)
+  (full[0...i], full[i + 1...full.len])
+
+def main:
+  docs = [
+    Doc("intro", ["lume", "fast", "easy"]),
+    Doc("guide", ["lume", "easy"]),
+  ]
+  idx = index(docs)
+  for w in idx.keys.sort:
+    puts "#{w.pad_right(6)} #{idx[w].or({}).to_list.sort.join(", ")}"
+
+  # both docs, by name
+  both = idx["lume"].or({}).intersect(idx["easy"].or({}))
+  puts "in both: #{both.to_list.sort}"
+
+  # a tuple taken apart in one line; `_` skips a part
+  (first, last) = split_name("Ada Lovelace")
+  puts "#{last}, #{first}"
+  (a, _, c) = (1, "skipped", 3)
+  puts a + c
+
+  # lists join with `+`; sets have union/intersect/diff
+  puts ["a", "b"] + ["c"]
+  ones = {1, 2}
+  puts ones.union({3}).to_list
+
+  # the interface default, called straight on the type
+  puts docs[0].or(Doc("none", [])).describe
+
+  # `()` is the value that does nothing
+  for d in docs:
+    match d.name:
+      "intro" -> puts "found the intro"
+      _       -> ()

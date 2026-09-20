@@ -1,0 +1,8 @@
+# repro (fmt): a trailing comment on an item of a multi-line set/list literal is moved
+# below the closing brace
+def main:
+  s = {
+    "a",  # first
+    "b",
+  }
+  puts s

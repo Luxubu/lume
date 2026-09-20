@@ -1,0 +1,6 @@
+# repro: xs[i].method on a list of lists is refused (README says xs[i].method reaches the item);
+# nested xs[i][j] = v is refused with no help
+def main:
+  var g = [[1, 2], [3, 4]]
+  g[0].push(9)
+  puts g

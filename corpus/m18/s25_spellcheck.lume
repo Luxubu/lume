@@ -1,0 +1,36 @@
+# Spell checker: dictionary set, edits-1 suggestions using slices
+def edits(w: Str) -> {Str}:
+  letters = "abcdefghijklmnopqrstuvwxyz".chars.to_list
+  var out: {Str} = {}
+  for i in 0..w.len:
+    left = w[0...i]
+    right = w[i..w.len]
+    if right.len > 0:
+      out.add(left + right[1..right.len])
+    if right.len > 1:
+      out.add(left + right[1..1] + right[0..0] + right[2..right.len])
+    for c in letters:
+      out.add(left + c + right)
+      if right.len > 0:
+        out.add(left + c + right[1..right.len])
+  out
+
+def check(text: Str, dict: {Str}) -> [Str]:
+  var report: [Str] = []
+  for raw in text.split:
+    w = raw.downcase.replace(",", "").replace(".", "")
+    if dict.contains?(w):
+      next
+    sugg = edits(w).intersect(dict).sort
+    if sugg.empty?: report.push("#{w}: ?")
+    else: report.push("#{w}: #{sugg.join("/")}")
+  report
+
+def main:
+  dict = "the quick brown fox jumps over lazy dog cat hat a".split.to_set
+  puts dict.len
+  puts edits("ab").len
+  puts edits("cat").contains?("act")
+  puts edits("cat").contains?("cat")
+  for line in check("Teh quick brwn fox jumsp ovr the lazzy dgo, xyzzy.", dict):
+    puts line

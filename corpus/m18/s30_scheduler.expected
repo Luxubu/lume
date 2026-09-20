@@ -1,0 +1,10 @@
+warning: `log` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/m18/s30_scheduler.lume:23:3
+   |
+23 |   shared var log: [Str] = []
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+4
+[w1:FETCH, w2:PARSE, w2:LINT, w3:BUILD, w4:SHIP]
+stuck: {orphan}
+exit: 0

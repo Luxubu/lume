@@ -1,0 +1,36 @@
+# for var over structs holding sets; ? with T or E and T? on slices
+struct Bin:
+  id: Int
+  items: {Str}
+
+def parse_pair(s: Str) -> (Str, Int) or Error:
+  i = s.index_of("=").or_error("no = in `#{s}`")?
+  key = s[0...i]
+  val = s[i + 1..s.len].to_int?
+  (key, val)
+
+def first_upper(s: Str) -> Str?:
+  c = s[0]?
+  Some(c.upcase)
+
+def load(lines: [Str]) -> {Str: Int} or Error:
+  var m: {Str: Int} = {}
+  for l in lines:
+    (k, v) = parse_pair(l)?
+    m[k] = v
+  m
+
+def main:
+  var boxes = [Bin(1, {"a"}), Bin(2, {})]
+  for var b in boxes:
+    b.items.add("tag#{b.id}")
+  puts boxes
+  puts parse_pair("x=10")
+  puts parse_pair("y10")
+  puts parse_pair("z=ten")
+  puts first_upper("émile")
+  puts first_upper("")
+  puts load(["a=1", "bb=22"])
+  match load(["a=1", "oops"]):
+    Ok(m) -> puts m
+    Error(e) -> puts "failed: #{e.message}"

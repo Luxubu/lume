@@ -1,0 +1,4 @@
+# Error test: a Float cannot be a set item
+def main:
+  s = {1.5, 2.5}
+  puts s.len

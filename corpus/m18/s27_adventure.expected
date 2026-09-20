@@ -1,0 +1,15 @@
+> east: Locked.
+> north: You enter the library.
+> take book: Taken.
+> take book: You already have it.
+> go south: Say just `south`.
+> south: Back in the hall.
+> search: You find a key.
+> east: The vault opens.
+> out: Freedom!
+> dance: Nothing happens.
+[book, key]
+{Hall, Library, Vault, Outside}
+4
+true
+exit: 0

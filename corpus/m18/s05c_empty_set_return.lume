@@ -1,0 +1,14 @@
+# repro: `{}` returned from a `-> {Int}` function, or assigned to a `{Int}` var, is built as a map
+def none -> {Int}:
+  {}
+def none2 -> {Int} = {}
+def pick(b: Bool) -> {Int}:
+  if b: {1}
+  else: {}
+def main:
+  puts none()
+  puts none2()
+  puts pick(false)
+  var s = {1}
+  s = {}
+  puts s

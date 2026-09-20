@@ -1,0 +1,5 @@
+# repro: an each block whose one statement is `set.add(n)` (a Bool) leaks
+def main:
+  var hits: {Int} = {}
+  [4, 5].each { |n| hits.add(n) }
+  puts hits

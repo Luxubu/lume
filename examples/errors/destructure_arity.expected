@@ -1,0 +1,6 @@
+error: this tuple has 3 parts, but 2 are named
+  --> examples/errors/destructure_arity.lume:6:3
+  |
+6 |   (a, b) = (Red, Green, Red)
+  |   ^
+  help: name every part; use `_` for a part you do not need

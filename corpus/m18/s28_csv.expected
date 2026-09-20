@@ -1,0 +1,11 @@
+[name, city, score]
+4
+Ana | Paris, FR | 90
+Bö | Köln | 75
+Zoë | Paris | FR | x
+Cy | Köln | 60
+{Paris, FR, Köln, Paris}
+[90, 75, -1, 60]
+75
+ABZC
+exit: 0

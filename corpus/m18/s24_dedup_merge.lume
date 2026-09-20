@@ -1,0 +1,40 @@
+# Dedup and merge of contact records keyed by a struct; tags merged as sets
+struct Key:
+  first: Str
+  last: Str
+
+struct Contact:
+  first: Str
+  last: Str
+  emails: {Str}
+  tags: {Str}
+
+  def key -> Key = Key(first.downcase, last.downcase)
+
+  def merge(o: Contact) -> Contact:
+    Contact(first, last, emails.union(o.emails), tags.union(o.tags))
+
+def dedup(cs: [Contact]) -> [Contact]:
+  var by: {Key: Contact} = {}
+  for c in cs:
+    k = c.key
+    match by[k]:
+      Some(old) -> by[k] = old.merge(c)
+      None -> by[k] = c
+  by.values
+
+def main:
+  cs = [
+    Contact("Ana", "Lee", {"ana@x.io"}, {"vip"}),
+    Contact("bo", "Kim", {"bo@y.io"}, {}),
+    Contact("ANA", "lee", {"ana@work.io", "ana@x.io"}, {"work", "vip"}),
+    Contact("Bo", "Kim", {}, {"new"}),
+  ]
+  out = dedup(cs)
+  puts out.len
+  for c in out:
+    puts "#{c.first} #{c.last}: #{c.emails.sort.join(", ")} [#{c.tags.sort.join(" ")}]"
+  vips = out.filter { |c| c.tags.contains?("vip") }.map(_.first).to_list
+  puts vips
+  all_tags = out.fold({}) { |acc, c| acc.union(c.tags) }
+  puts all_tags

@@ -1,0 +1,5 @@
+# repro: `{}` as an argument for a `{Str}` parameter is built as an empty map
+def size(s: {Str}) -> Int = s.len
+
+def main:
+  puts size({})

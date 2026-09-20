@@ -1,0 +1,10 @@
+# repro: a spawn block ending in `set.add(x)` is a Task[Bool]; pushing it into
+# [Task[()]] leaks a rustc error instead of a Lume type error
+async def main:
+  shared var seen: {Int} = {}
+  var tasks: [Task[()]] = []
+  t = spawn:
+    seen.add(1)
+  tasks.push(t)
+  await tasks
+  puts seen

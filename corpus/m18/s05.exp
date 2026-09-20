@@ -1,0 +1,10 @@
+true
+true
+false
+Team(name: red, members: {ann, cy})
+{ann}
+{ann}
+{ann, cy}
+{ann}
+0
+3

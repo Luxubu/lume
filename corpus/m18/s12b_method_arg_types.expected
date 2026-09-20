@@ -1,0 +1,7 @@
+error: `.contains?` on a `{Int}` takes an `Int`, but this is a `Str`
+  --> corpus/m18/s12b_method_arg_types.lume:5:20
+  |
+5 |   puts s.contains?("a")
+  |                    ^
+  help: parse it: `.to_int` gives `Int or Error`, so `x.to_int?` or `x.to_int.or(0)`
+exit: 1

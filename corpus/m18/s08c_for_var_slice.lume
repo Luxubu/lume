@@ -1,0 +1,10 @@
+# repro: `for var` over a slice changes a temporary copy; the list is unchanged and
+# nothing warns (compare `for var p in xs`, which changes xs)
+struct P:
+  x: Int
+
+def main:
+  var xs = [P(1), P(2), P(3)]
+  for var p in xs[0..1]:
+    p.x = 50
+  puts xs

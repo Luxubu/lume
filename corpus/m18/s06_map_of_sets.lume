@@ -1,0 +1,35 @@
+# Sets as map values ({Str: {Int}}), map keys that are structs/enums/tuples
+struct Cell:
+  r: Int
+  c: Int
+
+enum Dir:
+  North
+  South
+
+def main:
+  var idx: {Str: {Int}} = {}
+  words = ["a", "b", "a", "c", "b", "a"]
+  for i, w in words.enumerate:
+    if idx.contains?(w):
+      idx[w].add(i)
+    else:
+      idx[w] = {i}
+  puts idx
+  puts idx["a"].or({}).len
+  puts idx.get("z")
+  var grid: {Cell: Str} = {}
+  grid[Cell(0, 0)] = "start"
+  grid[Cell(2, 3)] = "goal"
+  grid[Cell(0, 0)] = "home"
+  puts grid.len
+  puts grid[Cell(0, 0)]
+  puts grid[Cell(9, 9)]
+  moves: {Dir: Int} = {North: 1, South: -1}
+  puts moves[South].or(0)
+  var dist: {(Int, Int): Int} = {}
+  dist[(0, 1)] = 5
+  dist[(1, 0)] = 7
+  puts dist[(1, 0)]
+  puts dist.keys
+  puts dist.contains?((0, 1))

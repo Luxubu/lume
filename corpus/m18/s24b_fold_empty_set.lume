@@ -1,0 +1,6 @@
+# repro: `{}` as the start value of fold is always a map; the suggested type is `{Str: Int}`,
+# and adding the right type `{Str}` then fails with "`{?: ?}` values have no method `union`"
+def main:
+  xs = [{"a"}, {"b"}]
+  all: {Str} = xs.fold({}) { |acc, s| acc.union(s) }
+  puts all

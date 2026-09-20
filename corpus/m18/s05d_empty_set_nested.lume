@@ -1,0 +1,15 @@
+# repro: `{}` assigned to a set field, or nested in a map/list/Some, is built as a map
+struct S:
+  tags: {Str}
+  def clear(var self):
+    tags = {}
+def main:
+  var s = S({"a"})
+  s.clear()
+  puts s
+  m: {Str: {Int}} = {"a": {}}
+  puts m
+  xs: [{Int}] = [{}, {1}]
+  puts xs
+  o: {Int}? = Some({})
+  puts o

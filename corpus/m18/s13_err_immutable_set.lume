@@ -1,0 +1,5 @@
+# Error test: add on a set bound without var
+def main:
+  s = {1, 2}
+  s.add(3)
+  puts s

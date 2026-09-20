@@ -1,4 +1,4 @@
-error: `Option` is a built-in name and cannot be a type
+error: `Option` cannot be a type name: this is a built-in Lume name
   --> examples/errors/reserved_type.lume:1:1
   |
 1 | struct Option:

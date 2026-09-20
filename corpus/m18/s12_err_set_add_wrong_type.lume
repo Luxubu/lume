@@ -1,0 +1,5 @@
+# Error test: adding a Str to a {Int}, and an immutable set changed
+def main:
+  var s: {Int} = {1}
+  s.add("two")
+  puts s

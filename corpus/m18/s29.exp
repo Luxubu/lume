@@ -1,0 +1,10 @@
+true
+false
+false
+[A1, C3]
+[B2, C3, D4]
+[craft, metal, sharp, tool]
+glue      0 craft
+saw       2 metal,sharp,tool
+hammer    5 metal,tool
+{tool: 2, metal: 2, craft: 2, sharp: 1}

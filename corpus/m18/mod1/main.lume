@@ -1,0 +1,20 @@
+# main.lume — imports helpers; uses sets and slices across the file boundary
+import helpers
+import helpers.Doc
+
+def main:
+  v = helpers.vocab("The cat and THE hat")
+  puts v
+  puts v.len
+  puts helpers.head("abcdef", 3)
+  puts helpers.head("é日😀x", 3)
+  puts helpers.tail_of([1, 2, 3])
+  a = helpers.make_doc("a", "red green blue")
+  b: Doc = helpers.make_doc("b", "blue red yellow")
+  puts helpers.overlap(a, b)
+  puts a.words.diff(b.words)
+  puts b.name
+  var ws: {Str} = b.words
+  ws.add("purple")
+  puts ws.len
+  puts b.words.len

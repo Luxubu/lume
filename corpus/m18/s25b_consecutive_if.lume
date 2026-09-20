@@ -1,0 +1,7 @@
+# repro: two block `if` statements in a row do not parse (the second `if` is taken as a
+# trailing `if` of the first); a blank line between does not help
+def main:
+  if true:
+    puts 1
+  if true:
+    puts 2

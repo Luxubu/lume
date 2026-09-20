@@ -1,0 +1,35 @@
+# Slices used in match, as arguments, in interpolation
+def kind(prefix: Str) -> Str:
+  match prefix:
+    "ab" | "ba" -> "mixed"
+    "aa" -> "double a"
+    p if p.len < 2 -> "short"
+    _ -> "other"
+
+def classify(word: Str) -> Str:
+  match word[0]:
+    Some("a") | Some("e") -> "vowel start"
+    Some(c) if c.digit? -> "digit start"
+    Some(_) -> "consonant start"
+    None -> "empty"
+
+def shout(s: Str) -> Str = s.upcase + "!"
+
+def main:
+  for w in ["abc", "bad", "aaron", "x", "zzz"]:
+    puts "#{w}: #{kind(w[0..1])}"
+  for w in ["egg", "9lives", "tree", ""]:
+    puts classify(w)
+  s = "hello world"
+  puts shout(s[0...5])
+  puts "first=#{s[0..0]} rest=#{s[1..s.len]} mid=#{s[3..7].upcase}"
+  match s[6..10]:
+    "world" -> puts "found world"
+    other -> puts "got #{other}"
+  xs = [1, 2, 3, 4]
+  match xs[1..2]:
+    [a, b] -> puts "pair #{a},#{b}"
+    _ -> puts "no"
+  match xs[9..12]:
+    [] -> puts "empty slice"
+    _ -> puts "nonempty"

@@ -1,0 +1,17 @@
+# helpers.lume — pub functions returning sets and slices
+pub struct Doc:
+  name: Str
+  words: {Str}
+
+pub def vocab(text: Str) -> {Str}:
+  text.downcase.split.to_list.to_set
+
+pub def head(s: Str, n: Int) -> Str = s[0...n]
+
+pub def tail_of(xs: [Int]) -> [Int] = xs[1..xs.len]
+
+pub def make_doc(name: Str, text: Str) -> Doc = Doc(name, vocab(text))
+
+pub def overlap(a: Doc, b: Doc) -> {Str} = a.words.intersect(b.words)
+
+def secret -> Int = 42

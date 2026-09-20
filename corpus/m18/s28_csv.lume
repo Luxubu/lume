@@ -1,0 +1,37 @@
+# CSV-ish parsing with slices: quoted fields, header row, column stats
+def split_line(line: Str) -> [Str]:
+  var fields: [Str] = []
+  var start = 0
+  var quoted = false
+  var i = 0
+  while i < line.len:
+    c = line[i].or("")
+    if c == "\"":
+      quoted = not quoted
+    elif c == "," and not quoted:
+      fields.push(line[start...i])
+      start = i + 1
+    i += 1
+  fields.push(line[start...line.len])
+  fields.map { |f| unquote(f.trim) }.to_list
+
+def unquote(f: Str) -> Str:
+  if f.len >= 2 and f.starts_with?("\"") and f.ends_with?("\""): f[1...f.len - 1]
+  else: f
+
+def main:
+  text = "name,city,score\nAna,\"Paris, FR\",90\nBö,Köln,75\n\"Zoë\",Paris, FR,x\nCy,Köln,60"
+  rows = text.lines.map(split_line).to_list
+  header = rows[0].or([])
+  puts header
+  body = rows[1..rows.len]
+  puts body.len
+  for r in body:
+    puts r.join(" | ")
+  cities = body.map { |r| r[1].or("?") }.to_list.to_set
+  puts cities
+  scores = body.map { |r| r[2].or("").to_int.or(-1) }.to_list
+  puts scores
+  good = scores.filter { |s| s >= 0 }.to_list
+  puts good.sum / good.len
+  puts body.map { |r| r[0].or("")[0..0] }.to_list.join("")

@@ -1,0 +1,4 @@
+def main:
+  var idx: {Str: {Int}} = {"a": {1}}
+  idx["a"].or({}).add(2)
+  puts idx

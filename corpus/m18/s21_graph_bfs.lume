@@ -1,0 +1,48 @@
+# Graph BFS with a visited set; shortest hop counts; connected components
+struct Graph:
+  adj: {Int: [Int]}
+
+  def connect(var self, a: Int, b: Int):
+    var la = adj[a].or([])
+    la.push(b)
+    adj[a] = la
+    var lb = adj[b].or([])
+    lb.push(a)
+    adj[b] = lb
+
+  def bfs(start: Int) -> {Int: Int}:
+    var dist: {Int: Int} = {start: 0}
+    var seen: {Int} = {start}
+    var queue = [start]
+    var i = 0
+    while i < queue.len:
+      cur = queue[i].or(0)
+      i += 1
+      for n in adj[cur].or([]):
+        if seen.add(n):
+          dist[n] = dist[cur].or(0) + 1
+          queue.push(n)
+    dist
+
+  def components -> [{Int}]:
+    var done: {Int} = {}
+    var out: [{Int}] = []
+    for node in adj.keys.sort:
+      if not done.contains?(node):
+        comp = bfs(node).keys.to_set
+        done = done.union(comp)
+        out.push(comp)
+    out
+
+def main:
+  var g = Graph({})
+  for e in [(1, 2), (2, 3), (1, 4), (4, 5), (3, 5), (7, 8), (9, 9)]:
+    g.connect(e.0, e.1)
+  d = g.bfs(1)
+  puts d
+  puts d[5]
+  puts d[7]
+  cs = g.components
+  puts cs.len
+  for c in cs:
+    puts "#{c.sort} size #{c.len}"

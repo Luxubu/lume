@@ -1,0 +1,4 @@
+# Error test: sets have no positions
+def main:
+  s = {"a", "b"}
+  puts s[0]

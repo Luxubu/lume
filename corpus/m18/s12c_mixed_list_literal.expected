@@ -1,0 +1,7 @@
+error: the items of a list must all be the same type; the first is an `Int`, but this is a `Str`
+  --> corpus/m18/s12c_mixed_list_literal.lume:3:12
+  |
+3 |   xs = [1, "a"]
+  |            ^
+  help: parse it: `.to_int` gives `Int or Error`, so `x.to_int?` or `x.to_int.or(0)`
+exit: 1

@@ -1,0 +1,6 @@
+# repro: following the compiler's own help (`.or(default).add`) compiles
+# but the add goes to a temporary copy: the map is unchanged
+def main:
+  var idx: {Str: {Int}} = {"a": {1}}
+  idx["a"].or({}).add(2)
+  puts idx

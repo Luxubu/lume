@@ -1,0 +1,3 @@
+# repro: join on a {Int} (or [Int]) leaks a rustc error
+def main:
+  puts {1, 2}.join(",")

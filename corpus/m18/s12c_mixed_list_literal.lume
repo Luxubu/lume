@@ -1,0 +1,4 @@
+# repro: a mixed list literal leaks, while the same set literal gets a Lume error
+def main:
+  xs = [1, "a"]
+  puts xs

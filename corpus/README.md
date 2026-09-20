@@ -20,3 +20,17 @@ with a method call in the block, `Str` parameter `+` literal), 1 crash
 **0 wrong outputs**. All three defects are fixed; `REPORT.md` is the
 reviewer's report as written. Every file has an `.expected` and runs in
 `tests/run.sh`.
+
+## m18/ — third review round
+
+Thirty programs by a third independent reviewer after milestone 18, from the
+README and the examples only, on sets, character slicing, and how those
+combine with interfaces, modules, async, tests and the formatter. Their first
+run: 14 ok, 9 Lume errors, 7 rustc leaks, 1 crash, 2 silently wrong outputs
+(a change landing on a temporary copy), 1 formatter defect — and, again, no
+wrong set or slice semantics. All ten ranked problems are fixed; `REPORT.md`
+is the reviewer's report. `s31_block_param_matrix.lume` is not the reviewer's:
+it is the regression test written while fixing finding 3, every block method
+over every item shape (225 cells). `*.exp` files are the reviewer's
+hand-computed expectations, kept as evidence; `*.expected` is what the suite
+compares.

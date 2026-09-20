@@ -1,0 +1,42 @@
+# Sets of tuples, structs, enums; block methods on sets
+struct Pos:
+  row: Int
+  col: Int
+
+enum Suit:
+  Hearts
+  Spades
+  Clubs
+
+enum Card:
+  Num(n: Int, s: Suit)
+  Joker
+
+def main:
+  pairs = {(1, "a"), (2, "b"), (1, "a"), (1, "b")}
+  puts pairs
+  puts pairs.len
+  puts pairs.contains?((2, "b"))
+  puts pairs.filter { |n, s| n == 1 }
+  puts pairs.map { |n, s| s }.to_list
+  ps = {Pos(0, 0), Pos(1, 2), Pos(0, 0)}
+  puts ps
+  puts ps.contains?(Pos(1, 2))
+  puts ps.any? { |p| p.row > 0 }
+  puts ps.all? { |p| p.col >= 0 }
+  puts ps.count { |p| p.row == 0 }
+  suits = {Hearts, Clubs, Hearts}
+  puts suits
+  puts suits.contains?(Spades)
+  cards = {Num(3, Hearts), Joker, Num(3, Hearts), Num(3, Spades), Joker}
+  puts cards.len
+  puts cards.reject { |c| c == Joker }
+  big = {10, 20, 30, 40}.filter { |n| n > 15 }
+  puts big
+  puts big.len
+  puts {1, 2, 3}.map { |n| n % 2 }.to_list
+  puts {1, 2, 3}.map { |n| n % 2 }.to_list.to_set
+  puts {3, 1, 2}.sort_by { |n| 0 - n }
+  puts {1, 2, 3, 4}.find { |n| n > 2 }
+  puts {1, 2, 3, 4}.sum { |n| n * n }
+  puts {1, 2, 3}.fold(100) { |a, n| a - n }

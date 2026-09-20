@@ -1,0 +1,3 @@
+4
+[w1:FETCH, w2:PARSE, w2:LINT, w3:BUILD, w4:SHIP]
+stuck: {orphan}

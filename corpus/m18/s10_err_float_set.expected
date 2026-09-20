@@ -1,0 +1,7 @@
+error: a `Float` cannot be an item of a set
+  --> corpus/m18/s10_err_float_set.lume:3:7
+  |
+3 |   s = {1.5, 2.5}
+  |       ^
+  help: floats have no exact equality; use an `Int` (cents, thousandths) or a `Str`
+exit: 1

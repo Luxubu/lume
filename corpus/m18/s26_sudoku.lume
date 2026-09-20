@@ -1,0 +1,48 @@
+# Sudoku validation: rows, columns and boxes checked with sets
+def valid_group?(cells: [Int]) -> Bool:
+  filled = cells.filter { |c| c != 0 }.to_list
+  filled.to_set.len == filled.len and filled.all? { |c| c >= 1 and c <= 9 }
+
+def column(grid: [[Int]], c: Int) -> [Int]:
+  grid.map { |row| row[c].or(0) }.to_list
+
+def box(grid: [[Int]], b: Int) -> [Int]:
+  r0 = (b / 3) * 3
+  c0 = (b % 3) * 3
+  var out: [Int] = []
+  for row in grid[r0...r0 + 3]:
+    for v in row[c0...c0 + 3]:
+      out.push(v)
+  out
+
+def problems(grid: [[Int]]) -> [Str]:
+  var errs: [Str] = []
+  for i, row in grid.enumerate:
+    errs.push("row #{i}") unless valid_group?(row)
+  for c in 0...9:
+    errs.push("col #{c}") unless valid_group?(column(grid, c))
+  for b in 0...9:
+    errs.push("box #{b}") unless valid_group?(box(grid, b))
+  errs
+
+def missing(cells: [Int]) -> {Int}:
+  (1..9).to_list.to_set.diff(cells.to_set)
+
+def main:
+  g = [
+    [5, 3, 0, 0, 7, 0, 0, 0, 0],
+    [6, 0, 0, 1, 9, 5, 0, 0, 0],
+    [0, 9, 8, 0, 0, 0, 0, 6, 0],
+    [8, 0, 0, 0, 6, 0, 0, 0, 3],
+    [4, 0, 0, 8, 0, 3, 0, 0, 1],
+    [7, 0, 0, 0, 2, 0, 0, 0, 6],
+    [0, 6, 0, 0, 0, 0, 2, 8, 0],
+    [0, 0, 0, 4, 1, 9, 0, 0, 5],
+    [0, 0, 0, 0, 8, 0, 0, 7, 9],
+  ]
+  puts problems(g)
+  puts missing(g[0].or([]))
+  puts box(g, 4)
+  var bad = g
+  bad[0][2] = 5
+  puts problems(bad)

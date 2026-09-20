@@ -227,6 +227,8 @@ pub enum Stmt {
     /// `name = value` — a new immutable binding, an assignment to a `var`,
     /// a self-transform rebind, or a field assignment inside a method.
     Bind { name: String, ty: Option<Type>, value: Expr, line: usize, col: usize },
+    /// `(a, b) = pair` — new immutable bindings, one per part; `_` skips a part
+    Destructure { names: Vec<String>, value: Expr, line: usize, col: usize },
     /// `var name = value` / `var name: Type = value`
     Var { name: String, ty: Option<Type>, value: Expr, line: usize, col: usize },
     /// `name += value` and friends

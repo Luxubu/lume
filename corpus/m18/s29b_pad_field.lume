@@ -1,0 +1,7 @@
+# repro: `pad_right`/`pad` on a Str field leaks a move error
+struct I:
+  name: Str
+def main:
+  it = I("a")
+  puts it.name.pad_right(4) + "|"
+  puts it.name.pad(4) + "|"

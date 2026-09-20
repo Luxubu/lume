@@ -1,0 +1,40 @@
+# Sets as struct fields, changed by `var self` methods; passed and returned
+struct Team:
+  name: Str
+  members: {Str}
+
+  def join(var self, who: Str) -> Bool:
+    members.add(who)
+
+  def leave(var self, who: Str):
+    members.remove(who)
+
+  def shared_with(o: Team) -> {Str}:
+    members.intersect(o.members)
+
+def everyone(teams: [Team]) -> {Str}:
+  var all: {Str} = {}
+  for t in teams:
+    all = all.union(t.members)
+  all
+
+def names_starting(s: {Str}, prefix: Str) -> {Str}:
+  s.filter { |n| n.starts_with?(prefix) }
+
+def main:
+  var red = Team("red", {})
+  var blue = Team(name: "blue", members: {"ann", "bob"})
+  puts red.join("ann")
+  puts red.join("cy")
+  puts red.join("ann")
+  puts red
+  puts red.shared_with(blue)
+  blue.leave("bob")
+  blue.leave("zed")
+  puts blue.members
+  all = everyone([red, blue])
+  puts all
+  puts names_starting(all, "a")
+  puts names_starting({}, "a").len
+  red.members.add("dan")
+  puts red.members.len

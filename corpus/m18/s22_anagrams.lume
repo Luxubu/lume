@@ -1,0 +1,28 @@
+# Anagram grouping: key = sorted characters; sets of words per key
+def key(w: Str) -> Str = w.downcase.chars.sort.join("")
+
+def group(words: [Str]) -> {Str: {Str}}:
+  var groups: {Str: {Str}} = {}
+  for w in words:
+    k = key(w)
+    var g = groups[k].or({})
+    g.add(w.downcase)
+    groups[k] = g
+  groups
+
+def main:
+  words = ["listen", "Silent", "enlist", "google", "tinsel", "banana", "inlets", "gogole", "silent"]
+  groups = group(words)
+  puts groups.len
+  for k, g in groups:
+    if g.len > 1:
+      puts "#{k}: #{g.sort.join(" ")}"
+  singles = groups.filter { |k, g| g.len == 1 }
+  puts singles.keys
+  biggest = groups.values.max_by { |g| g.len }
+  puts biggest.or({}).len
+  all_letters = words.map { |w| w.downcase.chars.to_set }.to_list
+  var common = all_letters[0].or({})
+  for s in all_letters:
+    common = common.intersect(s)
+  puts common

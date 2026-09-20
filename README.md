@@ -42,6 +42,7 @@ document. This repository is the compiler and the examples.
 | 16 | Ownership by analysis: liveness-based copy or move, recursive enums boxed, `.or` on optional fields, string comparisons in blocks, `for var a in xs`, `xs[i].method` | done: review corpus leaks 6 → 0 |
 | 17 | Pattern completeness: a real exhaustiveness checker with nested witnesses, `A \| B` alternatives; the everyday standard methods; statements in inline blocks | done: 37 new methods, corpus 40 ok / 26 Lume errors / 0 leaks |
 | 18 | `{T}` sets with literals, algebra and iteration; `s[i]` / `s[a..b]` / `xs[a..b]` by character and position; structs and enums as map keys | done |
+| 18r | Third review round (`corpus/m18/`, 30 programs by a third reviewer): two block `if`s in a row, `{}` outside a typed binding, block parameters bound one reference too deep, mutations landing on temporaries, unchecked built-in arguments | done: 10 ranked problems fixed, 0 leaks |
 
 What works today: functions (`def` block and one-liner forms, return type
 inferred when omitted), `struct` with fields and methods (fields used bare
@@ -61,7 +62,8 @@ alternative binds the same names), guards, and an exhaustiveness check that
 works through nested patterns, tuples, lists and `T?`/`T or E` and names a
 missing value exactly (`Wrap(A(_))`, `(Green, Tick)`, `Ok(false)`,
 `[false, _, ..rest]`), tuples (`(1, "a")`,
-`t.0`, `for i, x in xs.enumerate`), optional values (`T?`, `Some`/`None`,
+`t.0`, `(name, count) = pair` to take one apart, `_` for a part you do not
+need, `for i, x in xs.enumerate`), optional values (`T?`, `Some`/`None`,
 `.or(default)`, `?` early return in a function returning `T?`; `first`,
 `last`, `find`, `max`, `min`, `pop` all return `T?`), errors as values
 (`T or E`, the built-in `Error("message")` with `.message`, `?` passes the
@@ -87,7 +89,8 @@ loads `users/model.lume`; `model.User`, `model.parse(x)`, `model.Role.Guest(7)`
 in expressions, types and patterns; `import users.model.User` for one name;
 `as` to rename; only `pub` items cross a file boundary), interfaces
 (`interface Shape:` lists required method signatures and default methods
-with bodies; a type conforms by having the methods, with nothing to declare;
+with bodies; a type conforms by having the methods, with nothing to declare,
+and then has the defaults as its own methods (`q.describe`);
 `def describe(s: Shape)` is a generic function, `[Shape]` holds mixed types
 behind a pointer and says so once; `extend Str with Shape:` adds the methods
 to a type you do not own; `pub interface` crosses modules), operator methods
@@ -108,7 +111,8 @@ uses are wrapped in short locks, arguments are computed before the lock, and
 a block that would take the lock twice is a compile error), `if`/`elif`/`else` as
 expressions, trailing `if`/`unless`, `while`, `for x in range` with `where`,
 lists, ranges (`1..10` inclusive, `1...10` exclusive), string interpolation,
-`and`/`or`/`not`, `**`, calls, `\u{1F600}` escapes, one statement in an
+`and`/`or`/`not`, `**`, calls, `()` for an arm or block that does nothing,
+`xs + ys` to join two lists, `\u{1F600}` escapes, one statement in an
 inline block (`xs.each { |x| total += x }`), and the everyday built-in
 methods: on `Str` `len`, `empty?`, `upcase`, `downcase`, `capitalize`, `trim`,
 `lines`, `split` (with or without a separator), `chars`, `contains?`,
@@ -125,7 +129,10 @@ for an empty list), `sort`,
 `group_by`, `partition`, `flat_map` (a function name works as the block for
 all of these: `xs.map(parse)`, `xs.group_by(kind)`); on maps `len`, `keys`, `values`, `get`,
 `remove`, `contains?`, `merge`, `to_list`, `each`, `filter`, `reject`,
-`map_values`; on `T?` `or`, `some?`, `none?`, `or_error`, `map`; on `T or E`
+`map_values`; a collection stored in a `var` map or list is changed where it
+is stored (`idx[w].add(x)`, `grid[i].push(x)`, `grid[i][j] = v`; a missing map
+key starts from an empty value), and a `for` loop whose body changes the
+collection walks a snapshot; on `T?` `or`, `some?`, `none?`, `or_error`, `map`; on `T or E`
 `or`, `ok?`, `error?`, `error`, `ok`, `map`; sets (`{1, 2, 3}` is a `{Int}`,
 each value once, insertion order kept; `var seen: {Str} = {}`; `add` returns
 whether the value was new, `remove`, `contains?`, `len`, `union`,
@@ -153,8 +160,11 @@ mutating method on an immutable value, wrong or missing arguments and keywords,
 its bounds reversed (at run time, in Lume's words), `?` in a function
 that cannot return `None` or an error (with the right fix for each mismatch),
 a method or arithmetic on a `T?` or `T or E` without unwrapping, an empty
-`[]` binding with no type, a value used as an interface it does not satisfy
-(naming the missing method or the signature that differs), an `extend` that
+`[]` binding with no type, a built-in method given
+the wrong argument type (`s.add("x")` on a `{Int}`), a list or set literal
+whose items disagree, a change that would land on a temporary copy
+(`m[k].or({}).add(x)`, `for var p in xs[0..1]`), a value used as an interface
+it does not satisfy (naming the missing method or the signature that differs), an `extend` that
 leaves a method out, an operator a type does not define, `sort` on a type
 without `<`, `await` outside `async def`, an `async def` called
 without `await`, a `var` changed inside a `spawn:` block (it is a copy), a
@@ -179,13 +189,14 @@ tests/run.sh --update   # accept current output as the new expectation
 
 The suite also runs `lume test` on `examples/tests/`, `lume fmt` on
 `examples/fmt/`, checks that formatting every example is idempotent and leaves
-the generated Rust unchanged, and runs the review corpus (`corpus/`: 66
-programs written by an independent reviewer who did not know the compiler).
-`tests/corpus.sh` classifies the corpus (now 96 programs from two review
-rounds; `corpus/m17/` targets the milestone 17 surface): 64 run, 32 stop
-with a Lume error (each a deliberate rule or a deliberate error test: no
-first-class closures, no shadowing, no `Float / Int`, ...), none leaks a
-rustc error.
+the generated Rust unchanged, and runs the review corpora (programs written by
+independent reviewers who did not know the compiler).
+`tests/corpus.sh` classifies the corpus (151 programs from three review
+rounds: `corpus/` and `corpus/edge/` after milestone 14, `corpus/m17/` on the
+pattern and standard-method surface, `corpus/m18/` on sets and slicing): 111
+run, 40 stop with a Lume error (each a deliberate rule or a deliberate error
+test: no first-class closures, no shadowing, no `Float / Int`, ...), none
+leaks a rustc error.
 
 Tests in a Lume file:
 
@@ -307,6 +318,7 @@ examples/async.lume      async/await, spawn, Task[T], shared var
 examples/ownership.lume  copy or move by analysis, a recursive enum, for var, xs[i].method
 examples/patterns.lume   `|` alternatives and what the exhaustiveness check catches
 examples/sets.lume       sets, set algebra, struct keys, character slicing
+examples/collections.lume  a word index in a map of sets, tuple destructuring, interface defaults
 examples/stdlib.lume     the built-in methods, one line each
 examples/crate.lume      regex through the bridge: types, iterators, errors, a rust: block
 examples/crates.lume     hex and urlencoding, with nothing written for them

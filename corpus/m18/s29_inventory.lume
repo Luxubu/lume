@@ -1,0 +1,50 @@
+# Inventory with sets of tags; queries by all/any tags; restock report
+struct Item:
+  sku: Str
+  name: Str
+  qty: Int
+  tags: {Str}
+
+struct Inventory:
+  items: [Item]
+
+  def add(var self, it: Item):
+    items.push(it)
+
+  def tag(var self, sku: Str, t: Str) -> Bool:
+    var changed = false
+    for var it in items:
+      if it.sku == sku:
+        changed = it.tags.add(t)
+    changed
+
+  def with_all(want: {Str}) -> [Str]:
+    items.filter { |it| it.tags.superset?(want) }.map(_.sku).to_list
+
+  def with_any(want: {Str}) -> [Str]:
+    items.filter { |it| not it.tags.intersect(want).empty? }.map(_.sku).to_list
+
+  def all_tags -> {Str}:
+    var out: {Str} = {}
+    for it in items:
+      out = out.union(it.tags)
+    out
+
+  def low(limit: Int) -> [Item] = items.filter { |it| it.qty < limit }.sort_by(_.qty).to_list
+
+def main:
+  var inv = Inventory([])
+  inv.add(Item("A1", "hammer", 5, {"tool", "metal"}))
+  inv.add(Item("B2", "glue", 0, {"craft"}))
+  inv.add(Item("C3", "saw", 2, {"tool", "metal", "sharp"}))
+  inv.add(Item(sku: "D4", name: "tape", qty: 40, tags: {}))
+  puts inv.tag("D4", "craft")
+  puts inv.tag("D4", "craft")
+  puts inv.tag("Z9", "x")
+  puts inv.with_all({"tool", "metal"})
+  puts inv.with_any({"craft", "sharp"})
+  puts inv.all_tags.sort
+  for it in inv.low(10):
+    puts "#{it.name.pad_right(8)}#{it.qty.pad(3)} #{it.tags.sort.join(",")}"
+  tag_counts = inv.items.flat_map { |it| it.tags.to_list }.group_by { |t| t }.map_values { |v| v.len }
+  puts tag_counts

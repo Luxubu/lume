@@ -1,0 +1,54 @@
+# Text adventure state machine: rooms as enum, inventory as a set, visited set
+enum Room:
+  Hall
+  Library
+  Vault
+  Outside
+
+struct Game:
+  room: Room
+  items: {Str}
+  visited: {Room}
+  moves: Int
+
+  def go(var self, to: Room):
+    room = to
+    visited.add(to)
+    moves += 1
+
+  def step(var self, cmd: Str) -> Str:
+    match (room, cmd):
+      (Hall, "north") ->
+        go(Library)
+        "You enter the library."
+      (Library, "take book") ->
+        if items.add("book"): "Taken."
+        else: "You already have it."
+      (Library, "south") ->
+        go(Hall)
+        "Back in the hall."
+      (Vault, "west") ->
+        go(Hall)
+        "Back in the hall."
+      (Hall, "east") ->
+        if items.contains?("key"):
+          go(Vault)
+          "The vault opens."
+        else: "Locked."
+      (Hall, "search") ->
+        items.add("key")
+        "You find a key."
+      (Vault, "out") ->
+        go(Outside)
+        "Freedom!"
+      (_, c) if c.starts_with?("go ") -> "Say just `#{c[3..c.len]}`."
+      _ -> "Nothing happens."
+
+def main:
+  var g = Game(Hall, {}, {Hall}, 0)
+  for c in ["east", "north", "take book", "take book", "go south", "south", "search", "east", "out", "dance"]:
+    puts "> #{c}: #{g.step(c)}"
+  puts g.items.sort
+  puts g.visited
+  puts g.moves
+  puts g.room == Outside

@@ -1,0 +1,7 @@
+error: `.add` would change a temporary copy (`idx["a"].or(...)`), and the change would be lost
+  --> corpus/m18/s06b_or_add_silent.lume:5:18
+  |
+5 |   idx["a"].or({}).add(2)
+  |                  ^
+  help: change the stored value directly: `idx["a"].add(...)` on a `var` map starts from an empty value when the key is missing
+exit: 1

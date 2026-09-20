@@ -1,0 +1,5 @@
+# repro: arguments of built-in collection methods are not type-checked;
+# each line alone leaks a rustc error instead of a Lume "wrong type" error
+def main:
+  var s = {1}
+  puts s.contains?("a")

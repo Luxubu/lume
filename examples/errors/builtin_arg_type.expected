@@ -1,0 +1,6 @@
+error: `.add` on a `{Int}` takes an `Int`, but this is a `Str`
+  --> examples/errors/builtin_arg_type.lume:3:9
+  |
+3 |   s.add("two")
+  |         ^
+  help: parse it: `.to_int` gives `Int or Error`, so `x.to_int?` or `x.to_int.or(0)`

@@ -1,0 +1,26 @@
+# to_list, sort, sum, max, min, join, first on sets
+def main:
+  s = {30, 10, 20}
+  puts s.to_list
+  puts s.sort
+  puts s.sum
+  puts s.max
+  puts s.min
+  puts s.first
+  words = {"pear", "apple", "fig"}
+  puts words.join(", ")
+  puts words.sort.join("-")
+  puts words.max
+  puts words.min
+  e: {Int} = {}
+  puts e.sum
+  puts e.max
+  puts e.min
+  puts e.sort
+  puts e.to_list
+  puts e.join(",")
+  puts {1}.join("+")
+  puts s.to_list.reverse
+  puts [3, 1, 3, 2].to_set
+  puts [3, 1, 3, 2].to_set.len
+  puts ["b", "a", "b"].to_set.sort

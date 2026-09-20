@@ -1,0 +1,4 @@
+# repro: {Str}.contains?(w) inside a filter/reject block over a [Str] leaks (String: Borrow<&String>)
+def main:
+  banned = {"x"}
+  puts ["x", "y"].reject { |w| banned.contains?(w) }.to_list

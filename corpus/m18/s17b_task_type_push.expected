@@ -1,0 +1,6 @@
+error: `.push` on a `[Task[()]]` takes a `Task[()]`, but this is a `Task[Bool]`
+  --> corpus/m18/s17b_task_type_push.lume:8:14
+  |
+8 |   tasks.push(t)
+  |              ^
+exit: 1

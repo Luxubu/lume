@@ -1,0 +1,7 @@
+error: `for var` changes items where they are stored, but `xs[0..1]` is a copy
+  --> corpus/m18/s08c_for_var_slice.lume:8:18
+  |
+8 |   for var p in xs[0..1]:
+  |                  ^
+  help: loop over the stored list itself (`for var p in xs`), and use `where` or `if` to pick the items to change
+exit: 1

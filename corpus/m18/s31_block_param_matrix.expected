@@ -1,0 +1,226 @@
+ints filter [2]
+ints reject [1, 3]
+ints count 1
+ints any? true
+ints all? false
+ints find Some(2)
+ints map [false, true, false]
+ints each
+ints sort_by [1, 3, 2]
+ints min_by Some(1)
+ints max_by Some(2)
+ints group_by {false: [1, 3], true: [2]}
+ints partition ([2], [1, 3])
+ints take_while []
+ints sum 1
+strs filter [b]
+strs reject [a]
+strs count 1
+strs any? true
+strs all? false
+strs find Some(b)
+strs map [false, true]
+strs each
+strs sort_by [a, b]
+strs min_by Some(a)
+strs max_by Some(b)
+strs group_by {false: [a], true: [b]}
+strs partition ([b], [a])
+strs take_while []
+strs sum 1
+pts filter [P(x: 2)]
+pts reject [P(x: 1)]
+pts count 1
+pts any? true
+pts all? false
+pts find Some(P(x: 2))
+pts map [false, true]
+pts each
+pts sort_by [P(x: 1), P(x: 2)]
+pts min_by Some(P(x: 1))
+pts max_by Some(P(x: 2))
+pts group_by {false: [P(x: 1)], true: [P(x: 2)]}
+pts partition ([P(x: 2)], [P(x: 1)])
+pts take_while []
+pts sum 1
+enums filter [B]
+enums reject [A]
+enums count 1
+enums any? true
+enums all? false
+enums find Some(B)
+enums map [false, true]
+enums each
+enums sort_by [A, B]
+enums min_by Some(A)
+enums max_by Some(B)
+enums group_by {false: [A], true: [B]}
+enums partition ([B], [A])
+enums take_while []
+enums sum 1
+pairs_is filter [(2, b)]
+pairs_is reject [(1, a)]
+pairs_is count 1
+pairs_is any? true
+pairs_is all? false
+pairs_is find Some((2, b))
+pairs_is map [false, true]
+pairs_is each
+pairs_is sort_by [(1, a), (2, b)]
+pairs_is min_by Some((1, a))
+pairs_is max_by Some((2, b))
+pairs_is group_by {false: [(1, a)], true: [(2, b)]}
+pairs_is partition ([(2, b)], [(1, a)])
+pairs_is take_while []
+pairs_is sum 1
+pairs_ii filter [(3, 4)]
+pairs_ii reject [(1, 2)]
+pairs_ii count 1
+pairs_ii any? true
+pairs_ii all? false
+pairs_ii find Some((3, 4))
+pairs_ii map [false, true]
+pairs_ii each
+pairs_ii sort_by [(1, 2), (3, 4)]
+pairs_ii min_by Some((1, 2))
+pairs_ii max_by Some((3, 4))
+pairs_ii group_by {false: [(1, 2)], true: [(3, 4)]}
+pairs_ii partition ([(3, 4)], [(1, 2)])
+pairs_ii take_while []
+pairs_ii sum 1
+pairs_ss filter [(z, w)]
+pairs_ss reject [(x, y)]
+pairs_ss count 1
+pairs_ss any? true
+pairs_ss all? false
+pairs_ss find Some((z, w))
+pairs_ss map [false, true]
+pairs_ss each
+pairs_ss sort_by [(x, y), (z, w)]
+pairs_ss min_by Some((x, y))
+pairs_ss max_by Some((z, w))
+pairs_ss group_by {false: [(x, y)], true: [(z, w)]}
+pairs_ss partition ([(z, w)], [(x, y)])
+pairs_ss take_while []
+pairs_ss sum 1
+map_si filter {b: 2}
+map_si reject {a: 1}
+map_si count 1
+map_si any? true
+map_si all? false
+map_si find Some((b, 2))
+map_si map [false, true]
+map_si each
+map_si sort_by [(a, 1), (b, 2)]
+map_si min_by Some((a, 1))
+map_si max_by Some((b, 2))
+map_si group_by {false: [(a, 1)], true: [(b, 2)]}
+map_si partition ([(b, 2)], [(a, 1)])
+map_si take_while []
+map_si sum 1
+map_is filter {2: b}
+map_is reject {1: a}
+map_is count 1
+map_is any? true
+map_is all? false
+map_is find Some((2, b))
+map_is map [false, true]
+map_is each
+map_is sort_by [(1, a), (2, b)]
+map_is min_by Some((1, a))
+map_is max_by Some((2, b))
+map_is group_by {false: [(1, a)], true: [(2, b)]}
+map_is partition ([(2, b)], [(1, a)])
+map_is take_while []
+map_is sum 1
+set_i filter {2}
+set_i reject {1, 3}
+set_i count 1
+set_i any? true
+set_i all? false
+set_i find Some(2)
+set_i map [false, true, false]
+set_i each
+set_i sort_by [1, 3, 2]
+set_i min_by Some(1)
+set_i max_by Some(2)
+set_i group_by {false: [1, 3], true: [2]}
+set_i partition ([2], [1, 3])
+set_i take_while []
+set_i sum 1
+set_s filter {b}
+set_s reject {a}
+set_s count 1
+set_s any? true
+set_s all? false
+set_s find Some(b)
+set_s map [false, true]
+set_s each
+set_s sort_by [a, b]
+set_s min_by Some(a)
+set_s max_by Some(b)
+set_s group_by {false: [a], true: [b]}
+set_s partition ([b], [a])
+set_s take_while []
+set_s sum 1
+set_e filter {B}
+set_e reject {A}
+set_e count 1
+set_e any? true
+set_e all? false
+set_e find Some(B)
+set_e map [false, true]
+set_e each
+set_e sort_by [A, B]
+set_e min_by Some(A)
+set_e max_by Some(B)
+set_e group_by {false: [A], true: [B]}
+set_e partition ([B], [A])
+set_e take_while []
+set_e sum 1
+set_t filter {(2, b)}
+set_t reject {(1, a)}
+set_t count 1
+set_t any? true
+set_t all? false
+set_t find Some((2, b))
+set_t map [false, true]
+set_t each
+set_t sort_by [(1, a), (2, b)]
+set_t min_by Some((1, a))
+set_t max_by Some((2, b))
+set_t group_by {false: [(1, a)], true: [(2, b)]}
+set_t partition ([(2, b)], [(1, a)])
+set_t take_while []
+set_t sum 1
+chain_s filter [b]
+chain_s reject [a]
+chain_s count 1
+chain_s any? true
+chain_s all? false
+chain_s find Some(b)
+chain_s map [false, true]
+chain_s each
+chain_s sort_by [a, b]
+chain_s min_by Some(a)
+chain_s max_by Some(b)
+chain_s group_by {false: [a], true: [b]}
+chain_s partition ([b], [a])
+chain_s take_while []
+chain_s sum 1
+chain_p filter [P(x: 2)]
+chain_p reject [P(x: 3)]
+chain_p count 1
+chain_p any? true
+chain_p all? false
+chain_p find Some(P(x: 2))
+chain_p map [true, false]
+chain_p each
+chain_p sort_by [P(x: 3), P(x: 2)]
+chain_p min_by Some(P(x: 3))
+chain_p max_by Some(P(x: 2))
+chain_p group_by {true: [P(x: 2)], false: [P(x: 3)]}
+chain_p partition ([P(x: 2)], [P(x: 3)])
+chain_p take_while [P(x: 2)]
+chain_p sum 1
+exit: 0

@@ -1,0 +1,4 @@
+# repro: an inclusive slice ending at the largest Int stops with "Int overflow in `+`" (a `+` the program never wrote)
+def main:
+  big = 9223372036854775807
+  puts [1, 2, 3][1..big]

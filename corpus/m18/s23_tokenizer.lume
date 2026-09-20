@@ -1,0 +1,50 @@
+# A tiny tokenizer and evaluator using character indexing s[i]
+enum Tok:
+  Num(v: Int)
+  Op(c: Str)
+  LParen
+  RParen
+
+def tokenize(src: Str) -> [Tok] or Error:
+  ops: {Str} = {"+", "-", "*", "/"}
+  var out: [Tok] = []
+  var i = 0
+  while i < src.len:
+    c = src[i].or(" ")
+    if c.digit?:
+      var j = i
+      while j < src.len and src[j].or("x").digit?:
+        j += 1
+      out.push(Num(src[i...j].to_int?))
+      i = j
+    else:
+      if ops.contains?(c): out.push(Op(c))
+      elif c == "(": out.push(LParen)
+      elif c == ")": out.push(RParen)
+      elif not c.space?: return Error("bad char `#{c}` at #{i}")
+      i += 1
+  out
+
+def eval_rpn(toks: [Tok]) -> Int:
+  var stack: [Int] = []
+  for t in toks:
+    match t:
+      Num(v) -> stack.push(v)
+      Op(o) ->
+        b = stack.pop.or(0)
+        a = stack.pop.or(0)
+        r = match o:
+          "+" -> a + b
+          "-" -> a - b
+          "*" -> a * b
+          _ -> a / b
+        stack.push(r)
+      LParen | RParen -> ()
+  stack.pop.or(0)
+
+def main:
+  puts tokenize("12 + (3*45)")
+  puts tokenize("7 % 2")
+  puts eval_rpn(tokenize("3 4 + 10 *")!)
+  puts eval_rpn(tokenize("100 7 - 3 /")!)
+  puts tokenize("12€3")

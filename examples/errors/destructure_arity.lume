@@ -1,0 +1,7 @@
+enum Colour:
+  Red
+  Green
+
+def main:
+  (a, b) = (Red, Green, Red)
+  puts a

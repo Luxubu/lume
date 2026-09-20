@@ -1,0 +1,7 @@
+error: a set has no positions to index
+  --> corpus/m18/s11_err_set_index.lume:4:9
+  |
+4 |   puts s[0]
+  |         ^
+  help: use `.contains?(x)`, or `.to_list` for an ordered list
+exit: 1
