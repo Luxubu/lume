@@ -225,9 +225,9 @@ impl CrateInfo {
 
 /// Produces (or reuses) the rustdoc JSON for `krate` inside the cargo
 /// project at `proj`, and reads it.
-pub fn load_crate(proj: &Path, krate: &str, alias: &str) -> Result<CrateInfo, String> {
+pub fn load_crate(proj: &Path, krate: &str, alias: &str, target_dir: &Path) -> Result<CrateInfo, String> {
     let lib_name = krate.replace('-', "_");
-    let json_path: PathBuf = proj.join("target").join("doc").join(format!("{}.json", lib_name));
+    let json_path: PathBuf = proj.join(format!("signatures-{}.json", lib_name));
     let toml = proj.join("Cargo.toml");
     let fresh = match (std::fs::metadata(&json_path), std::fs::metadata(&toml)) {
         (Ok(j), Ok(t)) => j.modified().ok() >= t.modified().ok(),
@@ -243,6 +243,7 @@ pub fn load_crate(proj: &Path, krate: &str, alias: &str) -> Result<CrateInfo, St
         let out = Command::new("cargo")
             .args(["rustdoc", "-q", "-p", krate, "--", "-Z", "unstable-options", "--output-format", "json"])
             .env("RUSTC_BOOTSTRAP", "1")
+            .env("CARGO_TARGET_DIR", target_dir)
             .current_dir(proj)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -252,6 +253,9 @@ pub fn load_crate(proj: &Path, krate: &str, alias: &str) -> Result<CrateInfo, St
             let err = String::from_utf8_lossy(&out.stderr);
             return Err(format!("error: could not read the signatures of crate `{}`\n\ncargo said:\n{}", krate, err));
         }
+        // keep our own copy: the shared doc directory is overwritten by other programs' versions
+        let produced = target_dir.join("doc").join(format!("{}.json", lib_name));
+        std::fs::copy(&produced, &json_path).map_err(|e| format!("error: cannot copy `{}`: {}", produced.display(), e))?;
     }
     let text = std::fs::read_to_string(&json_path).map_err(|e| format!("error: cannot read `{}`: {}", json_path.display(), e))?;
     let doc: Value = serde_json::from_str(&text).map_err(|e| format!("error: bad rustdoc JSON for `{}`: {}", krate, e))?;

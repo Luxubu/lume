@@ -20,7 +20,7 @@ program takes about 1 s in Python and 1.4 s in Ruby.
 The language design lives in the [Lume Language Design](https://claude.ai/code/artifact/1872fe63-1816-4b1e-9983-dec2774382fb)
 document. This repository is the compiler and the examples.
 
-## Status: milestones 1–13 done
+## Status: milestones 1–14 done
 
 | # | Milestone | Status |
 | --- | --- | --- |
@@ -37,6 +37,7 @@ document. This repository is the compiler and the examples.
 | 11 | `test "name":` blocks, `assert`, `lume test`, `lume fmt` | done |
 | 12 | `async def`/`await`, `spawn:` tasks, `Task[T]`, `shared`/`shared var` | done: sample 3 runs on threads, 5 `shared` words in 97 lines |
 | 13 | Rust bridge phase 2: crate signatures from rustdoc JSON; `regex.Regex.new(p)` with no bindings | done |
+| 14 | Compile time: incremental rustc, one shared cargo cache per machine, skip when unchanged | done: edit-and-run 0.2 s plain, 0.7–0.9 s with crates |
 
 What works today: functions (`def` block and one-liner forms, return type
 inferred when omitted), `struct` with fields and methods (fields used bare
@@ -183,24 +184,41 @@ cargo build --release
 ## Use
 
 ```sh
-lume run   examples/fib.lume        # compile and run
-lume build examples/fib.lume        # compile to examples/.lume/fib
-lume emit  examples/fib.lume        # print the generated Rust
-lume check examples/fib.lume        # parse and check only (tests included)
+lume run   examples/fib.lume        # compile and run (fast turnaround)
+lume build examples/fib.lume        # compile to examples/.lume/fib, fully optimised
 lume test  examples/tests/parse.lume  # build and run the file's `test` blocks
 lume fmt   examples/fib.lume        # rewrite in the canonical layout (--check, --stdout)
 lume crate examples/crate.lume regex  # what the crate offers, in Lume types
+lume emit  examples/fib.lume        # print the generated Rust
+lume check examples/fib.lume        # parse and check only (tests included)
+lume clean examples/fib.lume        # remove examples/.lume (--cache: the shared cache too)
 ```
 
-Generated Rust and binaries go in a `.lume/` directory next to the source file.
-A program that imports a crate, or uses `async`, is built with cargo (first
-build fetches the crate — tokio for async, about 10 s; later builds are
-cached under `.lume/cargo-<name>/`). The first build of a program that
-imports a crate also reads the crate's signatures: `cargo rustdoc
---output-format json` (about 4 s for regex, cached next to the project).
-rustdoc JSON is still unstable in rustdoc, so the compiler sets
-`RUSTC_BOOTSTRAP=1` for that one command; the program itself is built by
-the ordinary stable toolchain.
+Generated Rust and binaries go in a `.lume/` directory next to the source
+file. A program that imports a crate, or uses `async`, is built with cargo.
+
+Compile time, after milestone 14:
+
+| | first time | unchanged | after an edit |
+| --- | --- | --- | --- |
+| plain program (`fib`, `graph`) | 0.3–0.9 s | 0.01 s | 0.15–0.2 s |
+| program using a crate (`regex`) | 1.3 s | 0.01 s | 0.7 s |
+| async program (tokio) | 2 s | 0.07 s | 0.9 s |
+
+How: `lume run` compiles with rustc's incremental cache (`.lume/inc-<name>/`),
+so an edit recompiles only what changed; a program whose generated Rust is
+identical to the last build is not compiled at all; every cargo build on the
+machine shares one target directory (`~/.cache/lume/target`, or
+`$LUME_CACHE_DIR/target`), so regex or tokio is compiled once per machine,
+not once per program — the first ever use costs 20–30 s, every program after
+that starts from the cache; through cargo, `lume run` builds the program
+crate at opt-level 1 on top of crates at opt-level 3, and `lume build` uses
+a separate `ship` profile with everything at opt-level 3. Reading a crate's
+signatures (`cargo rustdoc --output-format json`, about 4 s for regex) is
+cached next to the project; rustdoc JSON is still unstable in rustdoc, so the
+compiler sets `RUSTC_BOOTSTRAP=1` for that one command, and the program
+itself is built by the stable toolchain. The whole test suite (99 programs)
+runs in 18 s.
 
 ## Layout
 

@@ -6,6 +6,12 @@
 //!   lume check <file.lume>                 parse and check, emit nothing
 //!   lume test  <file.lume>                 build and run the `test` blocks
 //!   lume fmt   <file.lume> [--check|--stdout]  rewrite in the canonical layout
+//!   lume crate <file.lume> <crate>         what a crate offers, in Lume types
+//!   lume clean <file.lume>                 remove the program's build directory
+//!
+//! Builds go to `.lume/` next to the source file. Crates and async programs
+//! are built through cargo into one shared cache for the whole machine
+//! (`~/.cache/lume/target`, or `$LUME_CACHE_DIR/target`).
 
 mod ast;
 mod bridge;
@@ -24,7 +30,7 @@ use std::time::Instant;
 
 fn usage() -> ! {
     eprintln!(
-        "lume {}\n\nusage:\n  lume build <file.lume> [-o <binary>]\n  lume run   <file.lume> [-- <args>...]\n  lume test  <file.lume>\n  lume fmt   <file.lume> [--check | --stdout]\n  lume emit  <file.lume>\n  lume check <file.lume>",
+        "lume {}\n\nusage:\n  lume build <file.lume> [-o <binary>]\n  lume run   <file.lume> [-- <args>...]\n  lume test  <file.lume>\n  lume fmt   <file.lume> [--check | --stdout]\n  lume crate <file.lume> <crate>\n  lume clean <file.lume>\n  lume emit  <file.lume>\n  lume check <file.lume>",
         env!("CARGO_PKG_VERSION")
     );
     process::exit(2);
@@ -76,7 +82,7 @@ fn compile_to_rust(path: &Path, test_mode: bool) -> Result<Compiled, String> {
         for (k, _, alias) in &crate_imports {
             let key = (k.clone(), alias.clone());
             if !crate_infos.contains_key(&key) {
-                let info = bridge::load_crate(&proj, k, alias)?;
+                let info = bridge::load_crate(&proj, k, alias, &shared_target_dir())?;
                 crate_infos.insert(key, info);
             }
         }
@@ -238,7 +244,9 @@ fn write_cargo_project(path: &Path, deps: &[(String, String)]) -> Result<PathBuf
             toml.push_str(&format!("{} = \"{}\"\n", k, v));
         }
     }
-    toml.push_str("\n[profile.release]\nopt-level = 3\ndebug = false\n");
+    // `release` is what `lume run` uses: the program at opt-level 1 with an
+    // incremental cache, every crate at opt-level 3. `ship` is `lume build`.
+    toml.push_str("\n[profile.release]\nopt-level = 1\ndebug = false\nincremental = true\n\n[profile.release.package.\"*\"]\nopt-level = 3\n\n[profile.ship]\ninherits = \"release\"\nopt-level = 3\nincremental = false\n");
     let toml_path = proj.join("Cargo.toml");
     if fs::read_to_string(&toml_path).ok().as_deref() != Some(toml.as_str()) {
         fs::write(&toml_path, toml).map_err(|e| format!("error: cannot write Cargo.toml: {}", e))?;
@@ -250,16 +258,33 @@ fn write_cargo_project(path: &Path, deps: &[(String, String)]) -> Result<PathBuf
     Ok(proj)
 }
 
+/// One build directory for every Lume program on the machine, so a crate
+/// compiled for one program serves the next. `LUME_CACHE_DIR` overrides it.
+fn shared_target_dir() -> PathBuf {
+    if let Ok(d) = env::var("LUME_CACHE_DIR") {
+        return PathBuf::from(d).join("target");
+    }
+    let home = env::var("XDG_CACHE_HOME").map(PathBuf::from).or_else(|_| env::var("HOME").map(|h| PathBuf::from(h).join(".cache"))).unwrap_or_else(|_| PathBuf::from(".lume-cache"));
+    home.join("lume").join("target")
+}
+
+/// A cargo command inside a program's project, building into the shared cache.
+fn cargo_in(proj: &Path) -> Command {
+    let mut c = Command::new("cargo");
+    c.current_dir(proj).env("CARGO_TARGET_DIR", shared_target_dir());
+    c
+}
+
 /// Builds through cargo when the program imports Rust crates or uses async.
-fn build_with_cargo(path: &Path, rust: &str, deps: &[(String, String)], bin: &Path, has_rust_blocks: bool) -> Result<(), String> {
+fn build_with_cargo(path: &Path, rust: &str, deps: &[(String, String)], bin: &Path, has_rust_blocks: bool, mode: Mode) -> Result<(), String> {
     let (stem, _) = cargo_project_dir(path);
     let proj = write_cargo_project(path, deps)?;
     let src_dir = proj.join("src");
     let pkg = stem.replace(|c: char| !c.is_alphanumeric() && c != '_', "_");
     fs::write(src_dir.join("main.rs"), rust).map_err(|e| format!("error: cannot write main.rs: {}", e))?;
-    let out = Command::new("cargo")
-        .args(["build", "--release", "-q"])
-        .current_dir(&proj)
+    let profile = if mode == Mode::Ship { "ship" } else { "release" };
+    let out = cargo_in(&proj)
+        .args(["build", "--profile", profile, "-q"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .output()
@@ -268,12 +293,31 @@ fn build_with_cargo(path: &Path, rust: &str, deps: &[(String, String)], bin: &Pa
         let err = String::from_utf8_lossy(&out.stderr);
         return Err(rustc_failed_banner(has_rust_blocks, &src_dir.join("main.rs"), "cargo", &err));
     }
-    let built = proj.join("target").join("release").join(&pkg);
+    let built = shared_target_dir().join(profile).join(&pkg);
     fs::copy(&built, bin).map_err(|e| format!("error: cannot copy `{}` to `{}`: {}", built.display(), bin.display(), e))?;
     Ok(())
 }
 
-fn build(path: &Path, out: Option<PathBuf>, quiet: bool, test_mode: bool) -> Result<PathBuf, String> {
+/// `Iterate` is `lume run`/`lume test`: the fastest turnaround that still
+/// runs at full speed (rustc keeps an incremental cache; through cargo the
+/// program crate is built at opt-level 1 on top of fully optimised crates).
+/// `Ship` is `lume build`: everything at opt-level 3, no incremental state.
+#[derive(Clone, Copy, PartialEq)]
+enum Mode {
+    Iterate,
+    Ship,
+}
+
+/// A small stable hash of the generated program, to skip compiling when
+/// nothing changed since the binary was made.
+fn fingerprint(text: &str) -> String {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    text.hash(&mut h);
+    format!("{:016x}", h.finish())
+}
+
+fn build(path: &Path, out: Option<PathBuf>, quiet: bool, test_mode: bool, mode: Mode) -> Result<PathBuf, String> {
     let t0 = Instant::now();
     let compiled = compile_to_rust(path, test_mode)?;
     let rust = compiled.rust;
@@ -289,16 +333,35 @@ fn build(path: &Path, out: Option<PathBuf>, quiet: bool, test_mode: bool) -> Res
     let rust = format!("{}{}", header, rust);
     fs::write(&rs_path, &rust).map_err(|e| format!("error: cannot write `{}`: {}", rs_path.display(), e))?;
     let bin = out.unwrap_or_else(|| build_dir.join(&stem));
+
+    // Nothing changed since the last build of this program in this mode? Run what we have.
+    let stamp_path = build_dir.join(format!("{}.stamp", stem));
+    let stamp = format!("{} {} {:?}\n", fingerprint(&rust), fingerprint(&format!("{:?}", compiled.deps)), mode == Mode::Ship);
+    if bin.exists() && fs::read_to_string(&stamp_path).ok().as_deref() == Some(stamp.as_str()) {
+        if !quiet {
+            eprintln!("up to date: {}", bin.display());
+        }
+        return Ok(bin);
+    }
+    let _ = fs::remove_file(&stamp_path);
+
     if !compiled.deps.is_empty() {
-        build_with_cargo(path, &rust, &compiled.deps, &bin, compiled.has_rust_blocks)?;
+        build_with_cargo(path, &rust, &compiled.deps, &bin, compiled.has_rust_blocks, mode)?;
+        let _ = fs::write(&stamp_path, &stamp);
         if !quiet {
             eprintln!("compiled {} -> {} in {:.2}s (cargo, {} crate{})", path.display(), bin.display(), t0.elapsed().as_secs_f64(), compiled.deps.len(), if compiled.deps.len() == 1 { "" } else { "s" });
         }
         return Ok(bin);
     }
 
-    let status = Command::new("rustc")
-        .args(["--edition", "2021", "-O", "-C", "debuginfo=0"])
+    let mut cmd = Command::new("rustc");
+    cmd.args(["--edition", "2021", "-O", "-C", "debuginfo=0"]);
+    if mode == Mode::Iterate {
+        // rustc's incremental cache: a rebuild after an edit takes a fraction of a fresh compile
+        let inc = build_dir.join(format!("inc-{}", stem));
+        cmd.arg("-C").arg(format!("incremental={}", inc.display()));
+    }
+    let status = cmd
         .arg("-o")
         .arg(&bin)
         .arg(&rs_path)
@@ -310,6 +373,7 @@ fn build(path: &Path, out: Option<PathBuf>, quiet: bool, test_mode: bool) -> Res
         let err = String::from_utf8_lossy(&status.stderr);
         return Err(rustc_failed_banner(compiled.has_rust_blocks, &rs_path, "rustc", &err));
     }
+    let _ = fs::write(&stamp_path, &stamp);
     if !quiet {
         eprintln!("compiled {} -> {} in {:.2}s", path.display(), bin.display(), t0.elapsed().as_secs_f64());
     }
@@ -358,7 +422,7 @@ fn main() {
                     usage();
                 }
             }
-            if let Err(e) = build(&file, out, false, false) {
+            if let Err(e) = build(&file, out, false, false, Mode::Ship) {
                 eprint!("{}", e);
                 process::exit(1);
             }
@@ -371,7 +435,7 @@ fn main() {
                     None => rest.iter().collect(),
                 }
             };
-            let bin = match build(&file, None, true, false) {
+            let bin = match build(&file, None, true, false, Mode::Iterate) {
                 Ok(b) => b,
                 Err(e) => {
                     eprint!("{}", e);
@@ -425,6 +489,26 @@ fn main() {
                 }
             }
         }
+        "clean" => {
+            let dir = file.parent().map(|p| p.to_path_buf()).unwrap_or_else(|| PathBuf::from(".")).join(".lume");
+            if dir.exists() {
+                if let Err(e) = fs::remove_dir_all(&dir) {
+                    eprintln!("error: cannot remove `{}`: {}", dir.display(), e);
+                    process::exit(1);
+                }
+                eprintln!("removed {}", dir.display());
+            }
+            if args.get(2).map(|a| a == "--cache").unwrap_or(false) {
+                let cache = shared_target_dir();
+                if cache.exists() {
+                    if let Err(e) = fs::remove_dir_all(&cache) {
+                        eprintln!("error: cannot remove `{}`: {}", cache.display(), e);
+                        process::exit(1);
+                    }
+                    eprintln!("removed {}", cache.display());
+                }
+            }
+        }
         // `lume crate <file.lume> <crate>`: what Lume can call in a crate the file imports
         "crate" => {
             let krate = match args.get(2) {
@@ -461,7 +545,7 @@ fn main() {
                     process::exit(1);
                 }
             };
-            match bridge::load_crate(&proj, &krate, &krate) {
+            match bridge::load_crate(&proj, &krate, &krate, &shared_target_dir()) {
                 Ok(info) => print!("{}", info.describe(&krate)),
                 Err(e) => {
                     eprint!("{}", e);
@@ -470,7 +554,7 @@ fn main() {
             }
         }
         "test" => {
-            let bin = match build(&file, None, true, true) {
+            let bin = match build(&file, None, true, true, Mode::Iterate) {
                 Ok(b) => b,
                 Err(e) => {
                     eprint!("{}", e);
