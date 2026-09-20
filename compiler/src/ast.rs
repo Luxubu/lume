@@ -24,6 +24,12 @@ pub enum Type {
     /// says whether items are references into the source list. Internal:
     /// becomes `[T]` wherever a value is needed, never reaches a signature.
     Iter(Box<Type>, bool),
+    /// `Task[T]` — a spawned task that will produce a `T`
+    Task(Box<Type>),
+    /// The value of calling an `async def` before `await`. Internal.
+    Future(Box<Type>),
+    /// `shared T` (one value, many handles) / `shared var T` (behind a lock)
+    Shared(Box<Type>, bool),
     /// Not yet inferred. Never reaches generated Rust.
     Unknown,
 }
@@ -35,6 +41,8 @@ impl Type {
         match self {
             Type::Int | Type::Float | Type::Bool | Type::Unit => true,
             Type::Option(t) => t.is_copy(),
+            // a handle is cheap to clone, and cloning is how it is shared
+            Type::Shared(..) => true,
             Type::Tuple(ts) => ts.iter().all(|t| t.is_copy()),
             _ => false,
         }
@@ -44,6 +52,8 @@ impl Type {
     pub fn materialized(&self) -> Type {
         match self {
             Type::Iter(e, _) => Type::List(e.clone()),
+            // a shared value behaves as the value it holds
+            Type::Shared(inner, _) => inner.materialized(),
             other => other.clone(),
         }
     }
@@ -72,6 +82,8 @@ pub struct FnDef {
     pub name: String,
     /// `pub def` — visible to importing modules
     pub public: bool,
+    /// `async def` — callers `await` the result
+    pub is_async: bool,
     pub params: Vec<Param>,
     /// `None` when the signature has no `-> Type`; inferred from the body.
     pub ret: Option<Type>,
@@ -228,6 +240,8 @@ pub enum Stmt {
     Next { line: usize, col: usize },
     /// `assert cond` — stops the test (or program) with both sides printed
     Assert { cond: Expr, line: usize, col: usize },
+    /// `shared x = v` / `shared var x = v` — a handle other tasks can hold
+    Shared { name: String, mutable: bool, ty: Option<Type>, value: Expr, line: usize, col: usize },
 }
 
 #[derive(Debug, Clone)]
@@ -292,6 +306,10 @@ pub enum ExprKind {
     Index { recv: Box<Expr>, index: Box<Expr> },
     /// `{k: v, ...}` / `{}`
     MapLit(Vec<(Expr, Expr)>),
+    /// `await expr` — wait for an async call, a task, or a list of tasks
+    Await(Box<Expr>),
+    /// `spawn:` + block — run the block as its own task; the value is a `Task[T]`
+    Spawn(Block),
 }
 
 impl Expr {

@@ -1,0 +1,6 @@
+error: `xs` is used inside a block while `xs` is locked, which would wait forever
+  --> examples/errors/shared_lock_in_block.lume:3:15
+  |
+3 |   ys = xs.map { |x| x + xs.len }
+  |               ^
+  help: bind what the block needs from `xs` to a name before this line

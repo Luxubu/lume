@@ -1,0 +1,4 @@
+async def main:
+  shared var xs = [1, 2, 3]
+  ys = xs.map { |x| x + xs.len }
+  puts ys

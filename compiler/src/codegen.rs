@@ -57,6 +57,8 @@ impl<A: LumeShow, B: LumeShow, C: LumeShow> LumeShow for (A, B, C) {
 }
 impl<T: LumeShow + ?Sized> LumeShow for &T { fn lume_str(&self) -> String { (**self).lume_str() } }
 impl<T: LumeShow + ?Sized> LumeShow for Box<T> { fn lume_str(&self) -> String { (**self).lume_str() } }
+impl<T: LumeShow + ?Sized> LumeShow for std::sync::Arc<T> { fn lume_str(&self) -> String { (**self).lume_str() } }
+impl<T: LumeShow> LumeShow for std::sync::Mutex<T> { fn lume_str(&self) -> String { self.lock().unwrap().lume_str() } }
 #[allow(dead_code)]
 fn lume_assert_failed(line: usize, text: &str, sides: Option<(String, String)>) -> ! {
     let mut msg = format!(":{}: assert {}", line, text);
@@ -236,6 +238,8 @@ struct Sig {
     var_params: Vec<bool>,
     ret: Type,
     self_kind: SelfKind,
+    /// `async def`: a call gives a `Future` until it is awaited.
+    is_async: bool,
 }
 
 #[derive(Clone)]
@@ -370,6 +374,14 @@ pub struct Gen {
     test_mode: bool,
     in_test: bool,
     src_lines: Vec<String>,
+    /// Inside an `async def` or a `spawn:` block: `await` is allowed.
+    in_async: bool,
+    /// The program uses async somewhere: tokio goes in the dependencies.
+    uses_async: bool,
+    /// Names copied into the current `spawn:` block.
+    spawn_captured: HashSet<String>,
+    /// While set, a `shared var` name means the handle, not the value inside.
+    want_handle: bool,
 }
 
 
@@ -409,6 +421,10 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, deps: &[Dep], t
         test_mode,
         in_test: false,
         src_lines: src.lines().map(|l| l.to_string()).collect(),
+        in_async: false,
+        uses_async: false,
+        spawn_captured: HashSet::new(),
+        want_handle: false,
     };
     // The built-in Error type: a struct with one field, defined in the prelude.
     g.structs.insert("Error".into(), StructInfo { fields: vec![("message".into(), Type::Str)], methods: HashMap::new() });
@@ -422,6 +438,9 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, deps: &[Dep], t
                 rust_deps.push((imp.krate().to_string(), imp.version.clone().unwrap_or_else(|| "*".into())));
             }
         }
+    }
+    if g.uses_async {
+        rust_deps.push(("tokio".to_string(), "{ version = \"1\", features = [\"rt-multi-thread\", \"macros\", \"time\", \"sync\"] }".to_string()));
     }
     let exports = g.exports(program, rust_mod.unwrap_or("main"));
     let rust = match rust_mod {
@@ -455,6 +474,7 @@ fn qualify_sig(sig: &Sig, id: &str, ex: &Exports) -> Sig {
         var_params: sig.var_params.clone(),
         ret: qualify_type(&sig.ret, id, ex),
         self_kind: sig.self_kind,
+        is_async: sig.is_async,
     }
 }
 
@@ -491,6 +511,10 @@ pub fn rust_type(t: &Type) -> String {
         Type::Result(t, e) => format!("Result<{}, {}>", rust_type(t), rust_type(e)),
         Type::Map(k, v) => format!("LumeMap<{}, {}>", rust_type(k), rust_type(v)),
         Type::Iter(inner, _) => format!("Vec<{}>", rust_type(inner)),
+        Type::Task(inner) => format!("tokio::task::JoinHandle<{}>", rust_type(inner)),
+        Type::Future(inner) => format!("impl std::future::Future<Output = {}>", rust_type(inner)),
+        Type::Shared(inner, true) => format!("std::sync::Arc<std::sync::Mutex<{}>>", rust_type(inner)),
+        Type::Shared(inner, false) => format!("std::sync::Arc<{}>", rust_type(inner)),
         Type::Unknown => "_".into(),
     }
 }
@@ -509,6 +533,10 @@ pub fn type_name(t: &Type) -> String {
         Type::Result(t, e) => format!("{} or {}", type_name(t), type_name(e)),
         Type::Map(k, v) => format!("{{{}: {}}}", type_name(k), type_name(v)),
         Type::Iter(i, _) => format!("[{}]", type_name(i)),
+        Type::Task(i) => format!("Task[{}]", type_name(i)),
+        Type::Future(i) => format!("async {}", type_name(i)),
+        Type::Shared(i, true) => format!("shared var {}", type_name(i)),
+        Type::Shared(i, false) => format!("shared {}", type_name(i)),
         Type::Unknown => "?".into(),
     }
 }
@@ -546,6 +574,9 @@ impl Gen {
             Type::Result(a, b) => format!("Result<{}, {}>", self.rt(a), self.rt(b)),
             Type::Map(k, v) => format!("LumeMap<{}, {}>", self.rt(k), self.rt(v)),
             Type::Iter(inner, _) => format!("Vec<{}>", self.rt(inner)),
+            Type::Task(inner) => format!("tokio::task::JoinHandle<{}>", self.rt(inner)),
+            Type::Shared(inner, true) => format!("std::sync::Arc<std::sync::Mutex<{}>>", self.rt(inner)),
+            Type::Shared(inner, false) => format!("std::sync::Arc<{}>", self.rt(inner)),
             other => rust_type(other),
         }
     }
@@ -574,6 +605,9 @@ impl Gen {
             Type::Tuple(ts) => Type::Tuple(ts.iter().map(|x| self.ct(x)).collect()),
             Type::Result(a, b) => Type::Result(Box::new(self.ct(a)), Box::new(self.ct(b))),
             Type::Map(a, b) => Type::Map(Box::new(self.ct(a)), Box::new(self.ct(b))),
+            Type::Task(i) => Type::Task(Box::new(self.ct(i))),
+            Type::Future(i) => Type::Future(Box::new(self.ct(i))),
+            Type::Shared(i, m) => Type::Shared(Box::new(self.ct(i)), *m),
             other => other.clone(),
         }
     }
@@ -584,6 +618,7 @@ impl Gen {
             var_params: f.params.iter().map(|p| p.mutable).collect(),
             ret: f.ret.as_ref().map(|t| self.ct(t)).unwrap_or(Type::Unknown),
             self_kind: f.self_kind,
+            is_async: f.is_async,
         }
     }
 
@@ -1260,7 +1295,7 @@ impl Gen {
                     None => e.with_help("built-in types are Int, Float, Bool, Str, [T], T? and tuples; others must be a `struct` or `enum`"),
                 })
             }
-            Type::List(inner) | Type::Option(inner) => self.check_type(inner, line, col),
+            Type::List(inner) | Type::Option(inner) | Type::Task(inner) | Type::Shared(inner, _) => self.check_type(inner, line, col),
             Type::Tuple(ts) => ts.iter().try_for_each(|t| self.check_type(t, line, col)),
             Type::Result(t, e) | Type::Map(t, e) => {
                 self.check_type(t, line, col)?;
@@ -1593,9 +1628,9 @@ impl Gen {
                 let cname = self.canon(raw_name);
                 let name = &cname;
                 if let Some(s) = self.fns.get(name) {
-                    s.ret.clone()
+                    if s.is_async { Type::Future(Box::new(s.ret.clone())) } else { s.ret.clone() }
                 } else if let Some(m) = self.current_type.as_ref().and_then(|t| self.methods_of(t)).and_then(|m| m.get(name).cloned()) {
-                    m.ret
+                    if m.is_async { Type::Future(Box::new(m.ret)) } else { m.ret }
                 } else if self.structs.contains_key(name) {
                     Type::Named(name.clone())
                 } else if let Ok(Some(en)) = self.resolve_variant(name, e.line, e.col) {
@@ -1613,11 +1648,18 @@ impl Gen {
                     }
                     if self.lookup(tn).is_none() {
                         if let Some(t) = builtin_namespace_type(tn, name) {
+                            if tn == "Time" && name == "sleep" && self.in_async {
+                                return Type::Future(Box::new(Type::Unit));
+                            }
                             return t;
                         }
                     }
                 }
-                let rt = self.ty_of(recv);
+                let rt = match self.ty_of(recv) {
+                    // a shared value behaves as the value it holds
+                    Type::Shared(inner, _) => *inner,
+                    other => other,
+                };
                 if let Some(Arg { value: lam, .. }) = args.last() {
                     if let ExprKind::Lambda { params, body } = &lam.kind {
                         let init = if args.len() > 1 { Some(self.ty_of(&args[0].value)) } else { None };
@@ -1631,7 +1673,7 @@ impl Gen {
                         }
                     }
                     if let Some(m) = self.methods_of(sn).and_then(|m| m.get(name).cloned()) {
-                        return m.ret;
+                        return if m.is_async { Type::Future(Box::new(m.ret)) } else { m.ret };
                     }
                     if name == "to_s" || name == "to_str" {
                         return Type::Str;
@@ -1695,6 +1737,259 @@ impl Gen {
                     _ => Type::Result(Box::new(t), Box::new(Type::Named("Error".into()))),
                 }
             }
+            ExprKind::Await(x) => match self.ty_of(x).materialized() {
+                Type::Future(t) | Type::Task(t) => *t,
+                Type::List(inner) => match *inner {
+                    Type::Task(t) => Type::List(t),
+                    _ => Type::Unknown,
+                },
+                _ => Type::Unknown,
+            },
+            ExprKind::Spawn(body) => Type::Task(Box::new(self.spawn_body_type(body))),
+        }
+    }
+
+    /// The value a `spawn:` block produces: its last expression, else `()`.
+    fn spawn_body_type(&mut self, body: &Block) -> Type {
+        match body.stmts.last() {
+            Some(Stmt::Expr(e)) => {
+                self.push_scope();
+                // bindings made earlier in the block shape the tail's type
+                for st in &body.stmts[..body.stmts.len() - 1] {
+                    if let Stmt::Bind { name, ty, value, line, .. } | Stmt::Var { name, ty, value, line, .. } = st {
+                        let t = ty.as_ref().map(|t| self.ct(t)).unwrap_or_else(|| self.ty_of(value).materialized());
+                        self.declare(name, true, false, t, *line);
+                    }
+                }
+                let t = self.ty_of(e).materialized();
+                self.pop_scope();
+                match t {
+                    Type::Future(_) => Type::Unknown,
+                    other => other,
+                }
+            }
+            _ => Type::Unit,
+        }
+    }
+
+    /// Is `t` a value that must be awaited before use?
+    fn no_future(&self, t: &Type, e: &Expr) -> Result<()> {
+        if let Type::Future(_) = t {
+            let what = match &e.kind {
+                ExprKind::Call { name, .. } => format!("`{}` is an `async def`", name),
+                ExprKind::Method { name, .. } => format!("`{}` is an `async def`", name),
+                _ => "this is an async value".to_string(),
+            };
+            return Err(LumeError::new(e.line, e.col, format!("{}: its result arrives later", what))
+                .with_help("write `await` in front of the call to wait for it, or `spawn:` to run it alongside other work"));
+        }
+        Ok(())
+    }
+
+    /// If the receiver chain of a place (`x`, `x.a`, `x.a[i].b`) starts at a
+    /// `shared var` value, returns (root expression, inner type).
+    fn shared_root<'a>(&mut self, e: &'a Expr) -> Option<(&'a Expr, Type)> {
+        self.shared_root_ex(e).and_then(|(r, t, m)| if m { Some((r, t)) } else { None })
+    }
+
+    /// Like `shared_root`, for `shared` and `shared var` alike; the bool is
+    /// true for `shared var`.
+    fn shared_root_ex<'a>(&mut self, e: &'a Expr) -> Option<(&'a Expr, Type, bool)> {
+        let mut cur = e;
+        loop {
+            if let Type::Shared(inner, m) = self.ty_of(cur) {
+                return Some((cur, *inner, m));
+            }
+            match &cur.kind {
+                ExprKind::Method { recv, args, .. } if args.is_empty() => cur = recv,
+                ExprKind::Index { recv, .. } => cur = recv,
+                ExprKind::TupleIndex { recv, .. } => cur = recv,
+                _ => return None,
+            }
+        }
+    }
+
+    /// The name a shared root is known by, for "mentions" checks.
+    fn root_name(e: &Expr) -> Option<String> {
+        match &e.kind {
+            ExprKind::Ident(n) => Some(n.clone()),
+            ExprKind::Method { name, args, .. } if args.is_empty() => Some(name.clone()),
+            _ => None,
+        }
+    }
+
+    /// `e` with the sub-expression `root` (by pointer) replaced by `new`.
+    fn replace_root(e: &Expr, root: &Expr, new: &Expr) -> Expr {
+        if e.line == root.line && e.col == root.col && same_expr(e, root) {
+            return new.clone();
+        }
+        let kind = match &e.kind {
+            ExprKind::Method { recv, name, args } => ExprKind::Method { recv: Box::new(Self::replace_root(recv, root, new)), name: name.clone(), args: args.clone() },
+            ExprKind::Index { recv, index } => ExprKind::Index { recv: Box::new(Self::replace_root(recv, root, new)), index: index.clone() },
+            ExprKind::TupleIndex { recv, index } => ExprKind::TupleIndex { recv: Box::new(Self::replace_root(recv, root, new)), index: *index },
+            other => other.clone(),
+        };
+        Expr { kind, line: e.line, col: e.col }
+    }
+
+    /// The handle (`Arc`) of a shared place, not the value inside it.
+    fn handle_expr(&mut self, e: &Expr) -> Result<String> {
+        let saved = self.want_handle;
+        self.want_handle = true;
+        let r = self.expr(e);
+        self.want_handle = saved;
+        r
+    }
+
+    /// Emits `e`, whose receiver chain starts at a `shared var`, as one
+    /// locked block: `({ let mut g = root.lock().unwrap(); ...g... })`.
+    /// Arguments that mention the shared value are computed first, so the
+    /// lock is never taken twice at once.
+    fn shared_access(&mut self, e: &Expr, root: &Expr, inner: Type, args_of: Option<&[Arg]>) -> Result<String> {
+        let rname = Self::root_name(root);
+        let root_text = self.handle_expr(root)?;
+        let g = self.fresh("g");
+        let mut prelude = String::new();
+        let mut e2 = e.clone();
+        if let (Some(args), Some(rn)) = (args_of, &rname) {
+            let mentions: Vec<bool> = args.iter().map(|a| expr_mentions(&a.value, rn)).collect();
+            if mentions.iter().any(|m| *m) {
+                if let ExprKind::Method { args: new_args, .. } = &mut e2.kind {
+                    for (i, a) in new_args.iter_mut().enumerate() {
+                        if matches!(a.value.kind, ExprKind::Lambda { .. }) {
+                            if mentions[i] {
+                                return Err(LumeError::new(a.value.line, a.value.col, format!("`{}` is used inside a block while `{}` is locked, which would wait forever", rn, rn))
+                                    .with_help(format!("bind what the block needs from `{}` to a name before this line", rn)));
+                            }
+                            continue;
+                        }
+                        let t = self.ty_of(&a.value).materialized();
+                        let v = self.expr_owned(&a.value)?;
+                        let tmp = self.fresh("a");
+                        prelude.push_str(&format!("let {} = {}; ", tmp, v));
+                        self.declare(&tmp, false, false, t, a.value.line);
+                        a.value = Expr::new(ExprKind::Ident(tmp), a.value.line, a.value.col);
+                    }
+                }
+            }
+        }
+        self.push_scope();
+        self.declare(&g, true, false, inner, e.line);
+        let ge = Expr::new(ExprKind::Ident(g.clone()), root.line, root.col);
+        let rewritten = Self::replace_root(&e2, root, &ge);
+        let body = self.expr_owned(&rewritten);
+        self.pop_scope();
+        let body = body?;
+        Ok(format!("({{ {}let mut {} = {}.lock().unwrap(); {} }})", prelude, g, root_text, body))
+    }
+
+    /// A field or index assignment whose place starts at a `shared var`:
+    /// the right-hand side is computed first, then the change happens
+    /// under one lock.
+    fn shared_stmt(&mut self, s: &Stmt, root: &Expr, inner: Type, value: &Expr, is_tail: bool) -> Result<()> {
+        let root_text = self.handle_expr(root)?;
+        let vt = self.ty_of(value).materialized();
+        let v = self.expr_owned(value)?;
+        let tmp = self.fresh("v");
+        let g = self.fresh("g");
+        self.line("{");
+        self.indent += 1;
+        self.line(&format!("let {} = {};", tmp, v));
+        self.line(&format!("let mut {} = {}.lock().unwrap();", g, root_text));
+        self.push_scope();
+        self.declare(&tmp, false, false, vt, value.line);
+        self.declare(&g, true, false, inner, root.line);
+        let ge = Expr::new(ExprKind::Ident(g.clone()), root.line, root.col);
+        let ve = Expr::new(ExprKind::Ident(tmp.clone()), value.line, value.col);
+        let ns = match s {
+            Stmt::FieldAssign { recv, field, op, line, col, .. } => Stmt::FieldAssign { recv: Self::replace_root(recv, root, &ge), field: field.clone(), op: *op, value: ve, line: *line, col: *col },
+            Stmt::IndexAssign { recv, index, op, line, col, .. } => Stmt::IndexAssign { recv: Self::replace_root(recv, root, &ge), index: index.clone(), op: *op, value: ve, line: *line, col: *col },
+            _ => unreachable!(),
+        };
+        let r = self.stmt(&ns, false);
+        self.pop_scope();
+        self.indent -= 1;
+        self.line("}");
+        r?;
+        if is_tail {
+            let (line, col) = parser_pos(s);
+            return self.tail_unit(line, col);
+        }
+        Ok(())
+    }
+
+    /// `spawn:` — the block runs as its own task. Every local it mentions is
+    /// copied in (a `shared` handle is cloned, which is the point of it).
+    fn spawn_expr(&mut self, body: &Block, e: &Expr) -> Result<String> {
+        self.uses_async = true;
+        if self.current_type.is_some() && (block_mentions_self(body) || self.field_names().iter().any(|f| body.stmts.iter().any(|st| stmt_mentions(st, f)))) {
+            return Err(LumeError::new(e.line, e.col, "a `spawn:` block inside a method cannot use `self` or its fields")
+                .with_help("bind the fields the task needs to names before `spawn:`; a `shared var` field can be bound and passed in"));
+        }
+        let ret = self.spawn_body_type(body);
+        // captured locals
+        let mut captured: Vec<(String, Binding)> = Vec::new();
+        let mut seen = HashSet::new();
+        for scope in self.scopes.iter().rev() {
+            for (n, b) in scope {
+                if seen.insert(n.clone()) && body.stmts.iter().any(|st| stmt_uses(st, n)) {
+                    captured.push((n.clone(), b.clone()));
+                }
+            }
+        }
+        captured.sort_by(|a, b| a.0.cmp(&b.0));
+        let mut prelude = String::new();
+        for (n, b) in &captured {
+            let rn = rust_name(n);
+            let copy = if matches!(b.ty, Type::Shared(..)) {
+                format!("{}.clone()", rn)
+            } else if b.ty.is_copy() {
+                if b.borrowed { format!("*{}", rn) } else { rn.clone() }
+            } else if b.ty == Type::Str {
+                format!("{}.to_string()", rn)
+            } else {
+                format!("{}.clone()", rn)
+            };
+            prelude.push_str(&format!("let {} = {}; ", rn, copy));
+        }
+        let saved_loop = self.loop_depth;
+        let saved_in_block = self.in_block;
+        let saved_tail = self.tail_of_fn;
+        let saved_ret = std::mem::replace(&mut self.current_ret, ret.clone());
+        let saved_async = self.in_async;
+        let saved_captured = std::mem::take(&mut self.spawn_captured);
+        self.loop_depth = 0;
+        self.in_block = false;
+        self.tail_of_fn = true;
+        self.in_async = true;
+        self.push_scope();
+        for (n, b) in &captured {
+            self.declare(n, false, false, b.ty.clone(), b.line);
+            self.spawn_captured.insert(n.clone());
+        }
+        let saved_out = std::mem::take(&mut self.out);
+        let base = self.indent;
+        self.out.push_str("tokio::spawn(async move {\n");
+        let r = self.nested_block(body, ret != Type::Unit);
+        self.out.push_str(&"    ".repeat(base));
+        self.out.push_str("})");
+        let text = std::mem::take(&mut self.out);
+        self.out = saved_out;
+        self.pop_scope();
+        self.spawn_captured = saved_captured;
+        self.in_async = saved_async;
+        self.current_ret = saved_ret;
+        self.loop_depth = saved_loop;
+        self.in_block = saved_in_block;
+        self.tail_of_fn = saved_tail;
+        r?;
+        Ok(format!("{{ {}{} }}", prelude, text))
+    }
+
+    fn field_names(&self) -> Vec<String> {
+        match &self.current_type {
+            Some(t) => self.structs.get(t).map(|s| s.fields.iter().map(|(n, _)| n.clone()).collect()).unwrap_or_default(),
+            None => Vec::new(),
         }
     }
 
@@ -1935,7 +2230,13 @@ impl Gen {
     }
 
     fn struct_def(&mut self, s: &StructDef) -> Result<()> {
-        self.derive_line(&s.methods);
+        let shared_fields: Vec<&Param> = s.fields.iter().filter(|f| matches!(self.ct(&f.ty), Type::Shared(_, true))).collect();
+        let manual_eq = !shared_fields.is_empty() && !s.methods.iter().any(|m| m.name == "==");
+        if manual_eq {
+            self.line("#[derive(Debug, Clone)]");
+        } else {
+            self.derive_line(&s.methods);
+        }
         self.line(&format!("pub struct {} {{", s.name));
         self.indent += 1;
         for f in &s.fields {
@@ -1951,6 +2252,22 @@ impl Gen {
         self.line(&format!("fn lume_str(&self) -> String {{ format!(\"{}({})\", {}) }}", s.name, fmt.join(", "), args.join(", ")));
         self.indent -= 1;
         self.line("}");
+        if manual_eq {
+            // a lock has no `==`: compare what is behind it (the same handle is trivially equal)
+            let parts: Vec<String> = s
+                .fields
+                .iter()
+                .map(|f| {
+                    let n = rust_name(&f.name);
+                    if matches!(self.ct(&f.ty), Type::Shared(_, true)) {
+                        format!("(std::sync::Arc::ptr_eq(&self.{n}, &o.{n}) || *self.{n}.lock().unwrap() == *o.{n}.lock().unwrap())", n = n)
+                    } else {
+                        format!("self.{n} == o.{n}", n = n)
+                    }
+                })
+                .collect();
+            self.line(&format!("impl PartialEq for {} {{ fn eq(&self, o: &Self) -> bool {{ {} }} }}", s.name, parts.join(" && ")));
+        }
         self.op_impls(&s.name, &s.methods);
         if !s.methods.is_empty() {
             self.line(&format!("impl {} {{", s.name));
@@ -2081,7 +2398,15 @@ impl Gen {
         }
         let vis = if self.in_trait_impl { "" } else { "pub " };
         let gen = if generics.is_empty() { String::new() } else { format!("<{}>", generics.join(", ")) };
-        let mut header = format!("{}fn {}{}({})", vis, fn_name, gen, parts.join(", "));
+        if f.is_async {
+            self.uses_async = true;
+            if is_main && !main_result && !self.test_mode {
+                self.line("#[tokio::main]");
+            }
+        }
+        let saved_async = self.in_async;
+        self.in_async = f.is_async;
+        let mut header = format!("{}{}fn {}{}({})", vis, if f.is_async { "async " } else { "" }, fn_name, gen, parts.join(", "));
         if sig.ret != Type::Unit {
             header.push_str(&format!(" -> {}", self.rt(&sig.ret)));
         }
@@ -2107,14 +2432,21 @@ impl Gen {
             self.block_body(&f.body, want_value)?;
         }
         self.tail_of_fn = false;
+        self.in_async = saved_async;
         self.pop_scope();
         self.current_type = None;
         self.current_self_ty = None;
         self.indent -= 1;
         self.line("}");
         if main_result && !self.test_mode {
-            self.line("fn main() {");
-            self.line("    if let Err(e) = lume_main() { eprintln!(\"error: {}\", e.message); std::process::exit(1); }");
+            if f.is_async {
+                self.line("#[tokio::main]");
+                self.line("async fn main() {");
+                self.line("    if let Err(e) = lume_main().await { eprintln!(\"error: {}\", e.message); std::process::exit(1); }");
+            } else {
+                self.line("fn main() {");
+                self.line("    if let Err(e) = lume_main() { eprintln!(\"error: {}\", e.message); std::process::exit(1); }");
+            }
             self.line("}");
         }
         Ok(())
@@ -2229,12 +2561,56 @@ impl Gen {
     // ----- statements -------------------------------------------------------
 
     fn stmt(&mut self, s: &Stmt, is_tail: bool) -> Result<()> {
+        // A `shared var` place on the left: do the change inside one lock.
         match s {
+            Stmt::FieldAssign { recv, value, .. } | Stmt::IndexAssign { recv, value, .. } => {
+                if let Some((root, inner)) = self.shared_root(recv) {
+                    let root = root.clone();
+                    return self.shared_stmt(s, &root, inner, value, is_tail);
+                }
+            }
+            _ => {}
+        }
+        match s {
+            Stmt::Shared { name, mutable, ty, value, line, col } => {
+                if let Some(t) = ty {
+                    self.check_type(t, *line, *col)?;
+                }
+                let vt0 = self.ty_of(value).materialized();
+                self.no_future(&vt0, value)?;
+                if let Type::Shared(..) = vt0 {
+                    return Err(LumeError::new(*line, *col, format!("`{}` is already shared", describe_value(value)))
+                        .with_help(format!("another handle to the same value is just `{} = {}`", name, describe_value(value))));
+                }
+                let inner = ty.as_ref().map(|t| self.ct(t)).unwrap_or_else(|| vt0.clone());
+                if ty.is_none() && !type_is_known(&inner) {
+                    return Err(LumeError::new(*line, *col, format!("cannot tell the type of `{}` from `{}` alone", name, describe_value(value)))
+                        .with_help(format!("add the type: `shared var {}: {} = ...`", name, suggest_type(&inner))));
+                }
+                if self.scopes.last().unwrap().contains_key(name) {
+                    return Err(LumeError::new(*line, *col, format!("`{}` is already declared in this block", name)));
+                }
+                let v = self.expr_owned_as(value, &inner)?;
+                let st = Type::Shared(Box::new(inner.clone()), *mutable);
+                if *mutable {
+                    self.warnings.push(
+                        LumeError::new(*line, *col, format!("`{}` is `shared var`: every use of it takes a lock, so tasks change it one at a time", name))
+                            .with_help("fine for a store or a counter; keep the work done while it is locked short"),
+                    );
+                }
+                self.declare(name, false, false, st, *line);
+                let wrapped = if *mutable { format!("std::sync::Arc::new(std::sync::Mutex::new({}))", v) } else { format!("std::sync::Arc::new({})", v) };
+                self.line(&format!("let {} = {};", rust_name(name), wrapped));
+                if is_tail {
+                    return self.tail_unit(*line, *col);
+                }
+            }
             Stmt::Var { name, ty, value, line, col } => {
                 if let Some(t) = ty {
                     self.check_type(t, *line, *col)?;
                 }
                 let inferred = self.ty_of(value).materialized();
+                self.no_future(&inferred, value)?;
                 let vt = ty.as_ref().map(|t| self.ct(t)).unwrap_or_else(|| inferred.clone());
                 if ty.is_none() && !type_is_known(&inferred) {
                     return Err(LumeError::new(*line, *col, format!("cannot tell the type of `{}` from `{}` alone", name, describe_value(value)))
@@ -2256,6 +2632,12 @@ impl Gen {
                 }
             }
             Stmt::Bind { name, ty, value, line, col } => {
+                let vt0 = self.ty_of(value);
+                self.no_future(&vt0, value)?;
+                if self.spawn_captured.contains(name) && self.lookup(name).map(|b| !b.mutable).unwrap_or(false) {
+                    return Err(LumeError::new(*line, *col, format!("`{}` inside `spawn:` is a copy, so changing it here would not be seen outside", name))
+                        .with_help(format!("declare it `shared var {}` before the `spawn:` if tasks are meant to change it, or bind a new name here", name)));
+                }
                 if let Some(t) = ty {
                     self.check_type(t, *line, *col)?;
                     if self.lookup(name).is_some() {
@@ -2270,6 +2652,15 @@ impl Gen {
                 }
                 let ann = if ty.is_some() { format!(": {}", self.rt(&vt)) } else { String::new() };
                 match self.lookup(name).cloned() {
+                    Some(Binding { ty: Type::Shared(_, true), .. }) => {
+                        // replace the value behind the lock; the new value is computed first
+                        let v = self.expr_owned(value)?;
+                        self.line(&format!("{{ let lume_v = {}; *{}.lock().unwrap() = lume_v; }}", v, rust_name(name)));
+                    }
+                    Some(Binding { ty: Type::Shared(_, false), line: bl, .. }) => {
+                        return Err(LumeError::new(*line, *col, format!("`{}` is `shared` and read-only", name))
+                            .with_help(format!("declare it `shared var {}` on line {} if tasks change it", name, bl)));
+                    }
                     Some(b) if b.mutable => {
                         let v = self.expr_owned(value)?;
                         self.line(&format!("{} = {};", rust_name(name), v));
@@ -2309,6 +2700,13 @@ impl Gen {
             Stmt::OpAssign { name, op, value, line, col } => {
                 let v = self.expr(value)?;
                 match self.lookup(name).cloned() {
+                    Some(Binding { ty: Type::Shared(_, true), .. }) => {
+                        self.line(&format!("{{ let lume_v = {}; *{}.lock().unwrap() {} lume_v; }}", v, rust_name(name), op));
+                    }
+                    Some(Binding { ty: Type::Shared(_, false), line: bl, .. }) => {
+                        return Err(LumeError::new(*line, *col, format!("`{}` is `shared` and read-only", name))
+                            .with_help(format!("declare it `shared var {}` on line {} if tasks change it", name, bl)));
+                    }
                     Some(b) if b.mutable => {
                         self.line(&format!("{} {} {};", rust_name(name), op, v));
                     }
@@ -2459,6 +2857,8 @@ impl Gen {
                     };
                     self.line(&v);
                 } else {
+                    let et0 = self.ty_of(e);
+                    self.no_future(&et0, e)?;
                     // In a `() or E` function a bare error value is an early return.
                     if !self.in_block {
                         if let Type::Result(t, err_t) = self.current_ret.clone() {
@@ -2815,6 +3215,15 @@ impl Gen {
     /// `expr_owned` for a position whose type is known: boxes a concrete
     /// value stored as an interface, element by element for list literals.
     fn expr_owned_as(&mut self, e: &Expr, expected: &Type) -> Result<String> {
+        if let Type::Shared(_, mutable) = expected {
+            return match self.ty_of(e) {
+                Type::Shared(..) => Ok(format!("{}.clone()", self.handle_expr(e)?)),
+                _ => {
+                    let v = self.expr_owned(e)?;
+                    Ok(if *mutable { format!("std::sync::Arc::new(std::sync::Mutex::new({}))", v) } else { format!("std::sync::Arc::new({})", v) })
+                }
+            };
+        }
         match (&e.kind, expected) {
             (ExprKind::List(items), Type::List(elem)) if self.is_interface(elem) => {
                 let mut parts = Vec::new();
@@ -2841,6 +3250,23 @@ impl Gen {
     /// An argument for a parameter of type `t`: Copy types by value,
     /// everything else by reference.
     fn expr_arg(&mut self, e: &Expr, t: &Type) -> Result<String> {
+        if let Type::Shared(..) = t {
+            // the callee gets its own handle to the same value
+            let at = self.ty_of(e);
+            if !matches!(at, Type::Shared(..)) {
+                return Err(LumeError::new(e.line, e.col, format!("this parameter is `{}`, but the value is a plain `{}`", type_name(t), type_name(&at.materialized())))
+                    .with_help("declare the value with `shared var` (or `shared`) where it is created"));
+            }
+            let h = self.handle_expr(e)?;
+            return Ok(format!("{}.clone()", h));
+        }
+        if let Type::Shared(inner, true) = self.ty_of(e) {
+            // a shared value passed where a plain one is expected: lend it under the lock
+            if !inner.is_copy() {
+                let h = self.handle_expr(e)?;
+                return Ok(format!("&*{}.lock().unwrap()", h));
+            }
+        }
         if self.is_interface(t) {
             // static dispatch through a generic parameter; the value must conform
             let at = self.ty_of(e).materialized();
@@ -3598,7 +4024,15 @@ impl Gen {
                 }
             }
             ExprKind::Ident(name) => {
-                if self.lookup(name).is_some() {
+                if let Some(b) = self.lookup(name).cloned() {
+                    if let Type::Shared(inner, true) = &b.ty {
+                        if !self.want_handle {
+                            // the value inside, copied out under a short lock
+                            let g = self.fresh("g");
+                            let take = if inner.is_copy() { format!("*{}", g) } else { format!("(*{}).clone()", g) };
+                            return Ok(format!("({{ let {} = {}.lock().unwrap(); {} }})", g, rust_name(name), take));
+                        }
+                    }
                     rust_name(name)
                 } else if self.field_type(name).is_some() {
                     format!("self.{}", rust_name(name))
@@ -3740,6 +4174,29 @@ impl Gen {
                     format!("LumeMap::from([{}])", parts.join(", "))
                 }
             }
+            ExprKind::Await(x) => {
+                if !self.in_async {
+                    return Err(LumeError::new(e.line, e.col, "`await` only works inside an `async def` or a `spawn:` block")
+                        .with_help("make this function `async def`, or move the waiting into `async def main`"));
+                }
+                self.uses_async = true;
+                let xt = self.ty_of(x).materialized();
+                let v = self.expr(x)?;
+                match xt {
+                    Type::Future(_) => format!("({}).await", v),
+                    Type::Task(_) => format!("({}).await.unwrap()", v),
+                    Type::List(inner) if matches!(*inner, Type::Task(_)) => {
+                        let v = self.expr_owned(x)?;
+                        format!("{{ let mut lume_done = Vec::new(); for lume_t in {} {{ lume_done.push(lume_t.await.unwrap()); }} lume_done }}", v)
+                    }
+                    Type::Unknown => return Err(LumeError::new(x.line, x.col, "cannot tell what is being awaited here")),
+                    other => {
+                        return Err(LumeError::new(e.line, e.col, format!("`await` needs an async call or a task, but this is a `{}`", type_name(&other)))
+                            .with_help("`await` goes in front of a call to an `async def`, a `Task`, or a list of tasks"))
+                    }
+                }
+            }
+            ExprKind::Spawn(body) => self.spawn_expr(body, e)?,
             ExprKind::Rust(code) => {
                 self.has_rust_blocks = true;
                 if code.contains('\n') {
@@ -3888,6 +4345,31 @@ impl Gen {
                 if let Some(ne) = self.module_ref(e)? {
                     return self.expr(&ne);
                 }
+                if let Some((root, inner, mutable)) = self.shared_root_ex(recv) {
+                    if mutable {
+                        return self.shared_access(e, root, inner, Some(args));
+                    }
+                    // read-only `shared`: the handle reads like the value itself
+                    let root_text = self.handle_expr(root)?;
+                    let g = self.fresh("g");
+                    self.push_scope();
+                    self.declare(&g, false, true, inner, e.line);
+                    let ge = Expr::new(ExprKind::Ident(g.clone()), root.line, root.col);
+                    let rewritten = Self::replace_root(e, root, &ge);
+                    let body = self.expr_owned(&rewritten);
+                    self.pop_scope();
+                    let body = match body {
+                        Err(err) if err.msg.contains(&format!("`{}`", g)) => {
+                            let rn = Self::root_name(root).unwrap_or_else(|| "it".into());
+                            return Err(LumeError::new(e.line, e.col, format!("`{}` is `shared` and read-only, but `{}` changes it", rn, name))
+                                .with_help(format!("declare it `shared var {}` if tasks change it", rn)));
+                        }
+                        other => other?,
+                    };
+                    return Ok(format!("({{ let {} = &*{}; {} }})", g, root_text, body));
+                }
+                let recv_ty = self.ty_of(recv);
+                self.no_future(&recv_ty, recv)?;
                 // Enum.Variant(...) constructor
                 if let ExprKind::Ident(tn) = &recv.kind {
                     let ctn = self.canon(tn);
@@ -3913,12 +4395,21 @@ impl Gen {
                             ("Env", "args") => { need(0)?; "lume_args()".to_string() }
                             ("Env", "get") => { need(1)?; format!("std::env::var(&*{}).ok()", parts[0]) }
                             ("Time", "now") => { need(0)?; "lume_now()".to_string() }
+                            ("Time", "sleep") => {
+                                need(1)?;
+                                if self.in_async {
+                                    self.uses_async = true;
+                                    format!("tokio::time::sleep(std::time::Duration::from_millis(({}) as u64))", parts[0])
+                                } else {
+                                    format!("std::thread::sleep(std::time::Duration::from_millis(({}) as u64))", parts[0])
+                                }
+                            }
                             _ => unreachable!(),
                         });
                     }
                     if self.lookup(tn).is_none() && (tn == "File" || tn == "Env" || tn == "Time") {
                         return Err(LumeError::new(e.line, e.col, format!("`{}` has no `{}`", tn, name))
-                            .with_help(match tn.as_str() { "File" => "File has read(path), write(path, text) and exists?(path)", "Env" => "Env has args and get(name)", _ => "Time has now" }));
+                            .with_help(match tn.as_str() { "File" => "File has read(path), write(path, text) and exists?(path)", "Env" => "Env has args and get(name)", _ => "Time has now and sleep(ms)" }));
                     }
                     if self.lookup(tn).is_none() && self.structs.contains_key(tn) {
                         return Err(LumeError::new(e.line, e.col, format!("`{}.{}` — static methods on a type are not supported yet", tn, name))
@@ -4088,6 +4579,8 @@ impl Gen {
         match &recv.kind {
             ExprKind::Ident(n) => match self.lookup(n) {
                 Some(b) if b.mutable => Ok(()),
+                Some(Binding { ty: Type::Shared(_, false), line: bl, .. }) => Err(LumeError::new(line, col, format!("`{}` is `shared` and read-only, but `{}` changes it", n, method))
+                    .with_help(format!("declare it `shared var {}` on line {} if tasks change it", n, bl))),
                 Some(b) => Err(LumeError::new(line, col, format!("`{}` is immutable, but `{}` changes it", n, method))
                     .with_help(format!("declare it with `var {} = ...` on line {}", n, b.line))),
                 None if self.field_type(n).is_some() => self.require_var_self(n, line, col),
@@ -4261,6 +4754,7 @@ fn builtin_namespace_type(ns: &str, name: &str) -> Option<Type> {
         ("Env", "args") => Type::List(Box::new(Type::Str)),
         ("Env", "get") => Type::Option(Box::new(Type::Str)),
         ("Time", "now") => Type::Int,
+        ("Time", "sleep") => Type::Unit, // becomes `async ()` inside async code; see ty_of
         _ => return None,
     })
 }
@@ -4358,7 +4852,7 @@ fn edit_distance(a: &str, b: &str) -> usize {
 fn type_is_known(t: &Type) -> bool {
     match t {
         Type::Unknown => false,
-        Type::List(i) | Type::Option(i) | Type::Iter(i, _) => type_is_known(i),
+        Type::List(i) | Type::Option(i) | Type::Iter(i, _) | Type::Task(i) | Type::Future(i) | Type::Shared(i, _) => type_is_known(i),
         Type::Tuple(ts) => ts.iter().all(type_is_known),
         Type::Result(a, b) | Type::Map(a, b) => type_is_known(a) && type_is_known(b),
         _ => true,
@@ -4423,7 +4917,33 @@ fn stmt_mentions(s: &Stmt, name: &str) -> bool {
         Stmt::For { iter, filter, body, .. } => expr_mentions(iter, name) || filter.as_ref().map(|f| expr_mentions(f, name)).unwrap_or(false) || blk(body),
         Stmt::Break { .. } | Stmt::Next { .. } => false,
         Stmt::Assert { cond, .. } => expr_mentions(cond, name),
+        Stmt::Shared { value, .. } => expr_mentions(value, name),
     }
+}
+
+/// `stmt_mentions`, plus names that are assigned to (`x += 1`, `x = v`).
+fn stmt_uses(s: &Stmt, name: &str) -> bool {
+    let assigned = match s {
+        Stmt::OpAssign { name: n, .. } | Stmt::Bind { name: n, .. } => n == name,
+        Stmt::While { body, .. } | Stmt::For { body, .. } => body.stmts.iter().any(|st| stmt_uses(st, name)),
+        Stmt::Expr(e) => expr_assigns(e, name),
+        _ => false,
+    };
+    assigned || stmt_mentions(s, name)
+}
+
+fn expr_assigns(e: &Expr, name: &str) -> bool {
+    let blk = |b: &Block| b.stmts.iter().any(|st| stmt_uses(st, name));
+    match &e.kind {
+        ExprKind::If { branches, else_block } => branches.iter().any(|(_, b)| blk(b)) || else_block.as_ref().map(blk).unwrap_or(false),
+        ExprKind::Match { arms, .. } => arms.iter().any(|a| blk(&a.body)),
+        ExprKind::Lambda { body, .. } | ExprKind::Spawn(body) => blk(body),
+        _ => false,
+    }
+}
+
+fn block_mentions_self(b: &Block) -> bool {
+    b.stmts.iter().any(|st| stmt_mentions(st, "self"))
 }
 
 fn expr_mentions(e: &Expr, name: &str) -> bool {
@@ -4431,10 +4951,13 @@ fn expr_mentions(e: &Expr, name: &str) -> bool {
     match &e.kind {
         ExprKind::Ident(n) => n == name,
         ExprKind::Rust(code) => code.contains(name),
-        ExprKind::Int(_) | ExprKind::Float(_) | ExprKind::Bool(_) | ExprKind::SelfRef | ExprKind::None | ExprKind::Placeholder => false,
+        ExprKind::SelfRef => name == "self",
+        ExprKind::Int(_) | ExprKind::Float(_) | ExprKind::Bool(_) | ExprKind::None | ExprKind::Placeholder => false,
         ExprKind::Str(pieces) => pieces.iter().any(|p| matches!(p, StrPiece::Expr(x) if expr_mentions(x, name))),
         ExprKind::List(items) | ExprKind::Tuple(items) => items.iter().any(|i| expr_mentions(i, name)),
         ExprKind::MapLit(pairs) => pairs.iter().any(|(k, v)| expr_mentions(k, name) || expr_mentions(v, name)),
+        ExprKind::Await(x) => expr_mentions(x, name),
+        ExprKind::Spawn(b) => blk(b),
         ExprKind::Range { lo, hi, .. } => expr_mentions(lo, name) || expr_mentions(hi, name),
         ExprKind::Unary { expr, .. } | ExprKind::Some(expr) | ExprKind::Ok(expr) | ExprKind::Try(expr) | ExprKind::Unwrap(expr) | ExprKind::Puts(expr) => expr_mentions(expr, name),
         ExprKind::TupleIndex { recv, .. } => expr_mentions(recv, name),
@@ -4464,4 +4987,8 @@ fn op_method_name(op: &str) -> Option<&'static str> {
         ">=" => "op_ge",
         _ => return None,
     })
+}
+
+fn parser_pos(s: &Stmt) -> (usize, usize) {
+    crate::parser::stmt_pos(s)
 }

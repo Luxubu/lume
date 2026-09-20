@@ -1,0 +1,9 @@
+struct Counter:
+  n: Int
+  def bump(var self):
+    n += 1
+
+async def main:
+  shared c = Counter(0)
+  c.bump
+  puts c.n

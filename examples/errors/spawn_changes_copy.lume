@@ -1,0 +1,6 @@
+async def main:
+  var count = 0
+  t = spawn:
+    count = count + 1
+  await t
+  puts count

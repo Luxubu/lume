@@ -1,0 +1,6 @@
+error: `c` is `shared` and read-only, but `bump` changes it
+  --> examples/errors/shared_readonly.lume:8:4
+  |
+8 |   c.bump
+  |    ^
+  help: declare it `shared var c` if tasks change it

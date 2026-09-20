@@ -452,6 +452,9 @@ impl Fmt {
         if f.public && !sig_only {
             out.push_str("pub ");
         }
+        if f.is_async {
+            out.push_str("async ");
+        }
         out.push_str("def ");
         out.push_str(&f.name);
         let mut params: Vec<String> = Vec::new();
@@ -541,6 +544,13 @@ impl Fmt {
             Stmt::Break { .. } => "break".into(),
             Stmt::Next { .. } => "next".into(),
             Stmt::Assert { cond, .. } => format!("assert {}", self.expr(cond)),
+            Stmt::Shared { name, mutable, ty, value, .. } => {
+                let kw = if *mutable { "shared var" } else { "shared" };
+                match ty {
+                    Some(t) => format!("{} {}: {} = {}", kw, name, type_str(t), self.expr(value)),
+                    None => format!("{} {} = {}", kw, name, self.expr(value)),
+                }
+            }
             Stmt::While { cond, body } => {
                 let mut out = format!("while {}:", self.expr(cond));
                 self.indent += 1;
@@ -609,7 +619,8 @@ impl Fmt {
                     8
                 }
             }
-            ExprKind::If { .. } | ExprKind::Match { .. } | ExprKind::Puts(_) => 0,
+            ExprKind::If { .. } | ExprKind::Match { .. } | ExprKind::Puts(_) | ExprKind::Spawn(_) => 0,
+            ExprKind::Await(_) => 8,
             _ => 10,
         }
     }
@@ -846,6 +857,19 @@ impl Fmt {
                 }
                 out
             }
+            ExprKind::Await(x) => format!("await {}", self.expr_p(x, 10)),
+            ExprKind::Spawn(body) => {
+                if self.is_inline(body) {
+                    if let Some(Stmt::Expr(x)) = body.stmts.first() {
+                        return format!("spawn: {}", self.expr(x));
+                    }
+                }
+                let mut out = String::from("spawn:");
+                self.indent += 1;
+                out.push_str(&self.block_text(body));
+                self.indent -= 1;
+                out
+            }
             ExprKind::If { branches, else_block } => self.if_text(branches, else_block.as_ref()),
             ExprKind::Match { scrutinee, arms } => {
                 let mut out = format!("match {}:", self.expr(scrutinee));
@@ -979,6 +1003,10 @@ pub fn type_str(t: &Type) -> String {
         Type::Result(a, b) => format!("{} or {}", type_str(a), type_str(b)),
         Type::Map(k, v) => format!("{{{}: {}}}", type_str(k), type_str(v)),
         Type::Iter(e, _) => format!("[{}]", type_str(e)),
+        Type::Task(e) => format!("Task[{}]", type_str(e)),
+        Type::Future(e) => format!("async {}", type_str(e)),
+        Type::Shared(e, true) => format!("shared var {}", type_str(e)),
+        Type::Shared(e, false) => format!("shared {}", type_str(e)),
         Type::Unknown => "_".into(),
     }
 }

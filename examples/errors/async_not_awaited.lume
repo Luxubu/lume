@@ -1,0 +1,6 @@
+async def f -> Int:
+  1
+
+async def main:
+  x = f()
+  puts x

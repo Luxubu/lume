@@ -44,6 +44,7 @@ pub const KEYWORDS: &[&str] = &[
     "def", "var", "const", "if", "elif", "else", "unless", "while", "for", "in", "where",
     "return", "break", "next", "true", "false", "and", "or", "not", "puts", "struct", "enum",
     "match", "interface", "extend", "import", "pub", "test", "assert", "rust",
+    "async", "await", "spawn", "shared",
 ];
 
 pub fn is_keyword(s: &str) -> bool {

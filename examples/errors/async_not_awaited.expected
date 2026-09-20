@@ -1,0 +1,6 @@
+error: `f` is an `async def`: its result arrives later
+  --> examples/errors/async_not_awaited.lume:5:7
+  |
+5 |   x = f()
+  |       ^
+  help: write `await` in front of the call to wait for it, or `spawn:` to run it alongside other work

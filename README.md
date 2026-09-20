@@ -20,7 +20,7 @@ program takes about 1 s in Python and 1.4 s in Ruby.
 The language design lives in the [Lume Language Design](https://claude.ai/code/artifact/1872fe63-1816-4b1e-9983-dec2774382fb)
 document. This repository is the compiler and the examples.
 
-## Status: milestones 1–11 done
+## Status: milestones 1–12 done
 
 | # | Milestone | Status |
 | --- | --- | --- |
@@ -35,6 +35,7 @@ document. This repository is the compiler and the examples.
 | 9 | Lume modules: `import users.model`, `model.User`, `import a.b.Name`, `pub`, cycle detection | done |
 | 10 | `interface` with defaults, structural conformance, `extend T with I`, operator methods | done |
 | 11 | `test "name":` blocks, `assert`, `lume test`, `lume fmt` | done |
+| 12 | `async def`/`await`, `spawn:` tasks, `Task[T]`, `shared`/`shared var` | done: sample 3 runs on threads, 5 `shared` words in 97 lines |
 
 What works today: functions (`def` block and one-liner forms, return type
 inferred when omitted), `struct` with fields and methods (fields used bare
@@ -79,7 +80,15 @@ file they test (`test "name":` blocks with `assert`; `lume test` runs them
 and a failing `assert` prints both sides; `lume run`/`build` strip them; `!`
 is silent inside tests), `lume fmt` (one canonical layout, no options; keeps
 comments, blank lines, `x |> y` pipes, one-liner/inline forms and literal
-spelling; aligns `->` in a `match` and trailing comments), `if`/`elif`/`else` as
+spelling; aligns `->` in a `match` and trailing comments), async
+(`async def f` is called with `await f()`; `t = spawn:` runs an indented
+block as its own task on a thread pool and gives a `Task[T]`; `await t`,
+`await [t1, t2]`; `await Time.sleep(ms)`; `async def main`; every local a
+task mentions is copied into it), sharing (`shared var x = v` puts one value
+behind a lock that any task may change: `x.push(1)`, `x += 1`, `x.count`;
+`shared x` is a read-only handle; a struct field can be `shared var Store`;
+uses are wrapped in short locks, arguments are computed before the lock, and
+a block that would take the lock twice is a compile error), `if`/`elif`/`else` as
 expressions, trailing `if`/`unless`, `while`, `for x in range` with `where`,
 lists, ranges (`1..10` inclusive, `1...10` exclusive), string interpolation,
 `and`/`or`/`not`, `**`, calls, a small set of built-in methods (`len`, `sum`,
@@ -95,7 +104,10 @@ a method or arithmetic on a `T?` or `T or E` without unwrapping, an empty
 `[]` binding with no type, a value used as an interface it does not satisfy
 (naming the missing method or the signature that differs), an `extend` that
 leaves a method out, an operator a type does not define, `sort` on a type
-without `<`,
+without `<`, `await` outside `async def`, an `async def` called
+without `await`, a `var` changed inside a `spawn:` block (it is a copy), a
+mutating call on a read-only `shared`, a `spawn:` inside a method that uses
+`self`,
 `name (` with a space (ambiguous call), bad indentation, tabs. Warnings:
 `return` inside a block.
 
@@ -135,7 +147,10 @@ programmer writes mutability, never ownership: `var self` on a method that
 changes fields, `var xs: [Int]` on a parameter changed in place. Milestone 7
 measured zero ownership syntax across 202 lines of ported programs
 (`examples/port/`), so the memory policy is settled: Rust-faithful inferred
-ownership, no reference-counting fallback.
+ownership, no reference-counting fallback. Milestone 12 measured the last
+case, values shared between threads: 5 `shared` words in 97 lines of async
+code, all of them at the declaration of the shared thing (`shared var
+store`), none at its uses. That is the one ownership word in Lume.
 
 Speed: computation runs at Rust speed (`fib(35)`: 30 ms vs Python 1.04 s).
 String-and-map code is within 20% of hand-written Rust after milestone 8
@@ -167,8 +182,9 @@ lume fmt   examples/fib.lume        # rewrite in the canonical layout (--check, 
 ```
 
 Generated Rust and binaries go in a `.lume/` directory next to the source file.
-A program that imports a crate is built with cargo (first build fetches the
-crate; later builds are cached under `.lume/cargo-<name>/`).
+A program that imports a crate, or uses `async`, is built with cargo (first
+build fetches the crate — tokio for async, about 10 s; later builds are
+cached under `.lume/cargo-<name>/`).
 
 ## Layout
 
@@ -182,7 +198,8 @@ compiler/src/loader.rs   resolves imports to files, orders modules, rejects cycl
 compiler/src/fmt.rs      lume fmt: prints the tree back out, with comments and blank lines
 compiler/src/main.rs     the CLI
 examples/                programs that must keep compiling
-examples/port/           the design doc's sample programs and the graph program
+examples/port/           the design doc's sample programs and the graph program; app_async.lume is sample 3 on threads
+examples/async.lume      async/await, spawn, Task[T], shared var
 examples/modules/        a three-file program: app.lume imports users/model and users/store
 examples/interfaces.lume interfaces, extend, operator methods
 examples/tests/          files with `test` blocks; expected `lume test` output

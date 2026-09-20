@@ -1,0 +1,61 @@
+# Async: Rust's async/await mapped one-to-one, spelled the Python way.
+#   async def f       -> callers write `await f()`
+#   spawn: ...        -> the block runs as its own task; the value is a Task[T]
+#   await t / await ts -> wait for one task, or a list of them
+#   shared var x      -> one value many tasks may change (behind a lock)
+# Tasks run on a thread pool (tokio), so `spawn` is real parallelism.
+
+async def fetch(id: Int) -> Str:
+  await Time.sleep(30 - id * 5)  # the later ids finish first
+  "item #{id}"
+
+async def slow_sum(xs: [Int]) -> Int:
+  var t = 0
+  for x in xs:
+    await Time.sleep(1)
+    t += x
+  t
+
+def square(n: Int) -> Int = n * n
+
+async def main:
+  # one at a time
+  puts await fetch(1)
+
+  # all at once: spawn a task per id, then await the list
+  var tasks: [Task[Str]] = []
+  for i in 1..4:
+    tasks.push(spawn: await fetch(i))
+  puts await tasks
+
+  # a task with a body; locals it mentions are copied in
+  label = "sum"
+  t = spawn:
+    s = await slow_sum([1, 2, 3, 4])
+    "#{label} = #{s}"
+  puts await t
+
+  # plain functions run inside tasks too
+  squares = await (1..5).map { |n| spawn: square(n) }.to_list
+  puts squares
+
+  # one counter, many tasks: `shared var` puts it behind a lock
+  shared var hits = 0
+  var workers: [Task[()]] = []
+  for i in 1..10:
+    w = spawn:
+      hits += i
+    workers.push(w)
+  await workers
+  puts "hits: #{hits}"
+
+  # a shared list, appended to from tasks, read afterwards
+  shared var seen: [Str] = []
+  ws = (1..3).map { |i| spawn: seen.push("t#{i}") }.to_list
+  await ws
+  puts seen.sort
+
+  # `shared` without `var`: read-only, no lock, cheap to hand to every task
+  shared greeting = "hello"
+  hellos = await (1..3).map { |i| spawn: "#{greeting} #{i}" }.to_list
+  puts hellos

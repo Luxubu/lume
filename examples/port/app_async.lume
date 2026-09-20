@@ -1,0 +1,83 @@
+# Sample program 3 from the design doc, the threaded version: one Store
+# shared by request handlers that run as concurrent tasks. This is the one
+# place the design allows an ownership word to appear: `shared var`.
+# (The HTTP layer itself waits for the Rust-bridge signature work; the
+# requests are simulated, the concurrency is real: tokio tasks on threads.)
+
+struct User:
+  id: Int
+  name: Str
+  email: Str
+
+enum Response:
+  Ok(body: Str)
+  Created(id: Int)
+  NotFound(what: Str)
+  BadRequest(why: Str)
+
+  def status = match self:
+    Ok(_)         -> 200
+    Created(_)    -> 201
+    NotFound(_)   -> 404
+    BadRequest(_) -> 400
+
+struct Store:
+  users: [User]
+  next_id: Int
+
+  def find(id: Int) -> User? = users.find(_.id == id)
+
+  def insert(var self, name: Str, email: Str) -> Int:
+    id = next_id
+    users.push(User(id, name, email))
+    next_id += 1
+    id
+
+struct App:
+  store: shared var Store  # shared across requests, changed behind a lock
+
+  def get_user(id: Int) -> Response:
+    match store.find(id):
+      Some(u) -> Response.Ok("#{u.name} <#{u.email}>")
+      None    -> NotFound("user #{id}")
+
+  def create_user(body: Str) -> Response:
+    match body.split(","):
+      [name, email] if email.contains?("@") -> Created(store.insert(name.trim, email.trim))
+      [_, email]                            -> BadRequest("bad email: #{email.trim}")
+      parts                                 -> BadRequest("expected name,email; got #{parts.len} fields")
+
+enum Request:
+  Get(id: Int)
+  Post(body: Str)
+
+# One handler per request, each on its own task. `app` is copied into every
+# task; the copies share one Store because the field is `shared var`.
+async def handle(app: App, req: Request) -> (Int, Str):
+  await Time.sleep(5)
+  resp = match req:
+    Get(id)    -> app.get_user(id)
+    Post(body) -> app.create_user(body)
+  (resp.status, resp.to_s)
+
+async def main:
+  shared var store = Store([], 1)
+  app = App(store)
+
+  # writes first, in parallel; ids are handed out under the lock, so no two collide
+  posts = [Post("Ana, ana@x.com"), Post("Bo, bo@x.com"), Post("Cy, nope"), Post("just one field")]
+  var tasks: [Task[(Int, Str)]] = []
+  for req in posts:
+    tasks.push(spawn: await handle(app, req))
+  # which task gets id 1 depends on the scheduler, so print in sorted order
+  for status, text in (await tasks).sort:
+    puts "#{status}  #{text}"
+
+  # then reads, also in parallel
+  gets = [Get(1), Get(2), Get(7)]
+  var reads: [Task[(Int, Str)]] = []
+  for req in gets:
+    reads.push(spawn: await handle(app, req))
+  results = await reads
+  puts results.map(_.1).sort
+  puts "#{store.users.len} users stored; next id #{store.next_id}"

@@ -172,7 +172,12 @@ fn build_with_cargo(stem: &str, build_dir: &Path, rust: &str, deps: &[(String, S
     let pkg = stem.replace(|c: char| !c.is_alphanumeric() && c != '_', "_");
     let mut toml = format!("[package]\nname = \"{}\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[dependencies]\n", pkg);
     for (k, v) in deps {
-        toml.push_str(&format!("{} = \"{}\"\n", k, v));
+        // a version, or a whole inline table such as `{ version = "1", features = [...] }`
+        if v.trim_start().starts_with('{') {
+            toml.push_str(&format!("{} = {}\n", k, v));
+        } else {
+            toml.push_str(&format!("{} = \"{}\"\n", k, v));
+        }
     }
     toml.push_str("\n[profile.release]\nopt-level = 3\ndebug = false\n");
     fs::write(proj.join("Cargo.toml"), toml).map_err(|e| format!("error: cannot write Cargo.toml: {}", e))?;

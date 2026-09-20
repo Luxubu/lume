@@ -1,0 +1,6 @@
+error: `await` only works inside an `async def` or a `spawn:` block
+  --> examples/errors/await_outside_async.lume:5:7
+  |
+5 |   x = await f()
+  |       ^
+  help: make this function `async def`, or move the waiting into `async def main`

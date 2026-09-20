@@ -1,0 +1,10 @@
+struct App:
+  count: Int
+  def run(var self):
+    t = spawn:
+      count + 1
+    count += 1
+
+def main:
+  var a = App(0)
+  a.run

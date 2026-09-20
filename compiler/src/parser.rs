@@ -54,7 +54,8 @@ pub fn stmt_pos(s: &Stmt) -> (usize, usize) {
         | Stmt::For { line, col, .. }
         | Stmt::Break { line, col }
         | Stmt::Next { line, col }
-        | Stmt::Assert { line, col, .. } => (*line, *col),
+        | Stmt::Assert { line, col, .. }
+        | Stmt::Shared { line, col, .. } => (*line, *col),
         Stmt::Expr(e) => (e.line, e.col),
         Stmt::While { cond, .. } => (cond.line, cond.col),
     }
@@ -226,7 +227,7 @@ impl Parser {
             if public {
                 let (pl, pc) = self.here();
                 self.advance();
-                if !(self.at_kw("def") || self.at_kw("struct") || self.at_kw("enum") || self.at_kw("interface")) {
+                if !(self.at_kw("def") || self.at_kw("async") || self.at_kw("struct") || self.at_kw("enum") || self.at_kw("interface")) {
                     return Err(LumeError::new(pl, pc, "`pub` goes before `def`, `struct`, `enum` or `interface`"));
                 }
             }
@@ -247,7 +248,7 @@ impl Parser {
                 self.skip_newlines();
                 continue;
             }
-            if self.at_kw("def") {
+            if self.at_kw("def") || self.at_kw("async") {
                 let mut f = self.fn_def(false)?;
                 f.public = public;
                 items.push(Item::Fn(f));
@@ -267,7 +268,7 @@ impl Parser {
                     .with_help("top-level code goes inside `def main:`"));
             } else {
                 return Err(self
-                    .err(format!("expected `def`, `struct` or `enum`, found {}", self.describe()))
+                    .err(format!("expected `def`, `struct`, `enum`, `interface`, `import` or `test`, found {}", self.describe()))
                     .with_help("a file is a list of `def` functions, `struct` and `enum` types; statements go inside `def main:`"));
             }
             self.skip_newlines();
@@ -301,7 +302,7 @@ impl Parser {
         let mut fields = Vec::new();
         let mut methods = Vec::new();
         while !matches!(self.peek(), Tok::Dedent | Tok::Eof) {
-            if self.at_kw("def") {
+            if self.at_kw("def") || self.at_kw("async") {
                 methods.push(self.fn_def(true)?);
             } else if let Tok::Ident(fname) = self.peek().clone() {
                 if !methods.is_empty() {
@@ -355,6 +356,9 @@ impl Parser {
         let mut required = Vec::new();
         let mut defaults = Vec::new();
         while !matches!(self.peek(), Tok::Dedent | Tok::Eof) {
+            if self.at_kw("async") {
+                return Err(self.err("an interface method cannot be `async` yet").with_help("give the interface a plain method and do the awaiting in the caller"));
+            }
             if !self.at_kw("def") {
                 return Err(self.err(format!("expected `def` inside `interface {}`, found {}", name, self.describe())));
             }
@@ -416,7 +420,7 @@ impl Parser {
                     return Err(e);
                 }
                 self.end_stmt()?;
-                Ok((FnDef { name, public: true, params, ret, self_kind: SelfKind::Read, body: Block::default(), line, col }, false))
+                Ok((FnDef { name, public: true, is_async: false, params, ret, self_kind: SelfKind::Read, body: Block::default(), line, col }, false))
             }
         }
     }
@@ -439,7 +443,7 @@ impl Parser {
         self.advance();
         let mut methods = Vec::new();
         while !matches!(self.peek(), Tok::Dedent | Tok::Eof) {
-            if !self.at_kw("def") {
+            if !self.at_kw("def") && !self.at_kw("async") {
                 return Err(self.err(format!("expected `def` inside `extend`, found {}", self.describe())));
             }
             methods.push(self.fn_def(true)?);
@@ -532,7 +536,7 @@ impl Parser {
         let mut variants: Vec<Variant> = Vec::new();
         let mut methods = Vec::new();
         while !matches!(self.peek(), Tok::Dedent | Tok::Eof) {
-            if self.at_kw("def") {
+            if self.at_kw("def") || self.at_kw("async") {
                 methods.push(self.fn_def(true)?);
             } else if let Tok::Ident(vname) = self.peek().clone() {
                 if !methods.is_empty() {
@@ -584,6 +588,10 @@ impl Parser {
 
     fn fn_def(&mut self, in_struct: bool) -> Result<FnDef> {
         let (line, col) = self.here();
+        let is_async = self.eat_kw("async");
+        if is_async && !self.at_kw("def") {
+            return Err(self.err(format!("expected `def` after `async`, found {}", self.describe())).with_help("write `async def name(...)`"));
+        }
         self.advance(); // def
         let name = match self.peek().clone() {
             Tok::Sym(op) if matches!(op, "+" | "-" | "*" | "/" | "%" | "==" | "!=" | "<" | "<=" | ">" | ">=") => {
@@ -677,7 +685,7 @@ impl Parser {
                 .err(format!("expected `:` or `=` after the signature of `{}`, found {}", name, self.describe()))
                 .with_help("`def f(x: Int) -> Int:` starts a block; `def f(x: Int) -> Int = x * 2` is a one-liner"));
         };
-        Ok(FnDef { name, public: false, params, ret, self_kind, body, line, col })
+        Ok(FnDef { name, public: false, is_async, params, ret, self_kind, body, line, col })
     }
 
     /// `test "name":` followed by an indented body.
@@ -727,6 +735,19 @@ impl Parser {
     }
 
     fn parse_type_atom(&mut self) -> Result<Type> {
+        if self.eat_kw("shared") {
+            let mutable = self.eat_kw("var");
+            let inner = self.parse_type_atom()?;
+            return Ok(Type::Shared(Box::new(inner), mutable));
+        }
+        if self.at_kw("Task") && matches!(self.peek_at(1), Tok::Sym("[")) {
+            self.advance();
+            self.advance();
+            let inner = self.parse_type()?;
+            self.expect_sym("]", "to close `Task[...]`")?;
+            let t = Type::Task(Box::new(inner));
+            return Ok(self.type_suffix(t));
+        }
         if self.eat_sym("{") {
             let k = self.parse_type()?;
             if !self.eat_sym(":") {
@@ -895,6 +916,19 @@ impl Parser {
             let s = self.trailing_condition(Stmt::Next { line, col })?;
             self.end_stmt()?;
             return Ok(s);
+        }
+        if self.eat_kw("shared") {
+            let mutable = self.eat_kw("var");
+            let (name, _, _) = self.ident("a variable name")?;
+            let ty = if self.eat_sym(":") { Some(self.parse_type()?) } else { None };
+            if !self.eat_sym("=") {
+                return Err(self
+                    .err(format!("`shared {}` needs an initial value", name))
+                    .with_help(format!("write `shared var {} = ...` (many tasks may change it) or `shared {} = ...` (read-only)", name, name)));
+            }
+            let value = self.expr()?;
+            self.end_stmt()?;
+            return Ok(Stmt::Shared { name, mutable, ty, value, line, col });
         }
         if self.eat_kw("assert") {
             if matches!(self.peek(), Tok::Newline | Tok::Dedent | Tok::Eof) {
@@ -1420,6 +1454,10 @@ impl Parser {
 
     fn unary(&mut self) -> Result<Expr> {
         let (line, col) = self.here();
+        if self.eat_kw("await") {
+            let e = self.unary()?;
+            return Ok(Expr::new(ExprKind::Await(Box::new(e)), line, col));
+        }
         if self.eat_kw("not") {
             let e = self.binary(3)?; // binds looser than comparison: `not a == b`
             return Ok(Expr::new(ExprKind::Unary { op: "not", expr: Box::new(e) }, line, col));
@@ -1800,6 +1838,21 @@ impl Parser {
                     self.advance();
                     Ok(Expr::new(ExprKind::SelfRef, line, col))
                 }
+                "spawn" => {
+                    self.advance();
+                    if !self.eat_sym(":") {
+                        return Err(self.err("expected `:` after `spawn`").with_help("write `t = spawn:` with the task's body indented below, or `spawn: expr`"));
+                    }
+                    let body = if matches!(self.peek(), Tok::Newline) {
+                        self.block()?
+                    } else {
+                        let e = self.expr()?;
+                        let b = Block { stmts: vec![Stmt::Expr(e)] };
+                        self.mark_inline(&b);
+                        b
+                    };
+                    Ok(Expr::new(ExprKind::Spawn(body), line, col))
+                }
                 "test" => Err(LumeError::new(line, col, "`test` blocks go at the top level of the file, not inside a function")),
                 "assert" => Err(LumeError::new(line, col, "`assert` is a statement and starts its own line")),
                 "interface" | "extend" | "import" => Err(LumeError::new(line, col, format!("`{}` goes at the top level of the file", s))),
@@ -1880,6 +1933,8 @@ fn count_placeholders(e: &Expr) -> usize {
             count_placeholders(scrutinee)
                 + arms.iter().map(|a| a.guard.as_ref().map(count_placeholders).unwrap_or(0) + walk_block(&a.body)).sum::<usize>()
         }
+        ExprKind::Await(e) => count_placeholders(e),
+        ExprKind::Spawn(b) => walk_block(b),
     }
 }
 
@@ -1952,6 +2007,8 @@ fn replace_placeholders(e: &mut Expr) {
                 walk_block(&mut a.body);
             }
         }
+        ExprKind::Await(x) => replace_placeholders(x),
+        ExprKind::Spawn(b) => walk_block(b),
         _ => {}
     }
 }

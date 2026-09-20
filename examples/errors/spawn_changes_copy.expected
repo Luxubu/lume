@@ -1,0 +1,6 @@
+error: `count` inside `spawn:` is a copy, so changing it here would not be seen outside
+  --> examples/errors/spawn_changes_copy.lume:4:5
+  |
+4 |     count = count + 1
+  |     ^
+  help: declare it `shared var count` before the `spawn:` if tasks are meant to change it, or bind a new name here

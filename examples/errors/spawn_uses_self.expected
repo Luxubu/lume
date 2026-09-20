@@ -1,0 +1,6 @@
+error: a `spawn:` block inside a method cannot use `self` or its fields
+  --> examples/errors/spawn_uses_self.lume:4:9
+  |
+4 |     t = spawn:
+  |         ^
+  help: bind the fields the task needs to names before `spawn:`; a `shared var` field can be bound and passed in
