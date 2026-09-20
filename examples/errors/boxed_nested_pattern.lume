@@ -1,9 +1,0 @@
-enum T:
-  Leaf
-  Node(l: T, v: Int)
-
-def main:
-  t = Node(Node(Leaf, 1), 2)
-  match t:
-    Node(Node(_, a), b) -> puts a + b
-    _ -> puts 0

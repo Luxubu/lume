@@ -1,0 +1,6 @@
+error: this `match` on `E` does not cover: Add(Add(_, _), Num(_)), Add(Num(_), Add(_, _)), Add(Add(Num(_), Num(_)), Add(_, _)), ...
+  --> examples/errors/nonexhaustive_nested_deep.lume:6:3
+  |
+6 |   match e:
+  |   ^
+  help: add arms for the missing cases, or a final `_ ->` arm

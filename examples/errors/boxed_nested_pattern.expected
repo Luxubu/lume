@@ -1,6 +1,0 @@
-error: `l` holds a `T` inside a `T`; give it a name here and `match` it in the arm
-  --> examples/errors/boxed_nested_pattern.lume:8:10
-  |
-8 |     Node(Node(_, a), b) -> puts a + b
-  |          ^
-  help: write `Node(..., l, ...)` and then `match l:` on the next line

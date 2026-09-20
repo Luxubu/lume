@@ -20,7 +20,7 @@ program takes about 1 s in Python and 1.4 s in Ruby.
 The language design lives in the [Lume Language Design](https://claude.ai/code/artifact/1872fe63-1816-4b1e-9983-dec2774382fb)
 document. This repository is the compiler and the examples.
 
-## Status: milestones 1–19 done
+## Status: milestones 1–20 done
 
 | # | Milestone | Status |
 | --- | --- | --- |
@@ -42,6 +42,7 @@ document. This repository is the compiler and the examples.
 | 16 | Ownership by analysis: liveness-based copy or move, recursive enums boxed, `.or` on optional fields, string comparisons in blocks, `for var a in xs`, `xs[i].method` | done: review corpus leaks 6 → 0 |
 | 17 | Pattern completeness: a real exhaustiveness checker with nested witnesses, `A \| B` alternatives; the everyday standard methods; statements in inline blocks | done: 37 new methods, corpus 40 ok / 26 Lume errors / 0 leaks |
 | 18 | `{T}` sets with literals, algebra and iteration; `s[i]` / `s[a..b]` / `xs[a..b]` by character and position; structs and enums as map keys | done |
+| 20 | Dogfood again, across modules: a lexer/parser/evaluator for a small language, and what it exposed — nested patterns through recursive enums, top-level constants, `Variant(..)`, method-before-function resolution, `return` as a tail | done: Mini's `fib(21)` in 34 ms, 7× the same interpreter in Python |
 | 19 | Dogfood: a real JSON parser/printer/query tool written in Lume, and everything it exposed — `Char`, triple-quoted strings, `\r` and `1e15` literals, `Str +=`, `Time.now_ms`, six formatter defects | done: 13 ms vs hand-written Rust's 10 ms on 867 KB (was 100 ms) |
 | 18r | Third review round (`corpus/m18/`, 30 programs by a third reviewer): two block `if`s in a row, `{}` outside a typed binding, block parameters bound one reference too deep, mutations landing on temporaries, unchecked built-in arguments | done: 10 ranked problems fixed, 0 leaks |
 
@@ -57,7 +58,10 @@ self-transform rebinding), blocks in three forms (`xs.map(_.name)`,
 iterator, `find`/`take_while`/`fold`/`min_by`/`max_by`/`enumerate`, `enum`
 with data and methods (`Shape.Circle(1.0)`, bare `Circle(1.0)` where
 unambiguous), `match` as an expression with variant, literal, range, tuple,
-list (`[]`, `[x]`, `[first, ..rest]`) and string patterns, `|` alternatives
+list (`[]`, `[x]`, `[first, ..rest]`) and string patterns, nested patterns
+through a recursive enum's fields (`Binary("+", Num(0.0), r, _)` reaches
+inside the pointer a recursive field lives behind), `Variant(..)` to ignore a
+variant's fields, `|` alternatives
 (`1 | 2`, `"a" | "e"`, `Some(0) | None`, `Wrap(B) | Empty`; every
 alternative binds the same names), guards, and an exhaustiveness check that
 works through nested patterns, tuples, lists and `T?`/`T or E` and names a
@@ -120,6 +124,8 @@ has `digit?`, `alpha?`, `space?`, `alnum?`, `upper?`, `lower?`, `upcase`,
 `.to_s` or wherever a `Str` is wanted; `Int.to_char` goes back),
 multi-line strings (a `"""` block, with the leading line break and the common
 indentation removed; escapes and `#{}` work as usual), `1e15` and `2.5e-3`,
+top-level constants (`MAX = 100`, `KEYWORDS = {"let", "if"}` — computed once,
+`pub` to share them with other files),
 `and`/`or`/`not`, `**`, calls, `()` for an arm or block that does nothing,
 `xs + ys` to join two lists, `\u{1F600}` and `\r` escapes, one statement in an
 inline block (`xs.each { |x| total += x }`), and the everyday built-in
@@ -337,6 +343,8 @@ examples/collections.lume  a word index in a map of sets, tuple destructuring, i
 examples/chars.lume      Char: roman numerals, an expression evaluator, character tables
 examples/json/           a JSON parser, printer and query tool (350 lines) with its own tests,
                          plus the same algorithm in Rust and Python and a benchmark script
+examples/mini/           a small language in four modules: lexer, parser, evaluator, driver,
+                         with the same interpreter in Python beside it
 examples/stdlib.lume     the built-in methods, one line each
 examples/crate.lume      regex through the bridge: types, iterators, errors, a rust: block
 examples/crates.lume     hex and urlencoding, with nothing written for them

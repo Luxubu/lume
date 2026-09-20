@@ -1,0 +1,11 @@
+enum E:
+  Num(v: Int)
+  Add(l: E, r: E)
+
+def fold(e: E) -> Int:
+  match e:
+    Num(v)          -> v
+    Add(Num(a), Num(b)) -> a + b
+
+def main:
+  puts fold(Num(1))

@@ -392,6 +392,9 @@ struct CompiledPat {
     text: String,
     guards: Vec<String>,
     binds: Vec<(String, Type, BindKind)>,
+    /// Rust `let` lines to run at the top of the arm: how a pattern that
+    /// reaches inside a `Box` gives its names their values.
+    lets: Vec<String>,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -415,6 +418,7 @@ pub struct Exports {
     structs: HashMap<String, StructInfo>,
     enums: HashMap<String, EnumInfo>,
     fns: HashMap<String, Sig>,
+    consts: HashMap<String, Type>,
     interfaces: HashMap<String, IfaceInfo>,
     /// Methods types gained through `extend` in that module: type key -> methods.
     ext_methods: HashMap<String, HashMap<String, Sig>>,
@@ -514,6 +518,11 @@ pub struct Gen {
     map_items: bool,
     /// `c.or("")` on a `Char?`: the default is a string, so the result is one.
     or_default_is_str: bool,
+    /// Top-level constants: name -> type, for the root scope and for exports.
+    consts: HashMap<String, Type>,
+    /// The type the position being compiled expects, innermost last. A bare
+    /// variant name (`Num(v)`) is resolved against it when it is ambiguous.
+    want: Vec<Type>,
     /// Names copied into the current `spawn:` block.
     spawn_captured: HashSet<String>,
     /// While set, a `shared var` name means the handle, not the value inside.
@@ -566,6 +575,8 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, deps: &[Dep], t
         uses_async: false,
         map_items: false,
         or_default_is_str: false,
+        consts: HashMap::new(),
+        want: Vec::new(),
         spawn_captured: HashSet::new(),
         want_handle: false,
         crates: HashMap::new(),
@@ -1185,9 +1196,34 @@ impl Gen {
         match owners.len() {
             0 => Ok(None),
             1 => Ok(Some(owners[0].clone())),
-            _ => Err(LumeError::new(line, col, format!("`{}` is a variant of more than one enum: {}", v, owners.join(", ")))
-                .with_help(format!("write `{}.{}`", owners[0], v))),
+            _ => {
+                // the position says which enum is meant: a return type, an
+                // argument, a field, a typed binding, a list element
+                if let Some(en) = self.wanted_enum() {
+                    if owners.contains(&en) {
+                        return Ok(Some(en));
+                    }
+                }
+                Err(LumeError::new(line, col, format!("`{}` is a variant of more than one enum: {}", v, owners.join(", ")))
+                    .with_help(format!("write `{}.{}`", owners[0], v)))
+            }
         }
+    }
+
+    /// The enum the current position expects, looking through `T?`, `T or E`,
+    /// `[T]` and `{T}`.
+    fn wanted_enum(&self) -> Option<String> {
+        fn inner(t: &Type) -> Option<String> {
+            match t {
+                Type::Named(n) => Some(n.clone()),
+                Type::Option(i) | Type::List(i) | Type::Set(i) | Type::Iter(i, _) => inner(i),
+                Type::Result(ok, _) => inner(ok),
+                _ => None,
+            }
+        }
+        let t = self.want.last()?;
+        let en = inner(t)?;
+        if self.enums.contains_key(&en) { Some(en) } else { None }
     }
 
     fn all_names(&self) -> Vec<String> {
@@ -1248,6 +1284,11 @@ impl Gen {
         for (n, sig) in &ex.fns {
             let key = format!("{}.{}", key_prefix, n);
             self.fns.insert(key.clone(), qualify_sig(sig, id, ex));
+            self.paths.insert(key, format!("{}::{}", ex.rust_mod, n));
+        }
+        for (n, t) in &ex.consts {
+            let key = format!("{}.{}", key_prefix, n);
+            self.consts.insert(key.clone(), qualify_type(t, id, ex));
             self.paths.insert(key, format!("{}::{}", ex.rust_mod, n));
         }
         for (n, info) in &ex.interfaces {
@@ -1327,6 +1368,10 @@ impl Gen {
                     ex.fns.insert(f.name.clone(), self.fns[&f.name].clone());
                 }
                 Item::Fn(f) => ex.private.push(f.name.clone()),
+                Item::Const(c) if c.public => {
+                    ex.consts.insert(c.name.clone(), self.consts.get(&c.name).cloned().unwrap_or(Type::Unknown));
+                }
+                Item::Const(c) => ex.private.push(c.name.clone()),
                 Item::Struct(st) if st.public => {
                     ex.structs.insert(st.name.clone(), self.structs[&st.name].clone());
                 }
@@ -1354,7 +1399,7 @@ impl Gen {
             None => return Ok(None),
         };
         let key = self.canon(&format!("{}.{}", alias, name));
-        if self.structs.contains_key(&key) || self.enums.contains_key(&key) || self.fns.contains_key(&key) || self.interfaces.contains_key(&key) {
+        if self.structs.contains_key(&key) || self.enums.contains_key(&key) || self.fns.contains_key(&key) || self.interfaces.contains_key(&key) || self.consts.contains_key(&key) {
             return Ok(Some(key));
         }
         if self.module_private.get(alias).map(|p| p.contains(&name.to_string())).unwrap_or(false) {
@@ -1392,6 +1437,12 @@ impl Gen {
                     }
                 }
                 Item::Import(_) | Item::Test(_) => {}
+                Item::Const(c) => {
+                    if !seen.insert(c.name.clone()) {
+                        return Err(LumeError::new(c.line, c.col, format!("`{}` is defined twice", c.name)));
+                    }
+                    reserved_type_name(&c.name, c.line, c.col)?;
+                }
                 Item::Fn(f) => {
                     if !seen.insert(f.name.clone()) {
                         return Err(LumeError::new(f.line, f.col, format!("function `{}` is defined twice", f.name)));
@@ -1496,6 +1547,11 @@ impl Gen {
             match item {
                 Item::Import(_) | Item::Test(_) => {}
                 Item::Fn(f) => self.check_sig_types(f)?,
+                Item::Const(c) => {
+                    if let Some(t) = &c.ty {
+                        self.check_type(t, c.line, c.col)?;
+                    }
+                }
                 Item::Struct(s) => {
                     for fld in &s.fields {
                         self.check_type(&fld.ty, fld.line, fld.col)?;
@@ -1536,6 +1592,7 @@ impl Gen {
             for item in program {
                 let ext_key;
                 let (fns, owner): (Vec<&FnDef>, Option<&String>) = match item {
+                    Item::Const(_) => continue,
                     Item::Fn(f) => (vec![f], None),
                     Item::Struct(s) => (s.methods.iter().collect(), Some(&s.name)),
                     Item::Enum(e) => (e.methods.iter().collect(), Some(&e.name)),
@@ -1564,6 +1621,7 @@ impl Gen {
         for item in program {
             let ext_key;
             let (fns, owner): (Vec<&FnDef>, Option<&String>) = match item {
+                Item::Const(_) => continue,
                 Item::Fn(f) => (vec![f], None),
                 Item::Struct(s) => (s.methods.iter().collect(), Some(&s.name)),
                 Item::Enum(e) => (e.methods.iter().collect(), Some(&e.name)),
@@ -1599,9 +1657,17 @@ impl Gen {
             }
         }
         self.out.push('\n');
+        // constants: one value each, computed the first time it is used
+        for item in program {
+            if let Item::Const(c) = item {
+                self.const_def(c)?;
+            }
+        }
+        self.out.push('\n');
         let mut test_index = 0usize;
         for item in program {
             match item {
+                Item::Const(_) => continue,
                 Item::Fn(f) => self.fn_def(f, None)?,
                 Item::Struct(s) => self.struct_def(s)?,
                 Item::Enum(e) => self.enum_def(e)?,
@@ -1811,7 +1877,7 @@ impl Gen {
             PatKind::Bind(n) => {
                 self.declare(n, false, !t.is_copy(), t.clone(), p.line);
             }
-            PatKind::Variant { enum_name, name, args } => {
+            PatKind::Variant { enum_name, name, args, rest: _ } => {
                 match t {
                     Type::Option(inner) => {
                         if let Some(a) = args.first() {
@@ -1899,6 +1965,12 @@ impl Gen {
                 };
                 if self.enums.contains_key(&key) {
                     return Err(LumeError::new(e.line, e.col, format!("`{}` is an enum; pick a variant like `{}.{}`", key, key, self.enums[&key].variants[0].0)));
+                }
+                if self.consts.contains_key(&key) {
+                    if !args.is_empty() {
+                        return Err(LumeError::new(e.line, e.col, format!("`{}` is a constant, not a function", key)));
+                    }
+                    return Ok(Some(Expr::new(ExprKind::Ident(key), e.line, e.col)));
                 }
                 return Ok(Some(Expr::new(ExprKind::Call { name: key, args: args.clone() }, e.line, e.col)));
             }
@@ -1992,6 +2064,8 @@ impl Gen {
             ExprKind::Ident(n) => {
                 if let Some(b) = self.lookup(n) {
                     b.ty.clone()
+                } else if let Some(t) = self.consts.get(&self.canon(n)).cloned() {
+                    t
                 } else if let Some(t) = self.field_type(n) {
                     t
                 } else if let Some(m) = self.bare_method(n) {
@@ -2042,10 +2116,11 @@ impl Gen {
             ExprKind::Call { name: raw_name, .. } => {
                 let cname = self.canon(raw_name);
                 let name = &cname;
-                if let Some(s) = self.fns.get(name) {
-                    if s.is_async { Type::Future(Box::new(s.ret.clone())) } else { s.ret.clone() }
-                } else if let Some(m) = self.current_type.as_ref().and_then(|t| self.methods_of(t)).and_then(|m| m.get(name).cloned()) {
+                if let Some(m) = self.current_type.as_ref().and_then(|t| self.methods_of(t)).and_then(|m| m.get(name).cloned()) {
+                    // inside a type, its own method wins over a free function
                     if m.is_async { Type::Future(Box::new(m.ret)) } else { m.ret }
+                } else if let Some(s) = self.fns.get(name) {
+                    if s.is_async { Type::Future(Box::new(s.ret.clone())) } else { s.ret.clone() }
                 } else if self.structs.contains_key(name) {
                     Type::Named(name.clone())
                 } else if let Ok(Some(en)) = self.resolve_variant(name, e.line, e.col) {
@@ -3087,6 +3162,42 @@ impl Gen {
         }
     }
 
+    /// `NAME = value` at the top level: a Rust `static` computed on first use.
+    /// Inside functions the name reads as a borrowed value of that type.
+    fn const_def(&mut self, c: &ConstDef) -> Result<()> {
+        self.push_scope();
+        let inferred = self.ty_of(&c.value).materialized();
+        let t = match &c.ty {
+            Some(t) => {
+                let ct = self.ct(t);
+                self.check_assign(&c.value, &ct, &format!("`{}` is declared `{}`", c.name, type_name(&ct)))?;
+                ct
+            }
+            None => inferred,
+        };
+        if !type_is_known(&t) {
+            self.pop_scope();
+            return Err(LumeError::new(c.line, c.col, format!("cannot tell the type of `{}` from `{}` alone", c.name, describe_value(&c.value)))
+                .with_help(type_hint(&c.name, &c.value, &t)));
+        }
+        if matches!(t, Type::Shared(..) | Type::Task(_) | Type::Future(_)) {
+            self.pop_scope();
+            return Err(LumeError::new(c.line, c.col, format!("a constant cannot hold a `{}`", type_name(&t))));
+        }
+        let v = self.expr_owned_as(&c.value, &t)?;
+        self.pop_scope();
+        self.consts.insert(c.name.clone(), t.clone());
+        let rt = self.rt(&t);
+        let vis = if c.public { "pub " } else { "" };
+        self.line(&format!("{}static {}: std::sync::LazyLock<{}> = std::sync::LazyLock::new(|| {});", vis, rust_name(&c.name), rt, v));
+        // visible to every function in the file
+        if self.scopes.is_empty() {
+            self.scopes.push(HashMap::new());
+        }
+        self.scopes[0].insert(c.name.clone(), Binding { mutable: false, borrowed: true, ty: t, line: c.line });
+        Ok(())
+    }
+
     fn struct_def(&mut self, s: &StructDef) -> Result<()> {
         let shared_fields: Vec<&Param> = s.fields.iter().filter(|f| matches!(self.ct(&f.ty), Type::Shared(_, true))).collect();
         // a crate type in a field: it must be storable (Clone, no borrowed lifetime)
@@ -3847,16 +3958,18 @@ impl Gen {
                         return Err(LumeError::new(e.line, e.col, "this `if` is the function's result but has no `else`")
                             .with_help("add an `else` branch, or add `return` before it if it is not the result"));
                     }
+                    // the function's result type says which enum a bare
+                    // variant name means
+                    self.want.push(self.current_ret.clone());
                     let v = match &e.kind {
                         ExprKind::If { .. } | ExprKind::Match { .. } => {
                             self.at_tail = self.tail_of_fn;
-                            self.expr_owned(e)?
+                            self.expr_owned(e)
                         }
-                        _ => {
-                            let v = self.expr_owned(e)?;
-                            self.coerce_result(v, e)?
-                        }
+                        _ => self.expr_owned(e).and_then(|v| self.coerce_result(v, e)),
                     };
+                    self.want.pop();
+                    let v = v?;
                     self.line(&v);
                 } else {
                     let et0 = self.ty_of(e);
@@ -3899,10 +4012,16 @@ impl Gen {
                             return Err(LumeError::new(*line, *col, "this function returns nothing, but `return` has a value")
                                 .with_help("add `-> Type` to the function signature"));
                         }
-                        let v = self.expr_owned(e)?;
+                        // `return x` is a tail: the branches of an `if`/`match`
+                        // in it agree the same way the last expression's do
                         let saved = self.tail_of_fn;
                         self.tail_of_fn = true;
-                        let v = self.coerce_result(v, e);
+                        // an `if`/`match` coerces its own branches, like a tail one
+                        let branching = matches!(e.kind, ExprKind::If { .. } | ExprKind::Match { .. });
+                        self.at_tail = branching;
+                        self.want.push(self.current_ret.clone());
+                        let v = if branching { self.expr_owned(e) } else { self.expr_owned(e).and_then(|v| self.coerce_result(v, e)) };
+                        self.want.pop();
                         self.tail_of_fn = saved;
                         let v = v?;
                         self.line(&format!("return {};", v));
@@ -4238,9 +4357,16 @@ impl Gen {
         match &e.kind {
             ExprKind::Ident(n) => match self.lookup(n) {
                 Some(b) => b.borrowed,
-                None => self.field_type(n).is_some(),
+                None => self.field_type(n).is_some() || self.consts.contains_key(&self.canon(n)),
             },
             ExprKind::SelfRef => true,
+            ExprKind::Method { recv, name, args }
+                if args.is_empty()
+                    && matches!(&recv.kind, ExprKind::Ident(a) if self.lookup(a).is_none() && self.module_aliases.contains_key(a))
+                    && matches!(&recv.kind, ExprKind::Ident(a) if self.consts.contains_key(&self.canon(&format!("{}.{}", a, name)))) =>
+            {
+                true
+            }
             ExprKind::Method { recv, name, args } if args.is_empty() => {
                 if let Type::Named(s) = self.ty_of(recv) {
                     if let Some(info) = self.structs.get(&s) {
@@ -4256,8 +4382,19 @@ impl Gen {
 
     fn is_borrowed_ident(&self, e: &Expr) -> bool {
         match &e.kind {
-            ExprKind::Ident(n) => self.lookup(n).map(|b| b.borrowed).unwrap_or(false),
+            ExprKind::Ident(n) => match self.lookup(n) {
+                Some(b) => b.borrowed,
+                // a constant is a static: every use reads it in place
+                None => self.consts.contains_key(&self.canon(n)),
+            },
             ExprKind::SelfRef => true,
+            // `mod.NAME` of another module
+            ExprKind::Method { recv, name, args } if args.is_empty() => match &recv.kind {
+                ExprKind::Ident(alias) => {
+                    self.lookup(alias).is_none() && self.module_aliases.contains_key(alias) && self.consts.contains_key(&self.canon(&format!("{}.{}", alias, name)))
+                }
+                _ => false,
+            },
             _ => false,
         }
     }
@@ -4314,6 +4451,13 @@ impl Gen {
     /// `expr_owned` for a position whose type is known: boxes a concrete
     /// value stored as an interface, element by element for list literals.
     fn expr_owned_as(&mut self, e: &Expr, expected: &Type) -> Result<String> {
+        self.want.push(expected.clone());
+        let r = self.expr_owned_as_inner(e, expected);
+        self.want.pop();
+        r
+    }
+
+    fn expr_owned_as_inner(&mut self, e: &Expr, expected: &Type) -> Result<String> {
         if let Type::Shared(_, mutable) = expected {
             return match self.ty_of(e) {
                 Type::Shared(..) => Ok(format!("{}.clone()", self.handle_expr(e)?)),
@@ -4358,6 +4502,13 @@ impl Gen {
     /// An argument for a parameter of type `t`: Copy types by value,
     /// everything else by reference.
     fn expr_arg(&mut self, e: &Expr, t: &Type) -> Result<String> {
+        self.want.push(t.clone());
+        let r = self.expr_arg_inner(e, t);
+        self.want.pop();
+        r
+    }
+
+    fn expr_arg_inner(&mut self, e: &Expr, t: &Type) -> Result<String> {
         if let Type::Shared(..) = t {
             // the callee gets its own handle to the same value
             let at = self.ty_of(e);
@@ -4918,6 +5069,10 @@ impl Gen {
             for r in rebinds {
                 self.line(&r);
             }
+            // names a pattern reached through a `Box` get their values here
+            for l in &cp.lets {
+                self.line(l);
+            }
             self.block_body(&arm.body, want_value)?;
             self.indent -= 1;
             self.line("}");
@@ -4931,7 +5086,7 @@ impl Gen {
     }
 
     fn compile_pattern(&mut self, p: &Pattern, t: &Type, by_ref: bool) -> Result<CompiledPat> {
-        let mut cp = CompiledPat { text: String::new(), guards: Vec::new(), binds: Vec::new() };
+        let mut cp = CompiledPat { text: String::new(), guards: Vec::new(), binds: Vec::new(), lets: Vec::new() };
         self.compile_pat_into(p, t, by_ref, &mut cp)?;
         Ok(cp)
     }
@@ -4976,7 +5131,7 @@ impl Gen {
                     // every alternative names its temporaries the same way, so
                     // `Some("a") | Some("e")` is one pattern with two tests
                     self.tmp = tmp_before;
-                    let mut sub = CompiledPat { text: String::new(), guards: Vec::new(), binds: Vec::new() };
+                    let mut sub = CompiledPat { text: String::new(), guards: Vec::new(), binds: Vec::new(), lets: Vec::new() };
                     self.compile_pat_into(a, t, by_ref, &mut sub)?;
                     alt_guards.push(std::mem::take(&mut sub.guards));
                     let mut names: Vec<&String> = sub.binds.iter().map(|(n, _, _)| n).collect();
@@ -5081,11 +5236,12 @@ impl Gen {
                 }
                 let mut parts = Vec::new();
                 for (it, ty) in items.iter().zip(&ts) {
-                    let mut sub = CompiledPat { text: String::new(), guards: Vec::new(), binds: Vec::new() };
+                    let mut sub = CompiledPat { text: String::new(), guards: Vec::new(), binds: Vec::new(), lets: Vec::new() };
                     self.compile_pat_into(it, ty, by_ref, &mut sub)?;
                     parts.push(sub.text);
                     cp.guards.extend(sub.guards);
                     cp.binds.extend(sub.binds);
+                    cp.lets.extend(sub.lets);
                 }
                 format!("({})", parts.join(", "))
             }
@@ -5096,12 +5252,13 @@ impl Gen {
                 };
                 let mut parts = Vec::new();
                 for it in items {
-                    let mut sub = CompiledPat { text: String::new(), guards: Vec::new(), binds: Vec::new() };
+                    let mut sub = CompiledPat { text: String::new(), guards: Vec::new(), binds: Vec::new(), lets: Vec::new() };
                     // slice elements are always reached by reference
                     self.compile_pat_into(it, &elem, true, &mut sub)?;
                     parts.push(sub.text);
                     cp.guards.extend(sub.guards);
                     cp.binds.extend(sub.binds);
+                    cp.lets.extend(sub.lets);
                 }
                 match rest {
                     Some(Some(r)) => {
@@ -5113,7 +5270,7 @@ impl Gen {
                 }
                 format!("[{}]", parts.join(", "))
             }
-            PatKind::Variant { enum_name, name, args } => {
+            PatKind::Variant { enum_name, name, args, rest } => {
                 // Result
                 if (name == "Ok" || name == "Error") && matches!(t, Type::Result(..)) {
                     let (ok_t, err_t) = match t {
@@ -5124,10 +5281,11 @@ impl Gen {
                         return Err(LumeError::new(p.line, p.col, format!("`{}` takes exactly one pattern, like `{}(x)`", name, name)));
                     }
                     let inner_t = if name == "Ok" { ok_t } else { err_t };
-                    let mut sub = CompiledPat { text: String::new(), guards: Vec::new(), binds: Vec::new() };
+                    let mut sub = CompiledPat { text: String::new(), guards: Vec::new(), binds: Vec::new(), lets: Vec::new() };
                     self.compile_pat_into(&args[0], &inner_t, by_ref, &mut sub)?;
                     cp.guards.extend(sub.guards);
                     cp.binds.extend(sub.binds);
+                    cp.lets.extend(sub.lets);
                     cp.text = format!("{}({})", if name == "Ok" { "Ok" } else { "Err" }, sub.text);
                     return Ok(());
                 }
@@ -5152,7 +5310,7 @@ impl Gen {
                         if args.len() != 1 {
                             return Err(LumeError::new(p.line, p.col, "`Some` takes exactly one pattern, like `Some(x)`"));
                         }
-                        let mut sub = CompiledPat { text: String::new(), guards: Vec::new(), binds: Vec::new() };
+                        let mut sub = CompiledPat { text: String::new(), guards: Vec::new(), binds: Vec::new(), lets: Vec::new() };
                         self.compile_pat_into(&args[0], &inner, by_ref, &mut sub)?;
                         cp.guards.extend(sub.guards);
                         cp.binds.extend(sub.binds);
@@ -5199,11 +5357,18 @@ impl Gen {
                     };
                     let epath = self.path_of(&en);
                     if fields.is_empty() {
-                        if !args.is_empty() {
+                        if !args.is_empty() && !*rest {
                             return Err(LumeError::new(p.line, p.col, format!("`{}` carries no values; write it without parentheses", name)));
                         }
                         format!("{}::{}", epath, name)
                     } else {
+                        let mut args: Vec<Pattern> = args.clone();
+                        if *rest {
+                            while args.len() < fields.len() {
+                                args.push(Pattern { kind: PatKind::Wild, line: p.line, col: p.col });
+                            }
+                        }
+                        let args = &args;
                         if args.len() != fields.len() {
                             return Err(LumeError::new(p.line, p.col, format!(
                                 "`{}` carries {} {}, but the pattern names {}",
@@ -5216,7 +5381,7 @@ impl Gen {
                         }
                         let mut parts = Vec::new();
                         for (a, (fname, fty)) in args.iter().zip(&fields) {
-                            let mut sub = CompiledPat { text: String::new(), guards: Vec::new(), binds: Vec::new() };
+                            let mut sub = CompiledPat { text: String::new(), guards: Vec::new(), binds: Vec::new(), lets: Vec::new() };
                             if self.boxed_field(&en, fty) {
                                 // a recursive field sits behind a Box: bind it (or ignore it), no nested pattern
                                 match &a.kind {
@@ -5226,8 +5391,42 @@ impl Gen {
                                     }
                                     PatKind::Wild => sub.text = "_".into(),
                                     _ => {
-                                        return Err(LumeError::new(a.line, a.col, format!("`{}` holds a `{}` inside a `{}`; give it a name here and `match` it in the arm", fname, type_name(fty), en))
-                                            .with_help(format!("write `{}(..., {}, ...)` and then `match {}:` on the next line", name, fname, fname)));
+                                        // the field is behind a `Box`: bind it, test
+                                        // it in the guard, and take it apart in the arm
+                                        let tmp = self.fresh("bx");
+                                        let inner = self.compile_pattern(a, fty, true)?;
+                                        let cond = if inner.guards.is_empty() { String::new() } else { format!(" if {}", inner.guards.join(" && ")) };
+                                        sub.text = rust_name(&tmp);
+                                        sub.guards.push(format!("matches!(&**{}, {}{})", rust_name(&tmp), inner.text, cond));
+                                        if !inner.binds.is_empty() {
+                                            let names: Vec<String> = inner.binds.iter().map(|(n, _, _)| rust_name(n)).collect();
+                                            let values: Vec<String> = inner
+                                                .binds
+                                                .iter()
+                                                .map(|(n, _, k)| match k {
+                                                    BindKind::Deref => format!("*{}", rust_name(n)),
+                                                    BindKind::Boxed => format!("&**{}", rust_name(n)),
+                                                    BindKind::Slice => format!("{}.to_vec()", rust_name(n)),
+                                                    _ => rust_name(n),
+                                                })
+                                                .collect();
+                                            sub.lets.push(format!(
+                                                "let ({},) = match &**{} {{ {}{} => ({},), _ => unreachable!() }};",
+                                                names.join(", "),
+                                                rust_name(&tmp),
+                                                inner.text,
+                                                cond,
+                                                values.join(", ")
+                                            ));
+                                            for (n, t, k) in inner.binds {
+                                                let kind = match k {
+                                                    BindKind::Deref | BindKind::Owned | BindKind::Slice => BindKind::Owned,
+                                                    _ => BindKind::Ref,
+                                                };
+                                                sub.binds.push((n, t, kind));
+                                            }
+                                        }
+                                        inner.lets.into_iter().for_each(|l| sub.lets.push(l));
                                     }
                                 }
                             } else {
@@ -5236,6 +5435,7 @@ impl Gen {
                             parts.push(format!("{}: {}", rust_name(fname), sub.text));
                             cp.guards.extend(sub.guards);
                             cp.binds.extend(sub.binds);
+                            cp.lets.extend(sub.lets);
                         }
                         format!("{}::{} {{ {} }}", epath, name, parts.join(", "))
                     }
@@ -5291,6 +5491,10 @@ impl Gen {
         if more {
             missing.pop();
         }
+        // a recursive type has endless shapes: show the simplest ones
+        missing.sort_by_key(|m| (m.chars().count(), m.clone()));
+        let more = more || missing.len() > 3;
+        missing.truncate(3);
         let listed = if more { format!("{}, ...", missing.join(", ")) } else { missing.join(", ") };
         let err = LumeError::new(e.line, e.col, format!("this `match` on `{}` does not cover: {}", type_name(t), listed));
         Err(if missing == ["_"] {
@@ -5414,7 +5618,8 @@ impl Gen {
                     })
                     .collect()
             }
-            PatKind::Variant { name, args, .. } => {
+            PatKind::Variant { name, args, rest, .. } => {
+                let _ = rest;
                 let arg_tys: Vec<Type> = match self.ctors(t) {
                     Some(cs) => match cs.into_iter().find(|(n, _)| n == name) {
                         Some((_, tys)) => tys,
@@ -5661,6 +5866,9 @@ impl Gen {
                         }
                     }
                     rust_name(name)
+                } else if self.consts.contains_key(&self.canon(name)) {
+                    let key = self.canon(name);
+                    if self.paths.contains_key(&key) { self.path_of(&key) } else { rust_name(&key) }
                 } else if self.field_type(name).is_some() {
                     format!("self.{}", rust_name(name))
                 } else if let Some(m) = self.bare_method(name) {
@@ -6028,6 +6236,18 @@ impl Gen {
             ExprKind::Call { name: raw_name, args } => {
                 let cname = self.canon(raw_name);
                 let name = &cname;
+                // inside a type, a bare call is its own method before any
+                // free function of the same name
+                if let Some(tn) = self.current_type.clone() {
+                    if self.lookup(name).is_none() && self.methods_of(&tn).map(|m| m.contains_key(name)).unwrap_or(false) {
+                        let call = Expr::new(
+                            ExprKind::Method { recv: Box::new(Expr::new(ExprKind::SelfRef, e.line, e.col)), name: name.clone(), args: args.clone() },
+                            e.line,
+                            e.col,
+                        );
+                        return self.expr(&call);
+                    }
+                }
                 if let Some(sig) = self.fns.get(name).cloned() {
                     let bound = self.bind_args(&format!("`{}`", name), &sig.params, args, e.line, e.col)?;
                     let mut parts = Vec::new();

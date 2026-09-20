@@ -233,8 +233,9 @@ impl Parser {
             if public {
                 let (pl, pc) = self.here();
                 self.advance();
-                if !(self.at_kw("def") || self.at_kw("async") || self.at_kw("struct") || self.at_kw("enum") || self.at_kw("interface")) {
-                    return Err(LumeError::new(pl, pc, "`pub` goes before `def`, `struct`, `enum` or `interface`"));
+                let const_next = matches!(self.peek(), Tok::Ident(_)) && self.const_ahead();
+                if !(self.at_kw("def") || self.at_kw("async") || self.at_kw("struct") || self.at_kw("enum") || self.at_kw("interface") || const_next) {
+                    return Err(LumeError::new(pl, pc, "`pub` goes before `def`, `struct`, `enum`, `interface` or a constant"));
                 }
             }
             if self.at_kw("interface") {
@@ -268,6 +269,10 @@ impl Parser {
                 items.push(Item::Enum(e));
             } else if self.at_kw("import") {
                 items.push(Item::Import(self.import_def()?));
+            } else if matches!(self.peek(), Tok::Ident(_)) && self.const_ahead() {
+                let mut c = self.const_def()?;
+                c.public = public;
+                items.push(Item::Const(c));
             } else if matches!(self.peek(), Tok::Indent) {
                 return Err(self
                     .err("unexpected indentation at the top level")
@@ -459,6 +464,38 @@ impl Parser {
             self.advance();
         }
         Ok(ExtendDef { target, iface, methods, line, col })
+    }
+
+    /// At the top level, `NAME = value` or `NAME: Type = value`.
+    fn const_ahead(&self) -> bool {
+        match (&self.toks.get(self.pos + 1).map(|t| &t.tok), &self.toks.get(self.pos).map(|t| &t.tok)) {
+            (Some(Tok::Sym("=")), _) => true,
+            (Some(Tok::Sym(":")), _) => {
+                // `NAME: Type = value`, not a label or a block opener
+                let mut i = self.pos + 2;
+                while i < self.toks.len() {
+                    match &self.toks[i].tok {
+                        Tok::Newline | Tok::Eof => return false,
+                        Tok::Sym("=") => return true,
+                        _ => i += 1,
+                    }
+                }
+                false
+            }
+            _ => false,
+        }
+    }
+
+    fn const_def(&mut self) -> Result<ConstDef> {
+        let (line, col) = self.here();
+        let (name, _, _) = self.ident("a constant name")?;
+        let ty = if self.eat_sym(":") { Some(self.parse_type()?) } else { None };
+        if !self.eat_sym("=") {
+            return Err(self.err(format!("`{}` at the top level needs a value: `{} = ...`", name, name)));
+        }
+        let value = self.expr()?;
+        self.end_stmt()?;
+        Ok(ConstDef { name, ty, value, public: false, line, col })
     }
 
     fn import_def(&mut self) -> Result<Import> {
@@ -905,10 +942,9 @@ impl Parser {
             return Ok(s);
         }
         if self.eat_kw("return") {
-            let value = if matches!(self.peek(), Tok::Newline | Tok::Dedent | Tok::Eof)
-                || self.at_kw("if")
-                || self.at_kw("unless")
-            {
+            // `return if c: a else: b` is a value; `return if c` is a trailing condition
+            let trailing_if = (self.at_kw("if") || self.at_kw("unless")) && !self.inline_if_ahead();
+            let value = if matches!(self.peek(), Tok::Newline | Tok::Dedent | Tok::Eof) || trailing_if {
                 None
             } else {
                 Some(self.expr()?)
@@ -1084,6 +1120,24 @@ impl Parser {
     }
 
     /// `stmt if cond` / `stmt unless cond` — Ruby's trailing forms.
+    /// At an `if`: does a `:` follow on this line, outside brackets? Then it
+    /// opens a branch (`if c: a else: b`) rather than ending a statement.
+    fn inline_if_ahead(&self) -> bool {
+        let mut depth = 0i32;
+        let mut i = self.pos;
+        while i < self.toks.len() {
+            match &self.toks[i].tok {
+                Tok::Newline | Tok::Eof | Tok::Dedent => return false,
+                Tok::Sym("(") | Tok::Sym("[") | Tok::Sym("{") => depth += 1,
+                Tok::Sym(")") | Tok::Sym("]") | Tok::Sym("}") => depth -= 1,
+                Tok::Sym(":") if depth == 0 => return true,
+                _ => {}
+            }
+            i += 1;
+        }
+        false
+    }
+
     fn trailing_condition(&mut self, stmt: Stmt) -> Result<Stmt> {
         let (line, col) = self.here();
         // `stmt if cond` shares a line; after an indented block has closed,
@@ -1384,9 +1438,16 @@ impl Parser {
                 let vname = segs.pop().unwrap();
                 let enum_name = if segs.is_empty() { None } else { Some(segs.join(".")) };
                 let mut args = Vec::new();
+                let mut rest = false;
                 if self.at_sym("(") {
                     self.advance();
                     while !self.at_sym(")") {
+                        // `Binary(..)`: the fields do not matter here
+                        if self.at_sym("..") {
+                            self.advance();
+                            rest = true;
+                            break;
+                        }
                         args.push(self.arm_pattern()?);
                         if !self.eat_sym(",") {
                             break;
@@ -1394,7 +1455,7 @@ impl Parser {
                     }
                     self.expect_sym(")", "to close the variant pattern")?;
                 }
-                Ok(mk(PatKind::Variant { enum_name, name: vname, args }))
+                Ok(mk(PatKind::Variant { enum_name, name: vname, args, rest }))
             }
             _ => Err(self.err(format!("expected a pattern, found {}", self.describe()))),
         }

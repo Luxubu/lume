@@ -1,0 +1,150 @@
+# The same tree-walking interpreter in Python, for comparison: same AST shape,
+# same evaluation strategy (dict environment, recursive eval).
+import sys, time, re
+KEYWORDS={"let","if","else","while","fn","return","true","false","and","or","not","print"}
+def lex(src):
+    ts=[];i=0;line=1
+    while i<len(src):
+        c=src[i]
+        if c=="\n": ts.append(("nl",None,line));line+=1;i+=1;continue
+        if c in " \t\r": i+=1;continue
+        if c=="#":
+            while i<len(src) and src[i]!="\n": i+=1
+            continue
+        if c.isdigit():
+            j=i
+            while j<len(src) and (src[j].isdigit() or src[j]=="."): j+=1
+            ts.append(("num",float(src[i:j]),line));i=j;continue
+        if c=='"':
+            j=i+1;buf=""
+            while src[j]!='"':
+                if src[j]=="\\": buf+={"n":"\n","t":"\t"}.get(src[j+1],src[j+1]);j+=2
+                else: buf+=src[j];j+=1
+            ts.append(("str",buf,line));i=j+1;continue
+        if c.isalpha() or c=="_":
+            j=i
+            while j<len(src) and (src[j].isalnum() or src[j]=="_"): j+=1
+            w=src[i:j];ts.append(("kw" if w in KEYWORDS else "name",w,line));i=j;continue
+        two=src[i:i+2]
+        if two in ("==","!=","<=",">="): ts.append(("op",two,line));i+=2;continue
+        ts.append(("op",c,line));i+=1
+    ts.append(("end",None,line));return ts
+class P:
+    def __init__(s,ts): s.ts=ts;s.i=0
+    def peek(s): return s.ts[s.i]
+    def at(s,w): return s.ts[s.i][1]==w and s.ts[s.i][0] in ("kw","op")
+    def eat(s,w):
+        if s.at(w): s.i+=1;return True
+        return False
+    def skipnl(s):
+        while s.ts[s.i][0]=="nl": s.i+=1
+    def block(s):
+        assert s.eat("{");out=[];s.skipnl()
+        while not s.at("}"):
+            out.append(s.stmt());s.skipnl()
+        s.i+=1;return out
+    def stmt(s):
+        line=s.peek()[2]
+        if s.eat("let"):
+            n=s.ts[s.i][1];s.i+=1;assert s.eat("=");return ("let",n,s.expr(),line)
+        if s.eat("print"): return ("print",s.expr())
+        if s.eat("return"): return ("return",s.expr(),line)
+        if s.eat("if"):
+            c=s.expr();t=s.block();s.skipnl();e=s.block() if s.eat("else") else []
+            return ("if",c,t,e)
+        if s.eat("while"):
+            c=s.expr();return ("while",c,s.block())
+        if s.peek()[0]=="name" and s.ts[s.i+1][1]=="=":
+            n=s.peek()[1];s.i+=2;return ("assign",n,s.expr(),line)
+        return ("expr",s.expr())
+    def expr(s): return s.binary(0)
+    def binary(s,level):
+        if level>=5: return s.unary()
+        left=s.binary(level+1)
+        levels=[["or"],["and"],["==","!=","<","<=",">",">="],["+","-"],["*","/","%"]]
+        while s.peek()[1] in levels[level] and s.peek()[0] in ("op","kw"):
+            op=s.peek()[1];line=s.peek()[2];s.i+=1
+            left=("bin",op,left,s.binary(level+1),line)
+        return left
+    def unary(s):
+        line=s.peek()[2]
+        if s.eat("not"): return ("un","not",s.unary(),line)
+        if s.eat("-"): return ("un","-",s.unary(),line)
+        return s.primary()
+    def primary(s):
+        k,v,line=s.peek()
+        if k=="num": s.i+=1;return ("num",v)
+        if k=="str": s.i+=1;return ("str",v)
+        if v=="true": s.i+=1;return ("bool",True)
+        if v=="false": s.i+=1;return ("bool",False)
+        if k=="name":
+            s.i+=1
+            if not s.eat("("): return ("var",v,line)
+            args=[]
+            if not s.at(")"):
+                while True:
+                    args.append(s.expr())
+                    if not s.eat(","): break
+            assert s.eat(")");return ("call",v,args,line)
+        if v=="(":
+            s.i+=1;e=s.expr();assert s.eat(")");return e
+        raise SyntaxError("line %d" % line)
+def parse(src):
+    p=P(lex(src));fns={};main=[];p.skipnl()
+    while p.peek()[0]!="end":
+        if p.eat("fn"):
+            n=p.peek()[1];p.i+=1;assert p.eat("(");params=[]
+            if not p.at(")"):
+                while True:
+                    params.append(p.peek()[1]);p.i+=1
+                    if not p.eat(","): break
+            assert p.eat(")");fns[n]=(params,p.block())
+        else: main.append(p.stmt())
+        p.skipnl()
+    return fns,main
+class Ret(Exception):
+    def __init__(s,v): s.v=v
+def run(src):
+    fns,main=parse(src);out=[]
+    def ev(e,env):
+        t=e[0]
+        if t=="num" or t=="str" or t=="bool": return e[1]
+        if t=="var": return env[e[1]]
+        if t=="bin":
+            op=e[1]
+            if op=="and": return ev(e[3],env) if truthy(ev(e[2],env)) else False
+            if op=="or":
+                l=ev(e[2],env);return l if truthy(l) else ev(e[3],env)
+            a=ev(e[2],env);b=ev(e[3],env)
+            return {"+":lambda:a+b,"-":lambda:a-b,"*":lambda:a*b,"/":lambda:a/b,"%":lambda:a-b*(a//b),
+                    "<":lambda:a<b,"<=":lambda:a<=b,">":lambda:a>b,">=":lambda:a>=b,
+                    "==":lambda:a==b,"!=":lambda:a!=b}[op]()
+        if t=="un": return (not truthy(ev(e[2],env))) if e[1]=="not" else -ev(e[2],env)
+        if t=="call":
+            if e[1]=="len": return float(len(ev(e[2][0],env)))
+            params,body=fns[e[1]];vals=[ev(a,env) for a in e[2]]
+            local=dict(zip(params,vals))
+            try:
+                block(body,local)
+            except Ret as r: return r.v
+            return None
+    def truthy(v): return bool(v)
+    def block(stmts,env):
+        for s in stmts: st(s,env)
+    def st(s,env):
+        t=s[0]
+        if t=="let" or t=="assign": env[s[1]]=ev(s[2],env)
+        elif t=="print":
+            v=ev(s[1],env)
+            out.append(str(int(v)) if isinstance(v,float) and v==int(v) else str(v))
+        elif t=="return": raise Ret(ev(s[1],env))
+        elif t=="if": block(s[2] if truthy(ev(s[1],env)) else s[3],env)
+        elif t=="while":
+            while truthy(ev(s[1],env)): block(s[2],env)
+        else: ev(s[1],env)
+    block(main,{})
+    return out
+src=open(sys.argv[1]).read()
+t0=time.time();o=run(src);t1=time.time()
+print("\n".join(o))
+print("in %d ms" % ((t1-t0)*1000), file=sys.stderr)

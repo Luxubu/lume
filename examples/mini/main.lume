@@ -1,0 +1,133 @@
+# main.lume — the Mini interpreter: run a file, or the built-in samples.
+#
+#   lume run examples/mini/main.lume              the samples below
+#   lume run examples/mini/main.lume -- prog.mini a file of your own
+#
+# Mini is small on purpose: numbers, strings, booleans, `let`, assignment,
+# `if`/`else`, `while`, `fn` with `return`, `print`, and `len`.
+
+import lexer
+import parser
+import eval
+
+def samples -> [(Str, Str)]:
+  [
+    ("arithmetic", """
+      let a = 6
+      let b = 7
+      print a * b
+      print (a + b) * 2 - 1
+      print 22 / 7
+      """),
+    ("strings", """
+      let who = "world"
+      print "hello, " + who
+      print len(who)
+      if len(who) > 3 and not false {
+        print "long enough"
+      }
+      """),
+    ("fizzbuzz", """
+      let i = 1
+      while i <= 15 {
+        if i % 15 == 0 {
+          print "fizzbuzz"
+        } else {
+          if i % 3 == 0 {
+            print "fizz"
+          } else {
+            if i % 5 == 0 { print "buzz" } else { print i }
+          }
+        }
+        i = i + 1
+      }
+      """),
+    ("recursion", """
+      fn fact(n) {
+        if n <= 1 { return 1 }
+        return n * fact(n - 1)
+      }
+      fn fib(n) {
+        if n < 2 { return n }
+        return fib(n - 1) + fib(n - 2)
+      }
+      print fact(10)
+      print fib(20)
+      """),
+    ("closures are not a thing yet", """
+      fn twice(n) { return n + n }
+      let x = twice(21)
+      print x
+      x = twice(x)
+      print x
+      """),
+  ]
+
+def broken -> [Str]:
+  [
+    "print 1 +",
+    "let = 3",
+    "print nope",
+    "print 1 / 0",
+    "fn f(a) { return a }\nprint f(1, 2)",
+    "print \"a\" * 2",
+  ]
+
+def show_error(name: Str, e: Error):
+  puts "#{name}: #{e.message}"
+
+def main -> () or Error:
+  args = Env.args
+  timing = args.contains?("time")
+  files = args.reject { |a| a == "time" }.to_list
+  if not files.empty?:
+    path = files[0].or("")
+    source = File.read(path)?
+    for line in eval.run(source)?:
+      puts line
+    return ()
+
+  for name, src in samples():
+    puts "--- #{name}"
+    match eval.run(src):
+      Ok(lines) ->
+        for l in lines:
+          puts "  #{l}"
+      Error(e) -> show_error("  error", e)
+
+  puts "--- programs that should not run"
+  for src in broken():
+    one_line = src.replace("\n", "; ")
+    match eval.run(src):
+      Ok(out)  -> puts "  #{one_line.pad_right(26)} -> ran?! #{out}"
+      Error(e) -> puts "  #{one_line.pad_right(26)} -> #{e.message}"
+
+  # how long the interpreter takes on a program that works for its living
+  # (only when asked, so the sample output stays the same every run)
+  if not timing:
+    return ()
+  work = """
+    fn fib(n) {
+      if n < 2 { return n }
+      return fib(n - 1) + fib(n - 2)
+    }
+    print fib(21)
+    """
+  t0 = Time.now_ms
+  out = eval.run(work)?
+  puts "--- fib(21) = #{out[0].or("?")} in #{Time.now_ms - t0} ms"
+
+test "the samples all run":
+  for name, src in samples():
+    match eval.run(src):
+      Ok(lines) -> assert not lines.empty?
+      Error(_)  -> assert false
+
+test "every broken program is refused":
+  for src in broken():
+    match eval.run(src):
+      Ok(_)    -> assert false
+      Error(e) -> assert not e.message.empty?
+
+test "a program with output":
+  assert eval.run("fn sq(n) { return n * n }\nprint sq(9)")! == ["81"]

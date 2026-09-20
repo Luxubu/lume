@@ -177,12 +177,24 @@ pub struct TestDef {
 #[derive(Debug, Clone)]
 pub enum Item {
     Fn(FnDef),
+    /// `NAME = value` at the top level: one value, computed once.
+    Const(ConstDef),
     Struct(StructDef),
     Enum(EnumDef),
     Import(Import),
     Interface(InterfaceDef),
     Extend(ExtendDef),
     Test(TestDef),
+}
+
+#[derive(Debug, Clone)]
+pub struct ConstDef {
+    pub name: String,
+    pub ty: Option<Type>,
+    pub value: Expr,
+    pub public: bool,
+    pub line: usize,
+    pub col: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -202,7 +214,7 @@ pub enum PatKind {
     Str(String),
     Range { lo: i64, hi: i64, inclusive: bool },
     /// `Circle(r)`, `Some(x)`, `None`, `Shape.Circle(r)`
-    Variant { enum_name: Option<String>, name: String, args: Vec<Pattern> },
+    Variant { enum_name: Option<String>, name: String, args: Vec<Pattern>, rest: bool },
     Tuple(Vec<Pattern>),
     /// `[a, b]`, `[]`, `[first, ..rest]`
     List { items: Vec<Pattern>, rest: Option<Option<String>> },

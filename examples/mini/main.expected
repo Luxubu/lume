@@ -1,0 +1,37 @@
+--- arithmetic
+  42
+  25
+  3.142857142857143
+--- strings
+  hello, world
+  5
+  long enough
+--- fizzbuzz
+  1
+  2
+  fizz
+  4
+  buzz
+  fizz
+  7
+  8
+  fizz
+  buzz
+  11
+  fizz
+  13
+  14
+  fizzbuzz
+--- recursion
+  3628800
+  6765
+--- closures are not a thing yet
+  42
+  84
+--- programs that should not run
+  print 1 +                  -> line 1: expected a value, found the end of the program
+  let = 3                    -> line 1: expected a name, found `=`
+  print nope                 -> line 1: `nope` is not defined
+  print 1 / 0                -> line 1: division by zero
+  fn f(a) { return a }; print f(1, 2) -> line 2: `f` takes 1 arguments, but 2 were given
+  print "a" * 2              -> line 1: `*` does not work on a string and a number

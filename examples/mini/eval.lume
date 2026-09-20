@@ -1,0 +1,256 @@
+# eval.lume — walks the tree. Values are numbers, strings and booleans;
+# functions are looked up by name, and `return` unwinds through a flag.
+
+import parser
+import parser.Expr
+import parser.Stmt
+import parser.Fn
+import parser.Program
+
+pub enum Value:
+  Num(n: Float)
+  Str(s: Str)
+  Bool(b: Bool)
+  Nothing
+
+  def show -> Str:
+    match self:
+      Num(n)  -> if n == n.floor and n.abs < 1e15: n.to_int.to_s else: n.to_s
+      Str(s)  -> s
+      Bool(b) -> b.to_s
+      Nothing -> "nothing"
+
+  def kind -> Str:
+    match self:
+      Num(_)  -> "a number"
+      Str(_)  -> "a string"
+      Bool(_) -> "a boolean"
+      Nothing -> "nothing"
+
+  def truthy -> Bool:
+    match self:
+      Bool(b) -> b
+      Num(n)  -> n != 0.0
+      Str(s)  -> not s.empty?
+      Nothing -> false
+
+pub struct Interp:
+  fns: {Str: Fn}
+  vars: {Str: Value}
+  output: [Str]
+  returning: Bool
+  depth: Int
+
+  def define(var self, name: Str, v: Value):
+    vars[name] = v
+
+  def lookup(name: Str, line: Int) -> Value or Error:
+    vars[name].or_error("line #{line}: `#{name}` is not defined")
+
+  # ---- statements ---------------------------------------------------------
+
+  def run_block(var self, stmts: [Stmt]) -> Value or Error:
+    var last = Nothing
+    for s in stmts:
+      last = run(s)?
+      if returning:
+        return last
+    last
+
+  def run(var self, s: Stmt) -> Value or Error:
+    match s:
+      Let(name, value, _) ->
+        v = eval(value)?
+        define(name, v)
+        Nothing
+      Assign(name, value, line) ->
+        if not vars.contains?(name):
+          return Error("line #{line}: `#{name}` is not defined; use `let` first")
+        v = eval(value)?
+        define(name, v)
+        Nothing
+      Print(value) ->
+        v = eval(value)?
+        output.push(v.show)
+        Nothing
+      Expression(value) -> eval(value)
+      Return(value, _) ->
+        v = eval(value)?
+        returning = true
+        v
+      If(cond, then, otherwise) ->
+        if eval(cond)?.truthy:
+          run_block(then)
+        else:
+          run_block(otherwise)
+      While(cond, body) ->
+        var guard = 0
+        while eval(cond)?.truthy:
+          run_block(body)?
+          if returning:
+            break
+          guard += 1
+          if guard > 1000000:
+            return Error("this `while` never stops")
+        Nothing
+
+  # ---- expressions --------------------------------------------------------
+
+  def eval(var self, e: Expr) -> Value or Error:
+    match e:
+      Num(v)          -> Num(v)
+      Str(t)          -> Str(t)
+      Bool(b)         -> Bool(b)
+      Var(name, line) -> lookup(name, line)
+      Unary(op, operand, line) ->
+        v = eval(operand)?
+        match op:
+          "not" -> Bool(not v.truthy)
+          _ ->
+            match v:
+              Num(n) -> Num(0.0 - n)
+              other  -> Error("line #{line}: cannot negate #{other.kind}")
+      Binary(op, left, right, line) ->
+        # `and` and `or` stop early
+        if op == "and":
+          l = eval(left)?
+          return if l.truthy: eval(right)? else: Bool(false)
+        if op == "or":
+          l = eval(left)?
+          return if l.truthy: l else: eval(right)?
+        a = eval(left)?
+        b = eval(right)?
+        apply(op, a, b, line)
+      Call(name, args, line) ->
+        var values: [Value] = []
+        for a in args:
+          values.push(eval(a)?)
+        call(name, values, line)
+
+  def apply(op: Str, a: Value, b: Value, line: Int) -> Value or Error:
+    if op == "==":
+      return Bool(same(a, b))
+    if op == "!=":
+      return Bool(not same(a, b))
+    match (a, b):
+      (Num(x), Num(y)) ->
+        match op:
+          "+"  -> Num(x + y)
+          "-"  -> Num(x - y)
+          "*"  -> Num(x * y)
+          "<"  -> Bool(x < y)
+          "<=" -> Bool(x <= y)
+          ">"  -> Bool(x > y)
+          ">=" -> Bool(x >= y)
+          "/" ->
+            if y == 0.0:
+              return Error("line #{line}: division by zero")
+            Num(x / y)
+          _ ->
+            if y == 0.0:
+              return Error("line #{line}: `%` by zero")
+            Num(x - y * (x / y).floor)
+      (Str(x), Str(y)) if op == "+" -> Str(x + y)
+      (Str(x), Str(y)) ->
+        match op:
+          "<" -> Bool(x < y)
+          ">" -> Bool(x > y)
+          _   -> Error("line #{line}: `#{op}` does not work on strings")
+      (x, y) -> Error("line #{line}: `#{op}` does not work on #{x.kind} and #{y.kind}")
+
+  def same(a: Value, b: Value) -> Bool:
+    match (a, b):
+      (Num(x), Num(y))   -> x == y
+      (Str(x), Str(y))   -> x == y
+      (Bool(x), Bool(y)) -> x == y
+      (Nothing, Nothing) -> true
+      _                  -> false
+
+  def call(var self, name: Str, args: [Value], line: Int) -> Value or Error:
+    if name == "len":
+      return match args[0].or(Nothing):
+        Str(s) -> Num(s.len.to_float)
+        other  -> Error("line #{line}: `len` needs a string, not #{other.kind}")
+    f = fns[name].or_error("line #{line}: `#{name}` is not a function")?
+    if f.params.len != args.len:
+      return Error("line #{line}: `#{name}` takes #{f.params.len} arguments, but #{args.len} were given")
+    if depth > 200:
+      return Error("line #{line}: too many nested calls")
+    # a call gets its own variables; the caller's are put back afterwards
+    saved = vars
+    vars = {}
+    for i, p in f.params.enumerate:
+      define(p, args[i].or(Nothing))
+    depth += 1
+    result = run_block(f.body)
+    depth -= 1
+    returning = false
+    vars = saved
+    result
+
+# Constant folding, written the way a tree is meant to be matched: whole
+# shapes, `Box` and all.
+pub def fold(e: Expr) -> Expr:
+  match e:
+    Binary(op, Num(a), Num(b), line) ->
+      match op:
+        "+" -> Num(a + b)
+        "-" -> Num(a - b)
+        "*" -> Num(a * b)
+        _   -> Binary(op, Num(a), Num(b), line)
+    Binary("+", Num(0.0), r, _)     -> fold(r)
+    Binary("*", Num(1.0), r, _)     -> fold(r)
+    Binary(op, l, r, line)          -> Binary(op, fold(l), fold(r), line)
+    Unary("-", Unary("-", x, _), _) -> fold(x)
+    Unary(op, x, line)              -> Unary(op, fold(x), line)
+    other                           -> other
+
+pub def run(src: Str) -> [Str] or Error:
+  prog = parser.parse(src)?
+  var names: {Str: Fn} = {}
+  for f in prog.fns:
+    names[f.name] = f
+  var it = Interp(fns: names, vars: {}, output: [], returning: false, depth: 0)
+  it.run_block(prog.main)?
+  it.output
+
+test "arithmetic and precedence":
+  assert run("print 1 + 2 * 3")! == ["7"]
+  assert run("print (1 + 2) * 3")! == ["9"]
+  assert run("print 7 / 2")! == ["3.5"]
+  assert run("print 7 % 3")! == ["1"]
+
+test "variables and strings":
+  assert run("let x = 2\nx = x * 10\nprint x")! == ["20"]
+  assert run("print \"a\" + \"b\"")! == ["ab"]
+  assert run("print len(\"hello\")")! == ["5"]
+
+test "control flow":
+  assert run("let n = 3\nif n > 2 { print \"big\" } else { print \"small\" }")! == ["big"]
+  src = "let i = 0\nlet t = 0\nwhile i < 5 { t = t + i\ni = i + 1 }\nprint t"
+  assert run(src)! == ["10"]
+
+test "functions and recursion":
+  src = "fn fib(n) { if n < 2 { return n }\nreturn fib(n - 1) + fib(n - 2) }\nprint fib(15)"
+  assert run(src)! == ["610"]
+  assert run("fn add(a, b) { return a + b }\nprint add(2, 3)")! == ["5"]
+
+test "constant folding":
+  prog = parser.parse("print 2 * 3 + 0 * 9")!
+  match prog.main[0]:
+    Some(Print(v)) ->
+      match fold(v):
+        Binary("+", Num(6.0), Num(0.0), _) -> assert true
+        other                              -> assert other.kind_name == "unexpected"
+    _ -> assert false
+
+test "run-time errors say the line":
+  match run("print 1 / 0"):
+    Ok(_)    -> assert false
+    Error(e) -> assert e.message == "line 1: division by zero"
+  match run("print nope"):
+    Ok(_)    -> assert false
+    Error(e) -> assert e.message == "line 1: `nope` is not defined"
+  match run("print \"a\" - 1"):
+    Ok(_)    -> assert false
+    Error(e) -> assert e.message == "line 1: `-` does not work on a string and a number"

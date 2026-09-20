@@ -299,6 +299,7 @@ impl Fmt {
     fn item_line(item: &Item) -> usize {
         match item {
             Item::Fn(f) => f.line,
+            Item::Const(c) => c.line,
             Item::Struct(s) => s.line,
             Item::Enum(e) => e.line,
             Item::Import(i) => i.line,
@@ -345,6 +346,13 @@ impl Fmt {
 
     fn item_text(&mut self, item: &Item) -> String {
         match item {
+            Item::Const(c) => {
+                let pubkw = if c.public { "pub " } else { "" };
+                match &c.ty {
+                    Some(t) => format!("{}{}: {} = {}", pubkw, c.name, type_str(t), self.expr(&c.value)),
+                    None => format!("{}{} = {}", pubkw, c.name, self.expr(&c.value)),
+                }
+            }
             Item::Fn(f) => self.fn_text(f, false),
             Item::Struct(s) => {
                 let mut out = format!("{}struct {}:", if s.public { "pub " } else { "" }, s.name);
@@ -1084,15 +1092,19 @@ fn pattern_str(p: &Pattern) -> String {
         PatKind::Bool(b) => b.to_string(),
         PatKind::Str(s) => format!("\"{}\"", Fmt::escape(s)),
         PatKind::Range { lo, hi, inclusive } => format!("{}{}{}", lo, if *inclusive { ".." } else { "..." }, hi),
-        PatKind::Variant { enum_name, name, args } => {
+        PatKind::Variant { enum_name, name, args, rest } => {
             let head = match enum_name {
                 Some(e) => format!("{}.{}", e, name),
                 None => name.clone(),
             };
-            if args.is_empty() {
+            let mut parts: Vec<String> = args.iter().map(pattern_str).collect();
+            if *rest {
+                parts.push("..".into());
+            }
+            if parts.is_empty() {
                 head
             } else {
-                format!("{}({})", head, args.iter().map(pattern_str).collect::<Vec<_>>().join(", "))
+                format!("{}({})", head, parts.join(", "))
             }
         }
         PatKind::Tuple(items) => format!("({})", items.iter().map(pattern_str).collect::<Vec<_>>().join(", ")),

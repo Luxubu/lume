@@ -1,0 +1,266 @@
+# parser.lume — tokens to a tree. Recursive descent with precedence climbing;
+# every node keeps its line for run-time errors.
+
+import lexer
+import lexer.Token
+import lexer.Tok
+
+pub enum Expr:
+  Num(value: Float)
+  Str(text: Str)
+  Bool(value: Bool)
+  Var(name: Str, line: Int)
+  Unary(op: Str, operand: Expr, line: Int)
+  Binary(op: Str, left: Expr, right: Expr, line: Int)
+  Call(name: Str, args: [Expr], line: Int)
+
+  def kind_name -> Str:
+    match self:
+      Num(_)     -> "number"
+      Str(_)     -> "string"
+      Bool(_)    -> "boolean"
+      Var(_, _)  -> "name"
+      Unary(..)  -> "unary"
+      Binary(..) -> "binary"
+      Call(..)   -> "call"
+
+pub enum Stmt:
+  Let(name: Str, value: Expr, line: Int)
+  Assign(name: Str, value: Expr, line: Int)
+  Print(value: Expr)
+  If(cond: Expr, then: [Stmt], otherwise: [Stmt])
+  While(cond: Expr, body: [Stmt])
+  Return(value: Expr, line: Int)
+  Expression(value: Expr)
+
+pub struct Fn:
+  name: Str
+  params: [Str]
+  body: [Stmt]
+  line: Int
+
+pub struct Program:
+  fns: [Fn]
+  main: [Stmt]
+
+struct P:
+  ts: [Token]
+  pos: Int
+
+  def peek -> Tok:
+    ts[pos].map { |t| t.tok }.or(End)
+
+  def line -> Int:
+    ts[pos].map { |t| t.line }.or(0)
+
+  def advance(var self):
+    pos += 1
+
+  def at(word: Str) -> Bool:
+    match peek:
+      Keyword(w) -> w == word
+      Op(s)      -> s == word
+      _          -> false
+
+  def eat(var self, word: Str) -> Bool:
+    if at(word):
+      advance()
+      return true
+    false
+
+  def skip_newlines(var self):
+    while at_newline:
+      advance()
+
+  def at_newline -> Bool:
+    match peek:
+      Newline -> true
+      _       -> false
+
+  def expect(var self, word: Str, what: Str) -> () or Error:
+    if not eat(word):
+      return Error("line #{line}: expected #{what}, found #{peek.describe}")
+
+  def name(var self) -> Str or Error:
+    match peek:
+      Name(n) ->
+        advance()
+        n
+      other -> Error("line #{line}: expected a name, found #{other.describe}")
+
+  # ---- statements ---------------------------------------------------------
+
+  def block(var self) -> [Stmt] or Error:
+    expect("{", "`{`")?
+    var out: [Stmt] = []
+    skip_newlines()
+    while not at("}"):
+      if at_end:
+        return Error("line #{line}: this block is never closed")
+      out.push(statement()?)
+      skip_newlines()
+    advance()
+    out
+
+  def at_end -> Bool:
+    match peek:
+      End -> true
+      _   -> false
+
+  def statement(var self) -> Stmt or Error:
+    here = line
+    if eat("let"):
+      n = name()?
+      expect("=", "`=` after the name")?
+      return Let(n, expression()?, here)
+    if eat("print"):
+      return Print(expression()?)
+    if eat("return"):
+      return Return(expression()?, here)
+    if eat("if"):
+      cond = expression()?
+      then = block()?
+      skip_newlines()
+      var other: [Stmt] = []
+      if eat("else"):
+        other = block()?
+      return If(cond, then, other)
+    if eat("while"):
+      cond = expression()?
+      return While(cond, block()?)
+    # `name = value` is an assignment; anything else is an expression
+    match peek:
+      Name(n) if assignment_follows ->
+        advance()
+        advance()
+        return Assign(n, expression()?, here)
+      _ -> ()
+    Expression(expression()?)
+
+  def assignment_follows -> Bool:
+    match ts[pos + 1].map { |t| t.tok }.or(End):
+      Op(s) -> s == "="
+      _     -> false
+
+  # ---- expressions --------------------------------------------------------
+
+  def expression(var self) -> Expr or Error:
+    binary(0)?
+
+  # Precedence: `or` < `and` < comparison < + - < * / %
+  def binary(var self, level: Int) -> Expr or Error:
+    if level >= 5:
+      return unary()
+    var left = binary(level + 1)?
+    while true:
+      op = operator_at(level)
+      match op:
+        None -> break
+        Some(sym) ->
+          here = line
+          advance()
+          right = binary(level + 1)?
+          left = Binary(sym, left, right, here)
+    left
+
+  def operator_at(level: Int) -> Str?:
+    sym = match peek:
+      Op(s)      -> s
+      Keyword(w) -> w
+      _          -> ""
+    wanted = match level:
+      0 -> ["or"]
+      1 -> ["and"]
+      2 -> ["==", "!=", "<", "<=", ">", ">="]
+      3 -> ["+", "-"]
+      _ -> ["*", "/", "%"]
+    if wanted.contains?(sym): Some(sym) else: None
+
+  def unary(var self) -> Expr or Error:
+    here = line
+    if eat("not"):
+      return Unary("not", unary()?, here)
+    if eat("-"):
+      return Unary("-", unary()?, here)
+    primary()
+
+  def primary(var self) -> Expr or Error:
+    here = line
+    match peek:
+      Num(v) ->
+        advance()
+        Num(v)
+      Str(t) ->
+        advance()
+        Str(t)
+      Keyword("true") ->
+        advance()
+        Bool(true)
+      Keyword("false") ->
+        advance()
+        Bool(false)
+      Name(n) ->
+        advance()
+        if not eat("("):
+          return Var(n, here)
+        var args: [Expr] = []
+        if not at(")"):
+          while true:
+            args.push(expression()?)
+            if not eat(","):
+              break
+        expect(")", "`)` to close the arguments")?
+        Call(n, args, here)
+      Op("(") ->
+        advance()
+        inner = expression()?
+        expect(")", "`)`")?
+        inner
+      other -> Error("line #{here}: expected a value, found #{other.describe}")
+
+pub def parse(src: Str) -> Program or Error:
+  var p = P(ts: lexer.lex(src)?, pos: 0)
+  var fns: [Fn] = []
+  var main: [Stmt] = []
+  p.skip_newlines
+  while not p.at_end:
+    if p.eat("fn"):
+      at = p.line
+      n = p.name()?
+      p.expect("(", "`(` after the function name")?
+      var params: [Str] = []
+      if not p.at(")"):
+        while true:
+          params.push(p.name()?)
+          if not p.eat(","):
+            break
+      p.expect(")", "`)` to close the parameters")?
+      fns.push(Fn(name: n, params: params, body: p.block()?, line: at))
+    else:
+      main.push(p.statement()?)
+    p.skip_newlines
+  Program(fns: fns, main: main)
+
+test "parsing a program":
+  prog = parse("fn double(n) { return n * 2 }\nlet x = double(21)\nprint x")!
+  assert prog.fns.len == 1
+  assert prog.main.len == 2
+  assert prog.fns[0].map { |f| f.params.len } == Some(1)
+
+test "precedence":
+  prog = parse("print 1 + 2 * 3")!
+  match prog.main[0]:
+    Some(Print(Binary("+", _, Binary("*", _, _, _), _))) -> assert true
+    _                                                    -> assert false
+  prog2 = parse("print 1 * 2 + 3")!
+  match prog2.main[0]:
+    Some(Print(Binary("+", Binary("*", _, _, _), _, _))) -> assert true
+    _                                                    -> assert false
+
+test "parse errors":
+  match parse("let = 3"):
+    Ok(_)    -> assert false
+    Error(e) -> assert e.message == "line 1: expected a name, found `=`"
+  match parse("if x { print 1"):
+    Ok(_)    -> assert false
+    Error(e) -> assert e.message == "line 1: this block is never closed"

@@ -1,0 +1,18 @@
+test lexer: lexing ... ok
+test lexer: strings and comments ... ok
+test lexer: lexing errors ... ok
+test parser: parsing a program ... ok
+test parser: precedence ... ok
+test parser: parse errors ... ok
+test eval: arithmetic and precedence ... ok
+test eval: variables and strings ... ok
+test eval: control flow ... ok
+test eval: functions and recursion ... ok
+test eval: constant folding ... ok
+test eval: run-time errors say the line ... ok
+test the samples all run ... ok
+test every broken program is refused ... ok
+test a program with output ... ok
+
+15 tests: 15 passed, 0 failed
+exit: 0
