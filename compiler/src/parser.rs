@@ -753,8 +753,12 @@ impl Parser {
         }
         if self.eat_sym("{") {
             let k = self.parse_type()?;
+            if self.eat_sym("}") {
+                // `{T}` is a set
+                return Ok(self.type_suffix(Type::Set(Box::new(k))));
+            }
             if !self.eat_sym(":") {
-                return Err(self.err("a map type is written `{Key: Value}`, like `{Str: Int}`"));
+                return Err(self.err("a map type is written `{Key: Value}` and a set type `{Item}`, like `{Str: Int}` or `{Str}`"));
             }
             let v = self.parse_type()?;
             self.expect_sym("}", "to close the map type")?;
@@ -1755,18 +1759,30 @@ impl Parser {
                 }
                 self.advance();
                 let mut pairs = Vec::new();
+                let mut items = Vec::new();
                 while !self.at_sym("}") {
                     let k = self.expr()?;
-                    if !self.eat_sym(":") {
-                        return Err(self.err("expected `:` between a map key and its value").with_help("a map literal is `{key: value, ...}`; an empty map is `{}`"));
+                    if !pairs.is_empty() || (items.is_empty() && self.at_sym(":")) {
+                        if !self.eat_sym(":") {
+                            return Err(self.err("expected `:` between a map key and its value").with_help("a map literal is `{key: value, ...}`; a set is `{a, b, c}`"));
+                        }
+                        let v = self.expr()?;
+                        pairs.push((k, v));
+                    } else {
+                        // `{1, 2, 3}`: a set
+                        if self.at_sym(":") {
+                            return Err(self.err("this `{...}` started as a set, but this item has a `:` after it").with_help("a set is `{a, b, c}`; a map is `{key: value, ...}`"));
+                        }
+                        items.push(k);
                     }
-                    let v = self.expr()?;
-                    pairs.push((k, v));
                     if !self.eat_sym(",") {
                         break;
                     }
                 }
-                self.expect_sym("}", "to close the map")?;
+                self.expect_sym("}", if pairs.is_empty() && !items.is_empty() { "to close the set" } else { "to close the map" })?;
+                if !items.is_empty() {
+                    return Ok(Expr::new(ExprKind::SetLit(items), line, col));
+                }
                 Ok(Expr::new(ExprKind::MapLit(pairs), line, col))
             }
             Tok::Ident(s) if s == "_" => {
@@ -1961,6 +1977,7 @@ fn count_placeholders(e: &Expr) -> usize {
         ExprKind::None | ExprKind::Rust(_) => 0,
         ExprKind::Index { recv, index } => count_placeholders(recv) + count_placeholders(index),
         ExprKind::MapLit(pairs) => pairs.iter().map(|(k, v)| count_placeholders(k) + count_placeholders(v)).sum(),
+        ExprKind::SetLit(items) => items.iter().map(count_placeholders).sum(),
         ExprKind::Match { scrutinee, arms } => {
             count_placeholders(scrutinee)
                 + arms.iter().map(|a| a.guard.as_ref().map(count_placeholders).unwrap_or(0) + walk_block(&a.body)).sum::<usize>()
@@ -2030,6 +2047,7 @@ fn replace_placeholders(e: &mut Expr) {
                 replace_placeholders(v);
             }
         }
+        ExprKind::SetLit(items) => items.iter_mut().for_each(replace_placeholders),
         ExprKind::Match { scrutinee, arms } => {
             replace_placeholders(scrutinee);
             for a in arms {

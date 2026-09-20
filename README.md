@@ -20,7 +20,7 @@ program takes about 1 s in Python and 1.4 s in Ruby.
 The language design lives in the [Lume Language Design](https://claude.ai/code/artifact/1872fe63-1816-4b1e-9983-dec2774382fb)
 document. This repository is the compiler and the examples.
 
-## Status: milestones 1–17 done
+## Status: milestones 1–18 done
 
 | # | Milestone | Status |
 | --- | --- | --- |
@@ -41,6 +41,7 @@ document. This repository is the compiler and the examples.
 | 15 | Soundness: nested rebinding is an error, argument/return/operand/branch type checks, `Str + Int` rejected, per-type method tables, overflow stops the program | done: review corpus leaks 14 → 6, all remaining are ownership (milestone 16) |
 | 16 | Ownership by analysis: liveness-based copy or move, recursive enums boxed, `.or` on optional fields, string comparisons in blocks, `for var a in xs`, `xs[i].method` | done: review corpus leaks 6 → 0 |
 | 17 | Pattern completeness: a real exhaustiveness checker with nested witnesses, `A \| B` alternatives; the everyday standard methods; statements in inline blocks | done: 37 new methods, corpus 40 ok / 26 Lume errors / 0 leaks |
+| 18 | `{T}` sets with literals, algebra and iteration; `s[i]` / `s[a..b]` / `xs[a..b]` by character and position; structs and enums as map keys | done |
 
 What works today: functions (`def` block and one-liner forms, return type
 inferred when omitted), `struct` with fields and methods (fields used bare
@@ -125,7 +126,17 @@ for an empty list), `sort`,
 all of these: `xs.map(parse)`, `xs.group_by(kind)`); on maps `len`, `keys`, `values`, `get`,
 `remove`, `contains?`, `merge`, `to_list`, `each`, `filter`, `reject`,
 `map_values`; on `T?` `or`, `some?`, `none?`, `or_error`, `map`; on `T or E`
-`or`, `ok?`, `error?`, `error`, `ok`, `map`.
+`or`, `ok?`, `error?`, `error`, `ok`, `map`; sets (`{1, 2, 3}` is a `{Int}`,
+each value once, insertion order kept; `var seen: {Str} = {}`; `add` returns
+whether the value was new, `remove`, `contains?`, `len`, `union`,
+`intersect`, `diff`, `subset?`, `superset?`, `to_list`, `sort`, `sum`, `max`,
+`min`, `join`, `first`, `xs.to_set`, `==` ignores order, `for x in s`, and
+the block methods with `filter`/`reject` giving a set back; items and map
+keys may be `Int`, `Str`, `Bool`, tuples of those, or a struct/enum made of
+them — never a `Float`), positions (`xs[i]` and `s[i]` are a `T?` / `Str?`,
+`s[i]` counting characters not bytes; `s[a..b]`, `s[a...b]`, `xs[a..b]` are
+slices clamped to the value, so `s[2..99]` is the tail and `s[3..2]` is
+empty).
 
 Errors are Lume errors, not rustc errors: unknown names, fields and types (with
 a "did you mean"), assignment to an immutable binding (pointing at where it was
@@ -151,6 +162,7 @@ mutating call on a read-only `shared`, a `spawn:` inside a method that uses
 `self`, a crate function or method that does not exist (or is not callable
 from Lume yet, with the reason), a wrong argument type for a crate call, a
 crate value with no text form printed, a borrowing crate type in a field,
+a `Float` (or a type holding one) as a set item or map key, indexing a set,
 `name (` with a space (ambiguous call), a user type named after a built-in
 (`struct Option`), `|` alternatives that bind different names, bad
 indentation, tabs, and the spellings other languages use (`continue`, `'single
@@ -294,6 +306,7 @@ examples/port/           the design doc's sample programs and the graph program;
 examples/async.lume      async/await, spawn, Task[T], shared var
 examples/ownership.lume  copy or move by analysis, a recursive enum, for var, xs[i].method
 examples/patterns.lume   `|` alternatives and what the exhaustiveness check catches
+examples/sets.lume       sets, set algebra, struct keys, character slicing
 examples/stdlib.lume     the built-in methods, one line each
 examples/crate.lume      regex through the bridge: types, iterators, errors, a rust: block
 examples/crates.lume     hex and urlencoding, with nothing written for them

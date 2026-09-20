@@ -777,6 +777,17 @@ impl Fmt {
                 let texts: Vec<String> = items.iter().map(|i| self.expr(i)).collect();
                 format!("({})", texts.join(", "))
             }
+            ExprKind::SetLit(items) => {
+                let multi = items.len() >= 2 && Self::spread(items.first(), items.last());
+                if multi {
+                    self.indent += 1;
+                }
+                let texts: Vec<String> = items.iter().map(|i| self.expr(i)).collect();
+                if multi {
+                    self.indent -= 1;
+                }
+                self.bracketed("{", "}", texts, multi)
+            }
             ExprKind::MapLit(pairs) => {
                 let multi = pairs.len() >= 2 && Self::spread(pairs.first().map(|p| &p.0), pairs.last().map(|p| &p.0));
                 if multi {
@@ -1006,6 +1017,7 @@ pub fn type_str(t: &Type) -> String {
         Type::Tuple(ts) => format!("({})", ts.iter().map(type_str).collect::<Vec<_>>().join(", ")),
         Type::Result(a, b) => format!("{} or {}", type_str(a), type_str(b)),
         Type::Map(k, v) => format!("{{{}: {}}}", type_str(k), type_str(v)),
+        Type::Set(t) => format!("{{{}}}", type_str(t)),
         Type::Iter(e, _) => format!("[{}]", type_str(e)),
         Type::Task(e) => format!("Task[{}]", type_str(e)),
         Type::Future(e) => format!("async {}", type_str(e)),

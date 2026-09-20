@@ -20,6 +20,8 @@ pub enum Type {
     Result(Box<Type>, Box<Type>),
     /// `{K: V}`
     Map(Box<Type>, Box<Type>),
+    /// `{T}` — a set: each value at most once, insertion order kept
+    Set(Box<Type>),
     /// A lazy chain (`xs.filter(...).map(...)`) not yet collected. The bool
     /// says whether items are references into the source list. Internal:
     /// becomes `[T]` wherever a value is needed, never reaches a signature.
@@ -276,6 +278,8 @@ pub enum ExprKind {
     SelfRef,
     List(Vec<Expr>),
     Range { lo: Box<Expr>, hi: Box<Expr>, inclusive: bool },
+    /// `{1, 2, 3}`
+    SetLit(Vec<Expr>),
     Unary { op: &'static str, expr: Box<Expr> },
     Binary { op: &'static str, lhs: Box<Expr>, rhs: Box<Expr> },
     /// `name(args)` — a function call or a struct constructor.

@@ -1,0 +1,105 @@
+# Sets: `{a, b, c}` holds each value once and keeps insertion order.
+# Strings and lists slice by position: `s[i]` is a `Str?` (one character),
+# `s[a..b]` / `xs[a..b]` are clamped slices.
+
+struct Point:
+  x: Int
+  y: Int
+
+enum Color:
+  Red
+  Green
+
+struct Graph:
+  edges: {(Int, Int)}
+  seen: {Int}
+
+  def add_edge(var self, a: Int, b: Int):
+    edges.add((a, b))
+
+  def visit(var self, n: Int) -> Bool:
+    seen.add(n)
+
+  def neighbours(n: Int) -> {Int}:
+    edges.filter { |a, b| a == n }.map { |a, b| b }.to_list.to_set
+
+def main:
+  var g = Graph(edges: {}, seen: {})
+  g.add_edge(1, 2)
+  g.add_edge(1, 3)
+  g.add_edge(2, 3)
+  g.add_edge(1, 2)
+  puts g.edges.len
+  puts g.neighbours(1)
+  puts g.visit(1)
+  puts g.visit(1)
+  puts g
+  groups: {Str: {Int}} = {"odd": {1, 3}, "even": {2}}
+  puts groups["odd"].or({}).contains?(3)
+  puts {1, 2} == {2, 1}
+  puts {1, 2} != {2, 3}
+  letters = "hello".chars.to_set
+  puts letters
+  puts "hello"[1..3].chars.to_set.subset?(letters)
+  demo()
+
+test "sets and slices":
+  assert {1, 2}.union({3}) == {1, 2, 3}
+  assert "héllo"[1] == Some("é")
+  assert [1, 2, 3][1..5] == [2, 3]
+
+def demo:
+  s = {3, 1, 2, 3}
+  puts s
+  puts s.len
+  puts s.contains?(2)
+  puts s.contains?(9)
+  var seen: {Str} = {}
+  words = "the cat and the hat and the bat".split
+  for w in words:
+    puts "dup: #{w}" unless seen.add(w)
+  puts seen
+  puts seen.len
+  puts words.to_set
+  puts words.to_set.len
+  a = {1, 2, 3}
+  b = {3, 4}
+  puts a.union(b)
+  puts a.intersect(b)
+  puts a.diff(b)
+  puts {1, 2}.subset?(a)
+  puts a.superset?({4})
+  puts a == {3, 2, 1}
+  puts a.sort
+  puts a.sum
+  puts a.max
+  puts a.filter { |n| n > 1 }
+  puts a.map { |n| n * 10 }.to_list
+  puts a.to_list.len
+  var c = {1, 2}
+  c.remove(1)
+  puts c
+  pts = {Point(1, 2), Point(1, 2), Point(3, 4)}
+  puts pts.len
+  puts {Red, Green, Red}
+  puts {(1, "a"), (1, "a"), (2, "b")}.len
+  s2 = "héllo wörld"
+  puts s2[1]
+  puts s2[99]
+  puts s2[0..4]
+  puts s2[6...11]
+  puts s2[3..2]
+  puts s2[-5..100]
+  xs = [10, 20, 30, 40, 50]
+  puts xs[1..3]
+  puts xs[3...99]
+  puts xs[1..3].sum
+  puts s2[0].or("?")
+  i = 2
+  puts s2[i..i + 2]
+  for ch in s2[0..2].chars:
+    puts ch
+  m = {"a": 1}
+  puts m
+  e: {Str: Int} = {}
+  puts e.len

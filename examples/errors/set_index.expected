@@ -1,0 +1,6 @@
+error: a set has no positions to index
+  --> examples/errors/set_index.lume:3:9
+  |
+3 |   puts s[0]
+  |         ^
+  help: use `.contains?(x)`, or `.to_list` for an ordered list

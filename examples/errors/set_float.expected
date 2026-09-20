@@ -1,0 +1,6 @@
+error: a `Float` cannot be an item of a set
+  --> examples/errors/set_float.lume:2:12
+  |
+2 |   prices = {1.5, 2.5}
+  |            ^
+  help: floats have no exact equality; use an `Int` (cents, thousandths) or a `Str`

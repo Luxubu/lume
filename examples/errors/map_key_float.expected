@@ -1,0 +1,6 @@
+error: a `P` cannot be the key of a map
+  --> examples/errors/map_key_float.lume:5:3
+  |
+5 |   seen: {P: Int} = {}
+  |   ^
+  help: only a struct or enum whose fields are all `Int`, `Str`, `Bool`, tuples or other such types can be hashed; and not one with its own `==`

@@ -1,0 +1,6 @@
+struct P:
+  x: Float
+
+def main:
+  seen: {P: Int} = {}
+  puts seen

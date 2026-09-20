@@ -208,6 +208,54 @@ impl<'a> Iterator for LumeSplit<'a> {
         }
     }
 }
+#[derive(Clone, Debug)]
+struct LumeSet<T> { m: LumeMap<T, ()> }
+impl<T: std::hash::Hash + Eq + Clone> LumeSet<T> {
+    fn new() -> Self { LumeSet { m: LumeMap::new() } }
+    fn from<const N: usize>(items: [T; N]) -> Self { let mut s = Self::new(); for i in items { s.insert(i); } s }
+    fn insert(&mut self, x: T) -> bool { if self.m.contains_key(&x) { false } else { self.m.insert(x, ()); true } }
+    fn remove<Q>(&mut self, x: &Q) -> bool where T: std::borrow::Borrow<Q>, Q: std::hash::Hash + Eq + ?Sized { self.m.remove(x).is_some() }
+    fn contains<Q>(&self, x: &Q) -> bool where T: std::borrow::Borrow<Q>, Q: std::hash::Hash + Eq + ?Sized { self.m.contains_key(x) }
+    fn len(&self) -> usize { self.m.len() }
+    fn is_empty(&self) -> bool { self.m.is_empty() }
+    fn iter(&self) -> impl Iterator<Item = &T> { self.m.keys() }
+    fn union(&self, o: &Self) -> Self { let mut s = self.clone(); for x in o.iter() { s.insert(x.clone()); } s }
+    fn intersect(&self, o: &Self) -> Self { self.iter().filter(|x| o.contains(*x)).cloned().collect() }
+    fn diff(&self, o: &Self) -> Self { self.iter().filter(|x| !o.contains(*x)).cloned().collect() }
+    fn is_subset(&self, o: &Self) -> bool { self.iter().all(|x| o.contains(x)) }
+    fn is_superset(&self, o: &Self) -> bool { o.is_subset(self) }
+}
+impl<T: std::hash::Hash + Eq + Clone> FromIterator<T> for LumeSet<T> {
+    fn from_iter<I: IntoIterator<Item = T>>(it: I) -> Self { let mut s = Self::new(); for x in it { s.insert(x); } s }
+}
+impl<T: std::hash::Hash + Eq + Clone> PartialEq for LumeSet<T> {
+    fn eq(&self, o: &Self) -> bool { self.len() == o.len() && self.is_subset(o) }
+}
+impl<T: LumeShow + std::hash::Hash + Eq + Clone> LumeShow for LumeSet<T> {
+    fn lume_str(&self) -> String { format!("{{{}}}", self.iter().map(|x| x.lume_str()).collect::<Vec<_>>().join(", ")) }
+}
+impl<T: std::hash::Hash + Eq + Clone> LumeLen for LumeSet<T> { fn lume_len(&self) -> i64 { self.len() as i64 } }
+impl<T: std::hash::Hash + Eq + Clone> LumeEmpty for LumeSet<T> { fn lume_empty(&self) -> bool { self.is_empty() } }
+/// `s[i]`: the character at a position, `None` when out of range.
+fn lume_char_at(s: &str, i: i64) -> Option<String> {
+    if i < 0 { return None; }
+    s.chars().nth(i as usize).map(|c| c.to_string())
+}
+/// `s[a..b]` in characters; positions are clamped to the string, an
+/// empty result when they cross.
+fn lume_slice_str(s: &str, a: i64, b: i64) -> String {
+    let n = s.chars().count() as i64;
+    let (a, b) = (a.clamp(0, n), b.clamp(0, n));
+    if b <= a { return String::new(); }
+    s.chars().skip(a as usize).take((b - a) as usize).collect()
+}
+/// `xs[a..b]`: positions are clamped to the list.
+fn lume_slice_list<T: Clone>(xs: &[T], a: i64, b: i64) -> Vec<T> {
+    let n = xs.len() as i64;
+    let (a, b) = (a.clamp(0, n), b.clamp(0, n));
+    if b <= a { return Vec::new(); }
+    xs[a as usize..b as usize].to_vec()
+}
 fn lume_pad<T: LumeShow>(x: T, width: i64) -> String { format!("{:>w$}", x.lume_str(), w = width.max(0) as usize) }
 fn lume_pad_right<T: LumeShow>(x: T, width: i64) -> String { format!("{:<w$}", x.lume_str(), w = width.max(0) as usize) }
 fn lume_capitalize(s: &str) -> String {
@@ -540,6 +588,7 @@ fn qualify_type(t: &Type, id: &str, ex: &Exports) -> Type {
         Type::Tuple(ts) => Type::Tuple(ts.iter().map(|x| qualify_type(x, id, ex)).collect()),
         Type::Result(a, b) => Type::Result(Box::new(qualify_type(a, id, ex)), Box::new(qualify_type(b, id, ex))),
         Type::Map(a, b) => Type::Map(Box::new(qualify_type(a, id, ex)), Box::new(qualify_type(b, id, ex))),
+        Type::Set(t) => Type::Set(Box::new(qualify_type(t, id, ex))),
         other => other.clone(),
     }
 }
@@ -586,6 +635,7 @@ pub fn rust_type(t: &Type) -> String {
         Type::Tuple(ts) => format!("({})", ts.iter().map(rust_type).collect::<Vec<_>>().join(", ")),
         Type::Result(t, e) => format!("Result<{}, {}>", rust_type(t), rust_type(e)),
         Type::Map(k, v) => format!("LumeMap<{}, {}>", rust_type(k), rust_type(v)),
+        Type::Set(t) => format!("LumeSet<{}>", rust_type(t)),
         Type::Iter(inner, _) => format!("Vec<{}>", rust_type(inner)),
         Type::Task(inner) => format!("tokio::task::JoinHandle<{}>", rust_type(inner)),
         Type::Future(inner) => format!("impl std::future::Future<Output = {}>", rust_type(inner)),
@@ -608,6 +658,7 @@ pub fn type_name(t: &Type) -> String {
         Type::Tuple(ts) => format!("({})", ts.iter().map(type_name).collect::<Vec<_>>().join(", ")),
         Type::Result(t, e) => format!("{} or {}", type_name(t), type_name(e)),
         Type::Map(k, v) => format!("{{{}: {}}}", type_name(k), type_name(v)),
+        Type::Set(t) => format!("{{{}}}", type_name(t)),
         Type::Iter(i, _) => format!("[{}]", type_name(i)),
         Type::Task(i) => format!("Task[{}]", type_name(i)),
         Type::Future(i) => format!("async {}", type_name(i)),
@@ -653,6 +704,7 @@ impl Gen {
             Type::Tuple(ts) => format!("({})", ts.iter().map(|x| self.rt(x)).collect::<Vec<_>>().join(", ")),
             Type::Result(a, b) => format!("Result<{}, {}>", self.rt(a), self.rt(b)),
             Type::Map(k, v) => format!("LumeMap<{}, {}>", self.rt(k), self.rt(v)),
+            Type::Set(t) => format!("LumeSet<{}>", self.rt(t)),
             Type::Iter(inner, _) => format!("Vec<{}>", self.rt(inner)),
             Type::Task(inner) => format!("tokio::task::JoinHandle<{}>", self.rt(inner)),
             Type::Shared(inner, true) => format!("std::sync::Arc<std::sync::Mutex<{}>>", self.rt(inner)),
@@ -685,6 +737,7 @@ impl Gen {
             Type::Tuple(ts) => Type::Tuple(ts.iter().map(|x| self.ct(x)).collect()),
             Type::Result(a, b) => Type::Result(Box::new(self.ct(a)), Box::new(self.ct(b))),
             Type::Map(a, b) => Type::Map(Box::new(self.ct(a)), Box::new(self.ct(b))),
+            Type::Set(t) => Type::Set(Box::new(self.ct(t))),
             Type::Task(i) => Type::Task(Box::new(self.ct(i))),
             Type::Future(i) => Type::Future(Box::new(self.ct(i))),
             Type::Shared(i, m) => Type::Shared(Box::new(self.ct(i)), *m),
@@ -1027,6 +1080,11 @@ impl Gen {
 
     /// Boxes a concrete value where an interface value is stored.
     fn coerce(&self, text: String, from: &Type, to: &Type, line: usize, col: usize) -> Result<String> {
+        if let (Type::Map(k, v), Type::Set(_)) = (from, to) {
+            if **k == Type::Unknown && **v == Type::Unknown && text == "LumeMap::new()" {
+                return Ok("LumeSet::new()".into());
+            }
+        }
         if let Type::Named(iface) = to {
             if self.is_interface(to) && !self.is_interface(from) && *from != Type::Unknown {
                 self.require_conforms(from, iface, line, col)?;
@@ -1576,10 +1634,17 @@ impl Gen {
                 })
             }
             Type::List(inner) | Type::Option(inner) | Type::Task(inner) | Type::Shared(inner, _) => self.check_type(inner, line, col),
+            Type::Set(inner) => {
+                self.check_type(inner, line, col)?;
+                self.check_key_type(inner, "set", line, col)
+            }
             Type::Tuple(ts) => ts.iter().try_for_each(|t| self.check_type(t, line, col)),
-            Type::Result(t, e) | Type::Map(t, e) => {
-                self.check_type(t, line, col)?;
-                self.check_type(e, line, col)
+            Type::Result(a, b) | Type::Map(a, b) => {
+                self.check_type(a, line, col)?;
+                if matches!(t, Type::Map(..)) {
+                    self.check_key_type(a, "map", line, col)?;
+                }
+                self.check_type(b, line, col)
             }
             _ => Ok(()),
         }
@@ -2038,12 +2103,26 @@ impl Gen {
                 _ => Type::Unknown,
             },
             ExprKind::Rust(_) => Type::Unknown,
-            ExprKind::Index { recv, .. } => match self.ty_of(recv).materialized() {
-                Type::List(e) => Type::Option(e),
-                Type::Map(_, v) => Type::Option(v),
-                Type::Str => Type::Unknown,
-                _ => Type::Unknown,
-            },
+            ExprKind::Index { recv, index } => {
+                let slice = matches!(index.kind, ExprKind::Range { .. });
+                match self.ty_of(recv).materialized() {
+                    Type::List(e) if slice => Type::List(e),
+                    Type::List(e) => Type::Option(e),
+                    Type::Map(_, v) => Type::Option(v),
+                    Type::Str if slice => Type::Str,
+                    Type::Str => Type::Option(Box::new(Type::Str)),
+                    _ => Type::Unknown,
+                }
+            }
+            ExprKind::SetLit(items) => {
+                let mut t = Type::Unknown;
+                for i in items {
+                    if t == Type::Unknown {
+                        t = self.ty_of(i).materialized();
+                    }
+                }
+                Type::Set(Box::new(t))
+            }
             ExprKind::MapLit(pairs) => {
                 let mut k = Type::Unknown;
                 let mut v = Type::Unknown;
@@ -2202,6 +2281,9 @@ impl Gen {
             (Type::Iter(a, _), Type::List(b)) | (Type::List(a), Type::Iter(b, _)) | (Type::List(a), Type::List(b)) | (Type::Iter(a, _), Type::Iter(b, _)) => self.assignable(a, b),
             (Type::Option(a), Type::Option(b)) | (Type::Task(a), Type::Task(b)) => self.assignable(a, b),
             (Type::Result(a, b), Type::Result(c, d)) | (Type::Map(a, b), Type::Map(c, d)) => self.assignable(a, c) && self.assignable(b, d),
+            (Type::Set(a), Type::Set(b)) => self.assignable(a, b),
+            // `{}` where a set is wanted is the empty set
+            (Type::Map(k, v), Type::Set(_)) if **k == Type::Unknown && **v == Type::Unknown => true,
             (Type::Tuple(xs), Type::Tuple(ys)) => xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| self.assignable(x, y)),
             (Type::Named(a), Type::Named(b)) if self.canon(a) == self.canon(b) => true,
             (_, Type::Named(iface)) if self.is_interface(want) => {
@@ -2503,6 +2585,7 @@ impl Gen {
             Type::List(e) => Some(((**e).clone(), !e.is_copy())),
             Type::Iter(e, by_ref) => Some(((**e).clone(), *by_ref)),
             Type::Map(k, v) => Some((Type::Tuple(vec![(**k).clone(), (**v).clone()]), true)),
+            Type::Set(e) => Some(((**e).clone(), !e.is_copy())),
             _ => None,
         }
     }
@@ -2547,6 +2630,7 @@ impl Gen {
                 return Type::Result(Box::new(bt), err.clone());
             }
             (Type::Map(..), "filter" | "reject") => return recv.clone(),
+            (Type::Set(_), "filter" | "reject") => return recv.clone(),
             (Type::Map(k, v), "map_values") => {
                 let bt = self.lambda_body_type(params, v, true, None, body).materialized();
                 return Type::Map(k.clone(), Box::new(bt));
@@ -2739,9 +2823,12 @@ impl Gen {
 
     /// `#[derive(...)]` for a user type: `PartialEq` is derived unless the
     /// type defines `==` itself.
-    fn derive_line(&mut self, methods: &[FnDef]) {
+    fn derive_line(&mut self, name: &str, methods: &[FnDef]) {
         if methods.iter().any(|m| m.name == "==") {
             self.line("#[derive(Debug, Clone)]");
+        } else if self.hashable_named(name) {
+            // usable as a map key or set item
+            self.line("#[derive(Debug, Clone, PartialEq, Eq, Hash)]");
         } else {
             self.line("#[derive(Debug, Clone, PartialEq)]");
         }
@@ -2784,7 +2871,7 @@ impl Gen {
         if manual_eq {
             self.line("#[derive(Debug, Clone)]");
         } else {
-            self.derive_line(&s.methods);
+            self.derive_line(&s.name, &s.methods);
         }
         self.line(&format!("pub struct {} {{", s.name));
         self.indent += 1;
@@ -2834,7 +2921,7 @@ impl Gen {
     }
 
     fn enum_def(&mut self, e: &EnumDef) -> Result<()> {
-        self.derive_line(&e.methods);
+        self.derive_line(&e.name, &e.methods);
         self.line(&format!("pub enum {} {{", e.name));
         self.indent += 1;
         for v in &e.variants {
@@ -3599,9 +3686,12 @@ impl Gen {
                     Type::List(elem) if elem.is_copy() || **elem == Type::Unknown => (format!("({}).iter().cloned()", self.expr(iter)?), (**elem).clone(), false),
                     Type::List(elem) => (format!("({}).iter()", self.expr(iter)?), (**elem).clone(), true),
                     Type::Map(k, v) => (format!("({}).iter()", self.expr(iter)?), Type::Tuple(vec![(**k).clone(), (**v).clone()]), true),
+                    Type::Set(elem) if self_rooted => (format!("({}).iter().cloned().collect::<Vec<_>>().into_iter()", self.expr(iter)?), (**elem).clone(), false),
+                    Type::Set(elem) if elem.is_copy() => (format!("({}).iter().cloned()", self.expr(iter)?), (**elem).clone(), false),
+                    Type::Set(elem) => (format!("({}).iter()", self.expr(iter)?), (**elem).clone(), true),
                     Type::Unknown => (format!("({}).iter().cloned()", self.expr(iter)?), Type::Unknown, false),
                     other => {
-                        return Err(LumeError::new(iter.line, iter.col, format!("cannot loop over a `{}`", type_name(other))).with_help("`for` needs a list or a range"));
+                        return Err(LumeError::new(iter.line, iter.col, format!("cannot loop over a `{}`", type_name(other))).with_help("`for` needs a list, a set, a map or a range"));
                     }
                 };
                 let pattern = if vars.len() == 1 {
@@ -3992,6 +4082,13 @@ impl Gen {
                 }
             }
             Type::Iter(elem, by_ref) => Ok((r, *elem, by_ref)),
+            Type::Set(elem) => {
+                if elem.is_copy() {
+                    Ok((format!("({}).iter().cloned()", r), *elem, false))
+                } else {
+                    Ok((format!("({}).iter()", r), *elem, true))
+                }
+            }
             Type::Map(k, v) => {
                 // Copy parts travel by value, so a block sees `v > 1` on an `Int`
                 let pair = map_pair(&k, &v);
@@ -4103,6 +4200,15 @@ impl Gen {
                     r,
                     pair
                 ));
+            }
+            (Type::Set(el), "filter" | "reject") => {
+                let el = (**el).clone();
+                let r = self.expr(recv)?;
+                let by_ref = !el.is_copy();
+                let f = self.gen_lambda_ex(params, body, &el, by_ref, true, true, None, name == "reject", lam)?;
+                let it = if by_ref { format!("({}).iter()", r) } else { format!("({}).iter().cloned()", r) };
+                let tail = if by_ref { ".cloned()" } else { "" };
+                return Ok(format!("{}.filter({}){}.collect::<LumeSet<_>>()", it, f, tail));
             }
             (Type::Map(_, v), "map_values") => {
                 let v = (**v).clone();
@@ -4744,6 +4850,65 @@ impl Gen {
         })
     }
 
+    /// The two ends of `lo..hi` / `lo...hi` used as a slice, as exclusive Rust bounds.
+    fn slice_bounds(&mut self, lo: &Expr, hi: &Expr, inclusive: bool) -> Result<(String, String)> {
+        for x in [lo, hi] {
+            let t = self.ty_of(x);
+            if t != Type::Int && t != Type::Unknown {
+                return Err(LumeError::new(x.line, x.col, format!("a slice position is an `Int`, but this is a `{}`", type_name(&t))));
+            }
+        }
+        let a = self.expr_val(lo)?;
+        let b = self.expr_val(hi)?;
+        Ok((a, if inclusive { format!("({}) + 1", b) } else { b }))
+    }
+
+    /// Map keys and set items are compared by hashing, so a `Float` (which
+    /// has no total equality) and types that hold one are not allowed.
+    fn check_key_type(&self, t: &Type, what: &str, line: usize, col: usize) -> Result<()> {
+        if self.key_ok(t, &mut Vec::new()) {
+            Ok(())
+        } else {
+            let e = LumeError::new(line, col, format!("a `{}` cannot be {} of a {}", type_name(t), if what == "map" { "the key" } else { "an item" }, what));
+            Err(match t {
+                Type::Float => e.with_help("floats have no exact equality; use an `Int` (cents, thousandths) or a `Str`"),
+                Type::Named(_) => e.with_help("only a struct or enum whose fields are all `Int`, `Str`, `Bool`, tuples or other such types can be hashed; and not one with its own `==`"),
+                _ => e.with_help("keys and items must be `Int`, `Str`, `Bool`, tuples of those, or a struct/enum made of them"),
+            })
+        }
+    }
+
+    fn key_ok(&self, t: &Type, visiting: &mut Vec<String>) -> bool {
+        match t {
+            Type::Int | Type::Bool | Type::Str | Type::Unit | Type::Unknown => true,
+            Type::Tuple(ts) => ts.iter().all(|x| self.key_ok(x, visiting)),
+            Type::Option(i) => self.key_ok(i, visiting),
+            Type::Named(n) => {
+                let key = self.canon(n);
+                // a recursive type refers back to itself: fine, the field is boxed
+                if visiting.contains(&key) {
+                    return true;
+                }
+                visiting.push(key.clone());
+                let ok = if let Some(s) = self.structs.get(&key) {
+                    !s.methods.contains_key("==") && s.fields.iter().all(|(_, t)| self.key_ok(t, visiting))
+                } else if let Some(e) = self.enums.get(&key) {
+                    !e.methods.contains_key("==") && e.variants.iter().all(|(_, fs)| fs.iter().all(|(_, t)| self.key_ok(t, visiting)))
+                } else {
+                    false
+                };
+                visiting.pop();
+                ok
+            }
+            _ => false,
+        }
+    }
+
+    /// A user type that derives `Hash + Eq`: every field hashable, no custom `==`.
+    fn hashable_named(&self, n: &str) -> bool {
+        self.key_ok(&Type::Named(n.to_string()), &mut Vec::new())
+    }
+
     /// The constructors of a type, with their argument types; `None` when
     /// there are too many to enumerate (numbers, strings, unknown types).
     fn ctors(&self, t: &Type) -> Option<Vec<(String, Vec<Type>)>> {
@@ -5149,6 +5314,10 @@ impl Gen {
                 let r = self.expr_val(recv)?;
                 match rt {
                     Type::List(_) => {
+                        if let ExprKind::Range { lo, hi, inclusive } = &index.kind {
+                            let (a, b) = self.slice_bounds(lo, hi, *inclusive)?;
+                            return Ok(format!("lume_slice_list(&({}), {}, {})", r, a, b));
+                        }
                         let i = self.expr(index)?;
                         let it = self.ty_of(index);
                         if it != Type::Int && it != Type::Unknown {
@@ -5166,12 +5335,38 @@ impl Gen {
                         format!("({}).get({}).cloned()", r, key)
                     }
                     Type::Str => {
-                        return Err(LumeError::new(e.line, e.col, "strings cannot be indexed by position")
-                            .with_help("use `.chars`, `.first`, `.slice(from, len)` or `.split`"));
+                        // by character, never by byte
+                        if let ExprKind::Range { lo, hi, inclusive } = &index.kind {
+                            let (a, b) = self.slice_bounds(lo, hi, *inclusive)?;
+                            return Ok(format!("lume_slice_str(&({}), {}, {})", r, a, b));
+                        }
+                        let i = self.expr(index)?;
+                        let it = self.ty_of(index);
+                        if it != Type::Int && it != Type::Unknown {
+                            return Err(LumeError::new(index.line, index.col, format!("a character position is an `Int`, but this is a `{}`", type_name(&it))));
+                        }
+                        format!("lume_char_at(&({}), {})", r, i)
+                    }
+                    Type::Set(_) => {
+                        return Err(LumeError::new(e.line, e.col, "a set has no positions to index")
+                            .with_help("use `.contains?(x)`, or `.to_list` for an ordered list"));
                     }
                     Type::Unknown => format!("({}).get(({}) as usize).cloned()", r, self.expr(index)?),
                     other => return Err(LumeError::new(e.line, e.col, format!("`{}` values cannot be indexed", type_name(&other)))),
                 }
+            }
+            ExprKind::SetLit(items) => {
+                let et = match self.ty_of(e) {
+                    Type::Set(t) => *t,
+                    _ => Type::Unknown,
+                };
+                self.check_key_type(&et, "set", e.line, e.col)?;
+                let mut parts = Vec::new();
+                for i in items {
+                    self.check_assign(i, &et, &format!("the items of a set must all be the same type; the first is a `{}`", type_name(&et)))?;
+                    parts.push(self.expr_owned(i)?);
+                }
+                format!("LumeSet::from([{}])", parts.join(", "))
             }
             ExprKind::MapLit(pairs) => {
                 if pairs.is_empty() {
@@ -5625,14 +5820,14 @@ impl Gen {
                 if args.iter().any(|a| a.name.is_some()) {
                     return Err(LumeError::new(e.line, e.col, format!("built-in method `{}` does not take keyword arguments", name)));
                 }
-                if matches!(name.as_str(), "push" | "pop" | "insert" | "remove_at") || (name == "remove" && matches!(rt, Type::Map(..))) {
+                if matches!(name.as_str(), "push" | "pop" | "insert" | "remove_at" | "add") || (name == "remove" && matches!(rt, Type::Map(..) | Type::Set(_))) {
                     self.check_receiver_mutable(recv, name, e.line, e.col)?;
                 }
                 let mut parts = Vec::new();
                 for a in args {
                     // `.or(default)` and `.push(x)` store their argument: owned position
                     parts.push(match (name.as_str(), &rt) {
-                        ("push", Type::List(elem)) => self.expr_owned_as(&a.value, &elem.clone())?,
+                        ("push", Type::List(elem)) | ("add", Type::Set(elem)) | ("or", Type::Option(elem)) | ("or", Type::Result(elem, _)) => self.expr_owned_as(&a.value, &elem.clone())?,
                         ("insert", Type::List(elem)) if parts.len() == 1 => self.expr_owned_as(&a.value, &elem.clone())?,
                         ("or" | "push", _) => self.expr_owned(&a.value)?,
                         _ => self.expr_val(&a.value)?,
@@ -5735,6 +5930,21 @@ impl Gen {
             "zip" => { need(1)?; format!("({}).iter().cloned().zip(({}).iter().cloned()).collect::<Vec<_>>()", recv, args[0]) }
             "insert" => { need(2)?; format!("({}).insert(({}) as usize, {})", recv, args[0], args[1]) }
             "remove_at" => { need(1)?; format!("({}).remove(({}) as usize)", recv, args[0]) }
+            "to_set" => { need(0)?; format!("({}).iter().cloned().collect::<LumeSet<_>>()", recv) }
+            "add" if matches!(rt, Type::Set(_)) => { need(1)?; format!("({}).insert({})", recv, args[0]) }
+            "remove" if matches!(rt, Type::Set(_)) => { need(1)?; format!("({}).remove({})", recv, set_key(rt, &args[0])) }
+            "contains?" if matches!(rt, Type::Set(_)) => { need(1)?; format!("({}).contains({})", recv, set_key(rt, &args[0])) }
+            "to_list" if matches!(rt, Type::Set(_)) => { need(0)?; format!("({}).iter().cloned().collect::<Vec<_>>()", recv) }
+            "union" if matches!(rt, Type::Set(_)) => { need(1)?; format!("({}).union(&({}))", recv, args[0]) }
+            "intersect" if matches!(rt, Type::Set(_)) => { need(1)?; format!("({}).intersect(&({}))", recv, args[0]) }
+            "diff" if matches!(rt, Type::Set(_)) => { need(1)?; format!("({}).diff(&({}))", recv, args[0]) }
+            "subset?" if matches!(rt, Type::Set(_)) => { need(1)?; format!("({}).is_subset(&({}))", recv, args[0]) }
+            "superset?" if matches!(rt, Type::Set(_)) => { need(1)?; format!("({}).is_superset(&({}))", recv, args[0]) }
+            "sort" | "max" | "min" | "sum" | "join" | "first" if matches!(rt, Type::Set(_)) => {
+                let list = format!("({}).iter().cloned().collect::<Vec<_>>()", recv);
+                let lt = match rt { Type::Set(e) => Type::List(e.clone()), _ => unreachable!() };
+                return self.method(&list, name, args, &lt, e);
+            }
             "merge" if matches!(rt, Type::Map(..)) => { need(1)?; format!("{{ let mut lume_m = ({}).clone(); for (k, v) in ({}).iter() {{ lume_m.insert(k.clone(), v.clone()); }} lume_m }}", recv, args[0]) }
             "ok" => {
                 need(0)?;
@@ -5879,14 +6089,18 @@ fn builtins_for(recv: &Type) -> Vec<&'static str> {
         Type::List(_) => vec![
             "len", "empty?", "any?", "all?", "first", "last", "max", "min", "sum", "sort", "sort_by", "reverse", "push", "pop", "contains?",
             "join", "map", "filter", "reject", "each", "count", "find", "take", "skip", "take_while", "fold", "min_by", "max_by", "enumerate",
-            "to_list", "zip", "flatten", "uniq", "index_of", "insert", "remove_at", "avg", "group_by", "partition", "flat_map",
+            "to_list", "zip", "flatten", "uniq", "index_of", "insert", "remove_at", "avg", "group_by", "partition", "flat_map", "to_set",
         ],
         Type::Iter(..) => vec![
             "len", "empty?", "any?", "all?", "first", "last", "max", "min", "sum", "sort", "sort_by", "reverse", "contains?", "join", "map",
             "filter", "reject", "each", "count", "find", "take", "skip", "take_while", "fold", "min_by", "max_by", "enumerate", "to_list",
-            "zip", "flatten", "uniq", "index_of", "avg", "group_by", "partition", "flat_map",
+            "zip", "flatten", "uniq", "index_of", "avg", "group_by", "partition", "flat_map", "to_set",
         ],
         Type::Map(..) => vec!["len", "empty?", "any?", "contains?", "keys", "values", "to_list", "remove", "get", "merge", "filter", "reject", "map_values", "each", "count", "all?", "find"],
+        Type::Set(_) => vec![
+            "len", "empty?", "any?", "contains?", "add", "remove", "to_list", "union", "intersect", "diff", "subset?", "superset?", "sort", "max", "min", "sum", "first", "each",
+            "map", "filter", "reject", "count", "all?", "find", "fold", "join", "group_by", "partition", "flat_map", "sort_by", "min_by", "max_by",
+        ],
         Type::Option(_) => vec!["or", "some?", "none?", "or_error", "map"],
         Type::Result(..) => vec!["or", "ok?", "error?", "error", "ok", "map"],
         Type::Int => vec!["to_float", "to_int", "abs", "pad", "max", "min", "clamp", "pow", "even?", "odd?"],
@@ -5917,6 +6131,7 @@ fn is_builtin_name(name: &str) -> bool {
             | "pad" | "keys" | "values" | "remove" | "get" | "slice" | "replace" | "repeat"
             | "pad_right" | "capitalize" | "index_of" | "digit?" | "alpha?" | "space?" | "zip" | "flatten" | "uniq" | "insert"
             | "remove_at" | "avg" | "merge" | "clamp" | "pow" | "even?" | "odd?" | "ok"
+            | "to_set" | "add" | "union" | "intersect" | "diff" | "subset?" | "superset?"
     )
 }
 
@@ -5941,6 +6156,19 @@ fn builtin_method_type(recv: &Type, name: &str) -> Type {
         Type::List(e) | Type::Iter(e, _) => Some((**e).clone()),
         _ => None,
     };
+    if let Type::Set(t) = recv {
+        return match name {
+            "len" => Type::Int,
+            "empty?" | "any?" | "contains?" | "subset?" | "superset?" | "add" | "remove" => Type::Bool,
+            "to_list" | "sort" => Type::List(t.clone()),
+            "union" | "intersect" | "diff" => recv.clone(),
+            "max" | "min" | "first" => Type::Option(t.clone()),
+            "sum" => (**t).clone(),
+            "join" => Type::Str,
+            "to_s" | "to_str" => Type::Str,
+            _ => Type::Unknown,
+        };
+    }
     if let Type::Map(k, v) = recv {
         return match name {
             "len" => Type::Int,
@@ -5962,6 +6190,10 @@ fn builtin_method_type(recv: &Type, name: &str) -> Type {
         "clamp" | "pow" => recv.clone(),
         "avg" => Type::Float,
         "uniq" => recv.materialized(),
+        "to_set" => match &elem {
+            Some(e) => Type::Set(Box::new(e.clone())),
+            None => Type::Unknown,
+        },
         "insert" => Type::Unit,
         "remove_at" => elem.clone().unwrap_or(Type::Unknown),
         "flatten" => match &elem {
@@ -6046,7 +6278,7 @@ fn edit_distance(a: &str, b: &str) -> usize {
 fn type_is_known(t: &Type) -> bool {
     match t {
         Type::Unknown => false,
-        Type::List(i) | Type::Option(i) | Type::Iter(i, _) | Type::Task(i) | Type::Future(i) | Type::Shared(i, _) => type_is_known(i),
+        Type::List(i) | Type::Option(i) | Type::Iter(i, _) | Type::Task(i) | Type::Future(i) | Type::Shared(i, _) | Type::Set(i) => type_is_known(i),
         Type::Tuple(ts) => ts.iter().all(type_is_known),
         Type::Result(a, b) | Type::Map(a, b) => type_is_known(a) && type_is_known(b),
         _ => true,
@@ -6058,6 +6290,7 @@ fn suggest_type(t: &Type) -> String {
         Type::List(i) if **i == Type::Unknown => "[Int]".into(),
         Type::Option(i) if **i == Type::Unknown => "Int?".into(),
         Type::Map(k, v) if **k == Type::Unknown || **v == Type::Unknown => "{Str: Int}".into(),
+        Type::Set(i) if **i == Type::Unknown => "{Int}".into(),
         Type::Unknown => "Type".into(),
         other => type_name(other),
     }
@@ -6097,8 +6330,9 @@ fn snippet(e: &Expr) -> String {
 /// reference (for `String` it yields `&str`, which `Borrow` accepts).
 fn map_key(map_ty: &Type, k: &str) -> String {
     match map_ty {
-        Type::Map(kt, _) if kt.is_copy() => format!("&({})", k),
-        _ => format!("&*({})", k),
+        // `&*` turns a `String` into `&str`; anything else is borrowed as is
+        Type::Map(kt, _) if **kt == Type::Str => format!("&*({})", k),
+        _ => format!("&({})", k),
     }
 }
 
@@ -6171,6 +6405,7 @@ fn expr_mentions(e: &Expr, name: &str) -> bool {
         ExprKind::Str(pieces) => pieces.iter().any(|p| matches!(p, StrPiece::Expr(x) if expr_mentions(x, name))),
         ExprKind::List(items) | ExprKind::Tuple(items) => items.iter().any(|i| expr_mentions(i, name)),
         ExprKind::MapLit(pairs) => pairs.iter().any(|(k, v)| expr_mentions(k, name) || expr_mentions(v, name)),
+        ExprKind::SetLit(items) => items.iter().any(|i| expr_mentions(i, name)),
         ExprKind::Await(x) => expr_mentions(x, name),
         ExprKind::Spawn(b) => blk(b),
         ExprKind::Range { lo, hi, .. } => expr_mentions(lo, name) || expr_mentions(hi, name),
@@ -6349,4 +6584,12 @@ fn annotate_closure(f: &str, ty: &str) -> String {
 /// `(k, v)` for a map entry reached by reference, with Copy parts dereferenced.
 fn map_pair(k: &Type, v: &Type) -> String {
     format!("({}k, {}v)", if k.is_copy() { "*" } else { "" }, if v.is_copy() { "*" } else { "" })
+}
+
+/// How a set item argument is borrowed for `contains`/`remove`.
+fn set_key(set_ty: &Type, k: &str) -> String {
+    match set_ty {
+        Type::Set(t) if **t == Type::Str => format!("&*({})", k),
+        _ => format!("&({})", k),
+    }
 }
