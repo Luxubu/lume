@@ -1,0 +1,14 @@
+# Two more crates through the bridge, with nothing written for them:
+# their functions are called the way the crate documents them.
+import rust.hex = "0.4"
+import rust.urlencoding = "2"
+
+def main -> () or Error:
+  puts hex.encode("Lume")                 # T: AsRef<[u8]> accepts a Str
+  bytes = hex.decode("4c756d65")?         # Vec<u8> is [Int]
+  puts bytes
+  puts hex.decode("not hex").error?       # the crate's error type is a Lume Error
+  puts urlencoding.encode("a b&c=d")      # Cow<str> is a Str
+  puts urlencoding.decode("a%20b%26c")?
+  words = ["fast as Rust", "easy as Ruby"]
+  puts words.map(urlencoding.encode)

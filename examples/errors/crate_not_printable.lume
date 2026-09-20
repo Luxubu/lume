@@ -1,0 +1,6 @@
+import rust.regex = "1"
+
+def main:
+  re = regex.Regex.new("a")!
+  m = re.find("a")!
+  puts m

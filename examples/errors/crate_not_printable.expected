@@ -1,0 +1,6 @@
+error: `regex.Match` values cannot be printed: the crate gives them no text form
+  --> examples/errors/crate_not_printable.lume:6:8
+  |
+6 |   puts m
+  |        ^
+  help: print one of its parts instead: .as_str

@@ -1,0 +1,6 @@
+error: `regex.Match` borrows from something else, so it cannot be kept in a field
+  --> examples/errors/crate_borrowed_field.lume:4:3
+  |
+4 |   m: regex.Match
+  |   ^
+  help: keep what it points at instead (a `Str`, a list) and rebuild it when needed

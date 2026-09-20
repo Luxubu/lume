@@ -1,0 +1,6 @@
+error: `regex.Regex` has no method `is_matching`
+  --> examples/errors/crate_no_method.lume:5:10
+  |
+5 |   puts re.is_matching("a")
+  |          ^
+  help: `lume crate <file> regex` lists what the crate offers

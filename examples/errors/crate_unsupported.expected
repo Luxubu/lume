@@ -1,0 +1,6 @@
+error: `regex.RegexSet.new` cannot be called from Lume yet: it is generic over `S`
+  --> examples/errors/crate_unsupported.lume:4:22
+  |
+4 |   puts regex.RegexSet.new(["a", "b"])
+  |                      ^
+  help: call it from a `rust:` block, which can use any Rust

@@ -1,0 +1,5 @@
+import rust.regex = "1"
+
+def main:
+  re = regex.Regex.new("a")!
+  puts re.is_matching("a")

@@ -8,6 +8,7 @@
 //!   lume fmt   <file.lume> [--check|--stdout]  rewrite in the canonical layout
 
 mod ast;
+mod bridge;
 mod codegen;
 mod error;
 mod fmt;
@@ -49,6 +50,37 @@ fn rustc_failed_banner(has_rust_blocks: bool, file: &Path, tool: &str, err: &str
 /// the entry file's items.
 fn compile_to_rust(path: &Path, test_mode: bool) -> Result<Compiled, String> {
     let modules = loader::load(path)?;
+    // Crate imports: the cargo project must exist first, so rustdoc can
+    // describe each crate's signatures to the compiler.
+    let mut crate_imports: Vec<(String, String, String)> = Vec::new(); // (crate, version, alias)
+    let mut any_async = false;
+    for m in &modules {
+        for item in &m.items {
+            if let ast::Item::Import(imp) = item {
+                if imp.is_rust {
+                    let alias = imp.alias.clone().unwrap_or_else(|| imp.krate().to_string());
+                    crate_imports.push((imp.krate().to_string(), imp.version.clone().unwrap_or_else(|| "*".into()), alias));
+                }
+            }
+        }
+        any_async |= m.src.contains("async ") || m.src.contains("spawn:") || m.src.contains("await ");
+    }
+    let mut crate_infos: std::collections::HashMap<(String, String), bridge::CrateInfo> = std::collections::HashMap::new();
+    if !crate_imports.is_empty() {
+        let mut pre_deps: Vec<(String, String)> = crate_imports.iter().map(|(k, v, _)| (k.clone(), v.clone())).collect();
+        pre_deps.dedup();
+        if any_async {
+            pre_deps.push(tokio_dep());
+        }
+        let proj = write_cargo_project(path, &pre_deps)?;
+        for (k, _, alias) in &crate_imports {
+            let key = (k.clone(), alias.clone());
+            if !crate_infos.contains_key(&key) {
+                let info = bridge::load_crate(&proj, k, alias)?;
+                crate_infos.insert(key, info);
+            }
+        }
+    }
     let mut exports: std::collections::HashMap<String, codegen::Exports> = std::collections::HashMap::new();
     let mut rust = String::new();
     let mut deps: Vec<(String, String)> = Vec::new();
@@ -57,7 +89,7 @@ fn compile_to_rust(path: &Path, test_mode: bool) -> Result<Compiled, String> {
     for (i, m) in modules.iter().enumerate() {
         let is_entry = i + 1 == n;
         let file = m.path.display().to_string();
-        let dep_list: Vec<codegen::Dep> = m
+        let mut dep_list: Vec<codegen::Dep> = m
             .imports
             .iter()
             .map(|r| match r {
@@ -65,6 +97,21 @@ fn compile_to_rust(path: &Path, test_mode: bool) -> Result<Compiled, String> {
                 loader::Resolved::Single { local, id, item, line, col } => codegen::Dep::Single { local: local.clone(), id: id.clone(), item: item.clone(), exports: &exports[id], line: *line, col: *col },
             })
             .collect();
+        for item in &m.items {
+            if let ast::Item::Import(imp) = item {
+                if imp.is_rust {
+                    let alias = imp.alias.clone().unwrap_or_else(|| imp.krate().to_string());
+                    if let Some(info) = crate_infos.get(&(imp.krate().to_string(), alias.clone())) {
+                        dep_list.push(codegen::Dep::Rust { alias, info });
+                    }
+                }
+            }
+        }
+        if is_entry {
+            for info in crate_infos.values() {
+                dep_list.push(codegen::Dep::RustTypes { info });
+            }
+        }
         let rust_mod = if is_entry { None } else { Some(m.rust_mod()) };
         let (out, ex) = codegen::generate_module(&m.items, rust_mod.as_deref(), &dep_list, test_mode, &m.src).map_err(|e| e.render(&file, &m.src))?;
         for w in out.warnings {
@@ -164,9 +211,21 @@ fn main() {{
     )
 }
 
-/// Builds through cargo when the program imports Rust crates.
-fn build_with_cargo(stem: &str, build_dir: &Path, rust: &str, deps: &[(String, String)], bin: &Path, has_rust_blocks: bool) -> Result<(), String> {
-    let proj = build_dir.join(format!("cargo-{}", stem));
+fn tokio_dep() -> (String, String) {
+    ("tokio".to_string(), "{ version = \"1\", features = [\"rt-multi-thread\", \"macros\", \"time\", \"sync\"] }".to_string())
+}
+
+/// The cargo project for a program: `.lume/cargo-<stem>/` next to it.
+fn cargo_project_dir(path: &Path) -> (String, PathBuf) {
+    let stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or("out".into());
+    let dir = path.parent().map(|p| p.to_path_buf()).unwrap_or_else(|| PathBuf::from("."));
+    (stem.clone(), dir.join(".lume").join(format!("cargo-{}", stem)))
+}
+
+/// Writes the project's Cargo.toml (only when it changed, so cached crate
+/// signatures stay valid) and makes sure a main.rs exists.
+fn write_cargo_project(path: &Path, deps: &[(String, String)]) -> Result<PathBuf, String> {
+    let (stem, proj) = cargo_project_dir(path);
     let src_dir = proj.join("src");
     fs::create_dir_all(&src_dir).map_err(|e| format!("error: cannot create `{}`: {}", src_dir.display(), e))?;
     let pkg = stem.replace(|c: char| !c.is_alphanumeric() && c != '_', "_");
@@ -180,7 +239,23 @@ fn build_with_cargo(stem: &str, build_dir: &Path, rust: &str, deps: &[(String, S
         }
     }
     toml.push_str("\n[profile.release]\nopt-level = 3\ndebug = false\n");
-    fs::write(proj.join("Cargo.toml"), toml).map_err(|e| format!("error: cannot write Cargo.toml: {}", e))?;
+    let toml_path = proj.join("Cargo.toml");
+    if fs::read_to_string(&toml_path).ok().as_deref() != Some(toml.as_str()) {
+        fs::write(&toml_path, toml).map_err(|e| format!("error: cannot write Cargo.toml: {}", e))?;
+    }
+    let main_rs = src_dir.join("main.rs");
+    if !main_rs.exists() {
+        fs::write(&main_rs, "fn main() {}\n").map_err(|e| format!("error: cannot write main.rs: {}", e))?;
+    }
+    Ok(proj)
+}
+
+/// Builds through cargo when the program imports Rust crates or uses async.
+fn build_with_cargo(path: &Path, rust: &str, deps: &[(String, String)], bin: &Path, has_rust_blocks: bool) -> Result<(), String> {
+    let (stem, _) = cargo_project_dir(path);
+    let proj = write_cargo_project(path, deps)?;
+    let src_dir = proj.join("src");
+    let pkg = stem.replace(|c: char| !c.is_alphanumeric() && c != '_', "_");
     fs::write(src_dir.join("main.rs"), rust).map_err(|e| format!("error: cannot write main.rs: {}", e))?;
     let out = Command::new("cargo")
         .args(["build", "--release", "-q"])
@@ -215,7 +290,7 @@ fn build(path: &Path, out: Option<PathBuf>, quiet: bool, test_mode: bool) -> Res
     fs::write(&rs_path, &rust).map_err(|e| format!("error: cannot write `{}`: {}", rs_path.display(), e))?;
     let bin = out.unwrap_or_else(|| build_dir.join(&stem));
     if !compiled.deps.is_empty() {
-        build_with_cargo(&stem, &build_dir, &rust, &compiled.deps, &bin, compiled.has_rust_blocks)?;
+        build_with_cargo(path, &rust, &compiled.deps, &bin, compiled.has_rust_blocks)?;
         if !quiet {
             eprintln!("compiled {} -> {} in {:.2}s (cargo, {} crate{})", path.display(), bin.display(), t0.elapsed().as_secs_f64(), compiled.deps.len(), if compiled.deps.len() == 1 { "" } else { "s" });
         }
@@ -347,6 +422,50 @@ fn main() {
                         }
                         eprintln!("formatted {}", file.display());
                     }
+                }
+            }
+        }
+        // `lume crate <file.lume> <crate>`: what Lume can call in a crate the file imports
+        "crate" => {
+            let krate = match args.get(2) {
+                Some(k) => k.clone(),
+                None => usage(),
+            };
+            // make sure the project (and so the crate) exists, then describe it
+            let modules = match loader::load(&file) {
+                Ok(m) => m,
+                Err(e) => {
+                    eprint!("{}", e);
+                    process::exit(1);
+                }
+            };
+            let mut deps: Vec<(String, String)> = Vec::new();
+            for m in &modules {
+                for item in &m.items {
+                    if let ast::Item::Import(imp) = item {
+                        if imp.is_rust {
+                            deps.push((imp.krate().to_string(), imp.version.clone().unwrap_or_else(|| "*".into())));
+                        }
+                    }
+                }
+            }
+            if !deps.iter().any(|(k, _)| *k == krate) {
+                eprintln!("error: `{}` does not import crate `{}`", file.display(), krate);
+                eprintln!("  help: add `import rust.{} = \"<version>\"` to the file first", krate);
+                process::exit(1);
+            }
+            let proj = match write_cargo_project(&file, &deps) {
+                Ok(p) => p,
+                Err(e) => {
+                    eprint!("{}", e);
+                    process::exit(1);
+                }
+            };
+            match bridge::load_crate(&proj, &krate, &krate) {
+                Ok(info) => print!("{}", info.describe(&krate)),
+                Err(e) => {
+                    eprint!("{}", e);
+                    process::exit(1);
                 }
             }
         }

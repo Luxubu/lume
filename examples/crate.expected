@@ -1,7 +1,39 @@
+warning: `!` stops the program if the value is missing or an error
+  --> examples/crate.lume:20:58
+   |
+20 |   re = regex.Regex.new("^[^@\\s]+@[^@\\s]+\\.[a-z]{2,}$")!
+   |                                                          ^
+  help: fine in tests and quick scripts; elsewhere use `match`, `?` or `.or(default)`
+warning: `!` stops the program if the value is missing or an error
+  --> examples/crate.lume:24:39
+   |
+24 |   words = regex.Regex.new("[A-Za-z]+")!
+   |                                       ^
+  help: fine in tests and quick scripts; elsewhere use `match`, `?` or `.or(default)`
+warning: `!` stops the program if the value is missing or an error
+  --> examples/crate.lume:39:37
+   |
+39 |     Some(c) -> puts "year #{c.get(1)!.as_str}, month #{c.get(2)!.as_str}"
+   |                                     ^
+  help: fine in tests and quick scripts; elsewhere use `match`, `?` or `.or(default)`
+warning: `!` stops the program if the value is missing or an error
+  --> examples/crate.lume:39:64
+   |
+39 |     Some(c) -> puts "year #{c.get(1)!.as_str}, month #{c.get(2)!.as_str}"
+   |                                                                ^
+  help: fine in tests and quick scripts; elsewhere use `match`, `?` or `.or(default)`
 ana@x.com: true
 not an email: false
 bo@site.org: true
-[66, 3, 1024]
-0
+true
+year 2026, month 09
+  8..18: 2026-09-19
+  24..34: 2027-01-02
+[2026-09-19, 2027-01-02]
+shipped <date>, due <date>
+a\.b\*c
+hello
+none
+digits: 3
+true
 4
-2

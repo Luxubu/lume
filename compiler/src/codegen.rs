@@ -313,6 +313,18 @@ pub enum Dep<'a> {
     Module { alias: String, id: String, exports: &'a Exports, line: usize, col: usize },
     /// `import users.model.User [as U]`: one public item under a local name
     Single { local: String, id: String, item: String, exports: &'a Exports, line: usize, col: usize },
+    /// `import rust.regex [as re]`: a crate's public surface under an alias
+    Rust { alias: String, info: &'a crate::bridge::CrateInfo },
+    /// A crate some other module imports: its types only, so the entry file
+    /// can emit the printing glue once for the whole program.
+    RustTypes { info: &'a crate::bridge::CrateInfo },
+}
+
+/// What a dotted path such as `regex.Regex.new` names in a crate.
+enum ForeignRef<'a> {
+    Fn(&'a crate::bridge::ForeignFn),
+    Assoc(String, &'a crate::bridge::ForeignFn),
+    Type(String),
 }
 
 pub struct Output {
@@ -382,6 +394,10 @@ pub struct Gen {
     spawn_captured: HashSet<String>,
     /// While set, a `shared var` name means the handle, not the value inside.
     want_handle: bool,
+    /// `import rust.<crate>` namespaces, by alias.
+    crates: HashMap<String, crate::bridge::Namespace>,
+    /// Opaque crate types, by Lume key (`regex.Regex`).
+    foreign_types: HashMap<String, crate::bridge::ForeignType>,
 }
 
 
@@ -425,6 +441,8 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, deps: &[Dep], t
         uses_async: false,
         spawn_captured: HashSet::new(),
         want_handle: false,
+        crates: HashMap::new(),
+        foreign_types: HashMap::new(),
     };
     // The built-in Error type: a struct with one field, defined in the prelude.
     g.structs.insert("Error".into(), StructInfo { fields: vec![("message".into(), Type::Str)], methods: HashMap::new() });
@@ -567,6 +585,10 @@ impl Gen {
     fn rt(&self, t: &Type) -> String {
         match t {
             Type::Named(_) if self.is_interface(t) => format!("Box<dyn {}>", self.path_of(match t { Type::Named(n) => n, _ => unreachable!() })),
+            Type::Named(n) if self.foreign_types.contains_key(n) => {
+                let ft = &self.foreign_types[n];
+                if ft.lifetimes == 0 { ft.rust_path.clone() } else { format!("{}<{}>", ft.rust_path, vec!["'_"; ft.lifetimes].join(", ")) }
+            }
             Type::Named(n) => self.path_of(n),
             Type::List(inner) => format!("Vec<{}>", self.rt(inner)),
             Type::Option(inner) => format!("Option<{}>", self.rt(inner)),
@@ -698,7 +720,180 @@ impl Gen {
     }
 
     fn is_type(&self, name: &str) -> bool {
-        self.structs.contains_key(name) || self.enums.contains_key(name) || self.interfaces.contains_key(name)
+        self.structs.contains_key(name) || self.enums.contains_key(name) || self.interfaces.contains_key(name) || self.foreign_types.contains_key(name)
+    }
+
+    fn foreign_type(&self, t: &Type) -> Option<&crate::bridge::ForeignType> {
+        match t {
+            Type::Named(n) => self.foreign_types.get(n),
+            _ => None,
+        }
+    }
+
+    /// Resolves `alias.path.to.item` through a crate's namespaces. `e` is
+    /// the whole chain (the call's receiver, or the call itself when its
+    /// last segment is a function).
+    fn foreign_ref(&self, e: &Expr) -> Option<ForeignRef<'_>> {
+        // collect segments from the root outwards
+        let mut segs: Vec<&str> = Vec::new();
+        let mut cur = e;
+        loop {
+            match &cur.kind {
+                ExprKind::Method { recv, name, args } if args.is_empty() || std::ptr::eq(cur, e) => {
+                    segs.push(name);
+                    cur = recv;
+                }
+                ExprKind::Ident(n) => {
+                    segs.push(n);
+                    break;
+                }
+                _ => return None,
+            }
+        }
+        segs.reverse();
+        let alias = segs[0];
+        if self.lookup(alias).is_some() || self.field_type(alias).is_some() {
+            return None;
+        }
+        let mut ns = self.crates.get(alias)?;
+        let mut prefix = alias.to_string();
+        let mut i = 1;
+        while i < segs.len() {
+            let seg = segs[i];
+            let last = i + 1 == segs.len();
+            if let Some(sub) = ns.modules.get(seg) {
+                ns = sub;
+                prefix = format!("{}.{}", prefix, seg);
+                i += 1;
+                continue;
+            }
+            if let Some(f) = ns.fns.get(seg) {
+                return if last { Some(ForeignRef::Fn(f)) } else { None };
+            }
+            if let Some(key) = ns.types.get(seg) {
+                if last {
+                    return Some(ForeignRef::Type(key.clone()));
+                }
+                let ft = self.foreign_types.get(key)?;
+                let f = ft.assoc.get(segs[i + 1])?;
+                return if i + 2 == segs.len() { Some(ForeignRef::Assoc(key.clone(), f)) } else { None };
+            }
+            return None;
+        }
+        None
+    }
+
+    /// A crate type can be printed only when the crate says how (`Display`).
+    fn check_printable(&mut self, e: &Expr) -> Result<()> {
+        let t = self.ty_of(e).materialized();
+        let inner = match &t {
+            Type::List(i) | Type::Option(i) => (**i).clone(),
+            other => other.clone(),
+        };
+        if let Some(ft) = self.foreign_type(&inner) {
+            if !ft.display && ft.iter_item.is_none() {
+                let key = match &inner { Type::Named(n) => n.clone(), _ => String::new() };
+                let mut err = LumeError::new(e.line, e.col, format!("`{}` values cannot be printed: the crate gives them no text form", key));
+                let names: Vec<&String> = ft.methods.iter().filter(|(_, f)| f.ret == Type::Str && f.params.is_empty()).map(|(n, _)| n).collect();
+                if !names.is_empty() {
+                    err = err.with_help(format!("print one of its parts instead: {}", names.iter().map(|n| format!(".{}", n)).collect::<Vec<_>>().join(", ")));
+                }
+                return Err(err);
+            }
+        }
+        Ok(())
+    }
+
+    /// Is `e` a dotted crate path whose root is a crate alias? (for messages)
+    fn foreign_root(&self, e: &Expr) -> Option<String> {
+        let mut cur = e;
+        loop {
+            match &cur.kind {
+                ExprKind::Method { recv, .. } => cur = recv,
+                ExprKind::Ident(n) if self.crates.contains_key(n) && self.lookup(n).is_none() => return Some(n.clone()),
+                _ => return None,
+            }
+        }
+    }
+
+    /// One argument for a crate function, converted the way its parameter wants.
+    fn foreign_arg(&mut self, a: &Expr, p: &crate::bridge::ForeignParam, callee: &str) -> Result<String> {
+        use crate::bridge::Pass;
+        let at = self.ty_of(a).materialized();
+        if at != Type::Unknown && p.ty != Type::Unknown && !types_compatible(&at, &p.ty) {
+            return Err(LumeError::new(a.line, a.col, format!("`{}` takes `{}: {}`, but this is a `{}`", callee, p.name, type_name(&p.ty), type_name(&at))));
+        }
+        Ok(match &p.pass {
+            Pass::Borrow => {
+                if let Type::Iter(elem, by_ref) = self.ty_of(a) {
+                    let s = self.expr(a)?;
+                    let c = self.collect_iter_t(&s, by_ref, &elem);
+                    format!("&{}", c)
+                } else {
+                    let s = self.expr(a)?;
+                    if self.is_borrowed_ident(a) { format!("&*{}", s) } else { format!("&{}", s) }
+                }
+            }
+            Pass::Owned => self.expr_owned(a)?,
+            Pass::IntCast(w) => format!("(({}) as {})", self.expr_val(a)?, w),
+            Pass::F32 => format!("(({}) as f32)", self.expr_val(a)?),
+            Pass::Option(inner) => {
+                let v = self.expr_owned(a)?;
+                match &**inner {
+                    Pass::IntCast(w) => format!("({}).map(|lume_x| lume_x as {})", v, w),
+                    Pass::F32 => format!("({}).map(|lume_x| lume_x as f32)", v),
+                    _ => v,
+                }
+            }
+            Pass::MutBorrow => self.expr_var_arg(a, &p.name, callee)?,
+        })
+    }
+
+    /// Emits a call to a crate function or associated function.
+    fn foreign_call(&mut self, f: &crate::bridge::ForeignFn, display: &str, args: &[Arg], e: &Expr) -> Result<String> {
+        if let Some(why) = &f.unsupported {
+            return Err(LumeError::new(e.line, e.col, format!("`{}` cannot be called from Lume yet: {}", display, why))
+                .with_help("call it from a `rust:` block, which can use any Rust"));
+        }
+        let params: Vec<(String, Type)> = f.params.iter().map(|p| (p.name.clone(), p.ty.clone())).collect();
+        let bound = self.bind_args(&format!("`{}`", display), &params, args, e.line, e.col)?;
+        let mut parts = Vec::new();
+        for (a, p) in bound.iter().zip(&f.params) {
+            parts.push(self.foreign_arg(a, p, display)?);
+        }
+        Ok(f.ret_conv.apply(&format!("{}({})", f.rust_path, parts.join(", "))))
+    }
+
+    /// Emits a method call on a value of a crate type.
+    fn foreign_method(&mut self, recv: &Expr, key: &str, name: &str, args: &[Arg], e: &Expr) -> Result<String> {
+        let ft = self.foreign_types[key].clone();
+        let f = match ft.methods.get(name) {
+            Some(f) => f.clone(),
+            None => {
+                let err = LumeError::new(e.line, e.col, format!("`{}` has no method `{}`", key, name));
+                let names = ft.methods.keys().cloned();
+                return Err(match self.suggest_from(name, names) {
+                    Some(sug) => err.with_help(format!("did you mean `{}`?", sug)),
+                    None => err.with_help(format!("`lume crate <file> {}` lists what the crate offers", key.split('.').next().unwrap_or(key))),
+                });
+            }
+        };
+        let display = format!("{}.{}", key, name);
+        if let Some(why) = &f.unsupported {
+            return Err(LumeError::new(e.line, e.col, format!("`{}` cannot be called from Lume yet: {}", display, why))
+                .with_help("call it from a `rust:` block, which can use any Rust"));
+        }
+        if f.self_kind == Some(SelfKind::Mutate) {
+            self.check_receiver_mutable(recv, name, e.line, e.col)?;
+        }
+        let params: Vec<(String, Type)> = f.params.iter().map(|p| (p.name.clone(), p.ty.clone())).collect();
+        let bound = self.bind_args(&format!("`{}`", display), &params, args, e.line, e.col)?;
+        let mut parts = Vec::new();
+        for (a, p) in bound.iter().zip(&f.params) {
+            parts.push(self.foreign_arg(a, p, &display)?);
+        }
+        let r = self.expr(recv)?;
+        Ok(f.ret_conv.apply(&format!("({}).{}({})", r, name, parts.join(", "))))
     }
 
     fn is_interface(&self, t: &Type) -> bool {
@@ -916,6 +1111,17 @@ impl Gen {
     fn register_deps(&mut self, deps: &[Dep]) -> Result<()> {
         for d in deps {
             match d {
+                Dep::Rust { alias, info } => {
+                    self.crates.insert(alias.clone(), info.root.clone());
+                    for (k, v) in &info.types {
+                        self.foreign_types.insert(k.clone(), v.clone());
+                    }
+                }
+                Dep::RustTypes { info } => {
+                    for (k, v) in &info.types {
+                        self.foreign_types.entry(k.clone()).or_insert_with(|| v.clone());
+                    }
+                }
                 Dep::Module { alias, id, exports, line, col } => {
                     if self.module_aliases.contains_key(alias) {
                         return Err(LumeError::new(*line, *col, format!("`{}` is imported twice", alias)));
@@ -1249,6 +1455,20 @@ impl Gen {
             self.out.push('\n');
         }
         self.emit_conformances(program)?;
+        if self.is_entry {
+            // printing for crate types that implement Display, once per program
+            let mut seen = HashSet::new();
+            let mut fts: Vec<&crate::bridge::ForeignType> = self.foreign_types.values().filter(|ft| ft.display && ft.iter_item.is_none()).collect();
+            fts.sort_by(|a, b| a.rust_path.cmp(&b.rust_path));
+            for ft in fts {
+                if !seen.insert(ft.rust_path.clone()) {
+                    continue;
+                }
+                let lts: Vec<String> = (0..ft.lifetimes).map(|i| format!("'l{}", i)).collect();
+                let (gen, args) = if lts.is_empty() { (String::new(), String::new()) } else { (format!("<{}>", lts.join(", ")), format!("<{}>", lts.join(", "))) };
+                self.out.push_str(&format!("impl{} LumeShow for {}{} {{ fn lume_str(&self) -> String {{ self.to_string() }} }}\n", gen, ft.rust_path, args));
+            }
+        }
         if self.is_entry && !self.test_mode && !self.fns.contains_key("main") {
             return Err(LumeError::new(1, 1, "no `main` function").with_help("a program starts at `def main:`"));
         }
@@ -1508,12 +1728,16 @@ impl Gen {
         if !BLOCK_METHODS.contains(&name.as_str()) || args.len() != 1 || args[0].name.is_some() {
             return None;
         }
-        let fname = match &args[0].value.kind {
-            ExprKind::Ident(n) if self.lookup(n).is_none() && self.fns.contains_key(n) => n.clone(),
+        let (l, c) = (args[0].value.line, args[0].value.col);
+        let it = Arg { name: None, value: Expr::new(ExprKind::Ident("_".into()), l, c) };
+        let call = match &args[0].value.kind {
+            ExprKind::Ident(n) if self.lookup(n).is_none() && self.fns.contains_key(n) => Expr::new(ExprKind::Call { name: n.clone(), args: vec![it] }, l, c),
+            // a crate function named by its path: `xs.map(urlencoding.encode)`
+            ExprKind::Method { recv: fr, name: fname, args: fargs } if fargs.is_empty() && matches!(self.foreign_ref(&args[0].value), Some(ForeignRef::Fn(_)) | Some(ForeignRef::Assoc(..))) => {
+                Expr::new(ExprKind::Method { recv: fr.clone(), name: fname.clone(), args: vec![it] }, l, c)
+            }
             _ => return None,
         };
-        let (l, c) = (args[0].value.line, args[0].value.col);
-        let call = Expr::new(ExprKind::Call { name: fname, args: vec![Arg { name: None, value: Expr::new(ExprKind::Ident("_".into()), l, c) }] }, l, c);
         let lam = Expr::new(ExprKind::Lambda { params: vec!["_".into()], body: Block { stmts: vec![Stmt::Expr(call)] } }, l, c);
         Some(Expr::new(ExprKind::Method { recv: recv.clone(), name: name.clone(), args: vec![Arg { name: None, value: lam }] }, e.line, e.col))
     }
@@ -1655,11 +1879,20 @@ impl Gen {
                         }
                     }
                 }
+                if let Some(fr) = self.foreign_ref(e) {
+                    return match fr {
+                        ForeignRef::Fn(f) | ForeignRef::Assoc(_, f) => f.ret.clone(),
+                        ForeignRef::Type(_) => Type::Unknown,
+                    };
+                }
                 let rt = match self.ty_of(recv) {
                     // a shared value behaves as the value it holds
                     Type::Shared(inner, _) => *inner,
                     other => other,
                 };
+                if let Some(ft) = self.foreign_type(&rt) {
+                    return ft.methods.get(name).map(|f| f.ret.clone()).unwrap_or(Type::Unknown);
+                }
                 if let Some(Arg { value: lam, .. }) = args.last() {
                     if let ExprKind::Lambda { params, body } = &lam.kind {
                         let init = if args.len() > 1 { Some(self.ty_of(&args[0].value)) } else { None };
@@ -2231,7 +2464,24 @@ impl Gen {
 
     fn struct_def(&mut self, s: &StructDef) -> Result<()> {
         let shared_fields: Vec<&Param> = s.fields.iter().filter(|f| matches!(self.ct(&f.ty), Type::Shared(_, true))).collect();
-        let manual_eq = !shared_fields.is_empty() && !s.methods.iter().any(|m| m.name == "==");
+        // a crate type in a field: it must be storable (Clone, no borrowed lifetime)
+        let mut foreign_no_eq = false;
+        for f in &s.fields {
+            if let Some(ft) = self.foreign_type(&self.ct(&f.ty)).cloned() {
+                if ft.lifetimes > 0 || ft.iter_item.is_some() {
+                    return Err(LumeError::new(f.line, f.col, format!("`{}` borrows from something else, so it cannot be kept in a field", type_name(&f.ty)))
+                        .with_help("keep what it points at instead (a `Str`, a list) and rebuild it when needed"));
+                }
+                if !ft.clone {
+                    return Err(LumeError::new(f.line, f.col, format!("`{}` cannot be copied, so it cannot be a struct field", type_name(&f.ty)))
+                        .with_help("Lume structs are copied when stored or returned; keep this value in a local instead"));
+                }
+                if !ft.partial_eq {
+                    foreign_no_eq = true;
+                }
+            }
+        }
+        let manual_eq = (!shared_fields.is_empty() || foreign_no_eq) && !s.methods.iter().any(|m| m.name == "==");
         if manual_eq {
             self.line("#[derive(Debug, Clone)]");
         } else {
@@ -2261,6 +2511,9 @@ impl Gen {
                     let n = rust_name(&f.name);
                     if matches!(self.ct(&f.ty), Type::Shared(_, true)) {
                         format!("(std::sync::Arc::ptr_eq(&self.{n}, &o.{n}) || *self.{n}.lock().unwrap() == *o.{n}.lock().unwrap())", n = n)
+                    } else if self.foreign_type(&self.ct(&f.ty)).map(|ft| !ft.partial_eq).unwrap_or(false) {
+                        // a crate type without `==`: it does not take part in the comparison
+                        "true".to_string()
                     } else {
                         format!("self.{n} == o.{n}", n = n)
                     }
@@ -2509,6 +2762,14 @@ impl Gen {
         if self.is_interface(&ret) {
             let et = self.ty_of(e).materialized();
             return self.coerce(text, &et, &ret, e.line, e.col);
+        }
+        // a bare value where a `T?` is returned is `Some(value)`
+        if let Type::Option(inner) = &ret {
+            let et = self.ty_of(e).materialized();
+            if !matches!(et, Type::Option(_)) && et != Type::Unknown && !matches!(e.kind, ExprKind::None) && (et == **inner || **inner == Type::Unknown) {
+                return Ok(format!("Some({})", text));
+            }
+            return Ok(text);
         }
         let (ok_t, err_t) = match &ret {
             Type::Result(t, e) => ((**t).clone(), (**e).clone()),
@@ -4015,6 +4276,7 @@ impl Gen {
                         match p {
                             StrPiece::Lit(s) => fmt.push_str(&escape_rust_str(s, true)),
                             StrPiece::Expr(x) => {
+                                self.check_printable(x)?;
                                 fmt.push_str("{}");
                                 args.push(format!("({}).lume_str()", self.expr_val(x)?));
                             }
@@ -4345,6 +4607,30 @@ impl Gen {
                 if let Some(ne) = self.module_ref(e)? {
                     return self.expr(&ne);
                 }
+                if let Some(fr) = self.foreign_ref(e) {
+                    return match fr {
+                        ForeignRef::Fn(f) => {
+                            let f = f.clone();
+                            let display = foreign_display(e);
+                            self.foreign_call(&f, &display, args, e)
+                        }
+                        ForeignRef::Assoc(_, f) => {
+                            let f = f.clone();
+                            let display = foreign_display(e);
+                            self.foreign_call(&f, &display, args, e)
+                        }
+                        ForeignRef::Type(key) => Err(LumeError::new(e.line, e.col, format!("`{}` is a type from the crate; call one of its functions, like `{}.new(...)`", key, key))),
+                    };
+                }
+                if let Some(root) = self.foreign_root(e) {
+                    if self.foreign_ref(recv).is_none() && matches!(recv.kind, ExprKind::Ident(_) | ExprKind::Method { .. }) && self.ty_of(recv) == Type::Unknown {
+                        let err = LumeError::new(e.line, e.col, format!("crate `{}` has no `{}`", root, foreign_display(e).trim_start_matches(&format!("{}.", root))));
+                        return Err(err.with_help(format!("`lume crate <file> {}` lists what the crate offers", root)));
+                    }
+                }
+                if let Some(ft_key) = match self.ty_of(recv).materialized() { Type::Named(n) if self.foreign_types.contains_key(&n) => Some(n), _ => None } {
+                    return self.foreign_method(recv, &ft_key, name, args, e);
+                }
                 if let Some((root, inner, mutable)) = self.shared_root_ex(recv) {
                     if mutable {
                         return self.shared_access(e, root, inner, Some(args));
@@ -4563,6 +4849,7 @@ impl Gen {
             }
             ExprKind::Match { scrutinee, arms } => self.match_expr(scrutinee, arms, true, e)?,
             ExprKind::Puts(arg) => {
+                self.check_printable(arg)?;
                 let a = self.expr_val(arg)?;
                 format!("println!(\"{{}}\", ({}).lume_str())", a)
             }
@@ -4991,4 +5278,35 @@ fn op_method_name(op: &str) -> Option<&'static str> {
 
 fn parser_pos(s: &Stmt) -> (usize, usize) {
     crate::parser::stmt_pos(s)
+}
+
+/// `regex.Regex.new` as written, for messages.
+fn foreign_display(e: &Expr) -> String {
+    let mut segs: Vec<String> = Vec::new();
+    let mut cur = e;
+    loop {
+        match &cur.kind {
+            ExprKind::Method { recv, name, .. } => {
+                segs.push(name.clone());
+                cur = recv;
+            }
+            ExprKind::Ident(n) => {
+                segs.push(n.clone());
+                break;
+            }
+            _ => break,
+        }
+    }
+    segs.reverse();
+    segs.join(".")
+}
+
+/// Can a Lume value of type `have` be passed where `want` is expected?
+fn types_compatible(have: &Type, want: &Type) -> bool {
+    match (have, want) {
+        (_, Type::Unknown) | (Type::Unknown, _) => true,
+        (Type::List(a), Type::List(b)) | (Type::Option(a), Type::Option(b)) => types_compatible(a, b),
+        (Type::Iter(a, _), Type::List(b)) => types_compatible(a, b),
+        (a, b) => a == b,
+    }
 }

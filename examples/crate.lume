@@ -1,26 +1,52 @@
-# The Rust bridge. `import rust.<crate>` adds a cargo dependency, and a
-# `rust:` block inside a Lume function is Rust code with the function's
-# parameters in scope. The declared return type is the Lume type of the
-# result; everything else in the file is ordinary Lume.
+# The Rust bridge. `import rust.<crate>` adds a cargo dependency and reads
+# the crate's signatures, so its functions and types are ordinary Lume:
+# no bindings to write. `lume crate examples/crate.lume regex` lists what
+# the crate offers, in Lume types. A `rust:` block stays available for the
+# corners the bridge does not cover yet.
 
 import rust.regex = "1"
 
-def is_email(s: Str) -> Bool:
-  rust:
-    regex::Regex::new(r"^[^@\s]+@[^@\s]+\.[a-z]{2,}$").unwrap().is_match(s)
+# A crate type in a signature and in a field: `regex.Regex`.
+struct Matcher:
+  name: Str
+  re: regex.Regex
 
-def digits(s: Str) -> [Str]:
-  rust:
-    let re = regex::Regex::new(r"\d+").unwrap();
-    re.find_iter(s).map(|m| m.as_str().to_string()).collect()
+  def hits(text: Str) -> Int = re.find_iter(text).to_list.len
+
+def compile(name: Str, pattern: Str) -> Matcher or Error:
+  Matcher(name, regex.Regex.new(pattern)?)     # regex's error becomes a Lume Error
+
+def is_email(s: Str) -> Bool:
+  re = regex.Regex.new("^[^@\\s]+@[^@\\s]+\\.[a-z]{2,}$")!
+  re.is_match(s)
+
+def first_word(text: Str) -> Str?:
+  words = regex.Regex.new("[A-Za-z]+")!
+  m = words.find(text)?                         # find gives regex.Match?
+  m.as_str
 
 def word_count(s: Str) -> Int:
-  rust("s.split_whitespace().count() as i64")
+  rust("s.split_whitespace().count() as i64")   # the escape hatch, still here
 
-def main:
+def main -> () or Error:
   for addr in ["ana@x.com", "not an email", "bo@site.org"]:
     puts "#{addr}: #{is_email(addr)}"
-  puts digits("order 66 shipped 3 items on day 1024")
-  puts digits("no numbers here").len
+
+  date = regex.Regex.new("(\\d{4})-(\\d{2})-(\\d{2})")?
+  text = "shipped 2026-09-19, due 2027-01-02"
+  puts date.is_match(text)
+  match date.captures(text):
+    Some(c) -> puts "year #{c.get(1)!.as_str}, month #{c.get(2)!.as_str}"
+    None    -> puts "no date"
+  for m in date.find_iter(text):                # a crate iterator is a lazy chain
+    puts "  #{m.start}..#{m.end}: #{m.as_str}"
+  puts date.find_iter(text).map(_.as_str).to_list
+  puts date.replace_all(text, "<date>")
+  puts regex.escape("a.b*c")
+  puts first_word("  hello world").or("none")
+  puts first_word("123").or("none")
+
+  digits = compile("digits", "\\d+")?
+  puts "#{digits.name}: #{digits.hits("1 22 333")}"
+  puts compile("broken", "(").error?
   puts word_count("the quick brown fox")
-  puts ["a@b.co", "nope", "c@d.io"].filter(is_email).len

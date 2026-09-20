@@ -1,0 +1,7 @@
+import rust.regex = "1"
+
+struct Hit:
+  m: regex.Match
+
+def main:
+  puts "x"

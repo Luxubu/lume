@@ -20,7 +20,7 @@ program takes about 1 s in Python and 1.4 s in Ruby.
 The language design lives in the [Lume Language Design](https://claude.ai/code/artifact/1872fe63-1816-4b1e-9983-dec2774382fb)
 document. This repository is the compiler and the examples.
 
-## Status: milestones 1–12 done
+## Status: milestones 1–13 done
 
 | # | Milestone | Status |
 | --- | --- | --- |
@@ -29,13 +29,14 @@ document. This repository is the compiler and the examples.
 | 3 | `_` shorthand, inline blocks, `do` blocks, `for ... where` | done |
 | 4 | `enum`, `match` with exhaustiveness errors, tuples, `T?` | done |
 | 5 | `T or E`, `Error`, `?` on Result, implicit `Ok`, `!`, `File`/`Env` | done |
-| 6 | `\|>`, `import rust.<crate>` + `rust:` blocks (signature mapping deferred) | done |
+| 6 | `\|>`, `import rust.<crate>` + `rust:` blocks | done |
 | 7 | Port the sample programs plus a graph program; settle the memory policy | done: Rust-faithful ownership, no ORC |
 | 8 | Stdlib speed: ordered hash map, entry updates, lazy `split`/`lines`, key liveness | done: 74 ms → 23 ms |
 | 9 | Lume modules: `import users.model`, `model.User`, `import a.b.Name`, `pub`, cycle detection | done |
 | 10 | `interface` with defaults, structural conformance, `extend T with I`, operator methods | done |
 | 11 | `test "name":` blocks, `assert`, `lume test`, `lume fmt` | done |
 | 12 | `async def`/`await`, `spawn:` tasks, `Task[T]`, `shared`/`shared var` | done: sample 3 runs on threads, 5 `shared` words in 97 lines |
+| 13 | Rust bridge phase 2: crate signatures from rustdoc JSON; `regex.Regex.new(p)` with no bindings | done |
 
 What works today: functions (`def` block and one-liner forms, return type
 inferred when omitted), `struct` with fields and methods (fields used bare
@@ -63,9 +64,16 @@ typed bindings (`var xs: [User] = []`), `def main -> () or Error`,
 `File.read`/`File.write`/`File.exists?`, `Env.args`/`Env.get`, the pipe
 (`x |> .method`, `x |> f(y)` is `f(x, y)`, `x |> puts`; lines starting with
 `|>` continue the expression), function names as blocks (`xs.map(parse)`),
-the Rust bridge (`import rust.regex = "1"` adds a cargo dependency; a `rust:`
-block inside a Lume function is Rust with the parameters in scope and the
-declared return type as its Lume type), Lume modules (`import users.model`
+the Rust bridge (`import rust.regex = "1"` adds a cargo dependency and reads
+the crate's signatures, so `regex.Regex.new(p)`, `re.find_iter(text)`,
+`hex.encode(s)` are typed Lume calls with nothing to declare: `&str`/`String`/
+`Cow<str>` are `Str`, integer widths are `Int`, `Option` is `T?`, `Result<T,
+E>` is `T or Error` with the crate's error shown as text, `Vec`/`&[T]` are
+`[T]`, a crate struct is an opaque type usable in signatures and fields, a
+crate iterator is a lazy chain, `T: AsRef<str>` parameters take a `Str`;
+`lume crate file.lume regex` lists what the crate offers in Lume types and
+says why the rest is not callable yet; a `rust:` block inside a Lume function
+is Rust with the parameters in scope, for those corners), Lume modules (`import users.model`
 loads `users/model.lume`; `model.User`, `model.parse(x)`, `model.Role.Guest(7)`
 in expressions, types and patterns; `import users.model.User` for one name;
 `as` to rename; only `pub` items cross a file boundary), interfaces
@@ -107,7 +115,9 @@ leaves a method out, an operator a type does not define, `sort` on a type
 without `<`, `await` outside `async def`, an `async def` called
 without `await`, a `var` changed inside a `spawn:` block (it is a copy), a
 mutating call on a read-only `shared`, a `spawn:` inside a method that uses
-`self`,
+`self`, a crate function or method that does not exist (or is not callable
+from Lume yet, with the reason), a wrong argument type for a crate call, a
+crate value with no text form printed, a borrowing crate type in a field,
 `name (` with a space (ambiguous call), bad indentation, tabs. Warnings:
 `return` inside a block.
 
@@ -179,12 +189,18 @@ lume emit  examples/fib.lume        # print the generated Rust
 lume check examples/fib.lume        # parse and check only (tests included)
 lume test  examples/tests/parse.lume  # build and run the file's `test` blocks
 lume fmt   examples/fib.lume        # rewrite in the canonical layout (--check, --stdout)
+lume crate examples/crate.lume regex  # what the crate offers, in Lume types
 ```
 
 Generated Rust and binaries go in a `.lume/` directory next to the source file.
 A program that imports a crate, or uses `async`, is built with cargo (first
 build fetches the crate — tokio for async, about 10 s; later builds are
-cached under `.lume/cargo-<name>/`).
+cached under `.lume/cargo-<name>/`). The first build of a program that
+imports a crate also reads the crate's signatures: `cargo rustdoc
+--output-format json` (about 4 s for regex, cached next to the project).
+rustdoc JSON is still unstable in rustdoc, so the compiler sets
+`RUSTC_BOOTSTRAP=1` for that one command; the program itself is built by
+the ordinary stable toolchain.
 
 ## Layout
 
@@ -196,10 +212,13 @@ compiler/src/codegen.rs  Rust emission plus name/mutability checks
 compiler/src/error.rs    error rendering (line, caret, help)
 compiler/src/loader.rs   resolves imports to files, orders modules, rejects cycles
 compiler/src/fmt.rs      lume fmt: prints the tree back out, with comments and blank lines
+compiler/src/bridge.rs   crate signatures: rustdoc JSON -> Lume types and conversions
 compiler/src/main.rs     the CLI
 examples/                programs that must keep compiling
 examples/port/           the design doc's sample programs and the graph program; app_async.lume is sample 3 on threads
 examples/async.lume      async/await, spawn, Task[T], shared var
+examples/crate.lume      regex through the bridge: types, iterators, errors, a rust: block
+examples/crates.lume     hex and urlencoding, with nothing written for them
 examples/modules/        a three-file program: app.lume imports users/model and users/store
 examples/interfaces.lume interfaces, extend, operator methods
 examples/tests/          files with `test` blocks; expected `lume test` output

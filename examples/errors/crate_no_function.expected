@@ -1,0 +1,6 @@
+error: crate `regex` has no `nope`
+  --> examples/errors/crate_no_function.lume:4:13
+  |
+4 |   puts regex.nope("x")
+  |             ^
+  help: `lume crate <file> regex` lists what the crate offers

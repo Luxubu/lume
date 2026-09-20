@@ -1,0 +1,4 @@
+import rust.regex = "1"
+
+def main:
+  puts regex.RegexSet.new(["a", "b"])
