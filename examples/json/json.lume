@@ -1,0 +1,342 @@
+# A JSON parser, printer and query tool, written to see what a real program
+# asks of Lume. Run it: `lume run examples/json/json.lume`.
+#
+# json.parse(text) -> Json or Error   a full RFC 8259 parser: strings with
+#                                     escapes and \u, numbers, nesting
+# json.show(j) / json.pretty(j)       compact and indented output
+# json.get(j, "users.0.name")         a path lookup giving a Json?
+# json.stats(j)                       counts and depth
+
+pub enum Json:
+  Null
+  Bool(b: Bool)
+  Num(n: Float)
+  Str(s: Str)
+  Arr(items: [Json])
+  Obj(pairs: [(Str, Json)])
+
+  def kind -> Str:
+    match self:
+      Null    -> "null"
+      Bool(_) -> "bool"
+      Num(_)  -> "number"
+      Str(_)  -> "string"
+      Arr(_)  -> "array"
+      Obj(_)  -> "object"
+
+# ---- parsing --------------------------------------------------------------
+
+# The parser walks the characters as a list: `s[i]` on a string counts from
+# the start each time, so a long document would be quadratic. `Char` is a
+# plain value, so `peek` costs nothing.
+struct Parser:
+  chars: [Char]
+  pos: Int
+
+  # the NUL character stands for the end of the text
+  def peek -> Char:
+    chars[pos].or("\u{0}")
+
+  def at_end -> Bool:
+    pos >= chars.len
+
+  def advance(var self):
+    pos += 1
+
+  def skip_space(var self):
+    while not at_end and peek.space?:
+      advance()
+
+  def fail(what: Str) -> Error:
+    Error("#{what} at position #{pos}")
+
+  def expect(var self, c: Str) -> () or Error:
+    skip_space()
+    if peek != c:
+      return fail("expected `#{c}`, found `#{peek}`")
+    advance()
+
+  def parse_value(var self) -> Json or Error:
+    skip_space()
+    if at_end:
+      return fail("unexpected end of input")
+    c = peek
+    match c:
+      "{"  -> parse_object()
+      "["  -> parse_array()
+      "\"" -> Str(parse_string()?)
+      "t"  -> parse_word("true", Bool(true))
+      "f"  -> parse_word("false", Bool(false))
+      "n"  -> parse_word("null", Null)
+      _ if c == "-" or c.digit? -> parse_number()
+      _    -> fail("unexpected character `#{c}`")
+
+  def parse_word(var self, word: Str, value: Json) -> Json or Error:
+    for expected in word.chars:
+      if peek != expected:
+        return fail("expected `#{word}`")
+      advance()
+    value
+
+  def parse_number(var self) -> Json or Error:
+    start = pos
+    advance() if peek == "-"
+    while not at_end and peek.digit?:
+      advance()
+    if peek == ".":
+      advance()
+      while not at_end and peek.digit?:
+        advance()
+    if peek == "e" or peek == "E":
+      advance()
+      advance() if peek == "+" or peek == "-"
+      while not at_end and peek.digit?:
+        advance()
+    text = chars[start...pos].join("")
+    match text.to_float:
+      Ok(n)    -> Num(n)
+      Error(_) -> fail("bad number `#{text}`")
+
+  def parse_string(var self) -> Str or Error:
+    expect("\"")?
+    var out = ""
+    while true:
+      if at_end:
+        return fail("unterminated string")
+      c = peek
+      advance()
+      match c:
+        "\"" -> break
+        "\\" ->
+          e = peek
+          advance()
+          out += match e:
+            "n"  -> "\n"
+            "t"  -> "\t"
+            "r"  -> "\r"
+            "b"  -> "\u{8}"
+            "f"  -> "\u{c}"
+            "/"  -> "/"
+            "\\" -> "\\"
+            "\"" -> "\""
+            "u"  -> parse_unicode()?.to_s
+            _    -> return fail("bad escape `\\#{e}`")
+        _ -> out += c
+    out
+
+  def parse_unicode(var self) -> Char or Error:
+    hex = chars[pos...pos + 4].join("")
+    if hex.len != 4:
+      return fail("short \\u escape")
+    pos += 4
+    var code = hex_value(hex)?
+    # a surrogate pair: \ud83d\ude00
+    if code >= 55296 and code <= 56319:
+      if chars[pos...pos + 2].join("") != "\\u":
+        return fail("lone surrogate")
+      pos += 2
+      low_hex = chars[pos...pos + 4].join("")
+      pos += 4
+      low = hex_value(low_hex)?
+      code = 65536 + (code - 55296) * 1024 + (low - 56320)
+    code.to_char.or_error("bad code point #{code}")
+
+  def parse_array(var self) -> Json or Error:
+    expect("[")?
+    var items: [Json] = []
+    skip_space()
+    if peek == "]":
+      advance()
+      return Arr(items)
+    while true:
+      items.push(parse_value()?)
+      skip_space()
+      match peek:
+        "," -> advance()
+        "]" ->
+          advance()
+          break
+        _ -> return fail("expected `,` or `]`")
+    Arr(items)
+
+  def parse_object(var self) -> Json or Error:
+    expect("{")?
+    var pairs: [(Str, Json)] = []
+    skip_space()
+    if peek == "}":
+      advance()
+      return Obj(pairs)
+    while true:
+      skip_space()
+      key = parse_string()?
+      expect(":")?
+      value = parse_value()?
+      pairs.push((key, value))
+      skip_space()
+      match peek:
+        "," -> advance()
+        "}" ->
+          advance()
+          break
+        _ -> return fail("expected `,` or `}`")
+    Obj(pairs)
+
+def hex_value(hex: Str) -> Int or Error:
+  var n = 0
+  for c in hex.downcase.chars:
+    d = "0123456789abcdef".index_of(c).or_error("bad hex digit `#{c}`")?
+    n = n * 16 + d
+  n
+
+pub def parse(text: Str) -> Json or Error:
+  var p = Parser(chars: text.chars, pos: 0)
+  value = p.parse_value()?
+  p.skip_space
+  if not p.at_end:
+    return p.fail("trailing characters")
+  value
+
+# ---- printing -------------------------------------------------------------
+
+def quote(s: Str) -> Str:
+  var out = "\""
+  for c in s.chars:
+    match c:
+      "\"" -> out += "\\\""
+      "\\" -> out += "\\\\"
+      "\n" -> out += "\\n"
+      "\t" -> out += "\\t"
+      "\r" -> out += "\\r"
+      _    -> out += c
+  out + "\""
+
+def show_num(n: Float) -> Str:
+  if n == n.floor and n.abs < 1e15:
+    n.to_int.to_s
+  else:
+    n.to_s
+
+# One line, no spaces: the form for storage and comparison.
+pub def show(j: Json) -> Str:
+  match j:
+    Null       -> "null"
+    Bool(b)    -> b.to_s
+    Num(n)     -> show_num(n)
+    Str(s)     -> quote(s)
+    Arr(items) -> "[" + items.map(show).join(",") + "]"
+    Obj(pairs) -> "{" + pairs.map { |k, v| quote(k) + ":" + show(v) }.join(",") + "}"
+
+# Indented output, two spaces per level.
+pub def pretty(j: Json) -> Str:
+  pretty_at(j, 0)
+
+def pretty_at(j: Json, depth: Int) -> Str:
+  pad = "  ".repeat(depth + 1)
+  close = "  ".repeat(depth)
+  match j:
+    Arr(items) if items.empty? -> "[]"
+    Obj(pairs) if pairs.empty? -> "{}"
+    Arr(items) ->
+      inner = items.map { |x| pad + pretty_at(x, depth + 1) }.join(",\n")
+      "[\n#{inner}\n#{close}]"
+    Obj(pairs) ->
+      inner = pairs.map { |k, v| pad + quote(k) + ": " + pretty_at(v, depth + 1) }.join(",\n")
+      "{\n#{inner}\n#{close}}"
+    _ -> show(j)
+
+# ---- queries --------------------------------------------------------------
+
+# `get(j, "users.0.name")`: keys and positions separated by dots.
+pub def get(j: Json, path: Str) -> Json?:
+  var cur = j
+  for step in path.split("."):
+    cur = match cur:
+      Obj(pairs) -> pairs.find { |k, v| k == step }.map { |kv| kv.1 }?
+      Arr(items) -> items[step.to_int.ok()?]?
+      _          -> return None
+  cur
+
+pub struct Stats:
+  objects: Int
+  arrays: Int
+  strings: Int
+  numbers: Int
+  depth: Int
+
+pub def stats(j: Json) -> Stats:
+  var s = Stats(objects: 0, arrays: 0, strings: 0, numbers: 0, depth: 0)
+  walk(j, 1, s)
+  s
+
+def walk(j: Json, depth: Int, var s: Stats):
+  s.depth = s.depth.max(depth)
+  match j:
+    Obj(pairs) ->
+      s.objects += 1
+      for k, v in pairs:
+        walk(v, depth + 1, s)
+    Arr(items) ->
+      s.arrays += 1
+      for x in items:
+        walk(x, depth + 1, s)
+    Str(_) -> s.strings += 1
+    Num(_) -> s.numbers += 1
+    _      -> ()
+
+# ---- main -----------------------------------------------------------------
+
+def sample -> Str:
+  """
+  {
+    "name": "Lume",
+    "version": 0.19,
+    "tags": ["language", "compiler", "rust"],
+    "stable": false,
+    "authors": [
+      {"name": "Luan", "commits": 19},
+      {"name": "Claude", "commits": 19}
+    ],
+    "unicode": "caf\\u00e9 \\ud83d\\ude00",
+    "nested": {"a": {"b": {"c": [1, 2, {"d": null}]}}}
+  }
+  """
+
+def main -> () or Error:
+  doc = parse(sample())?
+  puts show(doc)
+  puts pretty(get(doc, "authors").or(Null))
+  puts get(doc, "authors.1.name").map(show).or("missing")
+  puts get(doc, "nested.a.b.c.2.d").map(show).or("missing")
+  puts get(doc, "tags.9").map(show).or("missing")
+  puts get(doc, "unicode").map(show).or("missing")
+  st = stats(doc)
+  puts "#{st.objects} objects, #{st.arrays} arrays, #{st.strings} strings, #{st.numbers} numbers, depth #{st.depth}"
+  # round trip: printing and parsing again gives the same document
+  puts show(parse(show(doc))?) == show(doc)
+  for bad in ["[1, 2", "{\"a\" 1}", "tru", "\"\\x\"", "[1,]", "01x"]:
+    match parse(bad):
+      Ok(_)    -> puts "accepted #{bad}?"
+      Error(e) -> puts "#{bad.pad_right(10)} -> #{e.message}"
+
+test "scalars":
+  assert show(parse("42")!) == "42"
+  assert show(parse("-1.5e2")!) == "-150"
+  assert show(parse(" true ")!) == "true"
+  assert show(parse("\"a\\nb\"")!) == "\"a\\nb\""
+
+test "unicode escapes":
+  assert show(parse("\"\\u00e9\"")!) == "\"é\""
+  assert show(parse("\"\\ud83d\\ude00\"")!) == "\"😀\""
+
+test "errors say where":
+  match parse("[1, 2"):
+    Ok(_)    -> assert false
+    Error(e) -> assert e.message == "expected `,` or `]` at position 5"
+
+test "queries":
+  doc = parse("{\"xs\": [10, 20, {\"y\": [true]}]}")!
+  assert get(doc, "xs.1").map(show) == Some("20")
+  assert get(doc, "xs.2.y.0").map(show) == Some("true")
+  assert get(doc, "xs.7") == None
+  assert get(doc, "nope") == None
+  assert stats(doc).depth == 5

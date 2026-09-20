@@ -29,6 +29,8 @@ pub struct Shape {
     /// `pat -> x`, `{ |x| x }`, `def f = x`), keyed by the position of the
     /// block's single statement.
     pub inline: std::collections::HashSet<(usize, usize)>,
+    /// `rust("...")` written inline (a `rust:` block otherwise), by position.
+    pub rust_inline: std::collections::HashSet<(usize, usize)>,
     /// `lhs |> stage`, keyed by the node the stage produced; the value is
     /// true when the `|>` began a new line.
     pub pipes: std::collections::HashMap<(usize, usize), bool>,
@@ -817,6 +819,7 @@ impl Parser {
             "Float" => Type::Float,
             "Bool" => Type::Bool,
             "Str" => Type::Str,
+            "Char" => Type::Char,
             "int" | "float" | "bool" | "str" | "string" | "String" | "i64" | "f64" => {
                 let fix = match name.as_str() {
                     "int" | "i64" => "Int",
@@ -1891,6 +1894,7 @@ impl Parser {
                         _ => return Err(self.err("`rust(...)` takes one string of Rust code")),
                     };
                     self.expect_sym(")", "to close `rust(...)`")?;
+                    self.shape.rust_inline.insert((line, col));
                     Ok(Expr::new(ExprKind::Rust(code), line, col))
                 }
                 "Ok" => {

@@ -1,0 +1,77 @@
+# The same algorithm in pure Python (no json module): a character list, a cursor.
+import sys, time
+class P:
+    def __init__(s, t): s.c = list(t); s.i = 0
+    def peek(s): return s.c[s.i] if s.i < len(s.c) else '\0'
+    def skip(s):
+        while s.i < len(s.c) and s.c[s.i].isspace(): s.i += 1
+    def value(s):
+        s.skip(); c = s.peek()
+        if c == '{': return s.obj()
+        if c == '[': return s.arr()
+        if c == '"': return s.string()
+        if c == 't': s.i += 4; return True
+        if c == 'f': s.i += 5; return False
+        if c == 'n': s.i += 4; return None
+        return s.num()
+    def num(s):
+        st = s.i
+        if s.peek() == '-': s.i += 1
+        while s.peek().isdigit(): s.i += 1
+        if s.peek() == '.':
+            s.i += 1
+            while s.peek().isdigit(): s.i += 1
+        if s.peek() in 'eE':
+            s.i += 1
+            if s.peek() in '+-': s.i += 1
+            while s.peek().isdigit(): s.i += 1
+        return float(''.join(s.c[st:s.i]))
+    def string(s):
+        s.i += 1; out = []
+        while True:
+            c = s.c[s.i]; s.i += 1
+            if c == '"': break
+            if c == '\\':
+                e = s.c[s.i]; s.i += 1
+                if e == 'u':
+                    code = int(''.join(s.c[s.i:s.i+4]), 16); s.i += 4
+                    if 0xd800 <= code <= 0xdbff:
+                        s.i += 2; low = int(''.join(s.c[s.i:s.i+4]), 16); s.i += 4
+                        code = 0x10000 + (code - 0xd800) * 1024 + (low - 0xdc00)
+                    out.append(chr(code))
+                else:
+                    out.append({'n':'\n','t':'\t','r':'\r','b':'\b','f':'\f','/':'/','\\':'\\','"':'"'}[e])
+            else: out.append(c)
+        return ''.join(out)
+    def arr(s):
+        s.i += 1; items = []; s.skip()
+        if s.peek() == ']': s.i += 1; return items
+        while True:
+            items.append(s.value()); s.skip()
+            if s.peek() == ',': s.i += 1
+            else: s.i += 1; break
+        return items
+    def obj(s):
+        s.i += 1; pairs = []; s.skip()
+        if s.peek() == '}': s.i += 1; return pairs
+        while True:
+            s.skip(); k = s.string(); s.skip(); s.i += 1; v = s.value(); pairs.append((k, v)); s.skip()
+            if s.peek() == ',': s.i += 1
+            else: s.i += 1; break
+        return pairs
+def quote(x):
+    o = '"'
+    for c in x:
+        o += {'"':'\\"','\\':'\\\\','\n':'\\n','\t':'\\t','\r':'\\r'}.get(c, c)
+    return o + '"'
+def show(j):
+    if j is None: return 'null'
+    if j is True: return 'true'
+    if j is False: return 'false'
+    if isinstance(j, float): return str(int(j)) if j == int(j) and abs(j) < 1e15 else repr(j)
+    if isinstance(j, str): return quote(j)
+    if isinstance(j, list) and (not j or not isinstance(j[0], tuple)): return '[' + ','.join(show(x) for x in j) + ']'
+    return '{' + ','.join(quote(k) + ':' + show(v) for k, v in j) + '}'
+t = open(sys.argv[1]).read()
+t0 = time.time(); d = P(t).value(); t1 = time.time(); out = show(d); t2 = time.time()
+print("parse %d ms, print %d ms" % ((t1-t0)*1000, (t2-t1)*1000))

@@ -1,0 +1,12 @@
+import json
+
+def main:
+  text = File.read(Env.args[0].or(""))!
+  t0 = Time.now_ms
+  doc = json.parse(text)!
+  t1 = Time.now_ms
+  st = json.stats(doc)
+  puts "#{st.objects} objects, #{st.numbers} numbers in #{t1 - t0} ms"
+  out = json.show(doc)
+  t2 = Time.now_ms
+  puts "printed #{out.len} chars in #{t2 - t1} ms"

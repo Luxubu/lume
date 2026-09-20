@@ -43,6 +43,13 @@ trait LumeShow { fn lume_str(&self) -> String; }
 impl LumeShow for i64 { fn lume_str(&self) -> String { self.to_string() } }
 impl LumeShow for f64 { fn lume_str(&self) -> String { format!("{:?}", if *self == 0.0 { 0.0 } else { *self }) } }
 impl LumeShow for bool { fn lume_str(&self) -> String { self.to_string() } }
+impl LumeShow for char { fn lume_str(&self) -> String { self.to_string() } }
+fn lume_char_eq_str(c: char, s: &str) -> bool { let mut it = s.chars(); it.next() == Some(c) && it.next().is_none() }
+fn lume_join_chars(cs: &[char], sep: &str) -> String {
+    let mut out = String::with_capacity(cs.len());
+    for (i, c) in cs.iter().enumerate() { if i > 0 { out.push_str(sep); } out.push(*c); }
+    out
+}
 impl LumeShow for String { fn lume_str(&self) -> String { self.clone() } }
 impl LumeShow for str { fn lume_str(&self) -> String { self.to_string() } }
 impl LumeShow for () { fn lume_str(&self) -> String { String::from("()") } }
@@ -241,9 +248,9 @@ impl<T: LumeShow + std::hash::Hash + Eq + Clone> LumeShow for LumeSet<T> {
 impl<T: std::hash::Hash + Eq + Clone> LumeLen for LumeSet<T> { fn lume_len(&self) -> i64 { self.len() as i64 } }
 impl<T: std::hash::Hash + Eq + Clone> LumeEmpty for LumeSet<T> { fn lume_empty(&self) -> bool { self.is_empty() } }
 /// `s[i]`: the character at a position, `None` when out of range.
-fn lume_char_at(s: &str, i: i64) -> Option<String> {
+fn lume_char_at(s: &str, i: i64) -> Option<char> {
     if i < 0 { return None; }
-    s.chars().nth(i as usize).map(|c| c.to_string())
+    s.chars().nth(i as usize)
 }
 /// `s[a..b]` in characters; positions are clamped to the string, an
 /// empty result when they cross.
@@ -305,6 +312,9 @@ fn lume_install_panic_hook() {
     }));
 }
 
+fn lume_now_ms() -> i64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
+}
 fn lume_now() -> i64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
 }
@@ -502,6 +512,8 @@ pub struct Gen {
     /// Set by `iter_base` for a map: its items are `(key, value)` pairs of
     /// references, not a reference to a pair. Read once by the next lambda.
     map_items: bool,
+    /// `c.or("")` on a `Char?`: the default is a string, so the result is one.
+    or_default_is_str: bool,
     /// Names copied into the current `spawn:` block.
     spawn_captured: HashSet<String>,
     /// While set, a `shared var` name means the handle, not the value inside.
@@ -553,6 +565,7 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, deps: &[Dep], t
         in_async: false,
         uses_async: false,
         map_items: false,
+        or_default_is_str: false,
         spawn_captured: HashSet::new(),
         want_handle: false,
         crates: HashMap::new(),
@@ -635,6 +648,7 @@ pub fn rust_type(t: &Type) -> String {
         Type::Int => "i64".into(),
         Type::Float => "f64".into(),
         Type::Bool => "bool".into(),
+        Type::Char => "char".into(),
         Type::Str => "String".into(),
         Type::Unit => "()".into(),
         Type::List(inner) => format!("Vec<{}>", rust_type(inner)),
@@ -658,6 +672,7 @@ pub fn type_name(t: &Type) -> String {
         Type::Int => "Int".into(),
         Type::Float => "Float".into(),
         Type::Bool => "Bool".into(),
+        Type::Char => "Char".into(),
         Type::Str => "Str".into(),
         Type::Unit => "()".into(),
         Type::List(i) => format!("[{}]", type_name(i)),
@@ -684,9 +699,12 @@ fn escape_rust_str(s: &str, for_format: bool) -> String {
             '\\' => out.push_str("\\\\"),
             '\n' => out.push_str("\\n"),
             '\t' => out.push_str("\\t"),
+            '\r' => out.push_str("\\r"),
             '\0' => out.push_str("\\0"),
             '{' if for_format => out.push_str("{{"),
             '}' if for_format => out.push_str("}}"),
+            // Rust source must not hold a bare CR or other control character
+            c if (c as u32) < 0x20 || c == '\u{7f}' => out.push_str(&format!("\\u{{{:x}}}", c as u32)),
             other => out.push(other),
         }
     }
@@ -1110,6 +1128,9 @@ impl Gen {
 
     /// Boxes a concrete value where an interface value is stored.
     fn coerce(&self, text: String, from: &Type, to: &Type, line: usize, col: usize) -> Result<String> {
+        if *from == Type::Char && *to == Type::Str {
+            return Ok(format!("({}).to_string()", text));
+        }
         if let Type::Named(iface) = to {
             if self.is_interface(to) && !self.is_interface(from) && *from != Type::Unknown {
                 self.require_conforms(from, iface, line, col)?;
@@ -2113,6 +2134,11 @@ impl Gen {
                 if let Some(m) = self.iface_default(&rt, name) {
                     return m.ret;
                 }
+                if name == "or" && args.len() == 1 && matches!(&rt, Type::Option(i) if **i == Type::Char) && char_literal(&args[0].value).is_none() {
+                    if self.ty_of(&args[0].value).materialized() == Type::Str {
+                        return Type::Str;
+                    }
+                }
                 if name == "zip" && args.len() == 1 {
                     let other = self.ty_of(&args[0].value);
                     if let (Some((a, _)), Some((b, _))) = (self.elem_of(&rt), self.elem_of(&other)) {
@@ -2160,7 +2186,7 @@ impl Gen {
                     Type::List(e) => Type::Option(e),
                     Type::Map(_, v) => Type::Option(v),
                     Type::Str if slice => Type::Str,
-                    Type::Str => Type::Option(Box::new(Type::Str)),
+                    Type::Str => Type::Option(Box::new(Type::Char)),
                     _ => Type::Unknown,
                 }
             }
@@ -2239,10 +2265,10 @@ impl Gen {
         let same = self.assignable(&rt, lt) && self.assignable(lt, &rt);
         let ok = match op {
             "and" | "or" => *lt == Type::Bool && rt == Type::Bool,
-            "+" => (numeric(lt) && same) || (*lt == Type::Str && rt == Type::Str) || (matches!(lt, Type::List(_) | Type::Iter(..)) && self.assignable(lt, &rt)),
+            "+" => (numeric(lt) && same) || (*lt == Type::Str && rt == Type::Str) || (matches!(lt, Type::List(_) | Type::Iter(..)) && self.assignable(lt, &rt)) || text_like(lt) && text_like(&rt),
             "-" | "*" | "/" | "%" | "**" => numeric(lt) && same,
-            "<" | "<=" | ">" | ">=" => same && (numeric(lt) || *lt == Type::Str),
-            "==" | "!=" => same,
+            "<" | "<=" | ">" | ">=" => (same && (numeric(lt) || *lt == Type::Str)) || (text_like(lt) && text_like(&rt)),
+            "==" | "!=" => same || (text_like(lt) && text_like(&rt)),
             _ => true,
         };
         if ok {
@@ -2283,6 +2309,18 @@ impl Gen {
             }
         }
         None
+    }
+
+    /// The Rust text of a map key in a read position, borrowed as the map
+    /// wants it. A one-character literal is a `Char` where the keys are.
+    fn map_key_text(&mut self, index: &Expr, key_ty: &Type, map_ty: &Type) -> Result<String> {
+        if *key_ty == Type::Char {
+            if let Some(c) = char_literal(index) {
+                return Ok(format!("&'{}'", rust_char(c)));
+            }
+        }
+        let k = self.expr_val(index)?;
+        Ok(map_key(map_ty, &k))
     }
 
     /// `xs[i]` / `m[k]` whose stored value is itself a list, set or map.
@@ -2327,7 +2365,7 @@ impl Gen {
             _ => {
                 let it = self.ty_of(index).materialized();
                 if it != Type::Int && it != Type::Unknown {
-                    return Err(LumeError::new(index.line, index.col, format!("a list position is an `Int`, but this is a `{}`", type_name(&it))));
+                    return Err(self.type_mismatch(index, &it, &Type::Int, "a list position is an `Int`"));
                 }
                 self.mutable_place(recv, "this position", e.line, e.col)?
             }
@@ -2380,7 +2418,7 @@ impl Gen {
         let i = self.expr_val(index)?;
         let it = self.ty_of(index).materialized();
         if it != Type::Int && it != Type::Unknown {
-            return Err(LumeError::new(index.line, index.col, format!("a list position is an `Int`, but this is a `{}`", type_name(&it))));
+            return Err(self.type_mismatch(index, &it, &Type::Int, "a list position is an `Int`"));
         }
         // emit the member call against a synthetic place binding
         let tmp = self.fresh("el");
@@ -2401,19 +2439,30 @@ impl Gen {
 
     /// Can a value of type `have` be used where `want` is expected?
     /// Unknown on either side is trusted (inference did not reach it).
+    /// Can a value of type `have` be used where `want` is expected?
     fn assignable(&self, have: &Type, want: &Type) -> bool {
+        self.assign_ok(have, want, true)
+    }
+
+    fn assign_ok_n(&self, have: &Type, want: &Type) -> bool {
+        self.assign_ok(have, want, false)
+    }
+
+    fn assign_ok(&self, have: &Type, want: &Type, top: bool) -> bool {
         match (have, want) {
             (Type::Unknown, _) | (_, Type::Unknown) => true,
             (Type::Future(_), _) | (_, Type::Future(_)) => true,
-            (Type::Shared(h, _), w) => self.assignable(h, w),
-            (h, Type::Shared(w, _)) => self.assignable(h, w),
-            (Type::Iter(a, _), Type::List(b)) | (Type::List(a), Type::Iter(b, _)) | (Type::List(a), Type::List(b)) | (Type::Iter(a, _), Type::Iter(b, _)) => self.assignable(a, b),
-            (Type::Option(a), Type::Option(b)) | (Type::Task(a), Type::Task(b)) => self.assignable(a, b),
-            (Type::Result(a, b), Type::Result(c, d)) | (Type::Map(a, b), Type::Map(c, d)) => self.assignable(a, c) && self.assignable(b, d),
-            (Type::Set(a), Type::Set(b)) => self.assignable(a, b),
+            (Type::Shared(h, _), w) => self.assign_ok_n(h, w),
+            (h, Type::Shared(w, _)) => self.assign_ok_n(h, w),
+            (Type::Iter(a, _), Type::List(b)) | (Type::List(a), Type::Iter(b, _)) | (Type::List(a), Type::List(b)) | (Type::Iter(a, _), Type::Iter(b, _)) => self.assign_ok_n(a, b),
+            (Type::Option(a), Type::Option(b)) | (Type::Task(a), Type::Task(b)) => self.assign_ok_n(a, b),
+            (Type::Result(a, b), Type::Result(c, d)) | (Type::Map(a, b), Type::Map(c, d)) => self.assign_ok_n(a, c) && self.assign_ok_n(b, d),
+            (Type::Set(a), Type::Set(b)) => self.assign_ok_n(a, b),
+            // a character is a one-character string wherever a string is wanted
+            (Type::Char, Type::Str) => top,
             // `{}` where a set is wanted is the empty set
             (Type::Map(k, v), Type::Set(_)) if **k == Type::Unknown && **v == Type::Unknown => true,
-            (Type::Tuple(xs), Type::Tuple(ys)) => xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| self.assignable(x, y)),
+            (Type::Tuple(xs), Type::Tuple(ys)) => xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| self.assign_ok_n(x, y)),
             (Type::Named(a), Type::Named(b)) if self.canon(a) == self.canon(b) => true,
             (_, Type::Named(iface)) if self.is_interface(want) => {
                 // a value where an interface is wanted: it must have the methods
@@ -2426,9 +2475,35 @@ impl Gen {
 
     /// The error for a value of the wrong type. `what` names the slot:
     /// "`add` takes `b: Int`", "`User` field `age` is `Int`", "`f` returns `Str`".
+    /// `x.ok?` where `x.ok` followed by `?` was meant: the predicate and the
+    /// early return share a spelling, and only parentheses tell them apart.
+    fn predicate_try_hint(&self, e: &Expr, have: &Type, want: &Type) -> Option<String> {
+        if *have != Type::Bool || *want == Type::Bool {
+            return None;
+        }
+        if let ExprKind::Method { recv, name, args } = &e.kind {
+            if args.is_empty() && name.ends_with('?') && name.len() > 1 {
+                let base = &name[..name.len() - 1];
+                return Some(format!(
+                    "`.{}` asks a yes/no question; for `.{}` followed by `?` (the early return) write `({}.{})?`",
+                    name, base, snippet(recv), base
+                ));
+            }
+        }
+        None
+    }
+
     fn type_mismatch(&self, e: &Expr, have: &Type, want: &Type, what: &str) -> LumeError {
         let err = LumeError::new(e.line, e.col, format!("{}, but this is a `{}`", what, type_name(have)));
+        if let Some(h) = self.predicate_try_hint(e, have, want) {
+            return err.with_help(h);
+        }
         let help = match (have, want) {
+            (Type::Str, Type::Char) => Some("a `Char` is one character: use a one-character literal like `\"a\"`, or `.chars` and take one".to_string()),
+            (Type::Char, Type::Str) => Some("write `.to_s` to make it a string".to_string()),
+            (Type::List(h), Type::List(w)) | (Type::Set(h), Type::Set(w)) if **h == Type::Char && **w == Type::Str => {
+                Some("the characters of a string are `Char` values: declare the type with `Char`, or turn them into strings with `.map(_.to_s)`".to_string())
+            }
             (Type::Str, Type::Int) => Some("parse it: `.to_int` gives `Int or Error`, so `x.to_int?` or `x.to_int.or(0)`".to_string()),
             (Type::Str, Type::Float) => Some("parse it: `.to_float` gives `Float or Error`".to_string()),
             (Type::Int, Type::Str) | (Type::Float, Type::Str) | (Type::Bool, Type::Str) => Some(format!("write `\"#{{{}}}\"` or `{}.to_s`", snippet(e), snippet(e))),
@@ -2448,6 +2523,10 @@ impl Gen {
     /// Checks `e` against `want`; implied `Some`/`Ok` wrapping is decided by
     /// the caller, so a plain `T` where `T?` is wanted passes here.
     fn check_assign(&mut self, e: &Expr, want: &Type, what: &str) -> Result<()> {
+        // a one-character literal is a `Char` where one is wanted
+        if *want == Type::Char && char_literal(e).is_some() {
+            return Ok(());
+        }
         let have = self.ty_of(e);
         if let Type::Named(iface) = want {
             // an interface slot: the detailed conformance error says what is missing
@@ -3325,7 +3404,7 @@ impl Gen {
                 self.check_assign(e, &ret, &what)?;
             }
         }
-        if self.is_interface(&ret) {
+        if self.is_interface(&ret) || ret == Type::Str {
             let et = self.ty_of(e).materialized();
             return self.coerce(text, &et, &ret, e.line, e.col);
         }
@@ -3423,6 +3502,8 @@ impl Gen {
                 }
                 let inner = ty.as_ref().map(|t| self.ct(t)).unwrap_or_else(|| vt0.clone());
                 if ty.is_none() && !type_is_known(&inner) {
+                    // a private or missing module item explains the unknown type better
+                    self.module_ref(value)?;
                     return Err(LumeError::new(*line, *col, format!("cannot tell the type of `{}` from `{}` alone", name, describe_value(value)))
                         .with_help(type_hint(&format!("shared var {}", name), value, &inner)));
                 }
@@ -3454,6 +3535,8 @@ impl Gen {
                 self.no_future(&inferred, value)?;
                 let vt = ty.as_ref().map(|t| self.ct(t)).unwrap_or_else(|| inferred.clone());
                 if ty.is_none() && !type_is_known(&inferred) {
+                    // a private or missing module item explains the unknown type better
+                    self.module_ref(value)?;
                     return Err(LumeError::new(*line, *col, format!("cannot tell the type of `{}` from `{}` alone", name, describe_value(value)))
                         .with_help(type_hint(&format!("var {}", name), value, &inferred)));
                 }
@@ -3536,6 +3619,8 @@ impl Gen {
                 let inferred = self.ty_of(value).materialized();
                 let vt = ty.as_ref().map(|t| self.ct(t)).unwrap_or_else(|| inferred.clone());
                 if ty.is_none() && self.lookup(name).is_none() && self.field_type(name).is_none() && !type_is_known(&inferred) {
+                    // a private or missing module item explains the unknown type better
+                    self.module_ref(value)?;
                     return Err(LumeError::new(*line, *col, format!("cannot tell the type of `{}` from `{}` alone", name, describe_value(value)))
                         .with_help(type_hint(name, value, &inferred)));
                 }
@@ -3601,6 +3686,17 @@ impl Gen {
                     }
                 }
                 let v = self.expr(value)?;
+                let is_str = matches!(self.lookup(name).map(|b| b.ty.materialized()), Some(Type::Str));
+                let rhs_char = self.ty_of(value).materialized() == Type::Char;
+                // `text += x`: append in place, whatever form `x` has
+                if is_str && *op == "+=" && rhs_char && matches!(self.lookup(name), Some(b) if b.mutable && !matches!(b.ty, Type::Shared(..))) {
+                    self.line(&format!("{}.push({});", rust_name(name), v));
+                    if is_tail {
+                        return self.tail_unit(*line, *col);
+                    }
+                    return Ok(());
+                }
+                let v = if is_str && *op == "+=" && rhs_char { format!("&({}).to_string()", v) } else if is_str && *op == "+=" { format!("&({})", v) } else { v };
                 match self.lookup(name).cloned() {
                     Some(Binding { ty: Type::Shared(_, true), .. }) => {
                         self.line(&format!("{{ let lume_v = {}; *{}.lock().unwrap() {} lume_v; }}", v, rust_name(name), op));
@@ -3824,7 +3920,11 @@ impl Gen {
             }
             Stmt::While { cond, body } => {
                 let c = self.expr(cond)?;
-                self.line(&format!("while {} {{", c));
+                if matches!(cond.kind, ExprKind::Bool(true)) {
+                    self.line("loop {");
+                } else {
+                    self.line(&format!("while {} {{", c));
+                }
                 self.loop_depth += 1;
                 self.barriers.push(self.scopes.len());
                 let r = self.nested_block(body, false);
@@ -3885,7 +3985,9 @@ impl Gen {
                     && matches!(self.place_root(iter).map(|r| &r.kind), Some(ExprKind::SelfRef))
                     || (self.current_self == SelfKind::Mutate
                         && matches!(self.place_root(iter).map(|r| &r.kind), Some(ExprKind::Ident(n)) if self.lookup(n).is_none() && self.field_type(n).is_some()));
+                let chars_of = if vars.len() == 1 && !*mutable { self.chars_source(iter) } else { None };
                 let (it, elem_ty, borrowed) = match &it_ty {
+                    _ if chars_of.is_some() => (format!("({}).chars()", self.expr_val(chars_of.as_ref().unwrap())?), Type::Char, false),
                     Type::Iter(elem, by_ref) => (self.expr(iter)?, (**elem).clone(), *by_ref && !elem.is_copy()),
                     Type::Set(elem) if self_rooted => (format!("({}).iter().cloned().collect::<Vec<_>>().into_iter()", self.expr(iter)?), (**elem).clone(), false),
                     Type::List(elem) | Type::Map(_, elem) if self_rooted => {
@@ -3915,7 +4017,19 @@ impl Gen {
                 } else {
                     match &elem_ty {
                         Type::Tuple(ts) if ts.len() == vars.len() => {
-                            format!("({})", vars.iter().map(|v| rust_name(v)).collect::<Vec<_>>().join(", "))
+                            // over a borrowed tuple, Copy parts come out by value
+                            // and the rest by reference, matching what is declared
+                            // a list or set yields `&(a, b)`; a map or a lazy
+                            // chain (`enumerate`, `map`) yields `(a, b)` whose
+                            // parts are already references
+                            let map_pairs = !matches!(it_ty, Type::List(_) | Type::Set(_));
+                            let parts: Vec<String> = vars
+                                .iter()
+                                .zip(ts)
+                                .map(|(v, t)| if borrowed && !map_pairs && t.is_copy() { rust_name(v) } else if borrowed && !map_pairs { format!("ref {}", rust_name(v)) } else { rust_name(v) })
+                                .collect();
+                            let inner = format!("({})", parts.join(", "));
+                            if borrowed && !map_pairs { format!("&{}", inner) } else { inner }
                         }
                         Type::Tuple(ts) => {
                             return Err(LumeError::new(*line, *col, format!("`for {}` names {} variables, but each item has {} parts", vars.join(", "), vars.len(), ts.len())));
@@ -3967,9 +4081,16 @@ impl Gen {
                 // a comparison prints both sides
                 let sides = match &cond.kind {
                     ExprKind::Binary { op, lhs, rhs } if matches!(*op, "==" | "!=" | "<" | "<=" | ">" | ">=") => {
-                        let l = self.expr_val(lhs)?;
-                        let r = self.expr_val(rhs)?;
-                        format!("Some((({}).lume_str(), ({}).lume_str()))", l, r)
+                        // a bare `None` has no type of its own to print: use its text
+                        let side = |g: &mut Self, x: &Expr| -> Result<String> {
+                            Ok(match &x.kind {
+                                ExprKind::None => "String::from(\"None\")".to_string(),
+                                _ => format!("({}).lume_str()", g.expr_val(x)?),
+                            })
+                        };
+                        let l = side(self, lhs)?;
+                        let r = side(self, rhs)?;
+                        format!("Some(({}, {}))", l, r)
                     }
                     _ => "None".to_string(),
                 };
@@ -4042,9 +4163,9 @@ impl Gen {
                 let r = self.lvalue(recv)?;
                 match rt {
                     Type::List(_) | Type::Unknown => Ok(format!("{}[({}) as usize]", r, self.expr(index)?)),
-                    Type::Map(..) => {
-                        let k = self.expr_val(index)?;
-                        let k = map_key(&rt, &k);
+                    Type::Map(ref kt, _) => {
+                        let kt = (**kt).clone();
+                        let k = self.map_key_text(index, &kt, &rt)?;
                         Ok(format!("(*{}.get_mut({}).expect(\"no such key in map\"))", r, k))
                     }
                     other => Err(LumeError::new(e.line, e.col, format!("`{}` values cannot be indexed", type_name(&other)))),
@@ -4202,6 +4323,11 @@ impl Gen {
                 }
             };
         }
+        if *expected == Type::Char {
+            if let Some(c) = char_literal(e) {
+                return Ok(format!("'{}'", rust_char(c)));
+            }
+        }
         match (&e.kind, expected) {
             // `{}` where the kind is known: say it, so nothing downstream has to infer it
             (ExprKind::MapLit(pairs), Type::Map(..) | Type::Set(_)) if pairs.is_empty() && type_is_known(expected) => {
@@ -4263,7 +4389,15 @@ impl Gen {
             let c = self.collect_iter_t(&s, by_ref, &elem);
             return Ok(format!("&{}", c));
         }
+        if *t == Type::Char {
+            if let Some(c) = char_literal(e) {
+                return Ok(format!("'{}'", rust_char(c)));
+            }
+        }
         let s = self.expr(e)?;
+        if *t == Type::Str && self.ty_of(e).materialized() == Type::Char {
+            return Ok(format!("&({}).to_string()", s));
+        }
         if t.is_copy() {
             return Ok(if self.is_borrowed_ident(e) && self.ty_of(e).is_copy() { format!("(*{})", s) } else { s });
         }
@@ -4296,6 +4430,10 @@ impl Gen {
 
     /// The iterator a list, range or chain yields: (rust, elem type, by_ref).
     fn iter_base(&mut self, recv: &Expr, e: &Expr) -> Result<(String, Type, bool)> {
+        if let Some(inner) = self.chars_source(recv) {
+            let r = self.expr_val(&inner)?;
+            return Ok((format!("({}).chars()", r), Type::Char, false));
+        }
         let rt = self.ty_of(recv);
         let r = self.expr(recv)?;
         match rt {
@@ -4324,6 +4462,31 @@ impl Gen {
                 .with_help("add a type to the binding or parameter it comes from")),
             other => Err(LumeError::new(e.line, e.col, format!("`{}` values cannot take a block; only lists and ranges can", type_name(&other)))),
         }
+    }
+
+    /// The pieces of a left-leaning `+` chain over text, in order.
+    fn text_leaves<'a>(&mut self, e: &'a Expr, out: &mut Vec<&'a Expr>) {
+        if let ExprKind::Binary { op: "+", lhs, rhs } = &e.kind {
+            let lt = self.ty_of(lhs).materialized();
+            let rt = self.ty_of(rhs).materialized();
+            if text_like(&lt) && text_like(&rt) {
+                self.text_leaves(lhs, out);
+                self.text_leaves(rhs, out);
+                return;
+            }
+        }
+        out.push(e);
+    }
+
+    /// `s.chars` used only to iterate: the string it came from, so the
+    /// characters can be walked without building a list first.
+    fn chars_source(&mut self, e: &Expr) -> Option<Expr> {
+        if let ExprKind::Method { recv, name, args } = &e.kind {
+            if name == "chars" && args.is_empty() && self.ty_of(recv).materialized() == Type::Str && self.shared_root(recv).is_none() {
+                return Some((**recv).clone());
+            }
+        }
+        None
     }
 
     /// Emits a Rust closure for a Lume block over items of type `elem`.
@@ -4608,6 +4771,11 @@ impl Gen {
             match &first {
                 None => first = Some((t, line)),
                 Some((ft, fl)) => {
+                    let str_char = (*ft == Type::Str && t == Type::Char) || (*ft == Type::Char && t == Type::Str);
+                    if str_char {
+                        return Err(LumeError::new(line, col, format!("the branches of this `{}` give different types: `{}` on line {} and `{}` here", what, type_name(ft), fl, type_name(&t)))
+                            .with_help("a `Char` becomes a `Str` with `.to_s`; give every branch the same type"));
+                    }
                     if !(self.assignable(&t, ft) || self.assignable(ft, &t)) {
                         return Err(LumeError::new(line, col, format!("the branches of this `{}` give different types: `{}` on line {} and `{}` here", what, type_name(ft), fl, type_name(&t)))
                             .with_help("a value chosen by a branch must have one type; convert one side, or return an `Error`/`None` instead"));
@@ -4773,7 +4941,7 @@ impl Gen {
             PatKind::Wild => "_".to_string(),
             PatKind::Or(alts) => {
                 // `"a" | "b"` and `1.0 | 2.0` compare against one binding
-                if alts.iter().all(|a| matches!(a.kind, PatKind::Str(_))) {
+                if alts.iter().all(|a| matches!(a.kind, PatKind::Str(_))) && *t != Type::Char {
                     self.expect_pat_type(t, &Type::Str, p, "a string")?;
                     let tmp = self.fresh("s");
                     let tests: Vec<String> = alts
@@ -4884,6 +5052,17 @@ impl Gen {
                 let deref = if by_ref { "*" } else { "" };
                 cp.guards.push(format!("{}{} == {:?}", deref, tmp, v));
                 tmp
+            }
+            PatKind::Str(s) if *t == Type::Char => {
+                // a one-character string matches a character directly
+                let mut cs = s.chars();
+                match (cs.next(), cs.next()) {
+                    (Some(c), None) => format!("'{}'", rust_char(c)),
+                    _ => {
+                        return Err(LumeError::new(p.line, p.col, format!("this pattern is the string \"{}\", but the value is a single `Char`", s))
+                            .with_help("match one character, like `\"a\"`, or turn the value into a string first with `.to_s`"));
+                    }
+                }
             }
             PatKind::Str(s) => {
                 self.expect_pat_type(t, &Type::Str, p, "a string")?;
@@ -5153,7 +5332,7 @@ impl Gen {
 
     fn key_ok(&self, t: &Type, visiting: &mut Vec<String>) -> bool {
         match t {
-            Type::Int | Type::Bool | Type::Str | Type::Unit | Type::Unknown => true,
+            Type::Int | Type::Bool | Type::Str | Type::Char | Type::Unit | Type::Unknown => true,
             Type::Tuple(ts) => ts.iter().all(|x| self.key_ok(x, visiting)),
             Type::Option(i) => self.key_ok(i, visiting),
             Type::Named(n) => {
@@ -5604,17 +5783,14 @@ impl Gen {
                         let i = self.expr(index)?;
                         let it = self.ty_of(index);
                         if it != Type::Int && it != Type::Unknown {
-                            return Err(LumeError::new(index.line, index.col, format!("a list position is an `Int`, but this is a `{}`", type_name(&it))));
+                            return Err(self.type_mismatch(index, &it, &Type::Int, "a list position is an `Int`"));
                         }
                         format!("({}).get(({}) as usize).cloned()", r, i)
                     }
                     Type::Map(ref k, _) => {
-                        let key = self.expr_val(index)?;
-                        let kt = self.ty_of(index);
-                        if kt != **k && kt != Type::Unknown {
-                            return Err(LumeError::new(index.line, index.col, format!("this map's keys are `{}`, but the key is a `{}`", type_name(k), type_name(&kt))));
-                        }
-                        let key = map_key(&rt, &key);
+                        let kt = (**k).clone();
+                        self.check_assign(index, &kt, &format!("this map's keys are `{}`", type_name(&kt)))?;
+                        let key = self.map_key_text(index, &kt, &rt)?;
                         format!("({}).get({}).cloned()", r, key)
                     }
                     Type::Str => {
@@ -5784,8 +5960,49 @@ impl Gen {
                             .with_help("Int is 64-bit; the largest value is 9223372036854775807"));
                     }
                 }
-                let mut l = self.expr_val(lhs)?;
-                let mut r = self.expr_val(rhs)?;
+                let rt_ = self.ty_of(rhs).materialized();
+                // a character against a string: a one-character literal becomes a
+                // `char`, anything else compares as text
+                if (lt == Type::Char) != (rt_ == Type::Char) && (lt == Type::Str || rt_ == Type::Str) && matches!(*op, "==" | "!=" | "<" | "<=" | ">" | ">=" ) {
+                    let (ce, se, char_left) = if lt == Type::Char { (lhs, rhs, true) } else { (rhs, lhs, false) };
+                    let mut c = self.expr_val(ce)?;
+                    if self.is_borrowed_ident(ce) {
+                        c = format!("(*{})", c);
+                    }
+                    let text = match char_literal(se) {
+                        Some(ch) => (format!("'{}'", rust_char(ch)), true),
+                        None => (format!("({}).lume_as_str()", self.expr_val(se)?), false),
+                    };
+                    if !text.1 && matches!(*op, "==" | "!=") {
+                        let neg = if *op == "!=" { "!" } else { "" };
+                        return Ok(format!("({}lume_char_eq_str({}, {}))", neg, c, text.0));
+                    }
+                    let c = if text.1 { c } else { format!("({}).to_string().as_str()", c) };
+                    let (l, r) = if char_left { (c, text.0) } else { (text.0, c) };
+                    return Ok(format!("({} {} {})", l, op, r));
+                }
+                // `a + b + c` on text: one `format!` with every piece
+                if *op == "+" && text_like(&lt) && text_like(&rt_) {
+                    let mut leaves: Vec<&Expr> = Vec::new();
+                    self.text_leaves(e, &mut leaves);
+                    let mut parts = Vec::new();
+                    for leaf in leaves {
+                        parts.push(match str_literal(leaf) {
+                            Some(t) => t,
+                            None => self.expr_val(leaf)?,
+                        });
+                    }
+                    return Ok(format!("format!(\"{}\", {})", "{}".repeat(parts.len()), parts.join(", ")));
+                }
+                let text_op = lt == Type::Str && matches!(*op, "+" | "==" | "!=" | "<" | "<=" | ">" | ">=");
+                let mut l = match str_literal(lhs) {
+                    Some(t) if text_op => t,
+                    _ => self.expr_val(lhs)?,
+                };
+                let mut r = match str_literal(rhs) {
+                    Some(t) if text_op => t,
+                    _ => self.expr_val(rhs)?,
+                };
                 let lb = self.is_borrowed_ident(lhs);
                 let rb = self.is_borrowed_ident(rhs);
                 // strings are formatted, never dereferenced (`&str` has no `*`)
@@ -5801,7 +6018,7 @@ impl Gen {
                     "and" => format!("({} && {})", l, r),
                     "or" => format!("({} || {})", l, r),
                     "**" => format!("({}).lume_pow({})", l, r),
-                    "+" if lt == Type::Str => format!("format!(\"{{}}{{}}\", {}, {})", l, r),
+                    "+" if lt == Type::Str || lt == Type::Char => format!("format!(\"{{}}{{}}\", {}, {})", l, r),
                     "+" if matches!(lt, Type::List(_) | Type::Iter(..)) => format!("{{ let mut lume_v = ({}).clone(); lume_v.extend(({}).iter().cloned()); lume_v }}", l, r),
                     // strings compare as `&str` whatever they are held as
                     "==" | "!=" | "<" | "<=" | ">" | ">=" if lt == Type::Str => format!("(({}).lume_as_str() {} ({}).lume_as_str())", l, op, r),
@@ -5953,6 +6170,7 @@ impl Gen {
                             ("Env", "args") => { need(0)?; "lume_args()".to_string() }
                             ("Env", "get") => { need(1)?; format!("std::env::var(&*{}).ok()", parts[0]) }
                             ("Time", "now") => { need(0)?; "lume_now()".to_string() }
+                            ("Time", "now_ms") => { need(0)?; "lume_now_ms()".to_string() }
                             ("Time", "sleep") => {
                                 need(1)?;
                                 if self.in_async {
@@ -5967,7 +6185,7 @@ impl Gen {
                     }
                     if self.lookup(tn).is_none() && (tn == "File" || tn == "Env" || tn == "Time") {
                         return Err(LumeError::new(e.line, e.col, format!("`{}` has no `{}`", tn, name))
-                            .with_help(match tn.as_str() { "File" => "File has read(path), write(path, text) and exists?(path)", "Env" => "Env has args and get(name)", _ => "Time has now and sleep(ms)" }));
+                            .with_help(match tn.as_str() { "File" => "File has read(path), write(path, text) and exists?(path)", "Env" => "Env has args and get(name)", _ => "Time has now (seconds), now_ms and sleep(ms)" }));
                     }
                     if self.lookup(tn).is_none() && self.structs.contains_key(tn) {
                         return Err(LumeError::new(e.line, e.col, format!("`{}.{}` — static methods on a type are not supported yet", tn, name))
@@ -6142,6 +6360,7 @@ impl Gen {
                 if args.iter().any(|a| a.name.is_some()) {
                     return Err(LumeError::new(e.line, e.col, format!("built-in method `{}` does not take keyword arguments", name)));
                 }
+                let mut want_types: Vec<Type> = Vec::new();
                 if let Some(want) = builtin_params(&rt, name) {
                     if want.len() == args.len() {
                         for (a, w) in args.iter().zip(&want) {
@@ -6149,13 +6368,46 @@ impl Gen {
                                 self.check_assign(&a.value, w, &format!("`.{}` on {} takes {}", name, a_type(&rt), a_type(w)))?;
                             }
                         }
+                        want_types = want;
                     }
                 }
                 if matches!(name.as_str(), "push" | "pop" | "insert" | "remove_at" | "add") || (name == "remove" && matches!(rt, Type::Map(..) | Type::Set(_))) {
                     self.check_receiver_mutable(recv, name, e.line, e.col)?;
                 }
                 let mut parts = Vec::new();
-                for a in args {
+                for (ai, a) in args.iter().enumerate() {
+                    if want_types.get(ai) == Some(&Type::Char) {
+                        if let Some(c) = char_literal(&a.value) {
+                            parts.push(format!("'{}'", rust_char(c)));
+                            continue;
+                        }
+                    }
+                    if name == "or" && matches!(&rt, Type::Option(i) if **i == Type::Char) {
+                        if let Some(c) = char_literal(&a.value) {
+                            parts.push(format!("'{}'", rust_char(c)));
+                            continue;
+                        }
+                        let at = self.ty_of(&a.value).materialized();
+                        if at == Type::Str {
+                            self.or_default_is_str = true;
+                            parts.push(self.expr_owned(&a.value)?);
+                            continue;
+                        }
+                        self.check_assign(&a.value, &Type::Char, "`.or` on a `Char?` takes a `Char` or a `Str`")?;
+                    }
+                    // a character where the method wants a string
+                    if want_types.get(ai) == Some(&Type::Str) && self.ty_of(&a.value).materialized() == Type::Char {
+                        let v = self.expr_val(&a.value)?;
+                        parts.push(format!("({}).to_string()", v));
+                        continue;
+                    }
+                    // a literal the method only reads: no String built for it
+                    if want_types.get(ai) == Some(&Type::Str) && !matches!(name.as_str(), "push" | "add" | "insert" | "or" | "or_error") {
+                        if let Some(t) = str_literal(&a.value) {
+                            parts.push(t);
+                            continue;
+                        }
+                    }
                     // `.or(default)` and `.push(x)` store their argument: owned position
                     parts.push(match (name.as_str(), &rt) {
                         ("push", Type::List(elem)) | ("add", Type::Set(elem)) | ("or", Type::Option(elem)) | ("or", Type::Result(elem, _)) => self.expr_owned_as(&a.value, &elem.clone())?,
@@ -6244,6 +6496,16 @@ impl Gen {
                     _ => format!("({}).iter().position(|lume_y| *lume_y == ({})).map(|i| i as i64)", recv, args[0]),
                 }
             }
+            "digit?" if *rt == Type::Char => { need(0)?; format!("({}).is_ascii_digit()", recv) }
+            "alpha?" if *rt == Type::Char => { need(0)?; format!("({}).is_alphabetic()", recv) }
+            "space?" if *rt == Type::Char => { need(0)?; format!("({}).is_whitespace()", recv) }
+            "alnum?" if *rt == Type::Char => { need(0)?; format!("({}).is_alphanumeric()", recv) }
+            "upper?" if *rt == Type::Char => { need(0)?; format!("({}).is_uppercase()", recv) }
+            "lower?" if *rt == Type::Char => { need(0)?; format!("({}).is_lowercase()", recv) }
+            "upcase" if *rt == Type::Char => { need(0)?; format!("({}).to_uppercase().collect::<String>()", recv) }
+            "downcase" if *rt == Type::Char => { need(0)?; format!("({}).to_lowercase().collect::<String>()", recv) }
+            "code" => { need(0)?; format!("(({}).clone() as u32 as i64)", recv) }
+            "to_char" => { need(0)?; format!("u32::try_from({}).ok().and_then(char::from_u32)", recv) }
             "digit?" => { need(0)?; format!("{{ let lume_s = &({}); !lume_s.is_empty() && lume_s.chars().all(|c| c.is_ascii_digit()) }}", recv) }
             "alpha?" => { need(0)?; format!("{{ let lume_s = &({}); !lume_s.is_empty() && lume_s.chars().all(|c| c.is_alphabetic()) }}", recv) }
             "space?" => { need(0)?; format!("{{ let lume_s = &({}); !lume_s.is_empty() && lume_s.chars().all(|c| c.is_whitespace()) }}", recv) }
@@ -6348,22 +6610,30 @@ impl Gen {
             "join" => {
                 need(1)?;
                 let strs = matches!(rt, Type::List(ref e) | Type::Iter(ref e, _) if **e == Type::Str);
+                let chars = matches!(rt, Type::List(ref e) | Type::Iter(ref e, _) if **e == Type::Char);
                 if strs {
                     format!("({}).join(&*{})", recv, args[0])
+                } else if chars {
+                    format!("lume_join_chars(&({}), &*{})", recv, args[0])
                 } else {
                     format!("({}).iter().map(|x| x.lume_str()).collect::<Vec<_>>().join(&*{})", recv, args[0])
                 }
             }
             "starts_with?" => { need(1)?; format!("({}).starts_with(&*{})", recv, args[0]) }
             "ends_with?" => { need(1)?; format!("({}).ends_with(&*{})", recv, args[0]) }
-            "chars" => { need(0)?; format!("({}).chars().map(|c| c.to_string()).collect::<Vec<String>>()", recv) }
+            "chars" => { need(0)?; format!("({}).chars().collect::<Vec<char>>()", recv) }
             // Option
             "or" => {
                 need(1)?;
                 if !matches!(rt, Type::Option(_) | Type::Result(..) | Type::Unknown) {
                     return Err(LumeError::new(e.line, e.col, format!("`.or` supplies a default for an optional value or a `T or E`, but this is a `{}`", type_name(rt))));
                 }
-                format!("({}).unwrap_or({})", recv, args[0])
+                if matches!(rt, Type::Option(i) if **i == Type::Char) && self.or_default_is_str {
+                    self.or_default_is_str = false;
+                    format!("({}).map(|c| c.to_string()).unwrap_or({})", recv, args[0])
+                } else {
+                    format!("({}).unwrap_or({})", recv, args[0])
+                }
             }
             "some?" => { need(0)?; format!("({}).is_some()", recv) }
             "none?" => { need(0)?; format!("({}).is_none()", recv) }
@@ -6425,6 +6695,7 @@ fn builtins_for(recv: &Type) -> Vec<&'static str> {
             "len", "empty?", "to_int", "to_float", "upcase", "downcase", "trim", "lines", "split", "chars", "contains?", "starts_with?",
             "ends_with?", "pad", "pad_right", "reverse", "slice", "replace", "repeat", "capitalize", "index_of", "digit?", "alpha?", "space?",
         ],
+        Type::Char => vec!["digit?", "alpha?", "space?", "alnum?", "upper?", "lower?", "upcase", "downcase", "code", "pad"],
         Type::List(_) => vec![
             "len", "empty?", "any?", "all?", "first", "last", "max", "min", "sum", "sort", "sort_by", "reverse", "push", "pop", "contains?",
             "join", "map", "filter", "reject", "each", "count", "find", "take", "skip", "take_while", "fold", "min_by", "max_by", "enumerate",
@@ -6442,7 +6713,7 @@ fn builtins_for(recv: &Type) -> Vec<&'static str> {
         ],
         Type::Option(_) => vec!["or", "some?", "none?", "or_error", "map"],
         Type::Result(..) => vec!["or", "ok?", "error?", "error", "ok", "map"],
-        Type::Int => vec!["to_float", "to_int", "abs", "pad", "max", "min", "clamp", "pow", "even?", "odd?"],
+        Type::Int => vec!["to_float", "to_int", "abs", "pad", "max", "min", "clamp", "pow", "even?", "odd?", "to_char"],
         Type::Float => vec!["to_int", "to_float", "sqrt", "floor", "ceil", "round", "abs", "pad", "max", "min", "clamp", "pow"],
         Type::Bool => vec!["pad"],
         _ => vec![],
@@ -6471,6 +6742,7 @@ fn is_builtin_name(name: &str) -> bool {
             | "pad_right" | "capitalize" | "index_of" | "digit?" | "alpha?" | "space?" | "zip" | "flatten" | "uniq" | "insert"
             | "remove_at" | "avg" | "merge" | "clamp" | "pow" | "even?" | "odd?" | "ok"
             | "to_set" | "add" | "union" | "intersect" | "diff" | "subset?" | "superset?"
+            | "alnum?" | "upper?" | "lower?" | "code" | "to_char"
     )
 }
 
@@ -6484,6 +6756,7 @@ fn builtin_namespace_type(ns: &str, name: &str) -> Option<Type> {
         ("Env", "args") => Type::List(Box::new(Type::Str)),
         ("Env", "get") => Type::Option(Box::new(Type::Str)),
         ("Time", "now") => Type::Int,
+        ("Time", "now_ms") => Type::Int,
         ("Time", "sleep") => Type::Unit, // becomes `async ()` inside async code; see ty_of
         _ => return None,
     })
@@ -6575,7 +6848,10 @@ fn builtin_method_type(recv: &Type, name: &str) -> Type {
         "sort" | "reverse" => recv.materialized(),
         "push" => Type::Unit,
         "lines" | "split" => Type::Iter(Box::new(Type::Str), true),
-        "chars" => Type::List(Box::new(Type::Str)),
+        "chars" => Type::List(Box::new(Type::Char)),
+        "code" => Type::Int,
+        "to_char" => Type::Option(Box::new(Type::Char)),
+        "alnum?" | "upper?" | "lower?" => Type::Bool,
         "or" => match recv {
             Type::Option(i) => (**i).clone(),
             Type::Result(t, _) => (**t).clone(),
@@ -6904,7 +7180,7 @@ fn describe_names(names: &[&String]) -> String {
 /// Names of built-in types and Rust types the generated code relies on.
 fn reserved_type_name(name: &str, line: usize, col: usize) -> Result<()> {
     const RESERVED: &[&str] = &[
-        "Int", "Float", "Str", "Bool", "List", "Map", "Set", "Option", "Result", "Box", "Vec", "String", "Task", "Time", "File", "Math", "Rc", "Arc", "Mutex", "Some",
+        "Int", "Float", "Str", "Char", "Bool", "List", "Map", "Set", "Option", "Result", "Box", "Vec", "String", "Task", "Time", "File", "Math", "Rc", "Arc", "Mutex", "Some",
         "None", "Ok", "Err",
     ];
     if RESERVED.contains(&name) {
@@ -6998,6 +7274,7 @@ fn builtin_params(recv: &Type, name: &str) -> Option<Vec<Type>> {
         (Type::Int, "clamp") => vec![int(), int()],
         (Type::Float, "max" | "min" | "pow") => vec![Type::Float],
         (Type::Float, "clamp") => vec![Type::Float, Type::Float],
+        (Type::Option(i), "or") if **i == Type::Char => return None,
         (Type::Option(i), "or") => vec![(**i).clone()],
         (Type::Result(t, _), "or") => vec![(**t).clone()],
         (Type::Option(_), "or_error") => vec![st()],
@@ -7010,4 +7287,53 @@ fn a_type(t: &Type) -> String {
     let n = type_name(t);
     let article = if n.chars().next().map(|c| "AEIOU".contains(c.to_ascii_uppercase())).unwrap_or(false) { "an" } else { "a" };
     format!("{} `{}`", article, n)
+}
+
+/// `Str` and `Char` mix in comparisons and `+`.
+fn text_like(t: &Type) -> bool {
+    matches!(t, Type::Str | Type::Char)
+}
+
+/// A plain string literal (no interpolation) as a Rust `&str` literal, for
+/// positions that only read it: operands of `+` and comparisons, method
+/// arguments that borrow. Saves an allocation per use.
+fn str_literal(e: &Expr) -> Option<String> {
+    match &e.kind {
+        ExprKind::Str(pieces) if pieces.iter().all(|p| matches!(p, StrPiece::Lit(_))) => {
+            let t: String = pieces.iter().map(|p| match p { StrPiece::Lit(s) => s.as_str(), _ => "" }).collect();
+            Some(format!("\"{}\"", escape_rust_str(&t, false)))
+        }
+        _ => None,
+    }
+}
+
+/// A one-character string literal, as the character.
+fn char_literal(e: &Expr) -> Option<char> {
+    match &e.kind {
+        ExprKind::Str(parts) => match parts.as_slice() {
+            [StrPiece::Lit(t)] => {
+                let mut cs = t.chars();
+                match (cs.next(), cs.next()) {
+                    (Some(c), None) => Some(c),
+                    _ => None,
+                }
+            }
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// The body of a Rust `char` literal.
+fn rust_char(c: char) -> String {
+    match c {
+        '\'' => "\\'".into(),
+        '\\' => "\\\\".into(),
+        '\n' => "\\n".into(),
+        '\t' => "\\t".into(),
+        '\r' => "\\r".into(),
+        '\0' => "\\0".into(),
+        c if (c as u32) < 0x20 => format!("\\u{{{:x}}}", c as u32),
+        c => c.to_string(),
+    }
 }

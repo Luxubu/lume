@@ -18,9 +18,9 @@ enum Status:
   Done(at: Int)
 
   def label = match self:
-    Draft              -> "draft"
+    Draft   -> "draft"
     Done(at) if at > 0 -> "done at #{at}"
-    Done(_)            -> "done"
+    Done(_) -> "done"
 
 interface Shape:
   def area -> Float

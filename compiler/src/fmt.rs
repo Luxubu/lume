@@ -112,9 +112,11 @@ fn align_arrows(arms: &mut [(String, Option<String>)]) {
         while j < arms.len() && arms[j].1.is_some() {
             j += 1;
         }
-        let width = arms[i..j].iter().map(|(h, _)| h.chars().count()).max().unwrap_or(0);
+        // a guard makes a head long; it does not set the column for the others
+        let plain = arms[i..j].iter().filter(|(h, _)| !h.contains(" if ")).map(|(h, _)| h.chars().count()).max();
+        let width = plain.unwrap_or_else(|| arms[i..j].iter().map(|(h, _)| h.chars().count()).max().unwrap_or(0));
         for (h, _) in &mut arms[i..j] {
-            let pad = width - h.chars().count();
+            let pad = width.saturating_sub(h.chars().count());
             h.push_str(&" ".repeat(pad));
         }
         i = j;
@@ -211,6 +213,9 @@ impl Fmt {
                 i += 1;
             } else if c == '.' && i + 1 < l.len() && l[i + 1].is_ascii_digit() && !(i > start && l[i - 1] == '.') {
                 i += 1;
+            } else if (c == 'e' || c == 'E') && i + 1 < l.len() && (l[i + 1].is_ascii_digit() || ((l[i + 1] == '+' || l[i + 1] == '-') && i + 2 < l.len() && l[i + 2].is_ascii_digit())) {
+                // an exponent: `1e15`, `2.5e-3`
+                i += if l[i + 1].is_ascii_digit() { 1 } else { 2 };
             } else {
                 break;
             }
@@ -223,6 +228,25 @@ impl Fmt {
         let mut i = col.checked_sub(1)?;
         if i >= l.len() || l[i] != '"' {
             return None;
+        }
+        // a `"""` block is copied through to its closing quotes, lines and all
+        if i + 2 < l.len() && l[i + 1] == '"' && l[i + 2] == '"' {
+            let mut out: String = l[i..].iter().collect();
+            let mut ln = line - 1;
+            let closes = |s: &str| s[3..].contains("\"\"\"");
+            if !closes(&out) {
+                loop {
+                    ln += 1;
+                    let next = self.src_lines.get(ln)?;
+                    out.push('\n');
+                    out.push_str(&next.iter().collect::<String>());
+                    if next.iter().collect::<String>().contains("\"\"\"") {
+                        break;
+                    }
+                }
+            }
+            let end = out[3..].find("\"\"\"")? + 6;
+            return Some(out[..end].to_string());
         }
         let start = i;
         i += 1;
@@ -260,8 +284,10 @@ impl Fmt {
                 '"' => out.push_str("\\\""),
                 '\n' => out.push_str("\\n"),
                 '\t' => out.push_str("\\t"),
+                '\r' => out.push_str("\\r"),
                 '\0' => out.push_str("\\0"),
                 '#' if chars.get(i + 1) == Some(&'{') => out.push_str("\\#"),
+                c if (*c as u32) < 0x20 || *c == '\u{7f}' => out.push_str(&format!("\\u{{{:x}}}", *c as u32)),
                 c => out.push(*c),
             }
         }
@@ -303,6 +329,10 @@ impl Fmt {
                     out.push('\n');
                 }
                 out.push_str(intro.trim_start_matches('\n'));
+                // a blank the programmer left between the comment and the item stays
+                if !intro.trim().is_empty() {
+                    out.push_str(&blank);
+                }
             } else {
                 out.push_str(&blank);
             }
@@ -431,6 +461,10 @@ impl Fmt {
                     out.push('\n');
                 }
                 out.push_str(intro.trim_start_matches('\n'));
+                // a blank the programmer left between the comment and the item stays
+                if !intro.trim().is_empty() {
+                    out.push_str(&blank);
+                }
             } else {
                 out.push_str(&blank);
             }
@@ -533,10 +567,10 @@ impl Fmt {
             },
             Stmt::OpAssign { name, op, value, .. } => format!("{} {} {}", name, op, self.expr(value)),
             Stmt::FieldAssign { recv, field, op, value, .. } => {
-                format!("{}.{} {}= {}", self.expr_p(recv, 10), field, op.unwrap_or(""), self.expr(value))
+                format!("{}.{} {} {}", self.expr_p(recv, 10), field, op.unwrap_or("="), self.expr(value))
             }
             Stmt::IndexAssign { recv, index, op, value, .. } => {
-                format!("{}[{}] {}= {}", self.expr_p(recv, 10), self.expr(index), op.unwrap_or(""), self.expr(value))
+                format!("{}[{}] {} {}", self.expr_p(recv, 10), self.expr(index), op.unwrap_or("="), self.expr(value))
             }
             Stmt::Return { value, .. } => match value {
                 Some(v) => format!("return {}", self.expr(v)),
@@ -860,11 +894,18 @@ impl Fmt {
             ExprKind::TupleIndex { recv, index } => format!("{}.{}", self.expr_p(recv, 10), index),
             ExprKind::Some(x) => format!("Some({})", self.expr(x)),
             ExprKind::Ok(x) => format!("Ok({})", self.expr(x)),
-            ExprKind::Try(x) => format!("{}?", self.expr_p(x, 10)),
+            ExprKind::Try(x) => match &x.kind {
+                // `p.next()?`, not `p.next?`: the latter reads as a predicate
+                ExprKind::Method { recv, name, args } if args.is_empty() && !name.ends_with('?') && !self.is_pipe(x) => {
+                    format!("{}.{}()?", self.expr_p(recv, 10), name)
+                }
+                _ => format!("{}?", self.expr_p(x, 10)),
+            },
             ExprKind::Unwrap(x) => format!("{}!", self.expr_p(x, 10)),
             ExprKind::Index { recv, index } => format!("{}[{}]", self.expr_p(recv, 10), self.expr(index)),
             ExprKind::Rust(code) => {
-                if !code.contains('\n') && !code.contains('"') && !code.contains('\\') && code.len() <= 60 {
+                let was_inline = self.shape.rust_inline.contains(&(e.line, e.col));
+                if was_inline && !code.contains('\n') && !code.contains('"') && !code.contains('\\') {
                     return format!("rust(\"{}\")", code);
                 }
                 let inner = ind(self.indent + 1);
@@ -1024,6 +1065,7 @@ pub fn type_str(t: &Type) -> String {
         Type::Result(a, b) => format!("{} or {}", type_str(a), type_str(b)),
         Type::Map(k, v) => format!("{{{}: {}}}", type_str(k), type_str(v)),
         Type::Set(t) => format!("{{{}}}", type_str(t)),
+        Type::Char => "Char".into(),
         Type::Iter(e, _) => format!("[{}]", type_str(e)),
         Type::Task(e) => format!("Task[{}]", type_str(e)),
         Type::Future(e) => format!("async {}", type_str(e)),

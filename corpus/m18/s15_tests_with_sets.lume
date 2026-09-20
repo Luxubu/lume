@@ -1,5 +1,5 @@
 # test blocks with assert over sets and slices
-def uniq_chars(s: Str) -> {Str} = s.chars.to_set
+def uniq_chars(s: Str) -> {Char} = s.chars.to_set
 
 def middle(s: Str) -> Str:
   if s.len <= 2: ""

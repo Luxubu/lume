@@ -1,0 +1,23 @@
+{"name":"Lume","version":0.19,"tags":["language","compiler","rust"],"stable":false,"authors":[{"name":"Luan","commits":19},{"name":"Claude","commits":19}],"unicode":"café 😀","nested":{"a":{"b":{"c":[1,2,{"d":null}]}}}}
+[
+  {
+    "name": "Luan",
+    "commits": 19
+  },
+  {
+    "name": "Claude",
+    "commits": 19
+  }
+]
+"Claude"
+null
+missing
+"café 😀"
+7 objects, 3 arrays, 7 strings, 5 numbers, depth 7
+true
+[1, 2      -> expected `,` or `]` at position 5
+{"a" 1}    -> expected `:`, found `1` at position 5
+tru        -> expected `true` at position 3
+"\x"       -> bad escape `\x` at position 3
+[1,]       -> unexpected character `]` at position 3
+01x        -> trailing characters at position 2

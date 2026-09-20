@@ -1,0 +1,14 @@
+[L, u, m, é]
+Some(L)
+é
+4
+L 76 capital
+u 117 vowel
+m 109 letter
+é 233 letter
+[i, m, p, s]
+4
+imps
+MCMXCIV
+Ok(40)
+Error(cannot read `?` at 2)

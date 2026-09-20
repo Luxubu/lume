@@ -9,6 +9,8 @@ pub enum Type {
     Float,
     Bool,
     Str,
+    /// One character; becomes a `Str` wherever one is wanted.
+    Char,
     Unit,
     List(Box<Type>),
     Named(String),
@@ -41,7 +43,7 @@ impl Type {
     /// passed to a function.
     pub fn is_copy(&self) -> bool {
         match self {
-            Type::Int | Type::Float | Type::Bool | Type::Unit => true,
+            Type::Int | Type::Float | Type::Bool | Type::Char | Type::Unit => true,
             Type::Option(t) => t.is_copy(),
             // a handle is cheap to clone, and cloning is how it is shared
             Type::Shared(..) => true,

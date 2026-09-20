@@ -1,0 +1,67 @@
+# `Char`: one character, and the only value in Lume that a string is made of.
+# It is a plain value (copied, never allocated), so character-at-a-time code
+# runs at Rust speed — see examples/json/json.lume for a real parser.
+
+def roman(n: Int) -> Str:
+  values = [(1000, "M"), (900, "CM"), (500, "D"), (400, "CD"), (100, "C"), (90, "XC"), (50, "L"), (40, "XL"), (10, "X"), (9, "IX"), (5, "V"), (4, "IV"), (1, "I")]
+  var left = n
+  var out = ""
+  for v, sign in values:
+    while left >= v:
+      out += sign
+      left -= v
+  out
+
+# A tiny expression evaluator: the characters drive it, one at a time.
+def eval(text: Str) -> Int or Error:
+  cs = text.chars
+  var i = 0
+  var total = 0
+  var sign = 1
+  while i < cs.len:
+    c = cs[i].or("\u{0}")
+    if c.digit?:
+      var n = 0
+      while i < cs.len and cs[i].or("\u{0}").digit?:
+        n = n * 10 + (cs[i].or("0").code - "0".chars[0].or("0").code)
+        i += 1
+      total += sign * n
+      next
+    match c:
+      "+" -> sign = 1
+      "-" -> sign = -1
+      " " -> ()
+      _   -> return Error("cannot read `#{c}` at #{i}")
+    i += 1
+  total
+
+def main:
+  # a character comes from `.chars` or from a position in a string
+  word = "Lumé"
+  puts word.chars
+  puts word[0]
+  puts word[3].or("?")
+  puts word.chars.len
+
+  # characters compare with one-character strings, and match like them
+  for c in word.chars:
+    kind = match c:
+      "a" | "e" | "i" | "o" | "u" -> "vowel"
+      _ if c.upper?               -> "capital"
+      _ if c.alpha?               -> "letter"
+      _                           -> "other"
+    puts "#{c} #{c.code} #{kind}"
+
+  # they build strings, go in sets and maps, and sort
+  var seen: {Char} = {}
+  var counts: {Char: Int} = {}
+  for c in "mississippi".chars:
+    seen.add(c)
+    counts[c] = counts[c].or(0) + 1
+  puts seen.to_list.sort
+  puts counts["s"].or(0)
+  puts "mississippi".chars.uniq.sort.join("")
+
+  puts roman(1994)
+  puts eval("12 + 30 - 2")
+  puts eval("2 ? 2")

@@ -1,0 +1,95 @@
+// The same algorithm as examples/json/json.lume, in plain Rust: a Vec<char>
+// cursor, an enum, recursive descent. What a Rust programmer would write.
+#[derive(Clone, Debug)]
+enum Json { Null, Bool(bool), Num(f64), Str(String), Arr(Vec<Json>), Obj(Vec<(String, Json)>) }
+struct P { chars: Vec<char>, pos: usize }
+impl P {
+    fn peek(&self) -> Option<char> { self.chars.get(self.pos).copied() }
+    fn skip(&mut self) { while matches!(self.peek(), Some(c) if c.is_whitespace()) { self.pos += 1; } }
+    fn fail<T>(&self, w: &str) -> Result<T, String> { Err(format!("{} at position {}", w, self.pos)) }
+    fn expect(&mut self, c: char) -> Result<(), String> { self.skip(); if self.peek() != Some(c) { return self.fail(&format!("expected {}", c)); } self.pos += 1; Ok(()) }
+    fn value(&mut self) -> Result<Json, String> {
+        self.skip();
+        match self.peek() {
+            None => self.fail("end"),
+            Some('{') => self.object(), Some('[') => self.array(), Some('"') => Ok(Json::Str(self.string()?)),
+            Some('t') => self.word("true", Json::Bool(true)), Some('f') => self.word("false", Json::Bool(false)),
+            Some('n') => self.word("null", Json::Null),
+            Some(c) if c == '-' || c.is_ascii_digit() => self.number(),
+            Some(_) => self.fail("unexpected"),
+        }
+    }
+    fn word(&mut self, w: &str, v: Json) -> Result<Json, String> { for e in w.chars() { if self.peek() != Some(e) { return self.fail("word"); } self.pos += 1; } Ok(v) }
+    fn number(&mut self) -> Result<Json, String> {
+        let start = self.pos;
+        if self.peek() == Some('-') { self.pos += 1; }
+        while matches!(self.peek(), Some(c) if c.is_ascii_digit()) { self.pos += 1; }
+        if self.peek() == Some('.') { self.pos += 1; while matches!(self.peek(), Some(c) if c.is_ascii_digit()) { self.pos += 1; } }
+        if matches!(self.peek(), Some('e') | Some('E')) { self.pos += 1; if matches!(self.peek(), Some('+') | Some('-')) { self.pos += 1; } while matches!(self.peek(), Some(c) if c.is_ascii_digit()) { self.pos += 1; } }
+        let t: String = self.chars[start..self.pos].iter().collect();
+        t.parse::<f64>().map(Json::Num).map_err(|_| "bad number".to_string())
+    }
+    fn string(&mut self) -> Result<String, String> {
+        self.expect('"')?;
+        let mut out = String::new();
+        loop {
+            let c = match self.peek() { Some(c) => c, None => return self.fail("unterminated") };
+            self.pos += 1;
+            match c {
+                '"' => break,
+                '\\' => { let e = self.peek().unwrap_or(' '); self.pos += 1; match e {
+                    'n' => out.push('\n'), 't' => out.push('\t'), 'r' => out.push('\r'), 'b' => out.push('\u{8}'), 'f' => out.push('\u{c}'),
+                    '/' => out.push('/'), '\\' => out.push('\\'), '"' => out.push('"'), 'u' => out.push_str(&self.unicode()?), _ => return self.fail("escape") } }
+                _ => out.push(c),
+            }
+        }
+        Ok(out)
+    }
+    fn unicode(&mut self) -> Result<String, String> {
+        let hex: String = self.chars[self.pos..self.pos + 4].iter().collect(); self.pos += 4;
+        let mut code = u32::from_str_radix(&hex, 16).map_err(|_| "hex".to_string())?;
+        if (0xd800..=0xdbff).contains(&code) {
+            self.pos += 2;
+            let low: String = self.chars[self.pos..self.pos + 4].iter().collect(); self.pos += 4;
+            let low = u32::from_str_radix(&low, 16).map_err(|_| "hex".to_string())?;
+            code = 0x10000 + (code - 0xd800) * 1024 + (low - 0xdc00);
+        }
+        char::from_u32(code).map(|c| c.to_string()).ok_or_else(|| "code point".to_string())
+    }
+    fn array(&mut self) -> Result<Json, String> {
+        self.expect('[')?; let mut items = Vec::new(); self.skip();
+        if self.peek() == Some(']') { self.pos += 1; return Ok(Json::Arr(items)); }
+        loop { items.push(self.value()?); self.skip(); match self.peek() { Some(',') => self.pos += 1, Some(']') => { self.pos += 1; break } _ => return self.fail(", or ]") } }
+        Ok(Json::Arr(items))
+    }
+    fn object(&mut self) -> Result<Json, String> {
+        self.expect('{')?; let mut pairs = Vec::new(); self.skip();
+        if self.peek() == Some('}') { self.pos += 1; return Ok(Json::Obj(pairs)); }
+        loop { self.skip(); let k = self.string()?; self.expect(':')?; let v = self.value()?; pairs.push((k, v)); self.skip();
+               match self.peek() { Some(',') => self.pos += 1, Some('}') => { self.pos += 1; break } _ => return self.fail(", or }") } }
+        Ok(Json::Obj(pairs))
+    }
+}
+fn quote(s: &str) -> String { let mut o = String::from("\""); for c in s.chars() { match c { '"' => o.push_str("\\\""), '\\' => o.push_str("\\\\"), '\n' => o.push_str("\\n"), '\t' => o.push_str("\\t"), '\r' => o.push_str("\\r"), _ => o.push(c) } } o.push('"'); o }
+fn show(j: &Json) -> String {
+    match j {
+        Json::Null => "null".into(), Json::Bool(b) => b.to_string(),
+        Json::Num(n) => if *n == n.floor() && n.abs() < 1e15 { (*n as i64).to_string() } else { n.to_string() },
+        Json::Str(s) => quote(s),
+        Json::Arr(items) => format!("[{}]", items.iter().map(show).collect::<Vec<_>>().join(",")),
+        Json::Obj(pairs) => format!("{{{}}}", pairs.iter().map(|(k, v)| format!("{}:{}", quote(k), show(v))).collect::<Vec<_>>().join(",")),
+    }
+}
+fn count(j: &Json, objs: &mut usize, nums: &mut usize) { match j { Json::Obj(p) => { *objs += 1; for (_, v) in p { count(v, objs, nums) } } Json::Arr(i) => for x in i { count(x, objs, nums) }, Json::Num(_) => *nums += 1, _ => {} } }
+fn main() {
+    let text = std::fs::read_to_string(std::env::args().nth(1).unwrap()).unwrap();
+    let t0 = std::time::Instant::now();
+    let mut p = P { chars: text.chars().collect(), pos: 0 };
+    let doc = p.value().unwrap();
+    let t1 = t0.elapsed();
+    let (mut o, mut n) = (0, 0); count(&doc, &mut o, &mut n);
+    println!("{} objects, {} numbers in {} ms", o, n, t1.as_millis());
+    let t2 = std::time::Instant::now();
+    let out = show(&doc);
+    println!("printed {} chars in {} ms", out.chars().count(), t2.elapsed().as_millis());
+}

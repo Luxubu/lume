@@ -1,0 +1,5 @@
+def main:
+  c = "abc".chars[0].or("a")
+  match c:
+    "ab" -> puts "two"
+    _    -> puts "one"

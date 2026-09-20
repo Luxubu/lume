@@ -1,0 +1,6 @@
+error: `cs` is declared `[Str]`, but this is a `[Char]`
+  --> examples/errors/char_list_type.lume:2:19
+  |
+2 |   cs: [Str] = "hi".chars
+  |                   ^
+  help: the characters of a string are `Char` values: declare the type with `Char`, or turn them into strings with `.map(_.to_s)`

@@ -20,7 +20,7 @@ program takes about 1 s in Python and 1.4 s in Ruby.
 The language design lives in the [Lume Language Design](https://claude.ai/code/artifact/1872fe63-1816-4b1e-9983-dec2774382fb)
 document. This repository is the compiler and the examples.
 
-## Status: milestones 1–18 done
+## Status: milestones 1–19 done
 
 | # | Milestone | Status |
 | --- | --- | --- |
@@ -42,6 +42,7 @@ document. This repository is the compiler and the examples.
 | 16 | Ownership by analysis: liveness-based copy or move, recursive enums boxed, `.or` on optional fields, string comparisons in blocks, `for var a in xs`, `xs[i].method` | done: review corpus leaks 6 → 0 |
 | 17 | Pattern completeness: a real exhaustiveness checker with nested witnesses, `A \| B` alternatives; the everyday standard methods; statements in inline blocks | done: 37 new methods, corpus 40 ok / 26 Lume errors / 0 leaks |
 | 18 | `{T}` sets with literals, algebra and iteration; `s[i]` / `s[a..b]` / `xs[a..b]` by character and position; structs and enums as map keys | done |
+| 19 | Dogfood: a real JSON parser/printer/query tool written in Lume, and everything it exposed — `Char`, triple-quoted strings, `\r` and `1e15` literals, `Str +=`, `Time.now_ms`, six formatter defects | done: 13 ms vs hand-written Rust's 10 ms on 867 KB (was 100 ms) |
 | 18r | Third review round (`corpus/m18/`, 30 programs by a third reviewer): two block `if`s in a row, `{}` outside a typed binding, block parameters bound one reference too deep, mutations landing on temporaries, unchecked built-in arguments | done: 10 ranked problems fixed, 0 leaks |
 
 What works today: functions (`def` block and one-liner forms, return type
@@ -111,8 +112,16 @@ uses are wrapped in short locks, arguments are computed before the lock, and
 a block that would take the lock twice is a compile error), `if`/`elif`/`else` as
 expressions, trailing `if`/`unless`, `while`, `for x in range` with `where`,
 lists, ranges (`1..10` inclusive, `1...10` exclusive), string interpolation,
+`Char` (one character: `s.chars` is a `[Char]`, `s[i]` is a `Char?`; a plain
+copied value, so character-at-a-time code runs at Rust speed; it compares
+with and matches one-character string literals (`c == "a"`, `"a" | "e" ->`),
+has `digit?`, `alpha?`, `space?`, `alnum?`, `upper?`, `lower?`, `upcase`,
+`downcase`, `code`, goes in sets and map keys, and becomes a `Str` with
+`.to_s` or wherever a `Str` is wanted; `Int.to_char` goes back),
+multi-line strings (a `"""` block, with the leading line break and the common
+indentation removed; escapes and `#{}` work as usual), `1e15` and `2.5e-3`,
 `and`/`or`/`not`, `**`, calls, `()` for an arm or block that does nothing,
-`xs + ys` to join two lists, `\u{1F600}` escapes, one statement in an
+`xs + ys` to join two lists, `\u{1F600}` and `\r` escapes, one statement in an
 inline block (`xs.each { |x| total += x }`), and the everyday built-in
 methods: on `Str` `len`, `empty?`, `upcase`, `downcase`, `capitalize`, `trim`,
 `lines`, `split` (with or without a separator), `chars`, `contains?`,
@@ -250,6 +259,12 @@ String-and-map code is within 20% of hand-written Rust after milestone 8
 slices, `m[k] = m[k].or(0) + 1` compiles to one entry lookup, a key that is
 not used afterwards is moved rather than cloned, and `{K: V}` is an
 insertion-ordered hash map (Ruby's order, hash speed) written in the prelude.
+Parsing, after milestone 19: `examples/json/json.lume` parses 867 KB of JSON
+in 13 ms and prints it in 21 ms, against 10 ms and 16 ms for the same
+algorithm written by hand in Rust, and 135 ms / 76 ms for the same algorithm
+in Python. Before `Char` existed the Lume version took 100 ms, because
+`s.chars` was a list of one-character heap strings — `examples/json/bench.sh`
+reproduces all of it, including a Rust build with that handicap put back.
 
 ## Build
 
@@ -319,6 +334,9 @@ examples/ownership.lume  copy or move by analysis, a recursive enum, for var, xs
 examples/patterns.lume   `|` alternatives and what the exhaustiveness check catches
 examples/sets.lume       sets, set algebra, struct keys, character slicing
 examples/collections.lume  a word index in a map of sets, tuple destructuring, interface defaults
+examples/chars.lume      Char: roman numerals, an expression evaluator, character tables
+examples/json/           a JSON parser, printer and query tool (350 lines) with its own tests,
+                         plus the same algorithm in Rust and Python and a benchmark script
 examples/stdlib.lume     the built-in methods, one line each
 examples/crate.lume      regex through the bridge: types, iterators, errors, a rust: block
 examples/crates.lume     hex and urlencoding, with nothing written for them

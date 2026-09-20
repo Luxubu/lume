@@ -1,0 +1,5 @@
+def first_letter(s: Str) -> Char:
+  s[0].or("none")
+
+def main:
+  puts first_letter("hi")

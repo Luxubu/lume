@@ -49,7 +49,7 @@ check() {  # name, expected-file, actual-text
   fi
 }
 
-for f in examples/*.lume examples/port/*.lume examples/modules/*.lume; do
+for f in examples/*.lume examples/port/*.lume examples/modules/*.lume examples/json/json.lume; do
   name=$(basename "$(dirname "$f")")/$(basename "$f" .lume); name=${name#examples/}
   [ "$(dirname "$f")" = "examples" ] && name=$(basename "$f" .lume)
   out=$("$LUME" run "$f" 2>&1); code=$?
@@ -81,6 +81,11 @@ for f in examples/tests/*.lume; do
 exit: $code"
 done
 
+# the JSON program keeps its tests beside the code it tests
+out=$("$LUME" test examples/json/json.lume 2>&1); code=$?
+check "json tests" "examples/json/json.test.expected" "$out
+exit: $code"
+
 for f in examples/fmt/*.lume; do
   name="fmt/$(basename "$f" .lume)"
   out=$("$LUME" fmt "$f" --stdout 2>&1); code=$?
@@ -109,10 +114,12 @@ rm -rf corpus/.lume corpus/edge/.lume corpus/m17/.lume corpus/m18/.lume corpus/m
 
 # The formatter must be idempotent and must not change what a program means.
 tmp=$(mktemp -d)
-for f in examples/*.lume examples/port/*.lume examples/modules/*.lume examples/modules/users/*.lume examples/tests/*.lume; do
+for f in examples/*.lume examples/port/*.lume examples/modules/*.lume examples/modules/users/*.lume examples/tests/*.lume examples/json/*.lume; do
   name="fmt-roundtrip/${f#examples/}"
   mkdir -p "$tmp/$(dirname "$f")"
   cp -r examples/modules "$tmp/examples/" 2>/dev/null
+  # a program that imports a neighbour needs it beside the copy too
+  cp examples/json/json.lume "$tmp/examples/json/" 2>/dev/null
   if ! "$LUME" fmt "$f" --stdout > "$tmp/$f" 2>"$tmp/err"; then
     echo "FAIL $name: fmt failed"; head -5 "$tmp/err" | sed 's/^/    /'
     fail=$((fail+1)); failed+=("$name"); continue
@@ -133,7 +140,7 @@ for f in examples/*.lume examples/port/*.lume examples/modules/*.lume examples/m
 done
 rm -rf "$tmp"
 
-rm -rf examples/.lume examples/errors/.lume examples/port/.lume examples/modules/.lume examples/tests/.lume
+rm -rf examples/.lume examples/errors/.lume examples/port/.lume examples/modules/.lume examples/tests/.lume examples/json/.lume
 if [ $UPDATE = 1 ]; then echo "expected files updated"; exit 0; fi
 echo "$pass passed, $fail failed"
 [ $fail -eq 0 ] || { printf '  %s\n' "${failed[@]}"; exit 1; }

@@ -279,6 +279,25 @@ pub fn lex_full(src: &str) -> Result<(Vec<Token>, LexInfo)> {
                         col += 1;
                     }
                 }
+                // an exponent: `1e15`, `2.5e-3` (a float either way)
+                if i < n && (chars[i] == 'e' || chars[i] == 'E') {
+                    let mut j = i + 1;
+                    if j < n && (chars[j] == '+' || chars[j] == '-') {
+                        j += 1;
+                    }
+                    if j < n && chars[j].is_ascii_digit() {
+                        is_float = true;
+                        s.push('e');
+                        s.extend(chars[i + 1..j].iter());
+                        col += j - i;
+                        i = j;
+                        while i < n && chars[i].is_ascii_digit() {
+                            s.push(chars[i]);
+                            i += 1;
+                            col += 1;
+                        }
+                    }
+                }
                 let tok = if is_float {
                     Tok::Float(s.parse().map_err(|_| {
                         LumeError::new(line, start_col, format!("bad number literal `{}`", s))
@@ -290,6 +309,54 @@ pub fn lex_full(src: &str) -> Result<(Vec<Token>, LexInfo)> {
                     })?)
                 };
                 push(&mut toks, tok, line, start_col, &mut space_before);
+            }
+            '"' if i + 2 < n && chars[i + 1] == '"' && chars[i + 2] == '"' => {
+                // A `"""` block: the text between the quotes, with the first
+                // line break and the common indentation removed. Escapes and
+                // `#{}` work as in any string.
+                let start_col = col;
+                let start_line = line;
+                let mut j = i + 3;
+                let mut raw = String::new();
+                loop {
+                    if j + 2 < n && chars[j] == '"' && chars[j + 1] == '"' && chars[j + 2] == '"' {
+                        break;
+                    }
+                    if j >= n {
+                        return Err(LumeError::new(start_line, start_col, "this `\"\"\"` string is never closed").with_help("end it with a matching `\"\"\"`"));
+                    }
+                    raw.push(chars[j]);
+                    j += 1;
+                }
+                // track lines and columns past the block
+                for c in chars[i..j + 3].iter() {
+                    if *c == '\n' {
+                        line += 1;
+                        col = 1;
+                    } else {
+                        col += 1;
+                    }
+                }
+                i = j + 3;
+                let text = dedent_block(&raw);
+                // lex the text as one ordinary string; `"` inside becomes `\"`
+                let mut escaped = String::new();
+                let tchars: Vec<char> = text.chars().collect();
+                for (k, c) in tchars.iter().enumerate() {
+                    if *c == '"' && !(k > 0 && tchars[k - 1] == '\\') {
+                        escaped.push_str("\\\"");
+                    } else if *c == '\n' {
+                        escaped.push_str("\\n");
+                    } else {
+                        escaped.push(*c);
+                    }
+                }
+                let sub = lex(&format!("\"{}\"", escaped)).map_err(|e| LumeError::new(start_line, start_col, format!("in this `\"\"\"` string: {}", e.msg)))?;
+                let parts = match sub.into_iter().next().map(|t| t.tok) {
+                    Some(Tok::Str(parts)) => parts,
+                    _ => Vec::new(),
+                };
+                push(&mut toks, Tok::Str(parts), start_line, start_col, &mut space_before);
             }
             '"' => {
                 let start_col = col;
@@ -343,6 +410,7 @@ pub fn lex_full(src: &str) -> Result<(Vec<Token>, LexInfo)> {
                         lit.push(match e {
                             'n' => '\n',
                             't' => '\t',
+                            'r' => '\r',
                             '0' => '\0',
                             '"' => '"',
                             '\\' => '\\',
@@ -353,7 +421,7 @@ pub fn lex_full(src: &str) -> Result<(Vec<Token>, LexInfo)> {
                                     col,
                                     format!("unknown escape `\\{}` in string", other),
                                 )
-                                .with_help("valid escapes are \\n \\t \\0 \\\" \\\\ \\# and \\u{...}"));
+                                .with_help("valid escapes are \\n \\t \\r \\0 \\\" \\\\ \\# and \\u{...}"));
                             }
                         });
                         i += 2;
@@ -485,4 +553,18 @@ pub fn lex_full(src: &str) -> Result<(Vec<Token>, LexInfo)> {
     }
     push(&mut toks, Tok::Eof, line, col, &mut space_before);
     Ok((toks, info))
+}
+
+/// The text of a `"""` block: drop a first line that is empty, remove the
+/// indentation shared by every non-empty line, and drop the final line break.
+fn dedent_block(raw: &str) -> String {
+    let mut lines: Vec<&str> = raw.split('\n').collect();
+    if lines.first().map(|l| l.trim().is_empty()).unwrap_or(false) {
+        lines.remove(0);
+    }
+    if lines.last().map(|l| l.trim().is_empty()).unwrap_or(false) {
+        lines.pop();
+    }
+    let indent = lines.iter().filter(|l| !l.trim().is_empty()).map(|l| l.len() - l.trim_start().len()).min().unwrap_or(0);
+    lines.iter().map(|l| if l.len() >= indent { &l[indent..] } else { l.trim_start() }).collect::<Vec<_>>().join("\n")
 }

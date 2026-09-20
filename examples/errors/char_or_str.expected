@@ -1,0 +1,6 @@
+error: `first_letter` returns `Char`, but this is a `Str`
+  --> examples/errors/char_or_str.lume:2:7
+  |
+2 |   s[0].or("none")
+  |       ^
+  help: a `Char` is one character: use a one-character literal like `"a"`, or `.chars` and take one

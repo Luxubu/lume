@@ -1,0 +1,6 @@
+error: this pattern is the string "ab", but the value is a single `Char`
+  --> examples/errors/char_pattern.lume:4:5
+  |
+4 |     "ab" -> puts "two"
+  |     ^
+  help: match one character, like `"a"`, or turn the value into a string first with `.to_s`
