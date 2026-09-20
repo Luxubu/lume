@@ -1,0 +1,11 @@
+test parse_user reads a valid line ... ok
+test parse_user rejects a short line ... ok
+test adults keeps 18 and over ... ok
+test this one fails on purpose ... FAILED
+    parse.lume:37: assert u.age == 41
+      left:  40
+      right: 41
+test a plain condition ... ok
+
+5 tests: 4 passed, 1 failed
+exit: 1

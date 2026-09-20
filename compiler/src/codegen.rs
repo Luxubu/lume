@@ -7,7 +7,7 @@
 //! wrong argument counts and keywords, `if` used as a value without `else`,
 //! non-exhaustive `match`, `?` in a function that cannot return `None`.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use crate::ast::*;
 use crate::error::{LumeError, Result};
@@ -57,6 +57,16 @@ impl<A: LumeShow, B: LumeShow, C: LumeShow> LumeShow for (A, B, C) {
 }
 impl<T: LumeShow + ?Sized> LumeShow for &T { fn lume_str(&self) -> String { (**self).lume_str() } }
 impl<T: LumeShow + ?Sized> LumeShow for Box<T> { fn lume_str(&self) -> String { (**self).lume_str() } }
+#[allow(dead_code)]
+fn lume_assert_failed(line: usize, text: &str, sides: Option<(String, String)>) -> ! {
+    let mut msg = format!(":{}: assert {}", line, text);
+    if let Some((l, r)) = sides {
+        msg.push_str(&format!("\n  left:  {}\n  right: {}", l, r));
+    }
+    std::panic::panic_any(LumeAssert(msg));
+}
+#[allow(dead_code)]
+struct LumeAssert(String);
 #[derive(Debug, Clone, PartialEq)]
 struct Error { message: String }
 impl LumeShow for Error { fn lume_str(&self) -> String { format!("Error({})", self.message) } }
@@ -242,7 +252,8 @@ struct EnumInfo {
 
 #[derive(Clone)]
 struct IfaceInfo {
-    methods: HashMap<String, Sig>,
+    /// Ordered by name, so the generated Rust is the same on every run.
+    methods: BTreeMap<String, Sig>,
     required: Vec<String>,
     /// Methods with a body, emitted inside the trait.
     defaults: Vec<FnDef>,
@@ -355,15 +366,16 @@ pub struct Gen {
     module_private: HashMap<String, Vec<String>>,
     /// True for the file that holds `main`.
     is_entry: bool,
+    /// `lume test`: `test` blocks are compiled, `main` is renamed, `!` is silent inside tests.
+    test_mode: bool,
+    in_test: bool,
+    src_lines: Vec<String>,
 }
 
-pub fn generate(program: &[Item]) -> Result<Output> {
-    generate_module(program, None, &[]).map(|(o, _)| o)
-}
 
 /// Compiles one module. `rust_mod` is `Some(name)` for an imported file,
 /// which is emitted as `mod name { ... }`; `None` for the entry file.
-pub fn generate_module(program: &[Item], rust_mod: Option<&str>, deps: &[Dep]) -> Result<(Output, Exports)> {
+pub fn generate_module(program: &[Item], rust_mod: Option<&str>, deps: &[Dep], test_mode: bool, src: &str) -> Result<(Output, Exports)> {
     let mut g = Gen {
         out: String::new(),
         indent: 0,
@@ -394,6 +406,9 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, deps: &[Dep]) -
         module_aliases: HashMap::new(),
         module_private: HashMap::new(),
         is_entry: true,
+        test_mode,
+        in_test: false,
+        src_lines: src.lines().map(|l| l.to_string()).collect(),
     };
     // The built-in Error type: a struct with one field, defined in the prelude.
     g.structs.insert("Error".into(), StructInfo { fields: vec![("message".into(), Type::Str)], methods: HashMap::new() });
@@ -633,7 +648,7 @@ impl Gen {
         } else if let Some(e) = self.enums.get(tname) {
             e.methods.clone()
         } else if let Some(i) = self.interfaces.get(tname) {
-            i.methods.clone()
+            i.methods.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
         } else if self.ext_methods.contains_key(tname) {
             HashMap::new()
         } else {
@@ -921,7 +936,7 @@ impl Gen {
                     ex.interfaces.insert(i.name.clone(), self.interfaces[&i.name].clone());
                 }
                 Item::Interface(i) => ex.private.push(i.name.clone()),
-                Item::Import(_) | Item::Extend(_) => {}
+                Item::Import(_) | Item::Extend(_) | Item::Test(_) => {}
             }
         }
         ex.ext_methods = self.ext_methods.clone();
@@ -973,7 +988,7 @@ impl Gen {
                         return Err(LumeError::new(imp.line, imp.col, format!("`{}` is imported twice", key)));
                     }
                 }
-                Item::Import(_) => {}
+                Item::Import(_) | Item::Test(_) => {}
                 Item::Fn(f) => {
                     if !seen.insert(f.name.clone()) {
                         return Err(LumeError::new(f.line, f.col, format!("function `{}` is defined twice", f.name)));
@@ -1027,7 +1042,7 @@ impl Gen {
                     }
                     self.interfaces.insert(
                         i.name.clone(),
-                        IfaceInfo { methods, required: i.required.iter().map(|m| m.name.clone()).collect(), defaults: i.defaults.clone(), local: true },
+                        IfaceInfo { methods: methods.into_iter().collect(), required: i.required.iter().map(|m| m.name.clone()).collect(), defaults: i.defaults.clone(), local: true },
                     );
                 }
                 Item::Extend(_) => {}
@@ -1074,7 +1089,7 @@ impl Gen {
         // Check that every named type exists.
         for item in program {
             match item {
-                Item::Import(_) => {}
+                Item::Import(_) | Item::Test(_) => {}
                 Item::Fn(f) => self.check_sig_types(f)?,
                 Item::Struct(s) => {
                     for fld in &s.fields {
@@ -1124,7 +1139,7 @@ impl Gen {
                         ext_key = self.type_key(&self.ct(&x.target));
                         (x.methods.iter().collect(), Some(&ext_key))
                     }
-                    Item::Import(_) => (vec![], None),
+                    Item::Import(_) | Item::Test(_) => (vec![], None),
                 };
                 for f in fns {
                     if f.ret.is_some() || self.sig_ret(&f.name, owner) != Type::Unknown {
@@ -1152,7 +1167,7 @@ impl Gen {
                     ext_key = self.type_key(&self.ct(&x.target));
                     (x.methods.iter().collect(), Some(&ext_key))
                 }
-                Item::Import(_) => (vec![], None),
+                Item::Import(_) | Item::Test(_) => (vec![], None),
             };
             for f in fns {
                 if self.sig_ret(&f.name, owner) == Type::Unknown {
@@ -1179,6 +1194,7 @@ impl Gen {
             }
         }
         self.out.push('\n');
+        let mut test_index = 0usize;
         for item in program {
             match item {
                 Item::Fn(f) => self.fn_def(f, None)?,
@@ -1186,11 +1202,19 @@ impl Gen {
                 Item::Enum(e) => self.enum_def(e)?,
                 Item::Interface(i) => self.interface_def(i)?,
                 Item::Import(_) | Item::Extend(_) => continue,
+                Item::Test(t) => {
+                    if !self.test_mode {
+                        continue;
+                    }
+                    let i = test_index;
+                    test_index += 1;
+                    self.test_def(t, i)?;
+                }
             }
             self.out.push('\n');
         }
         self.emit_conformances(program)?;
-        if self.is_entry && !self.fns.contains_key("main") {
+        if self.is_entry && !self.test_mode && !self.fns.contains_key("main") {
             return Err(LumeError::new(1, 1, "no `main` function").with_help("a program starts at `def main:`"));
         }
         Ok(())
@@ -1811,7 +1835,11 @@ impl Gen {
                 types.push((n.clone(), Type::Named(n.clone())));
             }
         }
-        let ifaces: Vec<(String, IfaceInfo)> = self.interfaces.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+        // deterministic output: sort by name
+        types.sort_by(|a, b| a.0.cmp(&b.0));
+        types.dedup_by(|a, b| a.0 == b.0);
+        let mut ifaces: Vec<(String, IfaceInfo)> = self.interfaces.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+        ifaces.sort_by(|a, b| a.0.cmp(&b.0));
         let mut done: HashSet<(String, String)> = HashSet::new();
         for (tkey, t) in &types {
             for (iname, info) in &ifaces {
@@ -2015,7 +2043,16 @@ impl Gen {
                     .with_help("write `def main:` or `def main -> () or Error:`"));
             }
         }
-        let fn_name = if main_result { "lume_main".to_string() } else { rust_name(&f.name) };
+        let fn_name = if is_main && self.test_mode {
+            "lume_program_main".to_string()
+        } else if main_result {
+            "lume_main".to_string()
+        } else {
+            rust_name(&f.name)
+        };
+        if is_main && self.test_mode {
+            self.line("#[allow(dead_code)]");
+        }
         let mut parts: Vec<String> = Vec::new();
         let mut generics: Vec<String> = Vec::new();
         if owner.is_some() {
@@ -2075,12 +2112,56 @@ impl Gen {
         self.current_self_ty = None;
         self.indent -= 1;
         self.line("}");
-        if main_result {
+        if main_result && !self.test_mode {
             self.line("fn main() {");
             self.line("    if let Err(e) = lume_main() { eprintln!(\"error: {}\", e.message); std::process::exit(1); }");
             self.line("}");
         }
         Ok(())
+    }
+
+    /// A `test "name":` block becomes `pub fn lume_test_N()`; the runner in
+    /// the entry file calls it under `catch_unwind`.
+    fn test_def(&mut self, t: &TestDef, index: usize) -> Result<()> {
+        self.line(&format!("pub fn lume_test_{}() {{", index));
+        self.indent += 1;
+        self.push_scope();
+        self.current_fn = format!("test \"{}\"", t.name);
+        self.current_ret = Type::Unit;
+        self.current_self = SelfKind::Read;
+        self.in_test = true;
+        self.tail_of_fn = false;
+        self.block_body(&t.body, false)?;
+        self.in_test = false;
+        self.pop_scope();
+        self.indent -= 1;
+        self.line("}");
+        Ok(())
+    }
+
+    /// The source text of an `assert`, for its failure message.
+    fn assert_text(&self, line: usize, col: usize) -> String {
+        let l = match self.src_lines.get(line.wrapping_sub(1)) {
+            Some(l) => l,
+            None => return String::new(),
+        };
+        let rest: String = l.chars().skip(col - 1).collect();
+        let rest = rest.trim_start_matches("assert").trim();
+        // drop a trailing comment, honouring quotes
+        let mut out = String::new();
+        let mut in_str = false;
+        let mut prev = ' ';
+        for ch in rest.chars() {
+            if ch == '"' && prev != '\\' {
+                in_str = !in_str;
+            }
+            if ch == '#' && !in_str && prev.is_whitespace() {
+                break;
+            }
+            out.push(ch);
+            prev = ch;
+        }
+        out.trim().to_string()
     }
 
     /// In a function returning `T or E`, a result value of type `T` is
@@ -2512,6 +2593,25 @@ impl Gen {
             }
             Stmt::Next { line, col } => {
                 self.loop_control("next", "continue;", *line, *col)?;
+            }
+            Stmt::Assert { cond, line, col } => {
+                let ct = self.ty_of(cond).materialized();
+                if ct != Type::Bool && ct != Type::Unknown {
+                    return Err(LumeError::new(cond.line, cond.col, format!("`assert` needs a `Bool`, but this is a `{}`", type_name(&ct)))
+                        .with_help("compare it to something: `assert x == 3`, `assert xs.len > 0`"));
+                }
+                let text = self.assert_text(*line, *col).replace('\\', "\\\\").replace('"', "\\\"");
+                let c = self.expr(cond)?;
+                // a comparison prints both sides
+                let sides = match &cond.kind {
+                    ExprKind::Binary { op, lhs, rhs } if matches!(*op, "==" | "!=" | "<" | "<=" | ">" | ">=") => {
+                        let l = self.expr_val(lhs)?;
+                        let r = self.expr_val(rhs)?;
+                        format!("Some((({}).lume_str(), ({}).lume_str()))", l, r)
+                    }
+                    _ => "None".to_string(),
+                };
+                self.line(&format!("if !({}) {{ lume_assert_failed({}, \"{}\", {}); }}", c, line, text, sides));
             }
         }
         Ok(())
@@ -3587,10 +3687,12 @@ impl Gen {
                     Type::Option(_) | Type::Result(..) | Type::Unknown => {}
                     other => return Err(LumeError::new(e.line, e.col, format!("`!` unwraps an optional or a `T or E`, but this is a `{}`", type_name(&other)))),
                 }
-                self.warnings.push(
-                    LumeError::new(e.line, e.col, "`!` stops the program if the value is missing or an error")
-                        .with_help("fine in tests and quick scripts; elsewhere use `match`, `?` or `.or(default)`"),
-                );
+                if !self.in_test {
+                    self.warnings.push(
+                        LumeError::new(e.line, e.col, "`!` stops the program if the value is missing or an error")
+                            .with_help("fine in tests and quick scripts; elsewhere use `match`, `?` or `.or(default)`"),
+                    );
+                }
                 let inner = self.expr(x)?;
                 match xt {
                     Type::Result(..) => format!("({}).unwrap_or_else(|e| panic!(\"{{}}\", e.message))", inner),
@@ -4320,6 +4422,7 @@ fn stmt_mentions(s: &Stmt, name: &str) -> bool {
         Stmt::While { cond, body } => expr_mentions(cond, name) || blk(body),
         Stmt::For { iter, filter, body, .. } => expr_mentions(iter, name) || filter.as_ref().map(|f| expr_mentions(f, name)).unwrap_or(false) || blk(body),
         Stmt::Break { .. } | Stmt::Next { .. } => false,
+        Stmt::Assert { cond, .. } => expr_mentions(cond, name),
     }
 }
 

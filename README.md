@@ -20,7 +20,7 @@ program takes about 1 s in Python and 1.4 s in Ruby.
 The language design lives in the [Lume Language Design](https://claude.ai/code/artifact/1872fe63-1816-4b1e-9983-dec2774382fb)
 document. This repository is the compiler and the examples.
 
-## Status: milestones 1–10 done
+## Status: milestones 1–11 done
 
 | # | Milestone | Status |
 | --- | --- | --- |
@@ -34,6 +34,7 @@ document. This repository is the compiler and the examples.
 | 8 | Stdlib speed: ordered hash map, entry updates, lazy `split`/`lines`, key liveness | done: 74 ms → 23 ms |
 | 9 | Lume modules: `import users.model`, `model.User`, `import a.b.Name`, `pub`, cycle detection | done |
 | 10 | `interface` with defaults, structural conformance, `extend T with I`, operator methods | done |
+| 11 | `test "name":` blocks, `assert`, `lume test`, `lume fmt` | done |
 
 What works today: functions (`def` block and one-liner forms, return type
 inferred when omitted), `struct` with fields and methods (fields used bare
@@ -73,7 +74,12 @@ with bodies; a type conforms by having the methods, with nothing to declare;
 behind a pointer and says so once; `extend Str with Shape:` adds the methods
 to a type you do not own; `pub interface` crosses modules), operator methods
 (`def +(o: Point)`, `-`, `*`, `/`, `%`, `==`, `<`; `!=` follows from `==`,
-and `<=`, `>`, `>=`, `sort`, `max`, `min` follow from `<`), `if`/`elif`/`else` as
+and `<=`, `>`, `>=`, `sort`, `max`, `min` follow from `<`), tests in the
+file they test (`test "name":` blocks with `assert`; `lume test` runs them
+and a failing `assert` prints both sides; `lume run`/`build` strip them; `!`
+is silent inside tests), `lume fmt` (one canonical layout, no options; keeps
+comments, blank lines, `x |> y` pipes, one-liner/inline forms and literal
+spelling; aligns `->` in a `match` and trailing comments), `if`/`elif`/`else` as
 expressions, trailing `if`/`unless`, `while`, `for x in range` with `where`,
 lists, ranges (`1..10` inclusive, `1...10` exclusive), string interpolation,
 `and`/`or`/`not`, `**`, calls, a small set of built-in methods (`len`, `sum`,
@@ -98,6 +104,29 @@ without `<`,
 ```sh
 tests/run.sh            # every example's output and every error message, diffed
 tests/run.sh --update   # accept current output as the new expectation
+```
+
+The suite also runs `lume test` on `examples/tests/`, `lume fmt` on
+`examples/fmt/`, and checks that formatting every example is idempotent and
+leaves the generated Rust unchanged.
+
+Tests in a Lume file:
+
+```ruby
+test "parse_user reads a valid line":
+  u = parse_user("Ana, 31")!
+  assert u.age == 31
+```
+
+```
+$ lume test examples/tests/parse.lume
+test parse_user reads a valid line ... ok
+test this one fails on purpose ... FAILED
+    parse.lume:37: assert u.age == 41
+      left:  40
+      right: 41
+
+5 tests: 4 passed, 1 failed
 ```
 
 Ownership: `Int`/`Float`/`Bool` pass by value; `Str`, lists, maps and structs
@@ -132,7 +161,9 @@ cargo build --release
 lume run   examples/fib.lume        # compile and run
 lume build examples/fib.lume        # compile to examples/.lume/fib
 lume emit  examples/fib.lume        # print the generated Rust
-lume check examples/fib.lume        # parse and check only
+lume check examples/fib.lume        # parse and check only (tests included)
+lume test  examples/tests/parse.lume  # build and run the file's `test` blocks
+lume fmt   examples/fib.lume        # rewrite in the canonical layout (--check, --stdout)
 ```
 
 Generated Rust and binaries go in a `.lume/` directory next to the source file.
@@ -148,10 +179,13 @@ compiler/src/ast.rs      the tree
 compiler/src/codegen.rs  Rust emission plus name/mutability checks
 compiler/src/error.rs    error rendering (line, caret, help)
 compiler/src/loader.rs   resolves imports to files, orders modules, rejects cycles
+compiler/src/fmt.rs      lume fmt: prints the tree back out, with comments and blank lines
 compiler/src/main.rs     the CLI
 examples/                programs that must keep compiling
 examples/port/           the design doc's sample programs and the graph program
 examples/modules/        a three-file program: app.lume imports users/model and users/store
 examples/interfaces.lume interfaces, extend, operator methods
+examples/tests/          files with `test` blocks; expected `lume test` output
+examples/fmt/            badly spaced input; expected `lume fmt` output
 examples/errors/         programs that must keep failing, with good messages
 ```

@@ -6,6 +6,10 @@
 #
 # examples/*.lume         must compile and run; stdout is compared
 # examples/errors/*.lume  must fail `lume check`; stderr is compared
+# examples/tests/*.lume   `lume test` output and exit code are compared
+# examples/fmt/*.lume     `lume fmt --stdout` is compared; every example
+#                         must also format idempotently without changing
+#                         the generated Rust
 #
 # The suite is the contract: a milestone is done when this passes.
 
@@ -67,7 +71,50 @@ for f in examples/errors/*.lume; do
   check "$name" "examples/errors/$(basename "$f" .lume).expected" "$out"
 done
 
-rm -rf examples/.lume examples/errors/.lume examples/port/.lume examples/modules/.lume
+for f in examples/tests/*.lume; do
+  name="tests/$(basename "$f" .lume)"
+  out=$("$LUME" test "$f" 2>&1); code=$?
+  check "$name" "${f%.lume}.expected" "$out
+exit: $code"
+done
+
+for f in examples/fmt/*.lume; do
+  name="fmt/$(basename "$f" .lume)"
+  out=$("$LUME" fmt "$f" --stdout 2>&1); code=$?
+  if [ $code -ne 0 ]; then
+    echo "FAIL $name: exit $code"; printf '%s\n' "$out" | head -15 | sed 's/^/    /'
+    fail=$((fail+1)); failed+=("$name"); continue
+  fi
+  check "$name" "${f%.lume}.expected" "$out"
+done
+
+# The formatter must be idempotent and must not change what a program means.
+tmp=$(mktemp -d)
+for f in examples/*.lume examples/port/*.lume examples/modules/*.lume examples/modules/users/*.lume examples/tests/*.lume; do
+  name="fmt-roundtrip/${f#examples/}"
+  mkdir -p "$tmp/$(dirname "$f")"
+  cp -r examples/modules "$tmp/examples/" 2>/dev/null
+  if ! "$LUME" fmt "$f" --stdout > "$tmp/$f" 2>"$tmp/err"; then
+    echo "FAIL $name: fmt failed"; head -5 "$tmp/err" | sed 's/^/    /'
+    fail=$((fail+1)); failed+=("$name"); continue
+  fi
+  "$LUME" fmt "$tmp/$f" --stdout > "$tmp/second" 2>/dev/null
+  if ! cmp -s "$tmp/$f" "$tmp/second"; then
+    echo "FAIL $name: formatting twice differs from formatting once"
+    diff "$tmp/$f" "$tmp/second" | head -10 | sed 's/^/    /'
+    fail=$((fail+1)); failed+=("$name"); continue
+  fi
+  a=$("$LUME" emit "$f" 2>/dev/null | grep -v '^// Generated')
+  b=$("$LUME" emit "$tmp/$f" 2>/dev/null | grep -v '^// Generated')
+  if [ "$a" != "$b" ]; then
+    echo "FAIL $name: formatted program compiles to different Rust"
+    fail=$((fail+1)); failed+=("$name"); continue
+  fi
+  pass=$((pass+1))
+done
+rm -rf "$tmp"
+
+rm -rf examples/.lume examples/errors/.lume examples/port/.lume examples/modules/.lume examples/tests/.lume
 if [ $UPDATE = 1 ]; then echo "expected files updated"; exit 0; fi
 echo "$pass passed, $fail failed"
 [ $fail -eq 0 ] || { printf '  %s\n' "${failed[@]}"; exit 1; }

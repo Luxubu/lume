@@ -4,10 +4,13 @@
 //!   lume run   <file.lume> [-- args...]    compile and run
 //!   lume emit  <file.lume>                 print the generated Rust
 //!   lume check <file.lume>                 parse and check, emit nothing
+//!   lume test  <file.lume>                 build and run the `test` blocks
+//!   lume fmt   <file.lume> [--check|--stdout]  rewrite in the canonical layout
 
 mod ast;
 mod codegen;
 mod error;
+mod fmt;
 mod lexer;
 mod loader;
 mod parser;
@@ -20,7 +23,7 @@ use std::time::Instant;
 
 fn usage() -> ! {
     eprintln!(
-        "lume {}\n\nusage:\n  lume build <file.lume> [-o <binary>]\n  lume run   <file.lume> [-- <args>...]\n  lume emit  <file.lume>\n  lume check <file.lume>",
+        "lume {}\n\nusage:\n  lume build <file.lume> [-o <binary>]\n  lume run   <file.lume> [-- <args>...]\n  lume test  <file.lume>\n  lume fmt   <file.lume> [--check | --stdout]\n  lume emit  <file.lume>\n  lume check <file.lume>",
         env!("CARGO_PKG_VERSION")
     );
     process::exit(2);
@@ -44,7 +47,7 @@ fn rustc_failed_banner(has_rust_blocks: bool, file: &Path, tool: &str, err: &str
 /// Loads the entry file and its imports, compiles each module in dependency
 /// order, and concatenates the Rust: imported modules as `mod` blocks, then
 /// the entry file's items.
-fn compile_to_rust(path: &Path) -> Result<Compiled, String> {
+fn compile_to_rust(path: &Path, test_mode: bool) -> Result<Compiled, String> {
     let modules = loader::load(path)?;
     let mut exports: std::collections::HashMap<String, codegen::Exports> = std::collections::HashMap::new();
     let mut rust = String::new();
@@ -63,7 +66,7 @@ fn compile_to_rust(path: &Path) -> Result<Compiled, String> {
             })
             .collect();
         let rust_mod = if is_entry { None } else { Some(m.rust_mod()) };
-        let (out, ex) = codegen::generate_module(&m.items, rust_mod.as_deref(), &dep_list).map_err(|e| e.render(&file, &m.src))?;
+        let (out, ex) = codegen::generate_module(&m.items, rust_mod.as_deref(), &dep_list, test_mode, &m.src).map_err(|e| e.render(&file, &m.src))?;
         for w in out.warnings {
             eprint!("{}", w.render(&file, &m.src).replacen("error:", "warning:", 1));
         }
@@ -82,7 +85,83 @@ fn compile_to_rust(path: &Path) -> Result<Compiled, String> {
         has_rust_blocks |= out.has_rust_blocks;
         exports.insert(m.id.clone(), ex);
     }
+    if test_mode {
+        rust.push_str(&test_runner(&modules));
+    }
     Ok(Compiled { rust, deps, has_rust_blocks })
+}
+
+/// `fn main` for `lume test`: runs every `test` block of every module,
+/// catching failures so the rest still run, and reports a summary.
+fn test_runner(modules: &[loader::Module]) -> String {
+    let n = modules.len();
+    let mut entries = Vec::new();
+    for (i, m) in modules.iter().enumerate() {
+        let is_entry = i + 1 == n;
+        let mut k = 0usize;
+        for item in &m.items {
+            if let ast::Item::Test(t) = item {
+                let path = if is_entry { format!("lume_test_{}", k) } else { format!("{}::lume_test_{}", m.rust_mod(), k) };
+                let label = if is_entry { t.name.clone() } else { format!("{}: {}", m.id, t.name) };
+                let file = m.path.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default();
+                entries.push(format!("(\"{}\", \"{}\", {} as fn())", label.replace('\\', "\\\\").replace('"', "\\\""), file, path));
+                k += 1;
+            }
+        }
+    }
+    format!(
+        r#"
+fn main() {{
+    let tests: Vec<(&str, &str, fn())> = vec![{entries}];
+    static LAST: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+    std::panic::set_hook(Box::new(|info| {{
+        let msg = if let Some(a) = info.payload().downcast_ref::<LumeAssert>() {{
+            a.0.clone()
+        }} else if let Some(s) = info.payload().downcast_ref::<String>() {{
+            format!(": stopped: {{}}", s)
+        }} else if let Some(s) = info.payload().downcast_ref::<&str>() {{
+            format!(": stopped: {{}}", s)
+        }} else {{
+            String::from(": stopped")
+        }};
+        *LAST.lock().unwrap() = Some(msg);
+    }}));
+    let mut failed = 0usize;
+    for (name, file, f) in &tests {{
+        print!("test {{}} ... ", name);
+        use std::io::Write;
+        let _ = std::io::stdout().flush();
+        match std::panic::catch_unwind(f) {{
+            Ok(()) => println!("ok"),
+            Err(_) => {{
+                failed += 1;
+                println!("FAILED");
+                let msg = LAST.lock().unwrap().take().unwrap_or_default();
+                for (i, l) in msg.lines().enumerate() {{
+                    if i == 0 {{
+                        println!("    {{}}{{}}", file, l);
+                    }} else {{
+                        println!("    {{}}", l);
+                    }}
+                }}
+            }}
+        }}
+    }}
+    let _ = std::panic::take_hook();
+    let total = tests.len();
+    if total == 0 {{
+        println!("no tests");
+    }} else {{
+        println!();
+        println!("{{}} test{{}}: {{}} passed, {{}} failed", total, if total == 1 {{ "" }} else {{ "s" }}, total - failed, failed);
+    }}
+    if failed > 0 {{
+        std::process::exit(1);
+    }}
+}}
+"#,
+        entries = entries.join(", ")
+    )
 }
 
 /// Builds through cargo when the program imports Rust crates.
@@ -114,11 +193,14 @@ fn build_with_cargo(stem: &str, build_dir: &Path, rust: &str, deps: &[(String, S
     Ok(())
 }
 
-fn build(path: &Path, out: Option<PathBuf>, quiet: bool) -> Result<PathBuf, String> {
+fn build(path: &Path, out: Option<PathBuf>, quiet: bool, test_mode: bool) -> Result<PathBuf, String> {
     let t0 = Instant::now();
-    let compiled = compile_to_rust(path)?;
+    let compiled = compile_to_rust(path, test_mode)?;
     let rust = compiled.rust;
-    let stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or("out".into());
+    let mut stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or("out".into());
+    if test_mode {
+        stem.push_str("-test");
+    }
     let dir = path.parent().map(|p| p.to_path_buf()).unwrap_or_else(|| PathBuf::from("."));
     let build_dir = dir.join(".lume");
     fs::create_dir_all(&build_dir).map_err(|e| format!("error: cannot create `{}`: {}", build_dir.display(), e))?;
@@ -170,14 +252,15 @@ fn main() {
     }
 
     match cmd {
-        "emit" => match compile_to_rust(&file) {
+        "emit" => match compile_to_rust(&file, false) {
             Ok(c) => print!("{}", c.rust),
             Err(e) => {
                 eprint!("{}", e);
                 process::exit(1);
             }
         },
-        "check" => match compile_to_rust(&file) {
+        // `check` compiles the tests too, so they are checked along with the program
+        "check" => match compile_to_rust(&file, true) {
             Ok(_) => eprintln!("ok: {}", file.display()),
             Err(e) => {
                 eprint!("{}", e);
@@ -195,7 +278,7 @@ fn main() {
                     usage();
                 }
             }
-            if let Err(e) = build(&file, out, false) {
+            if let Err(e) = build(&file, out, false, false) {
                 eprint!("{}", e);
                 process::exit(1);
             }
@@ -208,7 +291,7 @@ fn main() {
                     None => rest.iter().collect(),
                 }
             };
-            let bin = match build(&file, None, true) {
+            let bin = match build(&file, None, true, false) {
                 Ok(b) => b,
                 Err(e) => {
                     eprint!("{}", e);
@@ -222,6 +305,58 @@ fn main() {
                     eprintln!("error: cannot run `{}`: {}", bin.display(), e);
                     process::exit(1);
                 });
+            process::exit(status.code().unwrap_or(1));
+        }
+        "fmt" => {
+            let mode = args.get(2).map(|s| s.as_str()).unwrap_or("");
+            if !matches!(mode, "" | "--check" | "--stdout") {
+                usage();
+            }
+            let src = match fs::read_to_string(&file) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("error: cannot read `{}`: {}", file.display(), e);
+                    process::exit(1);
+                }
+            };
+            let formatted = match fmt::format_source(&src) {
+                Ok(f) => f,
+                Err(e) => {
+                    eprint!("{}", e.render(&file.display().to_string(), &src));
+                    process::exit(1);
+                }
+            };
+            match mode {
+                "--stdout" => print!("{}", formatted),
+                "--check" => {
+                    if formatted != src {
+                        eprintln!("would reformat {}", file.display());
+                        process::exit(1);
+                    }
+                }
+                _ => {
+                    if formatted != src {
+                        if let Err(e) = fs::write(&file, &formatted) {
+                            eprintln!("error: cannot write `{}`: {}", file.display(), e);
+                            process::exit(1);
+                        }
+                        eprintln!("formatted {}", file.display());
+                    }
+                }
+            }
+        }
+        "test" => {
+            let bin = match build(&file, None, true, true) {
+                Ok(b) => b,
+                Err(e) => {
+                    eprint!("{}", e);
+                    process::exit(1);
+                }
+            };
+            let status = Command::new(&bin).status().unwrap_or_else(|e| {
+                eprintln!("error: cannot run `{}`: {}", bin.display(), e);
+                process::exit(1);
+            });
             process::exit(status.code().unwrap_or(1));
         }
         _ => usage(),

@@ -149,6 +149,15 @@ pub struct ExtendDef {
     pub col: usize,
 }
 
+/// `test "name":` — compiled only by `lume test`.
+#[derive(Debug, Clone)]
+pub struct TestDef {
+    pub name: String,
+    pub body: Block,
+    pub line: usize,
+    pub col: usize,
+}
+
 #[derive(Debug, Clone)]
 pub enum Item {
     Fn(FnDef),
@@ -157,6 +166,7 @@ pub enum Item {
     Import(Import),
     Interface(InterfaceDef),
     Extend(ExtendDef),
+    Test(TestDef),
 }
 
 #[derive(Debug, Clone)]
@@ -216,6 +226,8 @@ pub enum Stmt {
     For { vars: Vec<String>, iter: Expr, filter: Option<Expr>, body: Block, line: usize, col: usize },
     Break { line: usize, col: usize },
     Next { line: usize, col: usize },
+    /// `assert cond` — stops the test (or program) with both sides printed
+    Assert { cond: Expr, line: usize, col: usize },
 }
 
 #[derive(Debug, Clone)]

@@ -1,0 +1,80 @@
+# A badly spaced program. `lume fmt` has no options: this file's .expected
+# is the one layout every Lume program gets.
+import users.model as m
+
+struct Point:
+  x: Int
+  y: Int  # trailing comment survives
+
+  def +(o: Point) -> Point = Point(x + o.x, y + o.y)
+
+  def dist(o: Point) -> Float:
+    dx = (x - o.x).to_float
+    dy = (y - o.y).to_float
+    (dx * dx + dy * dy).sqrt
+
+enum Status:
+  Draft
+  Done(at: Int)
+
+  def label = match self:
+    Draft              -> "draft"
+    Done(at) if at > 0 -> "done at #{at}"
+    Done(_)            -> "done"
+
+interface Shape:
+  def area -> Float
+  def name -> Str = "shape"
+
+def total(xs: [Int]) -> Int:
+  var t = 0
+  for x in xs where x > 0:
+    t += x
+  t
+
+def classify(n: Int) -> Str:
+  if n < 0: "negative"
+  elif n == 0: "zero"
+  else: "positive"
+
+def main:
+  p = Point(1, 2) + Point(3, 4)
+  puts p
+  puts((p.x + p.y) * 2)
+  xs = [1, 2, 3]
+  big = [
+    1_000_000,
+    2_000_000,
+    3_000_000,
+  ]
+  m = {"a": 1, "b": 2}
+  evens = xs.filter(_ % 2 == 0).map { |x| x * x }.to_list
+  xs.each do |x|
+    # inside a block
+    puts x if x > 1
+
+    puts "big" unless x < 3
+  total(xs) |> puts
+  xs |> .filter(_ > 1)
+    |> .map(_ * 10)
+    |> .to_list |> puts
+  puts "done: #{ p.dist( Point(0,0) ) }"
+  r = 1..10
+  puts -p.x
+  puts not (p.x > 0 and p.y > 0)
+  puts 2 ** 3 ** 2
+  puts((2 ** 3) ** 2)
+  puts 1 - (2 - 3)
+  puts 1 - 2 - 3
+  puts 10 / (2 * 5)
+  puts classify(-1)
+  puts m["a"].or(0)
+  m["c"] = 3
+  puts m
+  match xs.first:
+    Some(v) ->
+      puts "first #{v}"
+      puts "again"
+    None -> puts "none"
+  # trailing comment at the end of main
+# and one at the end of the file

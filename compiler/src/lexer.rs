@@ -57,7 +57,29 @@ const SYMBOLS: &[&str] = &[
     "!", "|",
 ];
 
+/// A `#` comment, kept for the formatter (the parser never sees it).
+#[derive(Debug, Clone)]
+pub struct Comment {
+    pub line: usize,
+    pub col: usize,
+    /// The text after `#`, untrimmed on the right.
+    pub text: String,
+}
+
+/// What the formatter needs beyond the tokens.
+#[derive(Debug, Default)]
+pub struct LexInfo {
+    pub comments: Vec<Comment>,
+    /// Lines that hold nothing but whitespace.
+    pub blank_lines: std::collections::HashSet<usize>,
+}
+
 pub fn lex(src: &str) -> Result<Vec<Token>> {
+    lex_full(src).map(|(t, _)| t)
+}
+
+pub fn lex_full(src: &str) -> Result<(Vec<Token>, LexInfo)> {
+    let mut info = LexInfo::default();
     let chars: Vec<char> = src.chars().collect();
     let n = chars.len();
     let mut toks: Vec<Token> = Vec::new();
@@ -92,6 +114,16 @@ pub fn lex(src: &str) -> Result<Vec<Token>> {
             }
             // Blank or comment-only line: skip it entirely.
             if j >= n || chars[j] == '\n' || chars[j] == '\r' || chars[j] == '#' {
+                if j < n && chars[j] == '#' {
+                    let start = j;
+                    while j < n && chars[j] != '\n' {
+                        j += 1;
+                    }
+                    let text: String = chars[start + 1..j].iter().collect();
+                    info.comments.push(Comment { line, col: spaces + 1, text: text.trim_end().to_string() });
+                } else {
+                    info.blank_lines.insert(line);
+                }
                 while j < n && chars[j] != '\n' {
                     j += 1;
                 }
@@ -213,9 +245,14 @@ pub fn lex(src: &str) -> Result<Vec<Token>> {
                 space_before = true;
             }
             '#' => {
+                let start = i;
+                let ccol = col;
                 while i < n && chars[i] != '\n' {
                     i += 1;
                 }
+                let text: String = chars[start + 1..i].iter().collect();
+                info.comments.push(Comment { line, col: ccol, text: text.trim_end().to_string() });
+                col += i - start;
             }
             '0'..='9' => {
                 let start_col = col;
@@ -419,5 +456,5 @@ pub fn lex(src: &str) -> Result<Vec<Token>> {
         push(&mut toks, Tok::Dedent, line, 1, &mut space_before);
     }
     push(&mut toks, Tok::Eof, line, col, &mut space_before);
-    Ok(toks)
+    Ok((toks, info))
 }

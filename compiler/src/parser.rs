@@ -12,11 +12,52 @@ pub struct Parser {
     /// expression inside a string so errors point at the right column.
     line_base: usize,
     col_base: usize,
+    shape: Shape,
+}
+
+/// What the tree does not keep but the formatter must reproduce: which forms
+/// the programmer chose where two spellings mean the same thing. Keyed by
+/// source position.
+#[derive(Debug, Default, Clone)]
+pub struct Shape {
+    /// `stmt if cond` / `stmt unless cond`, keyed by the `if` expression the
+    /// parser builds; the value is true for `unless`.
+    pub trailing: std::collections::HashMap<(usize, usize), bool>,
+    /// Blocks written on the same line as their opener (`if c: x`,
+    /// `pat -> x`, `{ |x| x }`, `def f = x`), keyed by the position of the
+    /// block's single statement.
+    pub inline: std::collections::HashSet<(usize, usize)>,
+    /// `lhs |> stage`, keyed by the node the stage produced; the value is
+    /// true when the `|>` began a new line.
+    pub pipes: std::collections::HashMap<(usize, usize), bool>,
 }
 
 pub fn parse_program(toks: Vec<Token>) -> Result<Vec<Item>> {
-    let mut p = Parser { toks, pos: 0, line_base: 0, col_base: 0 };
-    p.program()
+    parse_program_shaped(toks).map(|(items, _)| items)
+}
+
+pub fn parse_program_shaped(toks: Vec<Token>) -> Result<(Vec<Item>, Shape)> {
+    let mut p = Parser { toks, pos: 0, line_base: 0, col_base: 0, shape: Shape::default() };
+    let items = p.program()?;
+    Ok((items, p.shape))
+}
+
+/// Position of a statement, for the `inline` set.
+pub fn stmt_pos(s: &Stmt) -> (usize, usize) {
+    match s {
+        Stmt::Bind { line, col, .. }
+        | Stmt::Var { line, col, .. }
+        | Stmt::OpAssign { line, col, .. }
+        | Stmt::FieldAssign { line, col, .. }
+        | Stmt::IndexAssign { line, col, .. }
+        | Stmt::Return { line, col, .. }
+        | Stmt::For { line, col, .. }
+        | Stmt::Break { line, col }
+        | Stmt::Next { line, col }
+        | Stmt::Assert { line, col, .. } => (*line, *col),
+        Stmt::Expr(e) => (e.line, e.col),
+        Stmt::While { cond, .. } => (cond.line, cond.col),
+    }
 }
 
 impl Parser {
@@ -147,6 +188,12 @@ impl Parser {
         Ok(())
     }
 
+    fn mark_inline(&mut self, b: &Block) {
+        if let Some(st) = b.stmts.first() {
+            self.shape.inline.insert(stmt_pos(st));
+        }
+    }
+
     fn skip_newlines(&mut self) {
         while matches!(self.peek(), Tok::Newline) {
             self.advance();
@@ -192,6 +239,11 @@ impl Parser {
             }
             if self.at_kw("extend") {
                 items.push(Item::Extend(self.extend_def()?));
+                self.skip_newlines();
+                continue;
+            }
+            if self.at_kw("test") {
+                items.push(Item::Test(self.test_def()?));
                 self.skip_newlines();
                 continue;
             }
@@ -610,11 +662,15 @@ impl Parser {
                         .with_help("for several statements use `def ...:` and an indented body"));
                 }
                 self.advance();
-                Block { stmts: vec![Stmt::Expr(e)] }
+                let b = Block { stmts: vec![Stmt::Expr(e)] };
+                self.mark_inline(&b);
+                b
             } else {
                 let e = self.expr()?;
                 self.end_stmt()?;
-                Block { stmts: vec![Stmt::Expr(e)] }
+                let b = Block { stmts: vec![Stmt::Expr(e)] };
+                self.mark_inline(&b);
+                b
             }
         } else {
             return Err(self
@@ -622,6 +678,39 @@ impl Parser {
                 .with_help("`def f(x: Int) -> Int:` starts a block; `def f(x: Int) -> Int = x * 2` is a one-liner"));
         };
         Ok(FnDef { name, public: false, params, ret, self_kind, body, line, col })
+    }
+
+    /// `test "name":` followed by an indented body.
+    fn test_def(&mut self) -> Result<TestDef> {
+        let (line, col) = self.here();
+        self.advance(); // test
+        let name = match self.peek().clone() {
+            Tok::Str(parts) => {
+                let (sl, sc) = self.here();
+                self.advance();
+                let mut text = String::new();
+                for p in parts {
+                    match p {
+                        StrPart::Lit(s) => text.push_str(&s),
+                        StrPart::Expr(..) => return Err(LumeError::new(sl, sc, "a test name is a plain string, without `#{}`")),
+                    }
+                }
+                if text.trim().is_empty() {
+                    return Err(LumeError::new(sl, sc, "a test needs a name"));
+                }
+                text
+            }
+            _ => {
+                return Err(self
+                    .err(format!("expected the test's name in quotes after `test`, found {}", self.describe()))
+                    .with_help("write `test \"what it checks\":` and the body indented below"))
+            }
+        };
+        if !self.eat_sym(":") {
+            return Err(self.err(format!("expected `:` after the test name, found {}", self.describe())));
+        }
+        let body = self.block()?;
+        Ok(TestDef { name, body, line, col })
     }
 
     fn parse_type(&mut self) -> Result<Type> {
@@ -807,6 +896,17 @@ impl Parser {
             self.end_stmt()?;
             return Ok(s);
         }
+        if self.eat_kw("assert") {
+            if matches!(self.peek(), Tok::Newline | Tok::Dedent | Tok::Eof) {
+                return Err(self.err("`assert` needs a condition").with_help("write `assert x == 3`"));
+            }
+            let cond = self.expr()?;
+            if self.eat_sym(",") {
+                return Err(self.err("`assert` takes only a condition; a failing `assert` prints both sides itself"));
+            }
+            self.end_stmt()?;
+            return Ok(Stmt::Assert { cond, line, col });
+        }
         if self.eat_kw("while") {
             let cond = self.expr()?;
             self.expect_sym(":", "after the `while` condition")?;
@@ -919,6 +1019,7 @@ impl Parser {
         let (line, col) = self.here();
         if self.eat_kw("if") {
             let cond = self.expr()?;
+            self.shape.trailing.insert((line, col), false);
             return Ok(Stmt::Expr(Expr::new(
                 ExprKind::If { branches: vec![(cond, Block { stmts: vec![stmt] })], else_block: None },
                 line,
@@ -926,6 +1027,7 @@ impl Parser {
             )));
         }
         if self.eat_kw("unless") {
+            self.shape.trailing.insert((line, col), true);
             let cond = self.expr()?;
             let (cl, cc) = (cond.line, cond.col);
             let neg = Expr::new(ExprKind::Unary { op: "not", expr: Box::new(cond) }, cl, cc);
@@ -1050,7 +1152,9 @@ impl Parser {
                 self.block()?
             } else {
                 // an inline arm holds one statement: a value, or an assignment
-                Block { stmts: vec![self.stmt()?] }
+                let b = Block { stmts: vec![self.stmt()?] };
+                self.mark_inline(&b);
+                b
             };
             arms.push(MatchArm { pat, guard, body, line: al, col: ac });
             self.skip_newlines();
@@ -1212,9 +1316,29 @@ impl Parser {
         }
         if matches!(self.peek(), Tok::Newline) {
             self.block()
+        } else if self.at_kw("return") || self.at_kw("break") || self.at_kw("next") {
+            // `if done: return x` / `if x < 0: next`
+            let (l, c) = self.here();
+            let kw = match self.advance().tok {
+                Tok::Ident(k) => k,
+                _ => unreachable!(),
+            };
+            let st = match kw.as_str() {
+                "return" => {
+                    let value = if matches!(self.peek(), Tok::Newline | Tok::Dedent | Tok::Eof) { None } else { Some(self.expr()?) };
+                    Stmt::Return { value, line: l, col: c }
+                }
+                "break" => Stmt::Break { line: l, col: c },
+                _ => Stmt::Next { line: l, col: c },
+            };
+            let b = Block { stmts: vec![st] };
+            self.mark_inline(&b);
+            Ok(b)
         } else {
             let e = self.expr()?;
-            Ok(Block { stmts: vec![Stmt::Expr(e)] })
+            let b = Block { stmts: vec![Stmt::Expr(e)] };
+            self.mark_inline(&b);
+            Ok(b)
         }
     }
 
@@ -1248,9 +1372,12 @@ impl Parser {
                 break;
             }
             let (line, col) = self.here();
+            let pipe_newline = self.pos > 0 && self.toks[self.pos - 1].line < self.toks[self.pos].line;
             self.advance();
             if op == "|>" {
+                let key = self.here();
                 lhs = self.pipe_stage(lhs, line, col)?;
+                self.shape.pipes.insert(key, pipe_newline);
                 continue;
             }
             let next_min = if right_assoc { prec } else { prec + 1 };
@@ -1447,7 +1574,9 @@ impl Parser {
             if !self.eat_sym("}") {
                 return Err(self.err(format!("expected `}}` to close the block, found {}", self.describe())));
             }
-            return Ok(Some(Expr::new(ExprKind::Lambda { params, body: Block { stmts: vec![Stmt::Expr(body)] } }, line, col)));
+            let b = Block { stmts: vec![Stmt::Expr(body)] };
+            self.mark_inline(&b);
+            return Ok(Some(Expr::new(ExprKind::Lambda { params, body: b }, line, col)));
         }
         if self.at_kw("do") {
             self.advance();
@@ -1499,15 +1628,22 @@ impl Parser {
                     match p {
                         StrPart::Lit(s) => pieces.push(StrPiece::Lit(s)),
                         StrPart::Expr(raw, ecol) => {
+                            // `#{ x }` — spaces inside the braces are allowed
+                            let lead = raw.len() - raw.trim_start().len();
+                            let raw = raw.trim().to_string();
+                            let ecol = ecol + lead;
                             let toks = lexer::lex(&raw).map_err(|e| {
                                 LumeError::new(line, ecol + e.col - 1, format!("in interpolation: {}", e.msg))
                             })?;
-                            let mut sub = Parser { toks, pos: 0, line_base: line - 1, col_base: ecol - 1 };
+                            let mut sub = Parser { toks, pos: 0, line_base: line - 1, col_base: ecol - 1, shape: Shape::default() };
                             let e = sub.expr()?;
                             sub.skip_newlines();
                             if !matches!(sub.peek(), Tok::Eof) {
                                 return Err(sub.err("unexpected text after the interpolated expression"));
                             }
+                            self.shape.trailing.extend(sub.shape.trailing);
+                            self.shape.inline.extend(sub.shape.inline);
+                            self.shape.pipes.extend(sub.shape.pipes);
                             pieces.push(StrPiece::Expr(e));
                         }
                     }
@@ -1664,9 +1800,9 @@ impl Parser {
                     self.advance();
                     Ok(Expr::new(ExprKind::SelfRef, line, col))
                 }
-                "interface" | "extend" | "import" | "test" => {
-                    Err(LumeError::new(line, col, format!("`{}` is not implemented yet in this milestone", s)))
-                }
+                "test" => Err(LumeError::new(line, col, "`test` blocks go at the top level of the file, not inside a function")),
+                "assert" => Err(LumeError::new(line, col, "`assert` is a statement and starts its own line")),
+                "interface" | "extend" | "import" => Err(LumeError::new(line, col, format!("`{}` goes at the top level of the file", s))),
                 _ if lexer::is_keyword(&s) => {
                     Err(LumeError::new(line, col, format!("unexpected keyword `{}` here", s)))
                 }

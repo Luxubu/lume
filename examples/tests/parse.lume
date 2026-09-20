@@ -1,0 +1,41 @@
+# Tests live in the file they test. `lume test parse.lume` compiles the
+# `test` blocks into a runner; `lume run` and `lume build` strip them.
+# One test here fails on purpose, to show what a failure looks like.
+
+struct User:
+  name: Str
+  age: Int
+
+def parse_user(line: Str) -> User or Error:
+  parts = line.split(",").to_list
+  if parts.len != 2: return Error("expected `name,age`, got `#{line}`")
+  name = parts[0].or_error("missing name")?
+  age = parts[1].or_error("missing age")?.trim.to_int?
+  User(name.trim, age)
+
+def adults(users: [User]) -> [User]:
+  users.filter(_.age >= 18)
+
+def main -> () or Error:
+  puts parse_user("Ana, 31")?
+
+test "parse_user reads a valid line":
+  u = parse_user("Ana, 31")!        # `!` is silent inside tests
+  assert u.name == "Ana"
+  assert u.age == 31
+
+test "parse_user rejects a short line":
+  assert parse_user("Ana").error?
+
+test "adults keeps 18 and over":
+  us = [User("Ana", 31), User("Bo", 17), User("Cy", 18)]
+  assert adults(us).map(_.name) == ["Ana", "Cy"]
+  assert adults(us).len == 2
+
+test "this one fails on purpose":
+  u = parse_user("Bob, 40")!
+  assert u.age == 41
+
+test "a plain condition":
+  xs = [1, 2, 3]
+  assert xs.contains?(2)
