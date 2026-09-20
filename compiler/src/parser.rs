@@ -13,6 +13,8 @@ pub struct Parser {
     line_base: usize,
     col_base: usize,
     shape: Shape,
+    /// Depth of `{ |x| ... }` blocks being parsed: a statement may end at `}`.
+    inline_block: usize,
 }
 
 /// What the tree does not keep but the formatter must reproduce: which forms
@@ -37,7 +39,7 @@ pub fn parse_program(toks: Vec<Token>) -> Result<Vec<Item>> {
 }
 
 pub fn parse_program_shaped(toks: Vec<Token>) -> Result<(Vec<Item>, Shape)> {
-    let mut p = Parser { toks, pos: 0, line_base: 0, col_base: 0, shape: Shape::default() };
+    let mut p = Parser { toks, pos: 0, line_base: 0, col_base: 0, shape: Shape::default(), inline_block: 0 };
     let items = p.program()?;
     Ok((items, p.shape))
 }
@@ -210,6 +212,7 @@ impl Parser {
                 Ok(())
             }
             Tok::Dedent | Tok::Eof => Ok(()),
+            Tok::Sym("}") if self.inline_block > 0 => Ok(()),
             _ if matches!(self.prev_tok(), Some(Tok::Dedent)) => Ok(()),
             _ => Err(self
                 .err(format!("expected the end of the line, found {}", self.describe()))
@@ -1179,7 +1182,7 @@ impl Parser {
         let mut arms = Vec::new();
         while !matches!(self.peek(), Tok::Dedent | Tok::Eof) {
             let (al, ac) = self.here();
-            let pat = self.pattern()?;
+            let pat = self.arm_pattern()?;
             let guard = if self.eat_kw("if") { Some(self.expr()?) } else { None };
             if !self.eat_sym("->") {
                 return Err(self
@@ -1204,6 +1207,26 @@ impl Parser {
             return Err(LumeError::new(line, col, "`match` has no arms"));
         }
         Ok(Expr::new(ExprKind::Match { scrutinee: Box::new(scrutinee), arms }, line, col))
+    }
+
+    /// A whole arm pattern: one pattern, or several joined with `|`.
+    fn arm_pattern(&mut self) -> Result<Pattern> {
+        let first = self.pattern()?;
+        if !self.at_sym("|") {
+            return Ok(first);
+        }
+        let (line, col) = (first.line, first.col);
+        let mut alts = vec![first];
+        while self.eat_sym("|") {
+            alts.push(self.pattern()?);
+        }
+        for a in &alts {
+            if matches!(a.kind, PatKind::Wild | PatKind::Bind(_)) {
+                return Err(LumeError::new(a.line, a.col, "this alternative already matches everything, so the `|` has no effect")
+                    .with_help("drop the other alternatives, or replace this one with a specific pattern"));
+            }
+        }
+        Ok(Pattern { kind: PatKind::Or(alts), line, col })
     }
 
     fn pattern(&mut self) -> Result<Pattern> {
@@ -1259,7 +1282,7 @@ impl Parser {
                 self.advance();
                 let mut items = Vec::new();
                 while !self.at_sym(")") {
-                    items.push(self.pattern()?);
+                    items.push(self.arm_pattern()?);
                     if !self.eat_sym(",") {
                         break;
                     }
@@ -1292,7 +1315,7 @@ impl Parser {
                         }
                         break;
                     }
-                    items.push(self.pattern()?);
+                    items.push(self.arm_pattern()?);
                     if !self.eat_sym(",") {
                         break;
                     }
@@ -1331,7 +1354,7 @@ impl Parser {
                 if self.at_sym("(") {
                     self.advance();
                     while !self.at_sym(")") {
-                        args.push(self.pattern()?);
+                        args.push(self.arm_pattern()?);
                         if !self.eat_sym(",") {
                             break;
                         }
@@ -1607,16 +1630,21 @@ impl Parser {
         if self.at_sym("{") {
             self.advance();
             let params = self.block_params()?;
-            let body = self.expr()?;
-            if self.at_sym(";") || matches!(self.peek(), Tok::Newline) {
-                return Err(self
-                    .err("an inline block holds a single expression")
-                    .with_help("for several statements use `do |x|` and an indented body"));
-            }
-            if !self.eat_sym("}") {
+            // one statement: a value, or an assignment like `total += x`
+            self.inline_block += 1;
+            let st = self.stmt();
+            self.inline_block -= 1;
+            let st = st?;
+            if !self.at_sym("}") {
+                if matches!(self.prev_tok(), Some(Tok::Newline)) || self.at_sym(";") {
+                    return Err(self
+                        .err("an inline block holds a single statement")
+                        .with_help("for several statements use `do |x|` and an indented body"));
+                }
                 return Err(self.err(format!("expected `}}` to close the block, found {}", self.describe())));
             }
-            let b = Block { stmts: vec![Stmt::Expr(body)] };
+            self.advance();
+            let b = Block { stmts: vec![st] };
             self.mark_inline(&b);
             return Ok(Some(Expr::new(ExprKind::Lambda { params, body: b }, line, col)));
         }
@@ -1677,7 +1705,7 @@ impl Parser {
                             let toks = lexer::lex(&raw).map_err(|e| {
                                 LumeError::new(line, ecol + e.col - 1, format!("in interpolation: {}", e.msg))
                             })?;
-                            let mut sub = Parser { toks, pos: 0, line_base: line - 1, col_base: ecol - 1, shape: Shape::default() };
+                            let mut sub = Parser { toks, pos: 0, line_base: line - 1, col_base: ecol - 1, shape: Shape::default(), inline_block: 0 };
                             let e = sub.expr()?;
                             sub.skip_newlines();
                             if !matches!(sub.peek(), Tok::Eof) {

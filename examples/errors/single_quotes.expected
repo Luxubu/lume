@@ -1,7 +1,6 @@
 error: unexpected character `'`
-  --> corpus/edge/e07_escapes.lume:7:8
+  --> examples/errors/single_quotes.lume:2:8
   |
-7 |   puts 'single quotes'
+2 |   puts 'hello'
   |        ^
   help: strings use double quotes: "like this"
-exit: 1

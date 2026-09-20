@@ -1,7 +1,6 @@
-error: this `match` on `Outer` does not cover: Wrap (its arms only match some values: a guard or a nested pattern)
-  --> corpus/edge/e13_nested_enum.lume:10:3
-   |
-10 |   match o:
-   |   ^
-  help: add an arm for Wrap, or a final `_ ->` arm
-exit: 1
+big 9
+small 1
+b
+empty
+3
+exit: 0

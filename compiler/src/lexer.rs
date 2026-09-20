@@ -314,6 +314,30 @@ pub fn lex_full(src: &str) -> Result<(Vec<Token>, LexInfo)> {
                         )
                         .with_help("add the closing `\"`"));
                     }
+                    if ch == '\\' && i + 1 < n && chars[i + 1] == 'u' {
+                        // \u{1F600}
+                        if i + 2 >= n || chars[i + 2] != '{' {
+                            return Err(LumeError::new(line, col, "a unicode escape is written `\\u{...}` with the code point in hex")
+                                .with_help("for example `\\u{1F600}`"));
+                        }
+                        let mut j = i + 3;
+                        let mut hex = String::new();
+                        while j < n && chars[j] != '}' && chars[j] != '"' && chars[j] != '\n' {
+                            hex.push(chars[j]);
+                            j += 1;
+                        }
+                        let cp = if j < n && chars[j] == '}' && !hex.is_empty() && hex.len() <= 6 { u32::from_str_radix(&hex, 16).ok() } else { None };
+                        match cp.and_then(char::from_u32) {
+                            Some(c) => lit.push(c),
+                            None => {
+                                return Err(LumeError::new(line, col, format!("`\\u{{{}}}` is not a valid unicode escape", hex))
+                                    .with_help("write the code point in hex inside the braces, like `\\u{e9}` or `\\u{1F600}`"));
+                            }
+                        }
+                        col += j + 1 - i;
+                        i = j + 1;
+                        continue;
+                    }
                     if ch == '\\' && i + 1 < n {
                         let e = chars[i + 1];
                         lit.push(match e {
@@ -329,7 +353,7 @@ pub fn lex_full(src: &str) -> Result<(Vec<Token>, LexInfo)> {
                                     col,
                                     format!("unknown escape `\\{}` in string", other),
                                 )
-                                .with_help("valid escapes are \\n \\t \\0 \\\" \\\\ \\#"));
+                                .with_help("valid escapes are \\n \\t \\0 \\\" \\\\ \\# and \\u{...}"));
                             }
                         });
                         i += 2;
@@ -434,11 +458,14 @@ pub fn lex_full(src: &str) -> Result<(Vec<Token>, LexInfo)> {
                         col += sym.len();
                     }
                     None => {
-                        return Err(LumeError::new(
-                            line,
-                            col,
-                            format!("unexpected character `{}`", c),
-                        ));
+                        let e = LumeError::new(line, col, format!("unexpected character `{}`", c));
+                        return Err(match c {
+                            '\'' => e.with_help("strings use double quotes: \"like this\""),
+                            ';' => e.with_help("Lume ends a statement at the end of the line; no `;` is needed"),
+                            '&' => e.with_help("`and` joins conditions in Lume"),
+                            '$' | '@' => e.with_help("names are plain words in Lume, with no sigil"),
+                            _ => e,
+                        });
                     }
                 }
             }

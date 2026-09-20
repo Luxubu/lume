@@ -1,0 +1,6 @@
+error: this `match` on `Outer` does not cover: Wrap(A(_))
+  --> examples/errors/nonexhaustive_nested.lume:10:3
+   |
+10 |   match o:
+   |   ^
+  help: add an arm for Wrap(A(_)), or a final `_ ->` arm

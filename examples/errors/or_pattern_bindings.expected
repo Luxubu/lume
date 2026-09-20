@@ -1,0 +1,6 @@
+error: every alternative of `|` must bind the same names
+  --> examples/errors/or_pattern_bindings.lume:8:17
+  |
+8 |     Circle(r) | Square(side) -> r
+  |                 ^
+  help: the first alternative binds `r`, this one binds `side`

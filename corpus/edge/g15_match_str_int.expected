@@ -1,7 +1,4 @@
-error: expected `->` after the pattern, found `|`
-  --> corpus/edge/g15_match_str_int.lume:10:7
-   |
-10 |     1 | 2 -> "one or two"
-   |       ^
-  help: an arm is `pattern -> value`, or `pattern ->` with an indented body
-exit: 1
+2
+mid
+t
+exit: 0

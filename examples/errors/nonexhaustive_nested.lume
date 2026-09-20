@@ -1,0 +1,16 @@
+enum Inner:
+  A(n: Int)
+  B
+
+enum Outer:
+  Wrap(i: Inner)
+  Empty
+
+def describe(o: Outer) -> Str:
+  match o:
+    Wrap(A(n)) if n > 5 -> "big"
+    Wrap(B) -> "b"
+    Empty -> "empty"
+
+def main:
+  puts describe(Empty)

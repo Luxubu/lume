@@ -703,8 +703,12 @@ impl Fmt {
                 }
             }
             if self.is_inline(body) {
-                if let Some(Stmt::Expr(x)) = body.stmts.first() {
-                    return format!("{{ |{}| {} }}", params.join(", "), self.expr(x));
+                if let Some(st) = body.stmts.first() {
+                    let text = match st {
+                        Stmt::Expr(x) => self.expr(x),
+                        other => self.stmt_text(other),
+                    };
+                    return format!("{{ |{}| {} }}", params.join(", "), text);
                 }
             }
             let mut out = format!("do |{}|", params.join(", "));
@@ -1032,6 +1036,7 @@ fn pattern_str(p: &Pattern) -> String {
             }
         }
         PatKind::Tuple(items) => format!("({})", items.iter().map(pattern_str).collect::<Vec<_>>().join(", ")),
+        PatKind::Or(alts) => alts.iter().map(pattern_str).collect::<Vec<_>>().join(" | "),
         PatKind::List { items, rest } => {
             let mut parts: Vec<String> = items.iter().map(pattern_str).collect();
             if let Some(r) = rest {

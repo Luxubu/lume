@@ -3,5 +3,5 @@ error: unknown name `continue`
   |
 6 |     if i % 2 == 0: continue
   |                    ^
-  help: names must be bound with `name = value` or `var name = value` before use
+  help: Lume spells it `next`: it skips to the next turn of the loop
 exit: 1

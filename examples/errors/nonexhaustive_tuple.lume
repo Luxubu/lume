@@ -1,0 +1,15 @@
+enum Light:
+  Red
+  Green
+
+enum Event:
+  Tick
+  Stop
+
+def step(l: Light, e: Event) -> Str:
+  match (l, e):
+    (Red, Tick) -> "green"
+    (_, Stop) -> "off"
+
+def main:
+  puts step(Red, Tick)

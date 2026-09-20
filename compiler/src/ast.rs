@@ -202,6 +202,8 @@ pub enum PatKind {
     Tuple(Vec<Pattern>),
     /// `[a, b]`, `[]`, `[first, ..rest]`
     List { items: Vec<Pattern>, rest: Option<Option<String>> },
+    /// `A | B`, `1 | 2 | 3`, `Some(0) | None`
+    Or(Vec<Pattern>),
 }
 
 #[derive(Debug, Clone)]

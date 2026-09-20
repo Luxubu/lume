@@ -1,6 +1,3 @@
-error: expected `}` to close the block, found `+=`
-  --> corpus/edge/g14_closure_capture_mut.lume:3:30
-  |
-3 |   [1, 2, 3].each { |x| total += x }
-  |                              ^
-exit: 1
+6
+[A, B]
+exit: 0

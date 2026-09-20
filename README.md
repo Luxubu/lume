@@ -20,7 +20,7 @@ program takes about 1 s in Python and 1.4 s in Ruby.
 The language design lives in the [Lume Language Design](https://claude.ai/code/artifact/1872fe63-1816-4b1e-9983-dec2774382fb)
 document. This repository is the compiler and the examples.
 
-## Status: milestones 1–16 done
+## Status: milestones 1–17 done
 
 | # | Milestone | Status |
 | --- | --- | --- |
@@ -40,6 +40,7 @@ document. This repository is the compiler and the examples.
 | 14 | Compile time: incremental rustc, one shared cargo cache per machine, skip when unchanged | done: edit-and-run 0.2 s plain, 0.7–0.9 s with crates |
 | 15 | Soundness: nested rebinding is an error, argument/return/operand/branch type checks, `Str + Int` rejected, per-type method tables, overflow stops the program | done: review corpus leaks 14 → 6, all remaining are ownership (milestone 16) |
 | 16 | Ownership by analysis: liveness-based copy or move, recursive enums boxed, `.or` on optional fields, string comparisons in blocks, `for var a in xs`, `xs[i].method` | done: review corpus leaks 6 → 0 |
+| 17 | Pattern completeness: a real exhaustiveness checker with nested witnesses, `A \| B` alternatives; the everyday standard methods; statements in inline blocks | done: 37 new methods, corpus 40 ok / 26 Lume errors / 0 leaks |
 
 What works today: functions (`def` block and one-liner forms, return type
 inferred when omitted), `struct` with fields and methods (fields used bare
@@ -53,8 +54,12 @@ self-transform rebinding), blocks in three forms (`xs.map(_.name)`,
 iterator, `find`/`take_while`/`fold`/`min_by`/`max_by`/`enumerate`, `enum`
 with data and methods (`Shape.Circle(1.0)`, bare `Circle(1.0)` where
 unambiguous), `match` as an expression with variant, literal, range, tuple,
-list (`[]`, `[x]`, `[first, ..rest]`) and string patterns, guards, and a
-Lume-level error listing the cases a `match` misses, tuples (`(1, "a")`,
+list (`[]`, `[x]`, `[first, ..rest]`) and string patterns, `|` alternatives
+(`1 | 2`, `"a" | "e"`, `Some(0) | None`, `Wrap(B) | Empty`; every
+alternative binds the same names), guards, and an exhaustiveness check that
+works through nested patterns, tuples, lists and `T?`/`T or E` and names a
+missing value exactly (`Wrap(A(_))`, `(Green, Tick)`, `Ok(false)`,
+`[false, _, ..rest]`), tuples (`(1, "a")`,
 `t.0`, `for i, x in xs.enumerate`), optional values (`T?`, `Some`/`None`,
 `.or(default)`, `?` early return in a function returning `T?`; `first`,
 `last`, `find`, `max`, `min`, `pop` all return `T?`), errors as values
@@ -102,8 +107,23 @@ uses are wrapped in short locks, arguments are computed before the lock, and
 a block that would take the lock twice is a compile error), `if`/`elif`/`else` as
 expressions, trailing `if`/`unless`, `while`, `for x in range` with `where`,
 lists, ranges (`1..10` inclusive, `1...10` exclusive), string interpolation,
-`and`/`or`/`not`, `**`, calls, a small set of built-in methods (`len`, `sum`,
-`sort`, `first`, `last`, `upcase`, `trim`, `sqrt`, ...).
+`and`/`or`/`not`, `**`, calls, `\u{1F600}` escapes, one statement in an
+inline block (`xs.each { |x| total += x }`), and the everyday built-in
+methods: on `Str` `len`, `empty?`, `upcase`, `downcase`, `capitalize`, `trim`,
+`lines`, `split` (with or without a separator), `chars`, `contains?`,
+`starts_with?`, `ends_with?`, `index_of`, `digit?`, `alpha?`, `space?`, `pad`,
+`pad_right`, `reverse`, `slice`, `replace`, `repeat`, `to_int`, `to_float`; on
+`Int`/`Float` `abs`, `max(x)`, `min(x)`, `clamp(lo, hi)`, `pow`, `even?`,
+`odd?`, `sqrt`, `floor`, `ceil`, `round`, `to_float`, `to_int`, `pad`; on lists
+`len`, `empty?`, `first`, `last`, `max`, `min`, `sum`, `avg`, `sort`,
+`sort_by`, `reverse`, `uniq`, `flatten`, `zip`, `index_of`, `contains?`,
+`join`, `push`, `pop`, `insert`, `remove_at`, `take`, `skip`, `enumerate`,
+`to_list`, and the block methods `map`, `filter`, `reject`, `each`, `sum`,
+`count`, `any?`, `all?`, `find`, `take_while`, `fold`, `min_by`, `max_by`,
+`group_by`, `partition`, `flat_map`; on maps `len`, `keys`, `values`, `get`,
+`remove`, `contains?`, `merge`, `to_list`, `each`, `filter`, `reject`,
+`map_values`; on `T?` `or`, `some?`, `none?`, `or_error`, `map`; on `T or E`
+`or`, `ok?`, `error?`, `error`, `ok`, `map`.
 
 Errors are Lume errors, not rustc errors: unknown names, fields and types (with
 a "did you mean"), assignment to an immutable binding (pointing at where it was
@@ -128,7 +148,10 @@ mutating call on a read-only `shared`, a `spawn:` inside a method that uses
 `self`, a crate function or method that does not exist (or is not callable
 from Lume yet, with the reason), a wrong argument type for a crate call, a
 crate value with no text form printed, a borrowing crate type in a field,
-`name (` with a space (ambiguous call), bad indentation, tabs. Warnings:
+`name (` with a space (ambiguous call), a user type named after a built-in
+(`struct Option`), `|` alternatives that bind different names, bad
+indentation, tabs, and the spellings other languages use (`continue`, `'single
+quotes'`, `null`, `print`, `;`, each with the Lume form). Warnings:
 `return` inside a block.
 
 ## Tests
@@ -142,8 +165,9 @@ The suite also runs `lume test` on `examples/tests/`, `lume fmt` on
 `examples/fmt/`, checks that formatting every example is idempotent and leaves
 the generated Rust unchanged, and runs the review corpus (`corpus/`: 66
 programs written by an independent reviewer who did not know the compiler).
-`tests/corpus.sh` classifies the corpus: after milestone 16, 37 run, 29 stop
-with a Lume error, none leaks a rustc error.
+`tests/corpus.sh` classifies the corpus: after milestone 17, 40 run, 26 stop
+with a Lume error (each a deliberate rule: no first-class closures, no
+shadowing, no `Float / Int`, ...), none leaks a rustc error.
 
 Tests in a Lume file:
 
@@ -261,6 +285,8 @@ examples/                programs that must keep compiling
 examples/port/           the design doc's sample programs and the graph program; app_async.lume is sample 3 on threads
 examples/async.lume      async/await, spawn, Task[T], shared var
 examples/ownership.lume  copy or move by analysis, a recursive enum, for var, xs[i].method
+examples/patterns.lume   `|` alternatives and what the exhaustiveness check catches
+examples/stdlib.lume     the built-in methods, one line each
 examples/crate.lume      regex through the bridge: types, iterators, errors, a rust: block
 examples/crates.lume     hex and urlencoding, with nothing written for them
 examples/modules/        a three-file program: app.lume imports users/model and users/store

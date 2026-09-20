@@ -1,6 +1,6 @@
-error: this `match` on `Shape` does not cover: Circle (its arms only match some values: a guard or a nested pattern)
+error: this `match` on `Shape` does not cover: Circle(_)
   --> examples/errors/partial_arm.lume:6:3
   |
 6 |   match s:
   |   ^
-  help: add an arm for Circle, or a final `_ ->` arm
+  help: add an arm for Circle(_), or a final `_ ->` arm

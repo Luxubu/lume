@@ -1,0 +1,6 @@
+error: `Option` is a built-in name and cannot be a type
+  --> examples/errors/reserved_type.lume:1:1
+  |
+1 | struct Option:
+  | ^
+  help: pick another name, like `MyOption`

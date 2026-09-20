@@ -1,0 +1,6 @@
+error: this `match` on `(Light, Event)` does not cover: (Green, Tick)
+  --> examples/errors/nonexhaustive_tuple.lume:10:3
+   |
+10 |   match (l, e):
+   |   ^
+  help: add an arm for (Green, Tick), or a final `_ ->` arm

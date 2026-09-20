@@ -1,0 +1,5 @@
+struct Option:
+  value: Int
+
+def main:
+  puts Option(1).value

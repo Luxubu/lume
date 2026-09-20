@@ -1,0 +1,12 @@
+enum Shape:
+  Circle(r: Float)
+  Square(side: Float)
+  Dot
+
+def size(s: Shape) -> Float:
+  match s:
+    Circle(r) | Square(side) -> r
+    Dot -> 0.0
+
+def main:
+  puts size(Dot)

@@ -1,0 +1,6 @@
+error: `xs` is immutable, but `push` changes it
+  --> examples/errors/push_immutable.lume:3:5
+  |
+3 |   xs.push(3)
+  |     ^
+  help: declare it with `var xs = ...` on line 2

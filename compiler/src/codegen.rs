@@ -209,6 +209,11 @@ impl<'a> Iterator for LumeSplit<'a> {
     }
 }
 fn lume_pad<T: LumeShow>(x: T, width: i64) -> String { format!("{:>w$}", x.lume_str(), w = width.max(0) as usize) }
+fn lume_pad_right<T: LumeShow>(x: T, width: i64) -> String { format!("{:<w$}", x.lume_str(), w = width.max(0) as usize) }
+fn lume_capitalize(s: &str) -> String {
+    let mut c = s.chars();
+    match c.next() { Some(f) => f.to_uppercase().collect::<String>() + c.as_str(), None => String::new() }
+}
 /// Run-time failures speak Lume: no Rust file paths, no "attempt to".
 #[allow(dead_code)]
 fn lume_install_panic_hook() {
@@ -230,7 +235,7 @@ fn lume_install_panic_hook() {
             "attempt to divide by zero" => "division by zero".to_string(),
             "attempt to calculate the remainder with a divisor of zero" => "`%` by zero".to_string(),
             "attempt to divide with overflow" => "Int overflow in `/`".to_string(),
-            m if m.starts_with("index out of bounds") => "list position out of range".to_string(),
+            m if m.starts_with("index out of bounds") || m.starts_with("insertion index") || m.starts_with("removal index") => "list position out of range".to_string(),
             m => m.to_string(),
         };
         eprintln!("error: {}", msg);
@@ -1290,6 +1295,7 @@ impl Gen {
                     if s.name == "Error" {
                         return Err(LumeError::new(s.line, s.col, "`Error` is the built-in error type").with_help("name yours differently, or define an `enum` of error kinds and return `T or MyError`"));
                     }
+                    reserved_type_name(&s.name, s.line, s.col)?;
                     if !seen.insert(s.name.clone()) {
                         return Err(LumeError::new(s.line, s.col, format!("`{}` is defined twice", s.name)));
                     }
@@ -1304,6 +1310,7 @@ impl Gen {
                     self.structs.insert(s.name.clone(), StructInfo { fields, methods });
                 }
                 Item::Enum(e) => {
+                    reserved_type_name(&e.name, e.line, e.col)?;
                     if !seen.insert(e.name.clone()) {
                         return Err(LumeError::new(e.line, e.col, format!("`{}` is defined twice", e.name)));
                     }
@@ -1669,6 +1676,11 @@ impl Gen {
     /// scope (used for inference only; codegen does its own declaring).
     fn declare_pattern_types(&mut self, p: &Pattern, t: &Type) -> Result<()> {
         match &p.kind {
+            PatKind::Or(alts) => {
+                if let Some(a) = alts.first() {
+                    self.declare_pattern_types(a, t)?;
+                }
+            }
             PatKind::Bind(n) => {
                 self.declare(n, false, !t.is_copy(), t.clone(), p.line);
             }
@@ -1979,6 +1991,12 @@ impl Gen {
                 }
                 if let Some(m) = self.ext_methods.get(&self.type_key(&rt)).and_then(|m| m.get(name)) {
                     return m.ret.clone();
+                }
+                if name == "zip" && args.len() == 1 {
+                    let other = self.ty_of(&args[0].value);
+                    if let (Some((a, _)), Some((b, _))) = (self.elem_of(&rt), self.elem_of(&other)) {
+                        return Type::List(Box::new(Type::Tuple(vec![a, b])));
+                    }
                 }
                 builtin_method_type(&rt, name)
             }
@@ -2512,11 +2530,39 @@ impl Gen {
     }
 
     fn block_method_type(&mut self, recv: &Type, name: &str, params: &[String], body: &Block, init: Option<Type>) -> Type {
+        match (recv, name) {
+            (Type::Option(inner), "map") => {
+                let bt = self.lambda_body_type(params, inner, false, None, body).materialized();
+                return Type::Option(Box::new(bt));
+            }
+            (Type::Result(ok, err), "map") => {
+                let bt = self.lambda_body_type(params, ok, false, None, body).materialized();
+                return Type::Result(Box::new(bt), err.clone());
+            }
+            (Type::Map(..), "filter" | "reject") => return recv.clone(),
+            (Type::Map(k, v), "map_values") => {
+                let bt = self.lambda_body_type(params, v, true, None, body).materialized();
+                return Type::Map(k.clone(), Box::new(bt));
+            }
+            _ => {}
+        }
         let (elem, by_ref) = match self.elem_of(recv) {
             Some(x) => x,
             None => return Type::Unknown,
         };
         match name {
+            "group_by" => {
+                let kt = self.lambda_body_type(params, &elem, by_ref, None, body).materialized();
+                Type::Map(Box::new(kt), Box::new(Type::List(Box::new(elem))))
+            }
+            "partition" => {
+                let l = Type::List(Box::new(elem));
+                Type::Tuple(vec![l.clone(), l])
+            }
+            "flat_map" => match self.lambda_body_type(params, &elem, by_ref, None, body).materialized() {
+                Type::List(inner) => Type::List(inner),
+                _ => Type::Unknown,
+            },
             "map" => {
                 let bt = self.lambda_body_type(params, &elem, by_ref, None, body).materialized();
                 Type::Iter(Box::new(bt), false)
@@ -3722,6 +3768,14 @@ impl Gen {
 
     fn unknown_name(&self, name: &str, line: usize, col: usize) -> LumeError {
         let e = LumeError::new(line, col, format!("unknown name `{}`", name));
+        match name {
+            "continue" => return e.with_help("Lume spells it `next`: it skips to the next turn of the loop"),
+            "null" | "nil" | "None" | "undefined" => return e.with_help("an absent value is `None`, and a value that may be absent has type `T?`"),
+            "self" | "this" => return e.with_help("`self` is only available inside a method"),
+            "print" | "println" | "console" | "echo" => return e.with_help("Lume prints with `puts`"),
+            "len" | "length" => return e.with_help("length is a method: `xs.len`"),
+            _ => {}
+        }
         match self.suggest(name) {
             Some(s) => e.with_help(format!("did you mean `{}`?", s)),
             None => e.with_help("names must be bound with `name = value` or `var name = value` before use"),
@@ -3931,7 +3985,11 @@ impl Gen {
                 }
             }
             Type::Iter(elem, by_ref) => Ok((r, *elem, by_ref)),
-            Type::Map(k, v) => Ok((format!("({}).iter().map(|(k, v)| (k, v))", r), Type::Tuple(vec![*k, *v]), true)),
+            Type::Map(k, v) => {
+                // Copy parts travel by value, so a block sees `v > 1` on an `Int`
+                let pair = map_pair(&k, &v);
+                Ok((format!("({}).iter().map(|(k, v)| {})", r, pair), Type::Tuple(vec![*k, *v]), true))
+            }
             Type::Unknown => Err(LumeError::new(e.line, e.col, "cannot tell what kind of value this block is applied to")
                 .with_help("add a type to the binding or parameter it comes from")),
             other => Err(LumeError::new(e.line, e.col, format!("`{}` values cannot take a block; only lists and ranges can", type_name(&other)))),
@@ -4012,8 +4070,61 @@ impl Gen {
         if name != "fold" && !args.is_empty() {
             return Err(LumeError::new(e.line, e.col, format!("`{}` takes only a block", name)));
         }
+        let rt = self.ty_of(recv);
+        match (&rt, name) {
+            (Type::Option(inner), "map") | (Type::Result(inner, _), "map") => {
+                let inner = (**inner).clone();
+                let r = self.expr(recv)?;
+                let f = self.gen_lambda(params, body, &inner, false, false, true, None, lam)?;
+                return Ok(format!("({}).clone().map({})", r, f));
+            }
+            (Type::Map(k, v), "filter" | "reject") => {
+                let elem = Type::Tuple(vec![(**k).clone(), (**v).clone()]);
+                let r = self.expr(recv)?;
+                let f = self.gen_lambda_ex(params, body, &elem, true, false, true, None, name == "reject", lam)?;
+                let pair = map_pair(k, v);
+                let pair_ty = format!(
+                    "({}{}, {}{})",
+                    if k.is_copy() { "" } else { "&" },
+                    self.rt(k),
+                    if v.is_copy() { "" } else { "&" },
+                    self.rt(v)
+                );
+                return Ok(format!(
+                    "{{ let lume_keep = {}; let mut lume_m = LumeMap::new(); for (k, v) in ({}).iter() {{ if lume_keep({}) {{ lume_m.insert(k.clone(), v.clone()); }} }} lume_m }}",
+                    annotate_closure(&f, &pair_ty),
+                    r,
+                    pair
+                ));
+            }
+            (Type::Map(_, v), "map_values") => {
+                let v = (**v).clone();
+                let r = self.expr(recv)?;
+                let f = self.gen_lambda(params, body, &v, true, true, true, None, lam)?;
+                return Ok(format!("{{ let lume_f = {}; let mut lume_m = LumeMap::new(); for (k, v) in ({}).iter() {{ lume_m.insert(k.clone(), lume_f(v)); }} lume_m }}", f, r));
+            }
+            _ => {}
+        }
         let (it, elem, by_ref) = self.iter_base(recv, e)?;
         Ok(match name {
+            "group_by" => {
+                let f = self.gen_lambda(params, body, &elem, by_ref, true, true, None, lam)?;
+                let owned = self.collect_iter_t(&it, by_ref, &elem);
+                format!(
+                    "{{ let lume_key = {}; let mut lume_m: LumeMap<_, Vec<_>> = LumeMap::new(); for lume_x in {} {{ let lume_k = lume_key(&lume_x); match lume_m.get_mut(&lume_k) {{ Some(v) => v.push(lume_x), None => {{ lume_m.insert(lume_k, vec![lume_x]); }} }} }} lume_m }}",
+                    key_closure(&f, &self.rt(&elem)),
+                    owned
+                )
+            }
+            "partition" => {
+                let f = self.gen_lambda(params, body, &elem, by_ref, true, true, None, lam)?;
+                let owned = self.collect_iter_t(&it, by_ref, &elem);
+                format!("{{ let lume_test = {}; {}.into_iter().partition::<Vec<_>, _>(|lume_x| lume_test(lume_x)) }}", key_closure(&f, &self.rt(&elem)), owned)
+            }
+            "flat_map" => {
+                let f = self.gen_lambda(params, body, &elem, by_ref, false, true, None, lam)?;
+                format!("{}.flat_map({}).collect::<Vec<_>>()", it, f)
+            }
             "map" => {
                 let f = self.gen_lambda(params, body, &elem, by_ref, false, true, None, lam)?;
                 format!("{}.map({})", it, f)
@@ -4073,7 +4184,7 @@ impl Gen {
             }
             _ => {
                 return Err(LumeError::new(e.line, e.col, format!("`{}` does not take a block", name))
-                    .with_help("block methods are: map, filter, reject, each, sum, count, any?, all?, find, take_while, sort_by, min_by, max_by, fold"));
+                    .with_help("block methods are: map, filter, reject, each, sum, count, any?, all?, find, take_while, sort_by, min_by, max_by, fold, group_by, partition, flat_map"));
             }
         })
     }
@@ -4202,7 +4313,7 @@ impl Gen {
             }
             self.check_branches("match", values)?;
         }
-        let uses_list_pat = arms.iter().any(|a| matches!(a.pat.kind, PatKind::List { .. }));
+        let uses_list_pat = arms.iter().any(|a| pat_has_list(&a.pat));
         let s = self.expr_val(scrutinee)?;
         // How the scrutinee is matched: by value for Copy types, otherwise by reference.
         let by_ref = !st.is_copy();
@@ -4286,6 +4397,77 @@ impl Gen {
     fn compile_pat_into(&mut self, p: &Pattern, t: &Type, by_ref: bool, cp: &mut CompiledPat) -> Result<()> {
         let text = match &p.kind {
             PatKind::Wild => "_".to_string(),
+            PatKind::Or(alts) => {
+                // `"a" | "b"` and `1.0 | 2.0` compare against one binding
+                if alts.iter().all(|a| matches!(a.kind, PatKind::Str(_))) {
+                    self.expect_pat_type(t, &Type::Str, p, "a string")?;
+                    let tmp = self.fresh("s");
+                    let tests: Vec<String> = alts
+                        .iter()
+                        .map(|a| match &a.kind {
+                            PatKind::Str(s) => format!("{} == \"{}\"", tmp, escape_rust_str(s, false)),
+                            _ => unreachable!(),
+                        })
+                        .collect();
+                    cp.guards.push(format!("({})", tests.join(" || ")));
+                    return Ok(cp.text = tmp);
+                }
+                if alts.iter().all(|a| matches!(a.kind, PatKind::Float(_))) {
+                    self.expect_pat_type(t, &Type::Float, p, "a float")?;
+                    let tmp = self.fresh("f");
+                    let deref = if by_ref { "*" } else { "" };
+                    let tests: Vec<String> = alts
+                        .iter()
+                        .map(|a| match &a.kind {
+                            PatKind::Float(v) => format!("{}{} == {:?}", deref, tmp, v),
+                            _ => unreachable!(),
+                        })
+                        .collect();
+                    cp.guards.push(format!("({})", tests.join(" || ")));
+                    return Ok(cp.text = tmp);
+                }
+                let mut texts = Vec::new();
+                let mut first: Option<Vec<(String, Type, BindKind)>> = None;
+                for a in alts {
+                    let mut sub = CompiledPat { text: String::new(), guards: Vec::new(), binds: Vec::new() };
+                    self.compile_pat_into(a, t, by_ref, &mut sub)?;
+                    if !sub.guards.is_empty() {
+                        return Err(LumeError::new(a.line, a.col, "a string or float pattern cannot be one alternative of `|` inside a larger pattern")
+                            .with_help("write separate arms, or match the string on its own first"));
+                    }
+                    let mut names: Vec<&String> = sub.binds.iter().map(|(n, _, _)| n).collect();
+                    names.sort();
+                    match &first {
+                        None => first = Some(sub.binds.clone()),
+                        Some(f) => {
+                            let mut fnames: Vec<&String> = f.iter().map(|(n, _, _)| n).collect();
+                            fnames.sort();
+                            if names != fnames {
+                                return Err(LumeError::new(a.line, a.col, "every alternative of `|` must bind the same names")
+                                    .with_help(format!(
+                                        "the first alternative binds {}, this one binds {}",
+                                        describe_names(&fnames),
+                                        describe_names(&names)
+                                    )));
+                            }
+                            for (n, ty, kind) in &sub.binds {
+                                let (_, fty, fkind) = f.iter().find(|(fnm, _, _)| fnm == n).unwrap();
+                                if fty != ty || fkind != kind {
+                                    return Err(LumeError::new(a.line, a.col, format!(
+                                        "`{}` is a `{}` in one alternative and a `{}` in another",
+                                        n,
+                                        type_name(fty),
+                                        type_name(ty)
+                                    )));
+                                }
+                            }
+                        }
+                    }
+                    texts.push(sub.text);
+                }
+                cp.binds.extend(first.unwrap_or_default());
+                format!("({})", texts.join(" | "))
+            }
             PatKind::Bind(n) => {
                 let kind = if !by_ref {
                     BindKind::Owned
@@ -4506,109 +4688,213 @@ impl Gen {
         }
     }
 
-    /// A pattern that matches every value of its type, with no guard.
-    fn irrefutable(&self, p: &Pattern, t: &Type) -> bool {
-        match &p.kind {
-            PatKind::Wild | PatKind::Bind(_) => true,
-            PatKind::Tuple(items) => match t {
-                Type::Tuple(ts) => items.iter().zip(ts).all(|(i, it)| self.irrefutable(i, it)),
-                _ => items.iter().all(|i| self.irrefutable(i, &Type::Unknown)),
-            },
-            PatKind::List { items, rest } => items.is_empty() && rest.is_some(),
-            _ => false,
-        }
-    }
-
     fn check_exhaustive(&self, t: &Type, arms: &[MatchArm], e: &Expr) -> Result<()> {
-        let catch_all = arms.iter().any(|a| a.guard.is_none() && self.irrefutable(&a.pat, t));
-        if catch_all {
-            return Ok(());
+        // Rows of the pattern matrix: the unguarded arms, `|` expanded.
+        let mut rows: Vec<Vec<Pat>> = Vec::new();
+        for a in arms.iter().filter(|a| a.guard.is_none()) {
+            for p in self.flat_pats(&a.pat, t) {
+                rows.push(vec![p]);
+            }
         }
-        let missing: Vec<String> = match t {
-            Type::Named(en) if self.enums.contains_key(en) => {
-                let info = &self.enums[en];
-                info.variants
-                    .iter()
-                    .filter(|(vname, fields)| {
-                        !arms.iter().any(|a| {
-                            a.guard.is_none()
-                                && matches!(&a.pat.kind, PatKind::Variant { name, args, .. } if name == vname
-                                    && args.iter().zip(fields).all(|(ap, (_, ft))| self.irrefutable(ap, ft)))
-                        })
-                    })
-                    .map(|(n, _)| {
-                        let mentioned = arms.iter().any(|a| matches!(&a.pat.kind, PatKind::Variant { name, .. } if name == n));
-                        if mentioned { format!("{} (its arms only match some values: a guard or a nested pattern)", n) } else { n.clone() }
-                    })
-                    .collect()
+        // Each witness found becomes a row, so the next search finds a different one.
+        let mut missing: Vec<String> = Vec::new();
+        while missing.len() < 6 {
+            match self.useful(&rows, &[Pat::Wild], &[t.clone()]) {
+                None => break,
+                Some(w) => {
+                    missing.push(pat_text(&w[0]));
+                    rows.push(w);
+                }
             }
-            Type::Option(inner) => {
-                let mut m = Vec::new();
-                let has_none = arms.iter().any(|a| a.guard.is_none() && matches!(&a.pat.kind, PatKind::Variant { name, .. } if name == "None"));
-                let has_some = arms.iter().any(|a| {
-                    a.guard.is_none() && matches!(&a.pat.kind, PatKind::Variant { name, args, .. } if name == "Some" && args.len() == 1 && self.irrefutable(&args[0], inner))
-                });
-                if !has_some {
-                    m.push("Some(_)".to_string());
-                }
-                if !has_none {
-                    m.push("None".to_string());
-                }
-                m
-            }
-            Type::Result(ok_t, err_t) => {
-                let mut m = Vec::new();
-                let has = |want: &str, inner: &Type| {
-                    arms.iter().any(|a| {
-                        a.guard.is_none() && matches!(&a.pat.kind, PatKind::Variant { name, args, .. } if name == want && args.len() == 1 && self.irrefutable(&args[0], inner))
-                    })
-                };
-                if !has("Ok", ok_t) {
-                    m.push("Ok(_)".to_string());
-                }
-                if !has("Error", err_t) {
-                    m.push("Error(_)".to_string());
-                }
-                m
-            }
-            Type::Bool => {
-                let mut m = Vec::new();
-                for b in [true, false] {
-                    if !arms.iter().any(|a| a.guard.is_none() && matches!(a.pat.kind, PatKind::Bool(x) if x == b)) {
-                        m.push(b.to_string());
-                    }
-                }
-                m
-            }
-            Type::List(_) => {
-                let empty = arms.iter().any(|a| a.guard.is_none() && matches!(&a.pat.kind, PatKind::List { items, rest: None } if items.is_empty()));
-                let one_plus = arms.iter().any(|a| {
-                    a.guard.is_none() && matches!(&a.pat.kind, PatKind::List { items, rest: Some(_) } if items.len() == 1 && self.irrefutable(&items[0], &Type::Unknown))
-                });
-                if empty && one_plus {
-                    return Ok(());
-                }
-                let mut m = Vec::new();
-                if !empty {
-                    m.push("[]".into());
-                }
-                if !one_plus {
-                    m.push("[x, ..rest]".into());
-                }
-                m
-            }
-            _ => vec!["_".into()],
-        };
+        }
         if missing.is_empty() {
             return Ok(());
         }
-        let err = LumeError::new(e.line, e.col, format!("this `match` on `{}` does not cover: {}", type_name(t), missing.join(", ")));
-        let plain: Vec<String> = missing.iter().map(|m| m.split(" (").next().unwrap_or(m).to_string()).collect();
+        let more = missing.len() == 6;
+        if more {
+            missing.pop();
+        }
+        let listed = if more { format!("{}, ...", missing.join(", ")) } else { missing.join(", ") };
+        let err = LumeError::new(e.line, e.col, format!("this `match` on `{}` does not cover: {}", type_name(t), listed));
         Err(if missing == ["_"] {
             err.with_help("values of this type have too many cases to list; add a final `_ ->` arm")
+        } else if more {
+            err.with_help("add arms for the missing cases, or a final `_ ->` arm")
         } else {
-            err.with_help(format!("add {} for {}, or a final `_ ->` arm", plural(plain.len(), "an arm", "arms"), plain.join(" and ")))
+            err.with_help(format!("add {} for {}, or a final `_ ->` arm", plural(missing.len(), "an arm", "arms"), missing.join(" and ")))
         })
+    }
+
+    /// The constructors of a type, with their argument types; `None` when
+    /// there are too many to enumerate (numbers, strings, unknown types).
+    fn ctors(&self, t: &Type) -> Option<Vec<(String, Vec<Type>)>> {
+        Some(match t {
+            Type::Named(en) => {
+                let info = self.enums.get(en)?;
+                info.variants.iter().map(|(n, fs)| (n.clone(), fs.iter().map(|(_, ft)| ft.clone()).collect())).collect()
+            }
+            Type::Option(i) => vec![("Some".into(), vec![(**i).clone()]), ("None".into(), vec![])],
+            Type::Result(o, e) => vec![("Ok".into(), vec![(**o).clone()]), ("Error".into(), vec![(**e).clone()])],
+            Type::Bool => vec![("true".into(), vec![]), ("false".into(), vec![])],
+            Type::Tuple(ts) => vec![("()".into(), ts.clone())],
+            // a list is `[]` or an element followed by a list
+            Type::List(i) => vec![("[]".into(), vec![]), ("::".into(), vec![(**i).clone(), t.clone()])],
+            _ => return None,
+        })
+    }
+
+    /// Converts a source pattern into matrix patterns (one per `|` combination).
+    fn flat_pats(&self, p: &Pattern, t: &Type) -> Vec<Pat> {
+        match &p.kind {
+            PatKind::Wild | PatKind::Bind(_) => vec![Pat::Wild],
+            PatKind::Int(_) | PatKind::Float(_) | PatKind::Str(_) | PatKind::Range { .. } => vec![Pat::Lit],
+            PatKind::Bool(b) => vec![Pat::Ctor(b.to_string(), vec![])],
+            PatKind::Or(alts) => alts.iter().flat_map(|a| self.flat_pats(a, t)).collect(),
+            PatKind::Tuple(items) => {
+                let ts: Vec<Type> = match t {
+                    Type::Tuple(ts) => ts.clone(),
+                    _ => vec![Type::Unknown; items.len()],
+                };
+                let subs: Vec<Vec<Pat>> = items.iter().zip(&ts).map(|(i, it)| self.flat_pats(i, it)).collect();
+                if !matches!(t, Type::Tuple(_)) && subs.iter().all(|s| s == &[Pat::Wild]) {
+                    return vec![Pat::Wild];
+                }
+                product(subs).into_iter().map(|args| Pat::Ctor("()".into(), args)).collect()
+            }
+            PatKind::List { items, rest } => {
+                let elem = match t {
+                    Type::List(e) => (**e).clone(),
+                    _ => Type::Unknown,
+                };
+                let subs: Vec<Vec<Pat>> = items.iter().map(|i| self.flat_pats(i, &elem)).collect();
+                product(subs)
+                    .into_iter()
+                    .map(|args| {
+                        let mut tail = if rest.is_some() { Pat::Wild } else { Pat::Ctor("[]".into(), vec![]) };
+                        for a in args.into_iter().rev() {
+                            tail = Pat::Ctor("::".into(), vec![a, tail]);
+                        }
+                        tail
+                    })
+                    .collect()
+            }
+            PatKind::Variant { name, args, .. } => {
+                let arg_tys: Vec<Type> = match self.ctors(t) {
+                    Some(cs) => match cs.into_iter().find(|(n, _)| n == name) {
+                        Some((_, tys)) => tys,
+                        None => return vec![Pat::Lit],
+                    },
+                    None => vec![Type::Unknown; args.len()],
+                };
+                let mut subs: Vec<Vec<Pat>> = args.iter().zip(&arg_tys).map(|(a, at)| self.flat_pats(a, at)).collect();
+                while subs.len() < arg_tys.len() {
+                    subs.push(vec![Pat::Wild]);
+                }
+                product(subs).into_iter().map(|args| Pat::Ctor(name.clone(), args)).collect()
+            }
+        }
+    }
+
+    /// Maranget's usefulness: a value matched by `q` but by no row of
+    /// `rows`, if one exists. Called with `q = [_]` it answers "is the match
+    /// exhaustive?" and produces a witness when it is not.
+    fn useful(&self, rows: &[Vec<Pat>], q: &[Pat], tys: &[Type]) -> Option<Vec<Pat>> {
+        if q.is_empty() {
+            return if rows.is_empty() { Some(Vec::new()) } else { None };
+        }
+        let t = &tys[0];
+        let arity_of = |c: &str, cs: &Option<Vec<(String, Vec<Type>)>>| -> Vec<Type> {
+            cs.as_ref()
+                .and_then(|cs| cs.iter().find(|(n, _)| n == c).map(|(_, tys)| tys.clone()))
+                .unwrap_or_else(|| {
+                    // constructor of an unknown type: take the arity from a row
+                    let n = rows
+                        .iter()
+                        .find_map(|r| match &r[0] {
+                            Pat::Ctor(rc, args) if rc == c => Some(args.len()),
+                            _ => None,
+                        })
+                        .unwrap_or(0);
+                    vec![Type::Unknown; n]
+                })
+        };
+        let cs = self.ctors(t);
+        let specialize = |c: &str, arity: usize| -> Vec<Vec<Pat>> {
+            rows.iter()
+                .filter_map(|r| match &r[0] {
+                    Pat::Ctor(rc, args) if rc == c => {
+                        let mut nr = args.clone();
+                        nr.extend_from_slice(&r[1..]);
+                        Some(nr)
+                    }
+                    Pat::Wild => {
+                        let mut nr = vec![Pat::Wild; arity];
+                        nr.extend_from_slice(&r[1..]);
+                        Some(nr)
+                    }
+                    _ => None,
+                })
+                .collect()
+        };
+        let default_rows = || -> Vec<Vec<Pat>> { rows.iter().filter(|r| r[0] == Pat::Wild).map(|r| r[1..].to_vec()).collect() };
+        let rebuild = |c: &str, arity: usize, w: Vec<Pat>| -> Vec<Pat> {
+            let mut out = vec![Pat::Ctor(c.to_string(), w[..arity].to_vec())];
+            out.extend_from_slice(&w[arity..]);
+            out
+        };
+        match &q[0] {
+            Pat::Ctor(c, args) => {
+                let arg_tys = arity_of(c, &cs);
+                let mut nq = args.clone();
+                nq.extend_from_slice(&q[1..]);
+                let mut nt = arg_tys.clone();
+                nt.extend_from_slice(&tys[1..]);
+                self.useful(&specialize(c, arg_tys.len()), &nq, &nt).map(|w| rebuild(c, arg_tys.len(), w))
+            }
+            Pat::Lit => {
+                // no row's constructor matches a literal in the query except a wildcard
+                let mut out = vec![Pat::Lit];
+                out.extend(self.useful(&default_rows(), &q[1..], &tys[1..])?);
+                Some(out)
+            }
+            Pat::Wild => {
+                let used: Vec<String> = rows
+                    .iter()
+                    .filter_map(|r| match &r[0] {
+                        Pat::Ctor(c, _) => Some(c.clone()),
+                        _ => None,
+                    })
+                    .collect();
+                let complete = match &cs {
+                    Some(cs) => !cs.is_empty() && cs.iter().all(|(c, _)| used.contains(c)),
+                    None => false,
+                };
+                if complete {
+                    for (c, arg_tys) in cs.as_ref().unwrap() {
+                        let mut nq = vec![Pat::Wild; arg_tys.len()];
+                        nq.extend_from_slice(&q[1..]);
+                        let mut nt = arg_tys.clone();
+                        nt.extend_from_slice(&tys[1..]);
+                        if let Some(w) = self.useful(&specialize(c, arg_tys.len()), &nq, &nt) {
+                            return Some(rebuild(c, arg_tys.len(), w));
+                        }
+                    }
+                    None
+                } else {
+                    let rest = self.useful(&default_rows(), &q[1..], &tys[1..])?;
+                    let head = match &cs {
+                        Some(cs) => {
+                            let (c, arg_tys) = cs.iter().find(|(c, _)| !used.contains(c)).unwrap();
+                            Pat::Ctor(c.clone(), vec![Pat::Wild; arg_tys.len()])
+                        }
+                        None => Pat::Wild,
+                    };
+                    let mut out = vec![head];
+                    out.extend(rest);
+                    Some(out)
+                }
+            }
+        }
     }
 
     // ----- calls ----------------------------------------------------------------
@@ -5281,7 +5567,7 @@ impl Gen {
                     }
                 }
                 if let Type::Option(inner) = &rt {
-                    if !matches!(name.as_str(), "or" | "some?" | "none?" | "or_error" | "to_s" | "to_str") {
+                    if !matches!(name.as_str(), "or" | "some?" | "none?" | "or_error" | "map" | "to_s" | "to_str") {
                         let known = match &**inner {
                             Type::Named(tn) => self.methods_of(tn).map(|m| m.contains_key(name)).unwrap_or(false)
                                 || self.structs.get(tn).map(|s| s.fields.iter().any(|(n, _)| n == name)).unwrap_or(false),
@@ -5296,7 +5582,7 @@ impl Gen {
                     }
                 }
                 if let Type::Result(..) = &rt {
-                    if !matches!(name.as_str(), "or" | "ok?" | "error?" | "error" | "to_s" | "to_str") {
+                    if !matches!(name.as_str(), "or" | "ok?" | "error?" | "error" | "ok" | "to_s" | "to_str") {
                         return Err(LumeError::new(e.line, e.col, format!("this value is a `{}` — it may be an error, so `.{}` cannot be called on it directly", type_name(&rt), name))
                             .with_help("unwrap it first: `?` to pass the error up, `match` on `Ok(x)`/`Error(e)`, or `.or(default)`"));
                     }
@@ -5317,11 +5603,15 @@ impl Gen {
                 if args.iter().any(|a| a.name.is_some()) {
                     return Err(LumeError::new(e.line, e.col, format!("built-in method `{}` does not take keyword arguments", name)));
                 }
+                if matches!(name.as_str(), "push" | "pop" | "insert" | "remove_at") || (name == "remove" && matches!(rt, Type::Map(..))) {
+                    self.check_receiver_mutable(recv, name, e.line, e.col)?;
+                }
                 let mut parts = Vec::new();
                 for a in args {
                     // `.or(default)` and `.push(x)` store their argument: owned position
                     parts.push(match (name.as_str(), &rt) {
                         ("push", Type::List(elem)) => self.expr_owned_as(&a.value, &elem.clone())?,
+                        ("insert", Type::List(elem)) if parts.len() == 1 => self.expr_owned_as(&a.value, &elem.clone())?,
                         ("or" | "push", _) => self.expr_owned(&a.value)?,
                         _ => self.expr_val(&a.value)?,
                     });
@@ -5396,6 +5686,41 @@ impl Gen {
         };
         Ok(match name {
             "pad" => { need(1)?; format!("lume_pad({}, {})", recv, args[0]) }
+            "pad_right" => { need(1)?; format!("lume_pad_right({}, {})", recv, args[0]) }
+            "capitalize" => { need(0)?; format!("lume_capitalize(&{})", recv) }
+            "index_of" if *rt == Type::Str => { need(1)?; format!("{{ let lume_s = &({}); lume_s.find(&*({})).map(|i| lume_s[..i].chars().count() as i64) }}", recv, args[0]) }
+            "index_of" => {
+                need(1)?;
+                match rt {
+                    Type::List(el) if **el == Type::Str => format!("({}).iter().position(|lume_y| lume_y.lume_as_str() == ({}).lume_as_str()).map(|i| i as i64)", recv, args[0]),
+                    _ => format!("({}).iter().position(|lume_y| *lume_y == ({})).map(|i| i as i64)", recv, args[0]),
+                }
+            }
+            "digit?" => { need(0)?; format!("{{ let lume_s = &({}); !lume_s.is_empty() && lume_s.chars().all(|c| c.is_ascii_digit()) }}", recv) }
+            "alpha?" => { need(0)?; format!("{{ let lume_s = &({}); !lume_s.is_empty() && lume_s.chars().all(|c| c.is_alphabetic()) }}", recv) }
+            "space?" => { need(0)?; format!("{{ let lume_s = &({}); !lume_s.is_empty() && lume_s.chars().all(|c| c.is_whitespace()) }}", recv) }
+            "max" | "min" if matches!(rt, Type::Int | Type::Float) => { need(1)?; format!("({}).{}({})", recv, name, args[0]) }
+            "clamp" => { need(2)?; format!("({}).clamp({}, {})", recv, args[0], args[1]) }
+            "pow" => {
+                need(1)?;
+                if *rt == Type::Float { format!("({}).powf({})", recv, args[0]) } else { format!("({}).pow(({}) as u32)", recv, args[0]) }
+            }
+            "even?" => { need(0)?; format!("(({}) % 2 == 0)", recv) }
+            "odd?" => { need(0)?; format!("(({}) % 2 != 0)", recv) }
+            "avg" => { need(0)?; format!("{{ let lume_v = &({}); if lume_v.is_empty() {{ 0.0 }} else {{ lume_v.iter().map(|x| *x as f64).sum::<f64>() / lume_v.len() as f64 }} }}", recv) }
+            "uniq" => { need(0)?; format!("{{ let mut lume_v = Vec::new(); for lume_x in ({}).iter() {{ if !lume_v.contains(lume_x) {{ lume_v.push(lume_x.clone()); }} }} lume_v }}", recv) }
+            "flatten" => { need(0)?; format!("({}).iter().flatten().cloned().collect::<Vec<_>>()", recv) }
+            "zip" => { need(1)?; format!("({}).iter().cloned().zip(({}).iter().cloned()).collect::<Vec<_>>()", recv, args[0]) }
+            "insert" => { need(2)?; format!("({}).insert(({}) as usize, {})", recv, args[0], args[1]) }
+            "remove_at" => { need(1)?; format!("({}).remove(({}) as usize)", recv, args[0]) }
+            "merge" if matches!(rt, Type::Map(..)) => { need(1)?; format!("{{ let mut lume_m = ({}).clone(); for (k, v) in ({}).iter() {{ lume_m.insert(k.clone(), v.clone()); }} lume_m }}", recv, args[0]) }
+            "ok" => {
+                need(0)?;
+                if !matches!(rt, Type::Result(..) | Type::Unknown) {
+                    return Err(LumeError::new(e.line, e.col, format!("`.ok` turns a `T or E` into an optional value, but this is a `{}`", type_name(rt))));
+                }
+                format!("({}).clone().ok()", recv)
+            }
             "keys" if matches!(rt, Type::Map(..)) => { need(0)?; format!("({}).keys().cloned().collect::<Vec<_>>()", recv) }
             "values" if matches!(rt, Type::Map(..)) => { need(0)?; format!("({}).values().cloned().collect::<Vec<_>>()", recv) }
             "to_list" if matches!(rt, Type::Map(..)) => { need(0)?; format!("({}).iter().map(|(k, v)| (k.clone(), v.clone())).collect::<Vec<_>>()", recv) }
@@ -5426,7 +5751,7 @@ impl Gen {
                 }
             }
             "reverse" if *rt == Type::Str => { need(0)?; format!("({}).chars().rev().collect::<String>()", recv) }
-            "reverse" => { need(0)?; format!("{{ let mut v = ({}).clone(); v.reverse(); v }}", recv) }
+            "reverse" => { need(0)?; format!("{{ let mut lume_v = ({}).clone(); lume_v.reverse(); lume_v }}", recv) }
             "slice" => { need(2)?; format!("({}).chars().skip(({}).max(0) as usize).take(({}).max(0) as usize).collect::<String>()", recv, args[0], args[1]) }
             "replace" => { need(2)?; format!("({}).replace(&*{}, &*{})", recv, args[0], args[1]) }
             "repeat" => { need(1)?; format!("({}).repeat(({}).max(0) as usize)", recv, args[0]) }
@@ -5448,13 +5773,14 @@ impl Gen {
                     _ => false,
                 };
                 match (name, partial) {
-                    ("sort", true) => format!("{{ let mut v = ({}).clone(); v.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)); v }}", recv),
-                    ("sort", false) => format!("{{ let mut v = ({}).clone(); v.sort(); v }}", recv),
+                    ("sort", true) => format!("{{ let mut lume_v = ({}).clone(); lume_v.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)); lume_v }}", recv),
+                    ("sort", false) => format!("{{ let mut lume_v = ({}).clone(); lume_v.sort(); lume_v }}", recv),
                     (_, true) => format!("({}).iter().cloned().{}_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))", recv, name),
                     (_, false) => format!("({}).iter().cloned().{}()", recv, name),
                 }
             }
             "lines" => { need(0)?; format!("({}).lines()", recv) }
+            "split" if args.is_empty() => format!("({}).split_whitespace()", recv),
             "split" => { need(1)?; format!("LumeSplit::new(({}).split(&*({})))", recv, args[0]) }
             "join" => { need(1)?; format!("({}).join(&*{})", recv, args[0]) }
             "starts_with?" => { need(1)?; format!("({}).starts_with(&*{})", recv, args[0]) }
@@ -5526,22 +5852,23 @@ fn builtins_for(recv: &Type) -> Vec<&'static str> {
     let mut v: Vec<&str> = match recv {
         Type::Str => vec![
             "len", "empty?", "to_int", "to_float", "upcase", "downcase", "trim", "lines", "split", "chars", "contains?", "starts_with?",
-            "ends_with?", "pad", "reverse", "slice", "replace", "repeat",
+            "ends_with?", "pad", "pad_right", "reverse", "slice", "replace", "repeat", "capitalize", "index_of", "digit?", "alpha?", "space?",
         ],
         Type::List(_) => vec![
             "len", "empty?", "any?", "all?", "first", "last", "max", "min", "sum", "sort", "sort_by", "reverse", "push", "pop", "contains?",
             "join", "map", "filter", "reject", "each", "count", "find", "take", "skip", "take_while", "fold", "min_by", "max_by", "enumerate",
-            "to_list",
+            "to_list", "zip", "flatten", "uniq", "index_of", "insert", "remove_at", "avg", "group_by", "partition", "flat_map",
         ],
         Type::Iter(..) => vec![
             "len", "empty?", "any?", "all?", "first", "last", "max", "min", "sum", "sort", "sort_by", "reverse", "contains?", "join", "map",
             "filter", "reject", "each", "count", "find", "take", "skip", "take_while", "fold", "min_by", "max_by", "enumerate", "to_list",
+            "zip", "flatten", "uniq", "index_of", "avg", "group_by", "partition", "flat_map",
         ],
-        Type::Map(..) => vec!["len", "empty?", "any?", "contains?", "keys", "values", "to_list", "remove", "get"],
-        Type::Option(_) => vec!["or", "some?", "none?", "or_error"],
-        Type::Result(..) => vec!["or", "ok?", "error?", "error"],
-        Type::Int => vec!["to_float", "to_int", "abs", "pad"],
-        Type::Float => vec!["to_int", "to_float", "sqrt", "floor", "ceil", "round", "abs", "pad"],
+        Type::Map(..) => vec!["len", "empty?", "any?", "contains?", "keys", "values", "to_list", "remove", "get", "merge", "filter", "reject", "map_values", "each", "count", "all?", "find"],
+        Type::Option(_) => vec!["or", "some?", "none?", "or_error", "map"],
+        Type::Result(..) => vec!["or", "ok?", "error?", "error", "ok", "map"],
+        Type::Int => vec!["to_float", "to_int", "abs", "pad", "max", "min", "clamp", "pow", "even?", "odd?"],
+        Type::Float => vec!["to_int", "to_float", "sqrt", "floor", "ceil", "round", "abs", "pad", "max", "min", "clamp", "pow"],
         Type::Bool => vec!["pad"],
         _ => vec![],
     };
@@ -5566,6 +5893,8 @@ fn is_builtin_name(name: &str) -> bool {
             | "starts_with?" | "ends_with?" | "chars" | "take" | "skip" | "to_list" | "enumerate"
             | "or" | "some?" | "none?" | "ok?" | "error?" | "or_error" | "error"
             | "pad" | "keys" | "values" | "remove" | "get" | "slice" | "replace" | "repeat"
+            | "pad_right" | "capitalize" | "index_of" | "digit?" | "alpha?" | "space?" | "zip" | "flatten" | "uniq" | "insert"
+            | "remove_at" | "avg" | "merge" | "clamp" | "pow" | "even?" | "odd?" | "ok"
     )
 }
 
@@ -5598,12 +5927,30 @@ fn builtin_method_type(recv: &Type, name: &str) -> Type {
             "values" => Type::List(v.clone()),
             "to_list" => Type::List(Box::new(Type::Tuple(vec![(**k).clone(), (**v).clone()]))),
             "remove" | "get" => Type::Option(v.clone()),
+            "merge" => recv.clone(),
             "to_s" | "to_str" => Type::Str,
             _ => Type::Unknown,
         };
     }
     match name {
-        "pad" => Type::Str,
+        "pad" | "pad_right" | "capitalize" => Type::Str,
+        "digit?" | "alpha?" | "space?" | "even?" | "odd?" => Type::Bool,
+        "index_of" => Type::Option(Box::new(Type::Int)),
+        "max" | "min" if matches!(recv, Type::Int | Type::Float) => recv.clone(),
+        "clamp" | "pow" => recv.clone(),
+        "avg" => Type::Float,
+        "uniq" => recv.materialized(),
+        "insert" => Type::Unit,
+        "remove_at" => elem.clone().unwrap_or(Type::Unknown),
+        "flatten" => match &elem {
+            Some(Type::List(inner)) => Type::List(inner.clone()),
+            _ => Type::Unknown,
+        },
+        "zip" => Type::Unknown, // needs the argument's type: see ty_of
+        "ok" => match recv {
+            Type::Result(t, _) => Type::Option(t.clone()),
+            _ => Type::Unknown,
+        },
         "take" | "skip" => match recv {
             Type::List(e) => Type::Iter(e.clone(), !e.is_copy()),
             Type::Iter(..) => recv.clone(),
@@ -5877,4 +6224,107 @@ fn int_literal(e: &Expr) -> Option<i64> {
         ExprKind::Unary { op: "-", expr } => int_literal(expr).and_then(|v| v.checked_neg()),
         _ => None,
     }
+}
+
+/// A pattern in the exhaustiveness matrix.
+#[derive(Clone, Debug, PartialEq)]
+enum Pat {
+    Wild,
+    /// A literal (number, string, range): matches some values, never all of them.
+    Lit,
+    /// A variant, `true`/`false`, a tuple `()`, or a list cell `[]` / `::`.
+    Ctor(String, Vec<Pat>),
+}
+
+fn product(subs: Vec<Vec<Pat>>) -> Vec<Vec<Pat>> {
+    let mut acc: Vec<Vec<Pat>> = vec![Vec::new()];
+    for s in subs {
+        let mut next = Vec::new();
+        for a in &acc {
+            for p in &s {
+                let mut row = a.clone();
+                row.push(p.clone());
+                next.push(row);
+            }
+        }
+        acc = next;
+    }
+    acc
+}
+
+/// Prints a witness in Lume pattern syntax.
+fn pat_text(p: &Pat) -> String {
+    match p {
+        Pat::Wild | Pat::Lit => "_".into(),
+        Pat::Ctor(c, args) if c == "()" => format!("({})", args.iter().map(pat_text).collect::<Vec<_>>().join(", ")),
+        Pat::Ctor(c, _) if c == "[]" => "[]".into(),
+        Pat::Ctor(c, _) if c == "::" => {
+            let mut items = Vec::new();
+            let mut cur = p;
+            loop {
+                match cur {
+                    Pat::Ctor(c, args) if c == "::" => {
+                        items.push(pat_text(&args[0]));
+                        cur = &args[1];
+                    }
+                    Pat::Ctor(c, _) if c == "[]" => break,
+                    _ => {
+                        items.push("..rest".into());
+                        break;
+                    }
+                }
+            }
+            format!("[{}]", items.join(", "))
+        }
+        Pat::Ctor(c, args) if args.is_empty() => c.clone(),
+        Pat::Ctor(c, args) => format!("{}({})", c, args.iter().map(pat_text).collect::<Vec<_>>().join(", ")),
+    }
+}
+
+fn pat_has_list(p: &Pattern) -> bool {
+    match &p.kind {
+        PatKind::List { .. } => true,
+        PatKind::Or(alts) => alts.iter().any(pat_has_list),
+        _ => false,
+    }
+}
+
+fn describe_names(names: &[&String]) -> String {
+    if names.is_empty() {
+        "nothing".into()
+    } else {
+        names.iter().map(|n| format!("`{}`", n)).collect::<Vec<_>>().join(", ")
+    }
+}
+
+/// Names of built-in types and Rust types the generated code relies on.
+fn reserved_type_name(name: &str, line: usize, col: usize) -> Result<()> {
+    const RESERVED: &[&str] = &[
+        "Int", "Float", "Str", "Bool", "List", "Map", "Set", "Option", "Result", "Box", "Vec", "String", "Task", "Time", "File", "Math", "Rc", "Arc", "Mutex", "Some",
+        "None", "Ok", "Err",
+    ];
+    if RESERVED.contains(&name) {
+        return Err(LumeError::new(line, col, format!("`{}` is a built-in name and cannot be a type", name))
+            .with_help(format!("pick another name, like `My{}`", name)));
+    }
+    Ok(())
+}
+
+/// Annotates a `|x| body` closure's parameter with `&T`, so Rust can call it
+/// with a reference from a generic helper.
+fn key_closure(f: &str, elem_rust: &str) -> String {
+    annotate_closure(f, &format!("&{}", elem_rust))
+}
+
+/// Gives a `|pat| body` closure's parameter an explicit type.
+fn annotate_closure(f: &str, ty: &str) -> String {
+    match f.strip_prefix('|').and_then(|rest| rest.find('|').map(|i| (&rest[..i], &rest[i + 1..]))) {
+        Some((pat, body)) => format!("|{}: {}|{}", pat, ty, body),
+        None => f.to_string(),
+    }
+}
+
+/// `(k, v)` for a map entry reached by reference, with Copy parts dereferenced.
+fn map_pair(k: &Type, v: &Type) -> String {
+    format!("({}k, {}v)", if k.is_copy() { "*" } else { "" }, if v.is_copy() { "*" } else { "" })
 }

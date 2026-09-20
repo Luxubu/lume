@@ -1,0 +1,4 @@
+def main:
+  xs = [1, 2]
+  xs.push(3)
+  puts xs

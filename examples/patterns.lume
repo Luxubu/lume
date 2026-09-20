@@ -1,0 +1,76 @@
+# Patterns: `|` alternatives and the exhaustiveness check.
+# A `match` must cover every value; the compiler names what is missing,
+# down to nested cases like `Wrap(A(_))` or `(Green, Tick)`.
+
+enum Inner:
+  A(n: Int)
+  B
+
+enum Outer:
+  Wrap(i: Inner)
+  Empty
+
+enum Light:
+  Red
+  Green
+  Yellow
+
+enum Event:
+  Tick
+  Stop
+
+def describe(o: Outer) -> Str:
+  match o:
+    Wrap(A(n)) if n > 5 -> "big #{n}"
+    Wrap(A(n))          -> "small #{n}"
+    Wrap(B) | Empty     -> "nothing much"
+
+# A tuple scrutinee is checked as a whole: every (Light, Event) pair is covered.
+def step(light: Light, event: Event) -> Light:
+  match (light, event):
+    (_, Stop)      -> Red
+    (Red, Tick)    -> Green
+    (Green, Tick)  -> Yellow
+    (Yellow, Tick) -> Red
+
+def size(n: Int) -> Str:
+  match n:
+    0 | 1     -> "tiny"
+    2 | 3 | 4 -> "small"
+    5..10     -> "medium"
+    _         -> "big"
+
+def vowel?(c: Str) -> Bool:
+  match c:
+    "a" | "e" | "i" | "o" | "u" -> true
+    _                           -> false
+
+def first_or_zero(o: Int?) -> Int:
+  match o:
+    Some(0) | None -> 0
+    Some(n)        -> n
+
+def shape(xs: [Int]) -> Str:
+  match xs:
+    []      -> "empty"
+    [x]     -> "one: #{x}"
+    [x, y]  -> "pair: #{x} #{y}"
+    [x, ..] -> "starts with #{x}"
+
+def main:
+  puts describe(Wrap(A(9)))
+  puts describe(Wrap(A(1)))
+  puts describe(Empty)
+  puts step(Red, Tick)
+  puts step(Yellow, Stop)
+  puts size(1)
+  puts size(3)
+  puts size(7)
+  puts size(70)
+  puts vowel?("e")
+  puts vowel?("z")
+  puts first_or_zero(Some(4))
+  puts first_or_zero(None)
+  puts shape([])
+  puts shape([1, 2])
+  puts shape([1, 2, 3])

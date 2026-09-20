@@ -1,6 +1,6 @@
-error: this `match` on `Shape` does not cover: Rect
+error: this `match` on `Shape` does not cover: Rect(_, _)
   --> examples/errors/missing_arm.lume:7:3
   |
 7 |   match s:
   |   ^
-  help: add an arm for Rect, or a final `_ ->` arm
+  help: add an arm for Rect(_, _), or a final `_ ->` arm
