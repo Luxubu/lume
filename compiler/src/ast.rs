@@ -188,6 +188,11 @@ pub struct InterfaceDef {
 #[derive(Debug, Clone)]
 pub struct ExtendDef {
     pub target: Type,
+    /// `extend [T: Ordered] with Sortable[T]:` — the bounds written inside
+    /// the target. The parameters themselves are worked out in codegen,
+    /// where it is known which names are real types; this carries only what
+    /// the author bounded by hand.
+    pub bounds: Vec<TypeParam>,
     /// `extend Version with Comparable[Version]:` — the interface, with its
     /// arguments when it takes any.
     pub iface: Type,

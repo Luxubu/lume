@@ -1,0 +1,6 @@
+error: `empty?` here calls itself, and would never stop
+  --> examples/errors/extend_default_recurses.lume:6:29
+  |
+6 |   def empty? -> Bool = items.empty?
+  |                             ^
+  help: `[T]` conforms to `Bag`, so inside this default `empty?` means this very method. Give the interface's method a name of its own, or write the body with a method the type already had

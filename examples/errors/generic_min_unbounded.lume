@@ -1,0 +1,7 @@
+# `.min` has to compare values, and a bare `T` promises nothing.
+
+def smallest[T](xs: [T]) -> T?:
+  xs.min
+
+def main:
+  puts smallest([3, 1, 2])

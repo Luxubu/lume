@@ -124,9 +124,12 @@ expected to: `1234.5.decimals(2)` is `"1234.50"`, `0.125.decimals(2)` is
   That is the next real gap, and it is bigger than anything above.
 
   *Milestone 25 closed half of it: interfaces now take type parameters, so
-  `interface Container[T]` can be written and used as a bound. The other
-  half — making the built-in `[T]`, `{T}` and `{K: V}` conform to one —
-  needs `extend` to be generic over the type it extends, which it is not.*
+  `interface Container[T]` can be written and used as a bound. Milestone 27
+  closed the other half: an `extend` may introduce a type parameter by
+  using one, so `extend [T] with Container[T]`, `extend {T} with
+  Container[T]` and `extend {K: V} with Container[V]` all compile, and one
+  bounded helper now reaches every container. `examples/generic_extend.lume`
+  is the worked version of exactly what this note asked for.*
 
 ---
 

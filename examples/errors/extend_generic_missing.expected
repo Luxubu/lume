@@ -1,0 +1,6 @@
+error: `extend [T] with Container[T]` is missing `size`
+  --> examples/errors/extend_generic_missing.lume:7:1
+  |
+7 | extend [T] with Container[T]:
+  | ^
+  help: `Container[T]` needs: def size -> Int. Add it inside this `extend` block

@@ -1,0 +1,10 @@
+# A bound belongs on a name the `extend` introduces, not on a real type.
+
+interface Named:
+  def name -> Str
+
+extend [Int: Ordered] with Named:
+  def name -> Str = "a list"
+
+def main:
+  puts [1].name

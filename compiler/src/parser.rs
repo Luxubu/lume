@@ -15,6 +15,9 @@ pub struct Parser {
     shape: Shape,
     /// Depth of `{ |x| ... }` blocks being parsed: a statement may end at `}`.
     inline_block: usize,
+    /// While parsing an `extend` target, the bounds written inside its
+    /// brackets are collected here: `extend [T: Ordered] with ...`.
+    target_bounds: Option<Vec<TypeParam>>,
 }
 
 /// What the tree does not keep but the formatter must reproduce: which forms
@@ -41,7 +44,7 @@ pub fn parse_program(toks: Vec<Token>) -> Result<Vec<Item>> {
 }
 
 pub fn parse_program_shaped(toks: Vec<Token>) -> Result<(Vec<Item>, Shape)> {
-    let mut p = Parser { toks, pos: 0, line_base: 0, col_base: 0, shape: Shape::default(), inline_block: 0 };
+    let mut p = Parser { toks, pos: 0, line_base: 0, col_base: 0, shape: Shape::default(), inline_block: 0, target_bounds: None };
     let items = p.program()?;
     Ok((items, p.shape))
 }
@@ -459,7 +462,10 @@ impl Parser {
     fn extend_def(&mut self) -> Result<ExtendDef> {
         let (line, col) = self.here();
         self.advance(); // extend
-        let target = self.parse_type()?;
+        self.target_bounds = Some(Vec::new());
+        let target = self.parse_type();
+        let bounds = self.target_bounds.take().unwrap_or_default();
+        let target = target?;
         if !self.eat_kw("with") && !matches!(self.peek(), Tok::Ident(s) if s == "with") {
             return Err(self.err("expected `with` and an interface name").with_help("write `extend Str with Shape:`"));
         }
@@ -483,7 +489,7 @@ impl Parser {
         if matches!(self.peek(), Tok::Dedent) {
             self.advance();
         }
-        Ok(ExtendDef { target, iface, methods, line, col })
+        Ok(ExtendDef { target, bounds, iface, methods, line, col })
     }
 
     /// At the top level, `NAME = value` or `NAME: Type = value`.
@@ -830,6 +836,35 @@ impl Parser {
         Ok(out)
     }
 
+    /// One type inside `[...]`. In an `extend` target a bound may be
+    /// written here — `extend [T: Ordered] with Sortable[T]:` — because a
+    /// `:` inside square brackets can mean nothing else. Inside `{...}` it
+    /// already means a map, so a set's item takes its bound from the
+    /// interface instead.
+    fn bracketed_type(&mut self) -> Result<Type> {
+        if self.target_bounds.is_some() {
+            if let (Tok::Ident(n), Tok::Sym(":")) = (self.peek().clone(), self.peek_at(1).clone()) {
+                // a built-in's name is a type, not a parameter waiting for
+                // a bound: `extend [Int: Ordered]` is a mistake, not a name
+                let builtin = matches!(n.as_str(), "Int" | "Float" | "Bool" | "Str" | "Char" | "Unit" | "Error" | "Option" | "String");
+                if builtin {
+                    let (l, c) = self.here();
+                    return Err(LumeError::new(l, c, format!("`{}` is a type, so it takes no bound here", n))
+                        .with_help(format!("`extend [{}] with ...` extends lists of `{}`; a bound belongs on a name the `extend` introduces, like `extend [T: Ordered] with ...`", n, n)));
+                }
+                if n.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) && !n.ends_with('?') {
+                    let (l, c) = self.here();
+                    self.advance();
+                    self.advance();
+                    let bound = self.parse_type_atom()?;
+                    self.target_bounds.as_mut().unwrap().push(TypeParam { name: n.clone(), bound: Some(bound), line: l, col: c });
+                    return Ok(Type::Named(n));
+                }
+            }
+        }
+        self.parse_type()
+    }
+
     fn parse_type(&mut self) -> Result<Type> {
         let t = self.parse_type_atom()?;
         if self.at_kw("or") {
@@ -871,7 +906,7 @@ impl Parser {
             return Ok(self.type_suffix(Type::Map(Box::new(k), Box::new(v))));
         }
         if self.eat_sym("[") {
-            let inner = self.parse_type()?;
+            let inner = self.bracketed_type()?;
             self.expect_sym("]", "to close the list type")?;
             return Ok(self.type_suffix(Type::List(Box::new(inner))));
         }
@@ -927,7 +962,7 @@ impl Parser {
         if self.at_sym("[") && !self.toks[self.pos].space_before && !name.ends_with('?') {
             self.advance();
             loop {
-                targs.push(self.parse_type()?);
+                targs.push(self.bracketed_type()?);
                 if !self.eat_sym(",") {
                     break;
                 }
@@ -1896,7 +1931,7 @@ impl Parser {
                             let toks = lexer::lex(&raw).map_err(|e| {
                                 LumeError::new(line, ecol + e.col - 1, format!("in interpolation: {}", e.msg))
                             })?;
-                            let mut sub = Parser { toks, pos: 0, line_base: line - 1, col_base: ecol - 1, shape: Shape::default(), inline_block: 0 };
+                            let mut sub = Parser { toks, pos: 0, line_base: line - 1, col_base: ecol - 1, shape: Shape::default(), inline_block: 0, target_bounds: None };
                             let e = sub.expr()?;
                             sub.skip_newlines();
                             if !matches!(sub.peek(), Tok::Eof) {

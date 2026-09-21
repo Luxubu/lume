@@ -1,0 +1,6 @@
+error: `Int` is a type, so it takes no bound here
+  --> examples/errors/extend_bound_on_type.lume:6:9
+  |
+6 | extend [Int: Ordered] with Named:
+  |         ^
+  help: `extend [Int] with ...` extends lists of `Int`; a bound belongs on a name the `extend` introduces, like `extend [T: Ordered] with ...`

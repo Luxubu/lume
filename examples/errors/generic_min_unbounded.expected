@@ -1,0 +1,6 @@
+error: `T` could be any type, so `.min` cannot compare its values
+  --> examples/errors/generic_min_unbounded.lume:4:5
+  |
+4 |   xs.min
+  |     ^
+  help: declare it `[T: Ordered]`, which promises every type it is given has `<`

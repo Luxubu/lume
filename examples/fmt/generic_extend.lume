@@ -1,0 +1,25 @@
+interface Holds[T]:
+  def parts -> [T]
+  def count -> Int = parts.len
+
+extend [T] with Holds[T]:
+  def parts -> [T] = self
+
+extend {T} with Holds[T]:
+  def parts -> [T] = self.to_list
+
+extend {K: V} with Holds[V]:
+  def parts -> [V] = self.values.to_list
+
+interface Picked[T: Ordered]:
+  def every -> [T]
+  def top -> T? = every.max
+
+extend [T: Ordered] with Picked[T]:
+  def every -> [T] = self
+
+def main:
+  puts [1, 2].count
+  puts {"a"}.count
+  puts {1: "x"}.count
+  puts [3, 1].top

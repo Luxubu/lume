@@ -1,0 +1,78 @@
+# Generic `extend`: making the built-in containers conform.
+#
+# Milestone 24 wrote a library and found the one thing it could not say:
+# "anything you can iterate". Every helper took a `[T]`, so a `{T}` or a
+# `{K: V}` had to be converted first. Milestone 25 gave interfaces type
+# parameters; this milestone lets an `extend` introduce one, so the
+# built-in containers can conform to the same interface.
+#
+# An `extend` introduces a name by using one: a name inside the target
+# that is no type of this program's is a type parameter. A bare target
+# must still be a real type, so `extend Poimt with Named` is an unknown
+# type rather than a silent parameter.
+
+interface Bag[T]:
+  def items -> [T]
+
+  # Defaults are written once, in terms of the required method, and every
+  # conforming type gets them — including the built-in ones below.
+  def size -> Int = items.len
+  def none? -> Bool = size == 0
+  def listed -> Str = items.map { |x| "#{x}" }.to_list.join(", ")
+
+extend [T] with Bag[T]:
+  def items -> [T] = self
+
+extend {T} with Bag[T]:
+  def items -> [T] = self.to_list
+
+extend {K: V} with Bag[V]:
+  def items -> [V] = self.values.to_list
+
+# A user's own generic type conforms the same way.
+struct Stack[T]:
+  vals: [T]
+
+extend Stack[T] with Bag[T]:
+  def items -> [T] = vals
+
+# One helper, every container. `B` is whatever was passed; `Bag[Str]`
+# says what it holds.
+def describe[B: Bag[Str]](b: B) -> Str:
+  if b.none?:
+    "(nothing)"
+  else:
+    "#{b.size}: #{b.listed}"
+
+# A bound goes where every other generic puts it. Inside `{...}` a `:`
+# already means a map, so a set's item takes the bound the interface
+# declared instead.
+interface Ranked[T: Ordered]:
+  def all -> [T]
+
+  def best -> T? = all.max
+  def in_order -> [T] = all.sort
+
+extend [T: Ordered] with Ranked[T]:
+  def all -> [T] = self
+
+extend {T} with Ranked[T]:
+  def all -> [T] = self.to_list
+
+def main:
+  puts describe(["pear", "fig"])
+  puts describe({"red", "green", "blue"})
+  puts describe({1: "one", 2: "two"})
+  puts describe(Stack(vals: ["only"]))
+
+  none: [Str] = []
+  puts describe(none)
+
+  # The defaults are the type's own methods now, with no helper in between.
+  puts [3, 1, 2].size
+  puts({"a", "b"}.listed)
+  puts Stack(vals: [7, 8]).items
+
+  puts [3, 1, 2].best
+  puts [3, 1, 2].in_order
+  puts({"pear", "fig"}.in_order)

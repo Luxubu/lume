@@ -1,0 +1,11 @@
+# A generic `extend` must still supply every method the interface requires.
+
+interface Container[T]:
+  def items -> [T]
+  def size -> Int
+
+extend [T] with Container[T]:
+  def items -> [T] = self
+
+def main:
+  puts [1].size

@@ -393,7 +393,7 @@ impl Fmt {
                 out
             }
             Item::Extend(x) => {
-                let mut out = format!("extend {} with {}:", type_str(&x.target), type_str(&x.iface));
+                let mut out = format!("extend {} with {}:", extend_target_str(&x.target, &x.bounds), type_str(&x.iface));
                 self.indent += 1;
                 let all: Vec<(&FnDef, bool)> = x.methods.iter().map(|f| (f, false)).collect();
                 out.push_str(&self.defs_text(&all, true));
@@ -1088,6 +1088,29 @@ fn generics_str(gs: &[TypeParam]) -> String {
         None => p.name.clone(),
     }).collect();
     format!("[{}]", parts.join(", "))
+}
+
+/// An `extend` target with the bounds written inside it put back:
+/// `extend [T: Ordered] with Sortable[T]:`. They are kept beside the type
+/// rather than in it, so printing the type alone would lose them.
+fn extend_target_str(t: &Type, bounds: &[TypeParam]) -> String {
+    if bounds.is_empty() {
+        return type_str(t);
+    }
+    let go = |x: &Type| extend_target_str(x, bounds);
+    match t {
+        Type::Named(n) => match bounds.iter().find(|b| b.name == *n) {
+            Some(b) => match &b.bound {
+                Some(bt) => format!("{}: {}", n, type_str(bt)),
+                None => n.clone(),
+            },
+            None => n.clone(),
+        },
+        Type::List(e) => format!("[{}]", go(e)),
+        Type::App(n, args) => format!("{}[{}]", n, args.iter().map(go).collect::<Vec<_>>().join(", ")),
+        Type::Tuple(ts) => format!("({})", ts.iter().map(go).collect::<Vec<_>>().join(", ")),
+        other => type_str(other),
+    }
 }
 
 pub fn type_str(t: &Type) -> String {

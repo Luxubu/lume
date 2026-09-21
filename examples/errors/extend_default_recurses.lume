@@ -1,0 +1,12 @@
+# Once lists conform to `Bag`, `empty?` inside `Bag`'s own default means
+# `Bag`'s `empty?`, not the built-in one — so the default calls itself.
+
+interface Bag[T]:
+  def items -> [T]
+  def empty? -> Bool = items.empty?
+
+extend [T] with Bag[T]:
+  def items -> [T] = self
+
+def main:
+  puts [1].empty?

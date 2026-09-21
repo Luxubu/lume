@@ -565,6 +565,19 @@ pub struct Gen {
     ext_methods: HashMap<String, HashMap<String, Sig>>,
     /// `extend` targets that are built-in types: key ("Str") -> the type.
     ext_targets: HashMap<String, Type>,
+    /// A generic `extend` — `extend [T] with Container[T]:` — keyed by the
+    /// shape of its target, with the type parameters the target introduced.
+    /// Several extends may share a shape, so this holds their union: it
+    /// says only that the shape is generic.
+    ext_generics: HashMap<String, Vec<TypeParam>>,
+    /// The target one `extend` was written against, per method it gave the
+    /// type. A method of `[T]` is read through `[T]`, whatever another
+    /// `extend` of the same shape called its own parameter.
+    ext_method_target: HashMap<(String, String), Type>,
+    /// One `extend`'s own parameters, keyed by (type, interface): the
+    /// bounds of `extend [T: Ordered] with Ranked[T]` belong to that impl
+    /// alone, not to every impl for a list.
+    ext_impl_generics: HashMap<(String, String), Vec<TypeParam>>,
     /// Local types (struct/enum names) — interfaces are emitted for these.
     local_types: HashSet<String>,
     /// The struct or enum whose method is being generated, if any.
@@ -663,6 +676,9 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, deps: &[Dep], t
         block_ret: None,
         ext_methods: HashMap::new(),
         ext_targets: HashMap::new(),
+        ext_generics: HashMap::new(),
+        ext_method_target: HashMap::new(),
+        ext_impl_generics: HashMap::new(),
         local_types: HashSet::new(),
         current_type: None,
         current_self_ty: None,
@@ -1136,18 +1152,30 @@ impl Gen {
     /// The Rust bounds a type parameter carries. Every Lume value can be
     /// copied, compared and printed; the declared bound adds to that.
     fn rust_bounds(&self, p: &TypeParam) -> String {
+        let bs: Vec<Type> = p.bound.iter().cloned().collect();
+        self.rust_bounds_many(&p.name, &bs)
+    }
+
+    /// One parameter with every bound it has to satisfy at once: what it
+    /// was declared with, and what an interface asks of it.
+    fn rust_bounds_many(&self, name: &str, bounds: &[Type]) -> String {
         let mut parts = vec!["Clone".to_string(), "std::fmt::Debug".to_string(), "PartialEq".to_string(), "LumeShow".to_string()];
-        if let Some(b) = &p.bound {
+        let mut add = |p: String, parts: &mut Vec<String>| {
+            if !parts.contains(&p) {
+                parts.push(p);
+            }
+        };
+        for b in bounds {
             match Self::bound_name(b) {
-                "Ordered" => parts.push("PartialOrd".into()),
+                "Ordered" => add("PartialOrd".into(), &mut parts),
                 "Hashable" => {
-                    parts.push("std::hash::Hash".into());
-                    parts.push("Eq".into());
+                    add("std::hash::Hash".into(), &mut parts);
+                    add("Eq".into(), &mut parts);
                 }
-                _ => parts.push(self.rust_iface(b)),
+                _ => add(self.rust_iface(b), &mut parts),
             }
         }
-        format!("{}: {}", p.name, parts.join(" + "))
+        format!("{}: {}", name, parts.join(" + "))
     }
 
     /// An interface as a Rust trait, with its arguments when it takes any.
@@ -1481,6 +1509,34 @@ impl Gen {
 
     /// Methods callable on a type: inherent ones plus those from `extend`;
     /// for an interface, its methods; for a built-in, only `extend` methods.
+    /// The methods of a concrete type, with a generic `extend`'s names
+    /// filled in by what this receiver holds: the methods of `[T]` seen by
+    /// a `[Int]` talk about `Int`.
+    fn methods_for(&self, t: &Type) -> Option<HashMap<String, Sig>> {
+        let key = self.type_key(t);
+        let m = self.methods_of(&key)?;
+        if !self.ext_generics.contains_key(&key) {
+            return Some(m);
+        }
+        Some(
+            m.into_iter()
+                .map(|(k, v)| {
+                    // Each method is read through the target its own
+                    // `extend` was written against. A name this receiver
+                    // does not pin stays as written: a `[Int]` says what
+                    // `T` is, the shape `[T]` itself does not.
+                    let mut sub: HashMap<String, Type> = HashMap::new();
+                    if let Some(shape) = self.ext_method_target.get(&(key.clone(), k.clone())) {
+                        Self::unify(shape, t, &mut sub);
+                        sub.retain(|_, x| *x != Type::Unknown);
+                    }
+                    let v = Sig { params: v.params.iter().map(|(n, x)| (n.clone(), Self::subst(x, &sub))).collect(), ret: Self::subst(&v.ret, &sub), ..v };
+                    (k, v)
+                })
+                .collect(),
+        )
+    }
+
     fn methods_of(&self, tname: &str) -> Option<HashMap<String, Sig>> {
         let mut m: HashMap<String, Sig> = if let Some(s) = self.structs.get(tname) {
             s.methods.clone()
@@ -1692,7 +1748,166 @@ impl Gen {
                 Some(b) if !Self::is_builtin_bound(Self::bound_name(&b)) => self.type_key(&b),
                 _ => type_name(t),
             },
-            other => type_name(other),
+            other => {
+                // a built-in container that a generic `extend` covers answers
+                // under its shape, so `[Int]` finds what `[T]` was given
+                if let Some(shape) = Self::shape_key(other) {
+                    if self.ext_generics.contains_key(&shape) {
+                        return shape;
+                    }
+                }
+                type_name(other)
+            }
+        }
+    }
+
+    /// One `extend` block, with its type parameters already in scope.
+    fn register_extend(&mut self, x: &ExtendDef, gens: &[TypeParam]) -> Result<()> {
+        let target = self.ct(&x.target);
+        self.check_type(&target, x.line, x.col)?;
+        let iface_ty = self.ct(&x.iface);
+        let iface = self.type_key(&iface_ty);
+        if !self.interfaces.contains_key(&iface) {
+            return Err(LumeError::new(x.line, x.col, format!("unknown interface `{}`", type_name(&x.iface))));
+        }
+        if self.is_interface(&target) {
+            return Err(LumeError::new(x.line, x.col, "an interface cannot be extended with another; extend the concrete types"));
+        }
+        // A generic extend on a built-in has no name to register under, so
+        // it registers under the container's shape; a user's own generic
+        // type already keys by its name.
+        let key = match (gens.is_empty(), Self::shape_key(&target)) {
+            (false, Some(shape)) => shape,
+            _ => self.type_key(&target),
+        };
+        if !gens.is_empty() {
+            let all = self.ext_generics.entry(key.clone()).or_default();
+            for g in gens {
+                if !all.iter().any(|p| p.name == g.name) {
+                    all.push(g.clone());
+                }
+            }
+            self.ext_impl_generics.insert((key.clone(), iface.clone()), gens.to_vec());
+        }
+        if !matches!(target, Type::Named(_)) {
+            self.ext_targets.insert(key.clone(), target.clone());
+        }
+        let existing = self.methods_of(&key).unwrap_or_default();
+        for m in &x.methods {
+            if m.self_kind == SelfKind::Mutate {
+                return Err(LumeError::new(m.line, m.col, "methods in an `extend` block cannot take `var self`"));
+            }
+            if !self.interfaces[&iface].methods.contains_key(&m.name) {
+                return Err(LumeError::new(m.line, m.col, format!("`{}` is not a method of `{}`", m.name, type_name(&x.iface)))
+                    .with_help(format!("`{}` has: {}", type_name(&x.iface), self.interfaces[&iface].methods.keys().cloned().collect::<Vec<_>>().join(", "))));
+            }
+            if existing.contains_key(&m.name) {
+                return Err(LumeError::new(m.line, m.col, format!("`{}` already has a `{}` method", type_name(&target), m.name)));
+            }
+            let sg = self.sig_of(m);
+            if !gens.is_empty() {
+                self.ext_method_target.insert((key.clone(), m.name.clone()), target.clone());
+            }
+            self.ext_methods.entry(key.clone()).or_default().insert(m.name.clone(), sg);
+        }
+        // A generic `extend` covers a built-in, whose own methods are not
+        // in any table, so say here what is missing rather than letting a
+        // call site report a method the type "does not have".
+        if !gens.is_empty() {
+            let info = self.interfaces[&iface].clone();
+            let missing: Vec<String> = info
+                .required
+                .iter()
+                .filter(|r| {
+                    !x.methods.iter().any(|m| m.name == **r)
+                        && !existing.contains_key(*r)
+                        && builtin_method_type(&target, r) == Type::Unknown
+                        && !is_builtin_name(r)
+                })
+                .cloned()
+                .collect();
+            if !missing.is_empty() {
+                let needs: Vec<String> = missing.iter().filter_map(|n| info.methods.get(n).map(|s| format!("def {} {}", n, self.describe_sig(s)))).collect();
+                return Err(LumeError::new(x.line, x.col, format!("`extend {} with {}` is missing `{}`", type_name(&target), type_name(&x.iface), missing.join("`, `")))
+                    .with_help(format!("`{}` needs: {}. Add {} inside this `extend` block", type_name(&x.iface), needs.join("; "), if missing.len() == 1 { "it" } else { "them" })));
+            }
+        }
+        Ok(())
+    }
+
+    /// The key an `extend` block registers under, generic or not.
+    fn ext_key_of(&self, x: &ExtendDef) -> String {
+        let mut names = Vec::new();
+        self.target_params(&x.target, false, &mut names);
+        if !names.is_empty() {
+            // the shape does not depend on what the target holds, so it can
+            // be read straight off the written type
+            if let Some(shape) = Self::shape_key(&x.target) {
+                return shape;
+            }
+        }
+        self.type_key(&self.ct(&x.target))
+    }
+
+    /// The shape of a built-in container, ignoring what it holds: `[Int]`
+    /// and `[T]` are both `[]`. A generic `extend` on a built-in registers
+    /// under this, because there is no name to register under. A user's own
+    /// generic type needs none — `Stack[Int]` already keys as `Stack`.
+    fn shape_key(t: &Type) -> Option<String> {
+        Some(match t {
+            Type::List(_) => "[]".to_string(),
+            Type::Set(_) => "{}".to_string(),
+            Type::Map(..) => "{:}".to_string(),
+            Type::Option(_) => "?".to_string(),
+            _ => return None,
+        })
+    }
+
+    /// The names a generic `extend` target introduces: a name inside the
+    /// target that is not a type this program knows. Only names nested in a
+    /// container count, so `extend Poimt with Named` is still an unknown
+    /// type rather than a silent type parameter.
+    fn target_params(&self, t: &Type, nested: bool, out: &mut Vec<String>) {
+        let mut pairs = Vec::new();
+        self.target_params_ex(t, nested, &mut pairs);
+        for (n, _) in pairs {
+            if !out.contains(&n) {
+                out.push(n);
+            }
+        }
+    }
+
+    /// The same, with the bound the container itself implies: a set's item
+    /// and a map's key must be `Hashable`, so an `extend` on one need not
+    /// say so (and, inside `{...}`, could not).
+    fn target_params_ex(&self, t: &Type, nested: bool, out: &mut Vec<(String, Option<Type>)>) {
+        let implied = |n: &String, b: Option<&str>, out: &mut Vec<(String, Option<Type>)>| {
+            if !out.iter().any(|(x, _)| x == n) {
+                out.push((n.clone(), b.map(|s| Type::Named(s.to_string()))));
+            }
+        };
+        match t {
+            Type::Named(n) => {
+                if nested && !self.is_type(&self.canon(n)) {
+                    implied(n, None, out);
+                }
+            }
+            Type::Set(i) | Type::Map(i, _) => {
+                if let Type::Named(n) = &**i {
+                    if !self.is_type(&self.canon(n)) {
+                        implied(n, Some("Hashable"), out);
+                    }
+                } else {
+                    self.target_params_ex(i, true, out);
+                }
+                if let Type::Map(_, v) = t {
+                    self.target_params_ex(v, true, out);
+                }
+            }
+            Type::List(i) | Type::Option(i) => self.target_params_ex(i, true, out),
+            Type::Tuple(parts) => parts.iter().for_each(|x| self.target_params_ex(x, true, out)),
+            Type::App(_, args) => args.iter().for_each(|x| self.target_params_ex(x, true, out)),
+            _ => {}
         }
     }
 
@@ -1730,6 +1945,49 @@ impl Gen {
             }
         }
         None
+    }
+
+    /// Which interface supplies `name` to `t` as a default.
+    fn default_owner(&self, t: &Type, name: &str) -> Option<String> {
+        if self.is_interface(t) {
+            return None;
+        }
+        let mut names: Vec<&String> = self.interfaces.keys().collect();
+        names.sort();
+        for iname in names {
+            let info = &self.interfaces[iname];
+            if info.required.contains(&name.to_string()) {
+                continue;
+            }
+            if info.methods.contains_key(name) && matches!(self.conformance_with(t, &Type::Named(iname.clone())).0, Conformance::Yes) {
+                return Some(iname.clone());
+            }
+        }
+        None
+    }
+
+    /// An interface default whose body calls the very method it defines.
+    /// A generic `extend` makes this easy to write by accident: once
+    /// `extend [T] with Bag[T]` exists, a list has `Bag`'s methods, so a
+    /// default written as `items.empty?` no longer means the built-in.
+    fn check_default_recursion(&self, rt: &Type, name: &str, line: usize, col: usize) -> Result<()> {
+        if !self.in_trait_impl || name != self.current_fn {
+            return Ok(());
+        }
+        let owner = match self.default_owner(rt, name) {
+            Some(o) => o,
+            None => return Ok(()),
+        };
+        if Some(&owner) != self.current_type.as_ref() {
+            return Ok(());
+        }
+        Err(LumeError::new(line, col, format!("`{}` here calls itself, and would never stop", name))
+            .with_help(format!(
+                "`{}` conforms to `{}`, so inside this default `{}` means this very method. Give the interface's method a name of its own, or write the body with a method the type already had",
+                type_name(rt),
+                owner,
+                name
+            )))
     }
 
     /// How the interface that owns `method` for type `key` declared its
@@ -1771,7 +2029,7 @@ impl Gen {
             let same = self.type_key(t) == key;
             return (if same { Conformance::Yes } else { Conformance::Missing(info.required.clone()) }, Vec::new());
         }
-        let have = self.methods_of(&self.type_key(t)).unwrap_or_default();
+        let have = self.methods_for(t).unwrap_or_default();
         // what the interface's own parameters stand for here
         let mut sub: HashMap<String, Type> = HashMap::new();
         if let Type::App(_, args) = iface {
@@ -2235,35 +2493,27 @@ impl Gen {
         // `extend Type with Iface:` adds methods to the type.
         for item in program {
             if let Item::Extend(x) = item {
-                let target = self.ct(&x.target);
-                self.check_type(&target, x.line, x.col)?;
-                let iface_ty = self.ct(&x.iface);
-                let iface = self.type_key(&iface_ty);
-                if !self.interfaces.contains_key(&iface) {
-                    return Err(LumeError::new(x.line, x.col, format!("unknown interface `{}`", type_name(&x.iface))));
+                // `extend [T] with Container[T]:` — a name inside the target
+                // that is no type of this program's is a type parameter.
+                let mut pairs = Vec::new();
+                self.target_params_ex(&x.target, false, &mut pairs);
+                let names: Vec<String> = pairs.iter().map(|(n, _)| n.clone()).collect();
+                let gens: Vec<TypeParam> = pairs
+                    .iter()
+                    .map(|(n, implied)| match x.bounds.iter().find(|b| b.name == *n) {
+                        Some(b) => b.clone(),
+                        None => TypeParam { name: n.clone(), bound: implied.clone(), line: x.line, col: x.col },
+                    })
+                    .collect();
+                if let Some(b) = x.bounds.iter().find(|b| !names.contains(&b.name)) {
+                    return Err(LumeError::new(b.line, b.col, format!("`{}` is a type, so it takes no bound here", b.name))
+                        .with_help("a bound belongs on a name the `extend` introduces, like `extend [T: Ordered] with Sortable[T]:`"));
                 }
-                if self.is_interface(&target) {
-                    return Err(LumeError::new(x.line, x.col, "an interface cannot be extended with another; extend the concrete types"));
-                }
-                let key = self.type_key(&target);
-                if !matches!(target, Type::Named(_)) {
-                    self.ext_targets.insert(key.clone(), target.clone());
-                }
-                let existing = self.methods_of(&key).unwrap_or_default();
-                for m in &x.methods {
-                    if m.self_kind == SelfKind::Mutate {
-                        return Err(LumeError::new(m.line, m.col, "methods in an `extend` block cannot take `var self`"));
-                    }
-                    if !self.interfaces[&iface].methods.contains_key(&m.name) {
-                        return Err(LumeError::new(m.line, m.col, format!("`{}` is not a method of `{}`", m.name, type_name(&x.iface)))
-                            .with_help(format!("`{}` has: {}", type_name(&x.iface), self.interfaces[&iface].methods.keys().cloned().collect::<Vec<_>>().join(", "))));
-                    }
-                    if existing.contains_key(&m.name) {
-                        return Err(LumeError::new(m.line, m.col, format!("`{}` already has a `{}` method", type_name(&target), m.name)));
-                    }
-                    let sg = self.sig_of(m);
-                    self.ext_methods.entry(key.clone()).or_default().insert(m.name.clone(), sg);
-                }
+                self.check_generics(&gens, "this `extend`")?;
+                let saved_g = self.push_generics(&gens);
+                let r = self.register_extend(x, &gens);
+                self.pop_generics(saved_g);
+                r?;
             }
         }
         // Check that every named type exists.
@@ -2326,9 +2576,17 @@ impl Gen {
                     }
                 }
                 Item::Extend(x) => {
-                    for m in &x.methods {
-                        self.check_sig_types(m, &[])?;
-                    }
+                    let ikey = self.type_key(&self.ct(&x.iface));
+                    let gens = self.ext_impl_generics.get(&(self.ext_key_of(x), ikey)).cloned().unwrap_or_default();
+                    let saved = self.push_generics(&gens);
+                    let r = (|g: &mut Self| -> Result<()> {
+                        for m in &x.methods {
+                            g.check_sig_types(m, &[])?;
+                        }
+                        Ok(())
+                    })(self);
+                    self.pop_generics(saved);
+                    r?;
                 }
             }
         }
@@ -2344,7 +2602,7 @@ impl Gen {
                     Item::Enum(e) => (e.methods.iter().collect(), Some(&e.name)),
                     Item::Interface(i) => (i.defaults.iter().collect(), Some(&i.name)),
                     Item::Extend(x) => {
-                        ext_key = self.type_key(&self.ct(&x.target));
+                        ext_key = self.ext_key_of(x);
                         (x.methods.iter().collect(), Some(&ext_key))
                     }
                     Item::Import(_) | Item::Test(_) => (vec![], None),
@@ -2373,7 +2631,7 @@ impl Gen {
                 Item::Enum(e) => (e.methods.iter().collect(), Some(&e.name)),
                 Item::Interface(i) => (i.defaults.iter().collect(), Some(&i.name)),
                 Item::Extend(x) => {
-                    ext_key = self.type_key(&self.ct(&x.target));
+                    ext_key = self.ext_key_of(x);
                     (x.methods.iter().collect(), Some(&ext_key))
                 }
                 Item::Import(_) | Item::Test(_) => (vec![], None),
@@ -3353,7 +3611,9 @@ impl Gen {
             ExprKind::Method { recv, name, args } if args.is_empty() => {
                 let rt = self.ty_of(recv).materialized();
                 let is_field = match &rt {
-                    Type::Named(n) => self.structs.get(&self.canon(n)).map(|s| s.fields.iter().any(|(f, _)| f == name)).unwrap_or(false),
+                    // a generic struct reached at an instantiation is the
+                    // same struct: `Stack[Int]` has `Stack`'s fields
+                    Type::Named(n) | Type::App(n, _) => self.structs.get(&self.canon(n)).map(|s| s.fields.iter().any(|(f, _)| f == name)).unwrap_or(false),
                     _ => false,
                 };
                 is_field && self.is_place(recv)
@@ -3978,13 +4238,18 @@ impl Gen {
         let mut ext_bodies: HashMap<(String, String), Vec<FnDef>> = HashMap::new();
         for item in program {
             if let Item::Extend(x) = item {
-                let key = self.type_key(&self.ct(&x.target));
+                let key = self.ext_key_of(x);
                 ext_bodies.entry((key, self.type_key(&self.ct(&x.iface)))).or_default().extend(x.methods.iter().cloned());
             }
         }
         // candidate types: local structs/enums, extend targets, imported types (when the interface is local)
         let mut types: Vec<(String, Type)> = Vec::new();
         for n in &self.local_types {
+            // a generic `extend` on this type carries its parameters, so
+            // that spelling of it is the one to emit against
+            if self.ext_generics.contains_key(n) && self.ext_targets.contains_key(n) {
+                continue;
+            }
             types.push((n.clone(), Type::Named(n.clone())));
         }
         for (k, t) in &self.ext_targets {
@@ -4012,17 +4277,42 @@ impl Gen {
                 if !done.insert((tkey.clone(), iname.clone())) {
                     continue;
                 }
+                // a generic `extend` wrote everything below in terms of the
+                // names its target introduced, so they are in scope here
+                let egens = self.ext_impl_generics.get(&(tkey.clone(), iname.clone())).cloned().unwrap_or_default();
+                let saved_eg = self.push_generics(&egens);
+                let r = self.emit_one_conformance(program, tkey, t, iname, info, &ext_bodies, &egens);
+                self.pop_generics(saved_eg);
+                r?;
+            }
+        }
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn emit_one_conformance(
+        &mut self,
+        program: &[Item],
+        tkey: &String,
+        t: &Type,
+        iname: &String,
+        info: &IfaceInfo,
+        ext_bodies: &HashMap<(String, String), Vec<FnDef>>,
+        egens: &[TypeParam],
+    ) -> Result<()> {
+        {
+            {
                 // an `extend` may name the interface's arguments; otherwise
                 // they are read off the type's own methods
                 let written = program.iter().find_map(|it| match it {
-                    Item::Extend(x) if self.type_key(&self.ct(&x.target)) == *tkey && self.type_key(&self.ct(&x.iface)) == *iname => Some(self.ct(&x.iface)),
+                    Item::Extend(x) if self.ext_key_of(x) == *tkey && self.type_key(&self.ct(&x.iface)) == *iname => Some(self.ct(&x.iface)),
                     _ => None,
                 });
                 let asked = written.clone().unwrap_or_else(|| Type::Named(iname.clone()));
                 let (verdict, targs) = self.conformance_with(t, &asked);
                 if !matches!(verdict, Conformance::Yes) {
                     if let Some(x) = program.iter().find_map(|it| match it {
-                        Item::Extend(x) if self.type_key(&self.ct(&x.target)) == *tkey && self.type_key(&self.ct(&x.iface)) == *iname => Some(x),
+                        Item::Extend(x) if self.ext_key_of(x) == *tkey && self.type_key(&self.ct(&x.iface)) == *iname => Some(x),
                         _ => None,
                     }) {
                         // an extend that still leaves methods missing is an error here
@@ -4038,7 +4328,7 @@ impl Gen {
                         }
                         self.require_conforms(t, &asked, x.line, x.col)?;
                     }
-                    continue;
+                    return Ok(());
                 }
                 let iface_rust = if info.generics.is_empty() {
                     self.path_of(iname)
@@ -4051,8 +4341,31 @@ impl Gen {
                     Type::Str => vec!["str".into(), "String".into()],
                     other => vec![self.rt(other)],
                 };
+                // A generic `extend` becomes a generic impl: the names its
+                // target introduced are the impl's own parameters, and they
+                // inherit what the interface asks of its own — an
+                // `interface Sortable[T: Ordered]` means this `T` is Ordered.
+                let impl_gen = if egens.is_empty() {
+                    String::new()
+                } else {
+                    let parts: Vec<String> = egens
+                        .iter()
+                        .map(|g| {
+                            let mut bs: Vec<Type> = g.bound.iter().cloned().collect();
+                            for (ip, a) in info.generics.iter().zip(&targs) {
+                                if let (Some(b), Type::Var(n) | Type::Named(n)) = (&ip.bound, a) {
+                                    if *n == g.name && !bs.contains(b) {
+                                        bs.push(b.clone());
+                                    }
+                                }
+                            }
+                            self.rust_bounds_many(&g.name, &bs)
+                        })
+                        .collect();
+                    format!("<{}>", parts.join(", "))
+                };
                 for target in targets {
-                    self.line(&format!("impl {} for {} {{", iface_rust, target));
+                    self.line(&format!("impl{} {} for {} {{", impl_gen, iface_rust, target));
                     self.indent += 1;
                     let inherent = self.methods_of(tkey).unwrap_or_default();
                     for (mname, sg0) in &info.methods {
@@ -5399,8 +5712,11 @@ impl Gen {
                 true
             }
             ExprKind::Method { recv, name, args } if args.is_empty() => {
-                if let Type::Named(s) = self.ty_of(recv) {
-                    if let Some(info) = self.structs.get(&s) {
+                // a generic struct at an instantiation keeps its fields:
+                // `Stack[Int]`'s `vals` is as borrowed as `Stack`'s
+                let rt = self.ty_of(recv);
+                if let Type::Named(s) | Type::App(s, _) = &rt {
+                    if let Some(info) = self.structs.get(&self.canon(s)) {
                         return info.fields.iter().any(|(n, _)| n == name);
                     }
                 }
@@ -5769,6 +6085,9 @@ impl Gen {
         self.loop_depth = saved_loop;
         self.in_block = saved_in_block;
         self.tail_of_fn = saved_tail;
+        // a lambda inside a declared block does not end that block: what the
+        // block promised is still owed after this closure
+        self.block_ret = saved_block_ret;
         self.pop_scope();
         Ok(text)
     }
@@ -7786,6 +8105,7 @@ impl Gen {
                         }
                         return Ok(format!("{}.{}({})", r, rust_name(name), parts.join(", ")));
                     }
+                    self.check_default_recursion(&rt, name, e.line, e.col)?;
                     if let Some((m, decl)) = self.iface_default_ex(&rt, name) {
                         let bound = self.bind_args(&format!("`{}.{}`", tname, name), &m.params, args, e.line, e.col)?;
                         let mut parts = Vec::new();
@@ -7811,6 +8131,7 @@ impl Gen {
                         }
                         return Ok(format!("({}).{}({})", r, rust_name(name), parts.join(", ")));
                     }
+                    self.check_default_recursion(&rt, name, e.line, e.col)?;
                     if let Some((m, decl)) = self.iface_default_ex(&rt, name) {
                         let bound = self.bind_args(&format!("`{}.{}`", type_name(&rt), name), &m.params, args, e.line, e.col)?;
                         let mut parts = Vec::new();
@@ -8098,18 +8419,28 @@ impl Gen {
             "sort" | "max" | "min" => {
                 need(0)?;
                 let partial = match rt {
-                    Type::List(el) => {
-                        if let Type::Named(tn) = &**el {
+                    Type::List(el) => match &**el {
+                        Type::Named(tn) => {
                             let key = self.canon(tn);
                             if (self.structs.contains_key(&key) || self.enums.contains_key(&key)) && self.methods_of(tn).map(|m| !m.contains_key("<")).unwrap_or(true) {
                                 return Err(LumeError::new(e.line, e.col, format!("`.{}` needs to compare `{}` values, but `{}` has no `<` operator", name, tn, tn))
                                     .with_help(format!("add `def <(other: {}) -> Bool:` to `{}`, or use `.{}_by(_.field)`", tn, tn, if name == "sort" { "sort" } else { name })));
                             }
                             true
-                        } else {
-                            **el == Type::Float
                         }
-                    }
+                        // `Ordered` promises `<`, which is a partial order:
+                        // a type parameter cannot offer more than that, and
+                        // one with no bound cannot be compared at all
+                        Type::Var(vn) => {
+                            if !self.meets_bound(el, &Type::Named("Ordered".into())) {
+                                return Err(LumeError::new(e.line, e.col, format!("`{}` could be any type, so `.{}` cannot compare its values", vn, name))
+                                    .with_help(format!("declare it `[{}: Ordered]`, which promises every type it is given has `<`", vn)));
+                            }
+                            true
+                        }
+                        Type::App(..) => true,
+                        other => *other == Type::Float,
+                    },
                     _ => false,
                 };
                 match (name, partial) {

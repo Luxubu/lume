@@ -20,7 +20,7 @@ program takes about 1 s in Python and 1.4 s in Ruby.
 The language design lives in the [Lume Language Design](https://claude.ai/code/artifact/1872fe63-1816-4b1e-9983-dec2774382fb)
 document. This repository is the compiler and the examples.
 
-## Status: milestones 1–26 done
+## Status: milestones 1–27 done
 
 | # | Milestone | Status |
 | --- | --- | --- |
@@ -42,6 +42,7 @@ document. This repository is the compiler and the examples.
 | 16 | Ownership by analysis: liveness-based copy or move, recursive enums boxed, `.or` on optional fields, string comparisons in blocks, `for var a in xs`, `xs[i].method` | done: review corpus leaks 6 → 0 |
 | 17 | Pattern completeness: a real exhaustiveness checker with nested witnesses, `A \| B` alternatives; the everyday standard methods; statements in inline blocks | done: 37 new methods, corpus 40 ok / 26 Lume errors / 0 leaks |
 | 18 | `{T}` sets with literals, algebra and iteration; `s[i]` / `s[a..b]` / `xs[a..b]` by character and position; structs and enums as map keys | done |
+| 27 | Generic `extend`: an `extend` introduces a type parameter by using one, so `[T]`, `{T}`, `{K: V}` and a user's own `Stack[T]` all conform to the same interface | done: the second half of the gap milestone 24 found; one bounded helper now reaches every container |
 | 26 | Fourth review round (`corpus/m26/`, 36 programs by a fourth reviewer): how a block travels — reused, forwarded, handed to a built-in, carrying a failure — plus conformance at an argument other than `Self` and a generic enum's boxed field | done: 11 ranked problems fixed, 30 ok / 6 Lume errors / 0 leaks; `Box` is a name you can use again |
 | 25 | Interfaces that take type parameters: `interface Comparable[T]:`, bounds that carry arguments (`[T: Comparable[T]]`), `extend Int with Measures[Str]`, conformance that works the arguments out | done: the gap the library hit; structural conformance unchanged |
 | 24 | Dogfood a library: `seq` (24 generic helpers), `table` (a typed CSV table) and a program using both, then fix the six things writing it exposed | done: generics and blocks needed no workaround; `pub def`, keywords as method names, `at`, `trim_left`/`trim_right`, `decimals` |
@@ -119,7 +120,18 @@ value type, and `extend Int with Measures[Str]:`; conformance stays
 structural and works the arguments out from the type's own methods, so
 `Version` with `def compare(other: Version)` is a `Comparable[Version]`
 without naming it, and a parameter that appears only inside another's
-bound comes from that conformance), blocks of
+bound comes from that conformance; an `extend` may introduce a type
+parameter by using one, so the built-in containers conform too —
+`extend [T] with Bag[T]:`, `extend {T} with Bag[T]:`,
+`extend {K: V} with Bag[V]:` and `extend Stack[T] with Bag[T]:`, after
+which one `def describe[B: Bag[Str]](b: B)` reaches all of them. A name
+inside the target that is no type of yours is a parameter; a bare target
+must still be a real type, so `extend Poimt with Named` is an unknown
+type rather than a silent parameter. A bound goes where every other
+generic puts it, `extend [T: Ordered] with Ranked[T]:`; inside `{...}` a
+`:` already means a map, so a set's item takes the bound its interface
+declared (`interface Ranked[T: Ordered]`), and a set's item and a map's
+key are `Hashable` without saying so), blocks of
 your own (a parameter typed `(A) -> B` takes behaviour: `def each[T](xs: [T],
 f: (T) -> ())` is called `each(xs) { |x| puts x }`, or with `do |x|` and an
 indented body, or `each(xs, _ * 2)`, or `each(xs, double)` naming a function;
@@ -401,6 +413,7 @@ examples/interfaces.lume interfaces, extend, operator methods
 examples/generics.lume   generic functions, structs and enums; Ordered, Hashable, interface bounds
 examples/blocks_of_your_own.lume  functions that take behaviour: each, map, keep, fold, retry, time_it
 examples/generic_interfaces.lume  interfaces with type parameters: bounds, defaults, values, extend
+examples/generic_extend.lume      generic `extend`: lists, sets, maps and your own generic type under one interface
 examples/lib/            a library written in Lume: seq (generic helpers), table (typed CSV),
                          a report program that uses both, and what writing it exposed
 examples/tests/          files with `test` blocks; expected `lume test` output
