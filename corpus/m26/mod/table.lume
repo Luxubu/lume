@@ -1,0 +1,22 @@
+# Module 2 of 3: row formatting. Imports module 1.
+#
+# Note: the README says `import users.model` loads `users/model.lume`, but it
+# never says what a path inside a module is relative to. This file is
+# corpus/m26/mod/table.lume and the main program is corpus/m26/m04_report.lume,
+# so the path is written as if it were relative to the program, not to this
+# file. If Lume resolves it relative to this file, it should be `import units`.
+
+import mod.units
+
+pub struct Row:
+  name: Str
+  qty: units.Qty
+
+pub def header(cols: [Str], w: Int) -> Str:
+  cols.map { |c| c.pad_right(w) }.to_list.join("|")
+
+pub def grams(r: Row) -> Float:
+  r.qty.to_grams.or(0.0)
+
+pub def line(r: Row, w: Int) -> Str:
+  "#{r.name.pad_right(w)}|#{r.qty.label.pad_right(w)}|#{grams(r).decimals(1)}"

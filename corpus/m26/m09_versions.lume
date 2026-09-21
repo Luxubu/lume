@@ -1,0 +1,86 @@
+# Version numbers and a generic stack.
+#
+# Checks: an interface that takes a type parameter with a default written in
+# terms of it, structural conformance (Version never names Comparable), a bound
+# that carries arguments (`[T: Comparable[T]]`), `extend Int with
+# Comparable[Int]`, a generic struct with `var self` methods, `?` on an
+# optional inside a `T?` function, and `.map` on a `T?`.
+#
+# GUESS: the README shows `extend Int with Measures[Str]:` but never shows the
+# body of an `extend` on a built-in, so the receiver is written `self` here.
+# If that is wrong this file should fail with a clear message naming the form.
+#
+# EXPECTED OUTPUT:
+# v1.4 v2.0 v1.10
+# v2.0
+# true
+# 9
+# 4
+# not
+# or
+# 3
+# 3,2,1
+
+interface Comparable[T]:
+  def compare(other: T) -> Int
+
+  def below?(other: T) -> Bool:
+    compare(other) < 0
+
+struct Version:
+  major: Int
+  minor: Int
+
+  def compare(other: Version) -> Int:
+    if major != other.major: major - other.major
+    else: minor - other.minor
+
+  def label -> Str:
+    "v#{major}.#{minor}"
+
+extend Int with Comparable[Int]:
+  def compare(other: Int) -> Int:
+    self - other
+
+struct Stack[T]:
+  items: [T]
+
+  def push(var self, x: T):
+    items.push(x)
+
+  def pop(var self) -> T?:
+    items.pop
+
+  def peek -> T?:
+    items.last
+
+  def size -> Int:
+    items.len
+
+def largest[T: Comparable[T]](xs: [T]) -> T?:
+  var best = xs.first?
+  for x in xs:
+    if best.compare(x) < 0:
+      best = x
+  Some(best)
+
+def main:
+  vs = [Version(1, 4), Version(2, 0), Version(1, 10)]
+  puts vs.map(_.label).to_list.join(" ")
+  puts largest(vs).map { |v| v.label }.or("none")
+  puts Version(1, 4).below?(Version(1, 10))
+  puts largest([3, 9, 5]).or(0)
+
+  var s: Stack[Str] = Stack(items: [])
+  for w in "to be or not".split:
+    s.push(w)
+  puts s.size
+  puts s.pop.or("?")
+  puts s.peek.or("?")
+  puts s.size
+
+  var ns: Stack[Int] = Stack(items: [1, 2, 3])
+  var out: [Int] = []
+  while ns.size > 0:
+    out.push(ns.pop.or(0))
+  puts out.map { |n| "#{n}" }.to_list.join(",")

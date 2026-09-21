@@ -1,0 +1,88 @@
+# g08: generic METHODS on a generic type, each taking a block whose type
+# mentions both the struct's parameter and the method's own.
+#
+# What this checks:
+#   - `Seq[T].map_to[U](f: (T) -> U) -> Seq[U]`: the method's parameter is
+#     read off the block's RESULT, which nothing else in the call mentions
+#   - `fold_into[A](start: A, f: (A, T) -> A)`: A comes from the first
+#     argument, and the block has to agree with it
+#   - `zip_with[U, V](other: Seq[U], f: (T, U) -> V) -> Seq[V]`: three type
+#     parameters in flight at once, two of them from the block
+#   - a non-generic block method on a generic type (`keep`, `text`), called
+#     both with `{ |x| ... }` and with the `_` shorthand (`_.odd?`)
+#   - chaining trailing blocks: `s.map_to { ... }.text { ... }`
+#   - `Seq[Seq[Int]]` — the same generic struct as its own argument, with a
+#     block whose parameter is itself a `Seq[Int]`
+#
+# EXPECT (exact output, line by line):
+# 4
+# 2,4,6,8
+# n1,n2,n3,n4
+# 10
+# 1234
+# 2
+# 1,3
+# 3
+# a1,b2,c3
+# 2
+# 3
+# 2,1
+
+struct Seq[T]:
+  items: [T]
+
+  def len -> Int:
+    items.len
+
+  def map_to[U](f: (T) -> U) -> Seq[U]:
+    var out: [U] = []
+    for x in items:
+      out.push(f(x))
+    Seq(items: out)
+
+  def fold_into[A](start: A, f: (A, T) -> A) -> A:
+    var acc = start
+    for x in items:
+      acc = f(acc, x)
+    acc
+
+  def keep(f: (T) -> Bool) -> Seq[T]:
+    var out: [T] = []
+    for x in items:
+      if f(x):
+        out.push(x)
+    Seq(items: out)
+
+  def zip_with[U, V](other: Seq[U], f: (T, U) -> V) -> Seq[V]:
+    var out: [V] = []
+    var i = 0
+    while i < items.len and i < other.items.len:
+      out.push(f(items.at(i), other.items.at(i)))
+      i += 1
+    Seq(items: out)
+
+  def text(f: (T) -> Str) -> Str:
+    var parts: [Str] = []
+    for x in items:
+      parts.push(f(x))
+    parts.join(",")
+
+def main:
+  s = Seq(items: [1, 2, 3, 4])
+  puts s.len
+  puts s.map_to { |x| x * 2 }.text { |x| "#{x}" }
+  puts s.map_to { |x| "n#{x}" }.text { |t| t }
+  puts s.fold_into(0) { |a, x| a + x }
+  puts s.fold_into("") { |a, x| a + "#{x}" }
+  puts s.keep { |x| x % 2 == 0 }.len
+  puts s.keep(_.odd?).text { |x| "#{x}" }
+
+  words = Seq(items: ["a", "b", "c"])
+  z = s.zip_with(words) { |n, w| "#{w}#{n}" }
+  puts z.len
+  puts z.text { |t| t }
+
+  nested: Seq[Seq[Int]] = Seq(items: [Seq(items: [1, 2]), Seq(items: [3])])
+  puts nested.len
+  puts nested.fold_into(0) { |a, inner| a + inner.len }
+  puts nested.map_to { |inner| inner.len }.text { |n| "#{n}" }

@@ -1,0 +1,75 @@
+# b04 — methods of my own type that take blocks, chained together.
+#
+# Checks: a generic struct whose methods take `(T) -> ()`, `(T) -> Bool`,
+# `(T) -> U` and `(A, T) -> A`; chaining `.method { ... }.method(...)` so a
+# `}` is immediately followed by `.`; a method of my own (`each`) winning
+# over the built-in of the same name; the `_` shorthand as a method
+# argument; and a method whose `U` differs from its `T`.
+#
+# EXPECTED OUTPUT:
+# odd 1
+# odd 3
+# odd 5
+# [9, 16, 25]
+# 3! 4! 5!
+# 55
+# 12345
+# PEAR,PLUM
+# 11
+# 3
+# 5
+
+struct Box[T]:
+  items: [T]
+
+  def each(f: (T) -> ()):
+    for x in items:
+      f(x)
+
+  def keep(f: (T) -> Bool) -> Box[T]:
+    var out: [T] = []
+    for x in items:
+      if f(x):
+        out.push(x)
+    Box(items: out)
+
+  def change[U](f: (T) -> U) -> Box[U]:
+    var out: [U] = []
+    for x in items:
+      out.push(f(x))
+    Box(items: out)
+
+  def fold_in[A](start: A, f: (A, T) -> A) -> A:
+    var acc = start
+    for x in items:
+      acc = f(acc, x)
+    acc
+
+  def size = items.len
+
+def main:
+  b = Box(items: [1, 2, 3, 4, 5])
+
+  # a chain that ends in a block run for its effect
+  b.keep(_ % 2 == 1).each { |n| puts "odd #{n}" }
+
+  # `}` followed straight by `.`
+  puts b.change { |n| n * n }.keep(_ > 5).items
+
+  # T -> U changes the element type mid-chain
+  puts b.keep(_ > 2).change { |n| "#{n}!" }.items.join(" ")
+
+  # a two-argument block, with the accumulator of a different type
+  puts b.fold_in(0) { |acc, n| acc + n * n }
+  puts b.fold_in("") { |acc, n| acc + "#{n}" }
+
+  words = Box(items: ["pear", "fig", "plum"])
+  puts words.keep(_.starts_with?("p")).change(_.upcase).items.join(",")
+  puts words.fold_in(0) { |acc, w| acc + w.len }
+
+  # `words.each` is my method, not the list's
+  var seen = 0
+  words.each { |w| seen += 1 }
+  puts seen
+
+  puts b.size

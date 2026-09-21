@@ -1,0 +1,7 @@
+error: `T` could be any type, so it cannot be the key of a map
+  --> corpus/m26/g11_missing_bounds.lume:39:1
+   |
+39 | def tally_bad[T](xs: [T]) -> {T: Int}:
+   | ^
+  help: declare it `[T: Hashable]`, which promises every type it is given can be a key
+exit: 1

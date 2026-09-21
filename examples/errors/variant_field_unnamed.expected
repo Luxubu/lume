@@ -1,0 +1,6 @@
+error: a field of `Num` needs a name, not just the type `Int`
+  --> examples/errors/variant_field_unnamed.lume:5:7
+  |
+5 |   Num(Int)
+  |       ^
+  help: write `Num(value: Int)` — the name shows when the value prints, and names the argument when one is built

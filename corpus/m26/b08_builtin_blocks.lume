@@ -1,0 +1,79 @@
+# b08 — the built-in collection block methods, on a list of structs.
+#
+# Checks: `map`, `filter`, `reject`, `fold`, `sort_by` (both `_` and a
+# block), `group_by` (both `_` and a function name), `partition` (I read
+# its result as a tuple, `.0`/`.1`), `flat_map` giving a list per item,
+# `max_by`/`min_by`/`find` giving a `T?`, `take_while`, `count`, `any?`,
+# `all?`, `avg`, a lazy `filter.map.take.to_list` chain, and `enumerate`
+# in a `for`.
+#
+# `g2["high"].or([])` indexes a map made by `group_by` and falls back to an
+# untyped `[]`; if that needs a type annotation, that is a finding.
+#
+# EXPECTED OUTPUT:
+# ana,cy,ed
+# di bo ed ana cy
+# cy ana ed bo di
+# 530
+# eng,ops
+# high,low 3
+# 3 bo,di
+# eng ana ops bo eng cy ops di eng ed
+# cy
+# di
+# di
+# 1
+# 3
+# true true
+# 106.0
+# bo,di
+# ana+bo
+# 0 ana
+# 2 cy
+# 4 ed
+
+struct Emp:
+  name: Str
+  dept: Str
+  pay: Int
+
+def pay_band(e: Emp) -> Str:
+  if e.pay >= 100: "high"
+  else: "low"
+
+def main:
+  es = [Emp("ana", "eng", 120), Emp("bo", "ops", 90), Emp("cy", "eng", 150), Emp("di", "ops", 70), Emp("ed", "eng", 100)]
+  missing = Emp("none", "-", 0)
+
+  puts es.filter(_.dept == "eng").map(_.name).join(",")
+  puts es.sort_by(_.pay).map(_.name).join(" ")
+  puts es.sort_by { |e| 0 - e.pay }.map(_.name).join(" ")
+  puts es.fold(0) { |acc, e| acc + e.pay }
+
+  g1 = es.group_by(_.dept)
+  puts g1.keys.join(",")
+
+  g2 = es.group_by(pay_band)
+  puts "#{g2.keys.join(",")} #{g2["high"].or([]).len}"
+
+  p = es.partition(_.pay >= 100)
+  puts "#{p.0.len} #{p.1.map(_.name).join(",")}"
+
+  puts es.flat_map { |e| [e.dept, e.name] }.join(" ")
+
+  puts es.max_by(_.pay).or(missing).name
+  puts es.min_by(_.pay).or(missing).name
+  puts es.find(_.pay < 80).or(missing).name
+
+  puts es.take_while(_.dept == "eng").len
+  puts es.count(_.dept == "eng")
+  puts "#{es.any?(_.pay > 140)} #{es.all?(_.pay > 50)}"
+  puts es.map(_.pay).avg.decimals(1)
+  puts es.reject(_.dept == "eng").map(_.name).join(",")
+
+  # lazy: nothing runs until to_list asks
+  puts es.filter(_.pay > 80).map(_.name).take(2).to_list.join("+")
+
+  for i, e in es.enumerate:
+    if i % 2 == 0:
+      puts "#{i} #{e.name}"

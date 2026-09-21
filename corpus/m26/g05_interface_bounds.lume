@@ -1,0 +1,143 @@
+# g05: plain (non-parameterised) interfaces as bounds and as value types.
+#
+# What this checks:
+#   - an interface with two defaults; a struct that overrides one of them
+#     (`Room.shout`) and one that does not (`User`)
+#   - `[T: Named]` as a bound on a generic function, at two struct types and
+#     at `Int` (which only conforms because of the `extend`)
+#   - PROBE: `extend Int with Named:` supplies only the REQUIRED method and
+#     leans on the interface's defaults. The README says an `extend` that
+#     "leaves a method out" is an error, but also that a conforming type
+#     "has the defaults as its own methods", so this should be accepted.
+#     If it is rejected, the error message should say which it means.
+#   - two type parameters with two DIFFERENT interface bounds in one
+#     signature (`report[A: Named, B: Sized]`)
+#   - PROBE: a bound on a generic STRUCT's parameter (`struct Roster[T: Named]`).
+#     The README only ever shows bounds on functions.
+#   - PROBE: an interface used as the type of a struct FIELD (`Desk.owner:
+#     Named`), holding a struct in one value and an extended `Int` in another.
+#     The README shows interfaces as parameter types and as list element
+#     types, but never as a field type.
+#
+# EXPECT (exact output, line by line):
+# ada
+# ADA!
+# <ada>
+# ROOM 7
+# <room 7>
+# ada/bo
+# room 7/room 8
+# BERTHA!
+# none
+# int 5
+# INT 5!
+# int 1/int 2
+# 2
+# ada, bo
+# ada=7
+# room 7=36
+# 3: ada
+# 4: int 5
+
+interface Named:
+  def label -> Str
+
+  def shout -> Str:
+    label.upcase + "!"
+
+  def tagged -> Str:
+    "<#{label}>"
+
+interface Sized:
+  def size_in -> Int
+
+struct User:
+  name: Str
+  age: Int
+
+  def label -> Str:
+    name
+
+  def size_in -> Int:
+    age
+
+struct Room:
+  number: Int
+
+  def label -> Str:
+    "room #{number}"
+
+  def shout -> Str:
+    "ROOM #{number}"
+
+  def size_in -> Int:
+    number
+
+extend Int with Named:
+  def label -> Str:
+    "int #{self}"
+
+struct Roster[T: Named]:
+  members: [T]
+
+  def size -> Int:
+    members.len
+
+  def names -> Str:
+    var out: [Str] = []
+    for m in members:
+      out.push(m.label)
+    out.join(", ")
+
+struct Desk:
+  owner: Named
+  slot: Int
+
+  def line -> Str:
+    "#{slot}: #{owner.label}"
+
+def labels[T: Named](xs: [T]) -> [Str]:
+  xs.map { |x| x.label }.to_list
+
+def loudest[T: Named](xs: [T]) -> Str?:
+  var best = xs[0]?
+  for x in xs:
+    if best.label.len < x.label.len:
+      best = x
+  Some(best.shout)
+
+def report[A: Named, B: Sized](a: A, b: B) -> Str:
+  "#{a.label}=#{b.size_in}"
+
+def main:
+  u = User(name: "ada", age: 36)
+  r = Room(number: 7)
+
+  puts u.label
+  puts u.shout
+  puts u.tagged
+  puts r.shout
+  puts r.tagged
+
+  puts labels([u, User(name: "bo", age: 20)]).join("/")
+  puts labels([r, Room(number: 8)]).join("/")
+
+  puts loudest([User(name: "al", age: 1), User(name: "bertha", age: 2)]).or("none")
+  empties: [Room] = []
+  puts loudest(empties).or("none")
+
+  puts 5.label
+  puts 5.shout
+  puts labels([1, 2]).join("/")
+
+  crew: Roster[User] = Roster(members: [u, User(name: "bo", age: 20)])
+  puts crew.size
+  puts crew.names
+
+  puts report(u, r)
+  puts report(r, u)
+
+  d = Desk(owner: u, slot: 3)
+  puts d.line
+  e = Desk(owner: 5, slot: 4)
+  puts e.line

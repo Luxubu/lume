@@ -1,0 +1,8 @@
+skip: no number in `kg`
+input   |qty     |grams   
+1.5 kg  |1.5 kg  |1500.0
+250 g   |250.0 g |250.0
+40 mg   |40.0 mg |0.0
+3 stone |3.0 stone|0.0
+total grams: 1750.04
+exit: 0

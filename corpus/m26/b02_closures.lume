@@ -1,0 +1,66 @@
+# b02 — closures: what a block can read and change around it.
+#
+# Checks: reading an immutable binding from inside a block; changing a `var`
+# that lives outside it; a `var` *declared inside a loop* and captured by a
+# block on every turn (each turn must get its own, empty, list); a struct
+# whose field is assigned and whose list field is pushed to from inside a
+# `do` block; and the `_` shorthand closing over a `var` whose value changes
+# between two calls.
+#
+# EXPECTED OUTPUT:
+# [7, 14, 21]
+# 30
+# [10, 20]
+# [20, 40]
+# [30, 60]
+# 7
+# ANA,BO,CY
+# 2
+# 4
+
+def each_of[T](xs: [T], f: (T) -> ()):
+  for x in xs:
+    f(x)
+
+def count_where[T](xs: [T], ok: (T) -> Bool) -> Int:
+  var n = 0
+  for x in xs:
+    if ok(x):
+      n += 1
+  n
+
+struct Tally:
+  total: Int
+  names: [Str]
+
+def main:
+  # read an immutable binding from inside a block
+  factor = 7
+  var out: [Int] = []
+  each_of([1, 2, 3]) { |n| out.push(n * factor) }
+  puts out
+
+  # change a `var` that lives outside the block
+  var total = 0
+  each_of([5, 10, 15]) { |n| total += n }
+  puts total
+
+  # a `var` declared inside a loop, captured afresh on every turn
+  for i in 1..3:
+    var row: [Int] = []
+    each_of([10, 20]) { |n| row.push(n * i) }
+    puts row
+
+  # a struct the block mutates: one field assigned, one list field pushed to
+  var t = Tally(total: 0, names: [])
+  each_of(["ana", "bo", "cy"]) do |name|
+    t.total = t.total + name.len
+    t.names.push(name.upcase)
+  puts t.total
+  puts t.names.join(",")
+
+  # the `_` shorthand closes over a `var` that changes between the two calls
+  var threshold = 2
+  puts count_where([1, 2, 3, 4], _ > threshold)
+  threshold = 0
+  puts count_where([1, 2, 3, 4], _ > threshold)

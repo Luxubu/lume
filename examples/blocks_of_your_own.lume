@@ -67,6 +67,20 @@ def parse_all(xs: [Str], parse: (Str) -> Int or Error) -> [Int] or Error:
     out.push(parse(x)?)
   out
 
+# A block that gives back a `T or Error` ends the way a function does: a bare
+# value at the end is the implied `Ok`, and `?` inside it leaves the block.
+def totals(rows: [Str], read: (Str) -> Int or Error) -> [Int] or Error:
+  var out: [Int] = []
+  for r in rows:
+    out.push(read(r)?)
+  out
+
+# A block this function was handed can go straight on to a built-in.
+def total_by[T](xs: [T], weight: (T) -> Int) -> Int:
+  xs.sum(weight)
+
+def length_of(w: Str) -> Int = w.len
+
 # A block parameter can be handed straight on to another function.
 def map_twice[T](xs: [T], f: (T) -> T) -> [T]:
   map_all(map_all(xs, f), f)
@@ -149,3 +163,13 @@ def main:
 
   words = Bag(items: ["pear", "fig"])
   puts words.map_to { |w| w.upcase }
+
+  puts totals(["10", "20"]) do |s|
+    n = s.to_int?
+    n * 2
+  puts totals(["10", "no"]) do |s|
+    n = s.to_int?
+    n * 2
+
+  puts total_by([1, 2, 3], _ * 10)
+  puts total_by(["pear", "fig"], length_of)

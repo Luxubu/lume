@@ -1,0 +1,97 @@
+# DELIBERATELY AWKWARD #1: Conway's Life on a 5x5 grid, then a flood fill.
+# Deep nesting, `next` inside two loops, a `var` list rebuilt inside a loop,
+# nested blocks, and a set of tuples grown inside a `while`.
+#
+# Checks: `[[Int]]` built and read with `at`, a range with a negative bound
+# (`-1..1`), `next` inside nested `for`s, a `match` on a `(Bool, Int)` tuple
+# with `|` alternatives, a function name used as a block (`row.map(cell_char)`),
+# a block inside a block, `flatten`, `pop` returning a `T?`, and a
+# `{(Int, Int)}` set used as a visited marker.
+#
+# EXPECTED OUTPUT:
+# .#...
+# ..#..
+# ###..
+# .....
+# .....
+# -- gen 1 (5 alive)
+# .....
+# #.#..
+# .##..
+# .#...
+# .....
+# -- gen 2 (5 alive)
+# .....
+# ..#..
+# #.#..
+# .##..
+# .....
+# region at (2,2): 4 cells
+# includes (2,0)? false
+
+def cell_char(c: Int) -> Str:
+  if c == 1: "#"
+  else: "."
+
+def show(g: [[Int]]) -> Str:
+  g.map { |row| row.map(cell_char).to_list.join("") }.to_list.join("\n")
+
+def inside?(g: [[Int]], r: Int, c: Int) -> Bool:
+  r >= 0 and r < g.len and c >= 0 and c < g.at(0).len
+
+def neighbours(g: [[Int]], r: Int, c: Int) -> Int:
+  var n = 0
+  for dr in -1..1:
+    for dc in -1..1:
+      if dr == 0 and dc == 0:
+        next
+      if not inside?(g, r + dr, c + dc):
+        next
+      if g.at(r + dr).at(c + dc) == 1:
+        n += 1
+  n
+
+def step(g: [[Int]]) -> [[Int]]:
+  var out: [[Int]] = []
+  for r in 0..g.len - 1:
+    var row: [Int] = []
+    for c in 0..g.at(0).len - 1:
+      alive = g.at(r).at(c) == 1
+      cell = match (alive, neighbours(g, r, c)):
+        (true, 2) | (true, 3) -> 1
+        (false, 3)            -> 1
+        _                     -> 0
+      row.push(cell)
+    out.push(row)
+  out
+
+def region(g: [[Int]], r: Int, c: Int) -> {(Int, Int)}:
+  var seen: {(Int, Int)} = {}
+  var stack = [(r, c)]
+  while not stack.empty?:
+    p = stack.pop.or((-1, -1))
+    if p.0 < 0 or seen.contains?(p) or g.at(p.0).at(p.1) != 1:
+      next
+    seen.add(p)
+    for d in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
+      if inside?(g, p.0 + d.0, p.1 + d.1):
+        stack.push((p.0 + d.0, p.1 + d.1))
+  seen
+
+def main:
+  var g = [
+    [0, 1, 0, 0, 0],
+    [0, 0, 1, 0, 0],
+    [1, 1, 1, 0, 0],
+    [0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0],
+  ]
+  puts show(g)
+  for gen in 1..2:
+    g = step(g)
+    puts "-- gen #{gen} (#{g.flatten.sum} alive)"
+    puts show(g)
+
+  reg = region(g, 2, 2)
+  puts "region at (2,2): #{reg.len} cells"
+  puts "includes (2,0)? #{reg.contains?((2, 0))}"

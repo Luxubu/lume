@@ -1,0 +1,13 @@
+error: no `=` in `oops`
+error: empty key
+name     str  [lume]
+version  int  [25]
+debug    bool  [true]
+empty    empty  []
+keys: name, version, debug, empty
+first key: name
+version + 1 = 26
+letters: 8 digits: 2
+tail: 25true
+empty slice: []
+exit: 0

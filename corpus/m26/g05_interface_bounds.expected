@@ -1,0 +1,7 @@
+error: `Sized` cannot be a type name: the compiler keeps this name for itself
+  --> corpus/m26/g05_interface_bounds.lume:51:1
+   |
+51 | interface Sized:
+   | ^
+  help: pick another name, like `MySized`
+exit: 1

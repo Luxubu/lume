@@ -1,0 +1,104 @@
+# g09: generic code that also carries optionals and errors.
+#
+# What this checks:
+#   - a generic function returning `T or Error` built from `T?` with
+#     `.or_error(...)` (`require_at`, `lookup`)
+#   - `?` on a `T or Error` inside a generic function that returns a TUPLE
+#     result type: `pick_two[T](xs: [T]) -> (T, T) or Error`, with the bare
+#     tuple at the end becoming `Ok`
+#   - `?` inside a `for` loop, accumulating into an `Int or Error`
+#     (`sum_lookup`), so the error has to travel out of the loop
+#   - `xs[i]` giving a `T?` in generic code where there is no default to
+#     fall back on, and `.or(fallback)` with a fallback typed `T`
+#   - a generic function returning `(T, [T])?` where the optional is built
+#     explicitly with `Some(...)` after an `xs[0]?` early return
+#   - a generic map lookup with a `Hashable` key bound, and `.ok?`/`.error?`
+#   - a generic `first_where` taking a block and using `return Some(x)`
+#
+# EXPECT (exact output, line by line):
+# 20
+# -1
+# ?
+# ok 10
+# err no item at 7
+# a + b,c
+# empty
+# 1
+# -1
+# true
+# 3
+# -1
+# 7/8
+# need at least 2
+# 20
+# 0
+
+def get_or[T](xs: [T], i: Int, fallback: T) -> T:
+  xs[i].or(fallback)
+
+def require_at[T](xs: [T], i: Int) -> T or Error:
+  xs[i].or_error("no item at #{i}")
+
+def head_tail[T](xs: [T]) -> (T, [T])?:
+  h = xs[0]?
+  Some((h, xs[1...xs.len]))
+
+def lookup[K: Hashable, V](m: {K: V}, k: K) -> V or Error:
+  m[k].or_error("missing key")
+
+def sum_lookup[K: Hashable](m: {K: Int}, ks: [K]) -> Int or Error:
+  var total = 0
+  for k in ks:
+    total += lookup(m, k)?
+  total
+
+def pick_two[T](xs: [T]) -> (T, T) or Error:
+  a = xs[0].or_error("need at least 2")?
+  b = xs[1].or_error("need at least 2")?
+  (a, b)
+
+def first_where[T](xs: [T], f: (T) -> Bool) -> T?:
+  for x in xs:
+    if f(x):
+      return Some(x)
+  None
+
+def main:
+  xs = [10, 20, 30]
+  puts get_or(xs, 1, -1)
+  puts get_or(xs, 9, -1)
+  puts get_or(["a", "b"], 5, "?")
+
+  match require_at(xs, 0):
+    Ok(v)    -> puts "ok #{v}"
+    Error(e) -> puts "err #{e.message}"
+  match require_at(xs, 7):
+    Ok(v)    -> puts "ok #{v}"
+    Error(e) -> puts "err #{e.message}"
+
+  match head_tail(["a", "b", "c"]):
+    Some(p) -> puts "#{p.0} + #{p.1.join(",")}"
+    None    -> puts "empty"
+
+  none_strs: [Str] = []
+  match head_tail(none_strs):
+    Some(p) -> puts "#{p.0} + #{p.1.join(",")}"
+    None    -> puts "empty"
+
+  m: {Str: Int} = {"a": 1, "b": 2}
+  puts lookup(m, "a").or(-1)
+  puts lookup(m, "z").or(-1)
+  puts lookup(m, "z").error?
+
+  puts sum_lookup(m, ["a", "b"]).or(-1)
+  puts sum_lookup(m, ["a", "zz"]).or(-1)
+
+  match pick_two([7, 8, 9]):
+    Ok(p)    -> puts "#{p.0}/#{p.1}"
+    Error(e) -> puts e.message
+  match pick_two([7]):
+    Ok(p)    -> puts "#{p.0}/#{p.1}"
+    Error(e) -> puts e.message
+
+  puts first_where(xs) { |n| n > 15 }.or(0)
+  puts first_where(xs) { |n| n > 99 }.or(0)

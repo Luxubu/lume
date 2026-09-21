@@ -1,0 +1,21 @@
+ana,cy,ed
+di bo ed ana cy
+cy ana ed bo di
+530
+eng,ops
+high,low 3
+3 bo,di
+eng ana ops bo eng cy ops di eng ed
+cy
+di
+di
+1
+3
+true true
+106.0
+bo,di
+ana+bo
+0 ana
+2 cy
+4 ed
+exit: 0

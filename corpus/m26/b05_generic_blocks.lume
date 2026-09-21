@@ -1,0 +1,80 @@
+# b05 — generics and blocks together.
+#
+# Checks: a generic function whose block parameter mentions both type
+# parameters; a bound on the type the block *returns* (`[T, K: Ordered]`,
+# so `>` works on whatever the block gives back); a block parameter that is
+# NOT the last parameter, passed as the `_` shorthand; a block that is
+# called twice per iteration; three type parameters at once; `xs.at(i)`
+# inside generic code; and a generic call whose list is empty, so the block
+# never runs.
+#
+# It also chains `.name` straight onto a call that ends in a `}` block
+# (`max_by_key(...) { ... }.name`) — I believe that is valid, since the
+# README chains `.items` onto `b.keep { ... }`; if only methods allow it,
+# that is the finding.
+#
+# EXPECTED OUTPUT:
+# nail saw tape
+# [6, 50, 18]
+# saw
+# none
+# saw
+# nail
+# none
+# a1 b2
+
+struct Item:
+  name: Str
+  price: Int
+
+def map_with[T, U](xs: [T], f: (T) -> U) -> [U]:
+  var out: [U] = []
+  for x in xs:
+    out.push(f(x))
+  out
+
+# the block is the middle parameter here, so only `_` / a function name fit
+def pick[T](xs: [T], ok: (T) -> Bool, fallback: T) -> T:
+  for x in xs:
+    if ok(x):
+      return x
+  fallback
+
+# `K` is only ever produced by the block, and the bound is on `K`
+def max_by_key[T, K: Ordered](xs: [T], fallback: T, key: (T) -> K) -> T:
+  var best = fallback
+  var have = false
+  for x in xs:
+    if not have or key(x) > key(best):
+      best = x
+      have = true
+  best
+
+def zip_with[A, B, C](xs: [A], ys: [B], f: (A, B) -> C) -> [C]:
+  var out: [C] = []
+  for i, x in xs.enumerate:
+    if i < ys.len:
+      out.push(f(x, ys.at(i)))
+  out
+
+def main:
+  items = [Item("nail", 3), Item("saw", 25), Item("tape", 9)]
+
+  # U = Str, then U = Int, from the same generic function
+  puts map_with(items, _.name).join(" ")
+  puts map_with(items) { |it| it.price * 2 }
+
+  # `_` in a non-final parameter position
+  puts pick(items, _.price > 10, Item("none", 0)).name
+  puts pick(items, _.price > 99, Item("none", 0)).name
+
+  # K = Int, then K = Int again but from a longer expression
+  puts max_by_key(items, Item("none", 0)) { |it| it.price }.name
+  puts max_by_key(items, Item("none", 0)) { |it| it.name.len }.name
+
+  # the block never runs
+  var nothing: [Item] = []
+  puts max_by_key(nothing, Item("none", 0)) { |it| it.price }.name
+
+  zipped = zip_with(["a", "b", "c"], [1, 2]) { |s, n| "#{s}#{n}" }
+  puts zipped.join(" ")

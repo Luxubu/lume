@@ -1,0 +1,73 @@
+# b10 — the shapes a block body can take.
+#
+# Checks: a block whose whole body is one `if ...: a else: b` used as a
+# value (the `:` lives inside `{ }`); a block whose whole body is an `if`
+# with no `else`, run for its effect; two such block-`if`s one after the
+# other, which milestone 18r says used to break; a block that returns a
+# list, so the result is a list of lists; a block that returns a tuple,
+# then `for a, b in` and `(a, b) = ...` destructuring of the result; and a
+# multi-statement `do` block whose last expression is its value, assigned
+# straight to a binding.
+#
+# The raw print of a list of lists assumes `[[1, 1], [2, 4], [3, 9]]`; the
+# allowed documents never print a nested list, so the spelling is a guess.
+#
+# EXPECTED OUTPUT:
+# odd even odd even
+# [4, 5]
+# [2, 3] [1, 2]
+# 3
+# 1,1,2,4,3,9
+# [[1, 1], [2, 4], [3, 9]]
+# ana 3
+# bo 2
+# ana/3
+# [3, 12]
+
+def each_of[T](xs: [T], f: (T) -> ()):
+  for x in xs:
+    f(x)
+
+def map_of[T, U](xs: [T], f: (T) -> U) -> [U]:
+  var out: [U] = []
+  for x in xs:
+    out.push(f(x))
+  out
+
+def main:
+  # the body is a single `if` used as a value
+  kinds = map_of([1, 2, 3, 4]) { |n| if n % 2 == 0: "even" else: "odd" }
+  puts kinds.join(" ")
+
+  # the body is a single `if` with no `else`, run for its effect
+  var kept: [Int] = []
+  each_of([1, 2, 3, 4, 5]) { |n| if n > 3: kept.push(n) }
+  puts kept
+
+  # two block-`if`s in a row
+  var a: [Int] = []
+  var b: [Int] = []
+  each_of([1, 2, 3]) { |n| if n > 1: a.push(n) }
+  each_of([1, 2, 3]) { |n| if n < 3: b.push(n) }
+  puts "#{a} #{b}"
+
+  # a block that returns a list
+  nested = map_of([1, 2, 3]) { |n| [n, n * n] }
+  puts nested.len
+  puts nested.flatten.join(",")
+  puts nested
+
+  # a block that returns a tuple
+  pairs = map_of(["ana", "bo"]) { |s| (s, s.len) }
+  for name, n in pairs:
+    puts "#{name} #{n}"
+  (who, howmany) = pairs.first.or(("?", 0))
+  puts "#{who}/#{howmany}"
+
+  # a multi-statement `do` block whose last expression is its value
+  sums = map_of([[1, 2], [3, 4, 5]]) do |row|
+    var t = 0
+    for v in row:
+      t += v
+    t
+  puts sums

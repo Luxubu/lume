@@ -1,0 +1,55 @@
+# g12: DELIBERATE ERROR TEST — a parameterised interface bound that the
+# argument type satisfies at the WRONG argument.
+#
+# EXPECT: a compile error. Nothing should run.
+#
+# `Cell` has `def compare(other: Int) -> Int`, so structural conformance
+# makes it a `Comparable[Int]` — and nothing else. `smallest` asks for
+# `[T: Comparable[T]]`, and `T` is fixed to `Cell` by `xs: [Cell]`, so the
+# bound to check is `Comparable[Cell]`, which `Cell` does not satisfy: its
+# `compare` takes an `Int`, not a `Cell`.
+#
+# EXPECT a Lume error along the lines of "Cell is not a Comparable[Cell]"
+# naming the signature that differs (`compare(other: Int)` where
+# `compare(other: Cell)` was needed) — the README promises exactly that
+# wording for "a value used as an interface it does not satisfy (naming the
+# missing method or the signature that differs)".
+#
+# The trap is that `Cell` DOES conform to the interface at some argument,
+# and the bound mentions `T` twice, so a checker that only looks for "has a
+# method named compare", or that solves `Comparable[?]` before pinning `T`,
+# would wrongly accept this and then either compare a Cell against an Int or
+# leak a rustc trait-bound error.
+#
+# `ok_use` below is the same type used correctly, at the bound the type
+# really satisfies; it should not be reported.
+
+interface Comparable[T]:
+  def compare(other: T) -> Int
+
+  def before?(other: T) -> Bool:
+    compare(other) < 0
+
+struct Cell:
+  n: Int
+
+  def compare(other: Int) -> Int:
+    n - other
+
+def smallest[T: Comparable[T]](xs: [T]) -> T?:
+  var best = xs[0]?
+  for x in xs:
+    if x.before?(best):
+      best = x
+  Some(best)
+
+def ok_use[T: Comparable[Int]](probe: T, limit: Int) -> Bool:
+  probe.before?(limit)
+
+def main:
+  puts ok_use(Cell(n: 3), 10)
+
+  cs = [Cell(n: 3), Cell(n: 1)]
+  match smallest(cs):
+    Some(c) -> puts c.n
+    None    -> puts "empty"

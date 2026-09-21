@@ -1,0 +1,79 @@
+# An ISO date parser with a day-of-year calculation, and its tests.
+#
+# Checks: `test "name":` blocks with `assert` (and `!` being silent in a test),
+# a top-level `[Int]` constant, `xs.at(i)` where the position is already known
+# to be good, `for ... where`, `T or Error` with `?` and `return Error(...)`,
+# `match` on a `T or Error` in `main`, and `not` in an assert.
+#
+# EXPECTED OUTPUT of `lume run` (the test blocks are stripped):
+# 2024-02-29 is day 60
+# bad 2023-02-29: day out of range: 29
+# bad 2024-13-01: month out of range: 13
+# 2024-03-07 is day 67
+# bad oops: expected Y-M-D, got 1 parts
+# true
+# false
+#
+# `lume test` should report 3 tests, all passing.
+
+DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+
+struct Date:
+  y: Int
+  m: Int
+  d: Int
+
+  def iso -> Str:
+    "#{y}-#{pad2(m)}-#{pad2(d)}"
+
+def pad2(n: Int) -> Str:
+  if n < 10: "0#{n}"
+  else: "#{n}"
+
+def leap?(y: Int) -> Bool:
+  (y % 4 == 0 and y % 100 != 0) or y % 400 == 0
+
+def days_in(y: Int, m: Int) -> Int:
+  if m == 2 and leap?(y): 29
+  else: DAYS.at(m - 1)
+
+def parse_date(s: Str) -> Date or Error:
+  parts = s.trim.split("-").to_list
+  if parts.len != 3:
+    return Error("expected Y-M-D, got #{parts.len} parts")
+  y = parts.at(0).to_int?
+  m = parts.at(1).to_int?
+  d = parts.at(2).to_int?
+  if m < 1 or m > 12:
+    return Error("month out of range: #{m}")
+  if d < 1 or d > days_in(y, m):
+    return Error("day out of range: #{d}")
+  Date(y, m, d)
+
+def day_of_year(dt: Date) -> Int:
+  var total = dt.d
+  for m in 1..12 where m < dt.m:
+    total += days_in(dt.y, m)
+  total
+
+test "leap years":
+  assert leap?(2024)
+  assert not leap?(2023)
+  assert leap?(2000)
+  assert not leap?(1900)
+
+test "parse_date checks the day against the month":
+  assert parse_date("2023-02-29").error?
+  assert parse_date("2024-02-29").ok?
+
+test "day_of_year counts from January":
+  dt = parse_date("2024-12-31")!
+  assert day_of_year(dt) == 366
+
+def main:
+  for s in ["2024-02-29", "2023-02-29", "2024-13-01", "2024-3-7", "oops"]:
+    match parse_date(s):
+      Ok(dt)   -> puts "#{dt.iso} is day #{day_of_year(dt)}"
+      Error(e) -> puts "bad #{s}: #{e.message}"
+  puts leap?(2000)
+  puts leap?(1900)

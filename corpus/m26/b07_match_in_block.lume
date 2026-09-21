@@ -1,0 +1,73 @@
+# b07 — `match` inside a block.
+#
+# Checks: a multi-line `match` used as the right-hand side of a binding
+# inside a `do` block body, with a statement after it at the block's own
+# indentation (the arms are indented deeper than the `push` that follows);
+# a guard arm and a `|` alternative that binds the same name from two
+# variants; list patterns (`[]`, `[x]`, `[first, ..rest]`) inside a block;
+# and `Some`/`None` on `row.first` inside a block.
+#
+# Note: the allowed documents never spell out an `enum` declaration in
+# full, so the indented-variant form below is my reading of it.
+#
+# EXPECTED OUTPUT:
+# num:1 word:hi punct:! num:41
+# small 1 / text hi / text ! / big 41
+# empty | one 1 | 1 then 2
+# first 3 none
+
+enum Token:
+  Num(Int)
+  Word(Str)
+  Punct(Str)
+
+def classify(t: Token) -> Str:
+  match t:
+    Num(n)   -> "num:#{n}"
+    Word(w)  -> "word:#{w}"
+    Punct(p) -> "punct:#{p}"
+
+def each_of[T](xs: [T], f: (T) -> ()):
+  for x in xs:
+    f(x)
+
+def map_of[T, U](xs: [T], f: (T) -> U) -> [U]:
+  var out: [U] = []
+  for x in xs:
+    out.push(f(x))
+  out
+
+def main:
+  ts = [Num(1), Word("hi"), Punct("!"), Num(41)]
+
+  # a function that matches, used as the block
+  puts map_of(ts, classify).join(" ")
+
+  # the match written inside the block, with a guard and a `|` alternative
+  var shout: [Str] = []
+  each_of(ts) do |t|
+    line = match t:
+      Num(n) if n > 10   -> "big #{n}"
+      Num(n)             -> "small #{n}"
+      Word(w) | Punct(w) -> "text #{w}"
+    shout.push(line)
+  puts shout.join(" / ")
+
+  # list patterns inside a block
+  var kinds: [Str] = []
+  each_of([[], [1], [1, 2, 3]]) do |row|
+    k = match row:
+      []              -> "empty"
+      [x]             -> "one #{x}"
+      [first, ..rest] -> "#{first} then #{rest.len}"
+    kinds.push(k)
+  puts kinds.join(" | ")
+
+  # matching a `T?` that a built-in handed back, inside a block
+  var found: [Str] = []
+  each_of([[3, 4], []]) do |row|
+    f = match row.first:
+      Some(n) -> "first #{n}"
+      None    -> "none"
+    found.push(f)
+  puts found.join(" ")

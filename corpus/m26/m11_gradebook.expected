@@ -1,0 +1,7 @@
+error: `best_avg` is immutable and cannot be reassigned
+  --> corpus/m26/m11_gradebook.lume:37:7
+   |
+37 |       best_avg = avg
+   |       ^
+  help: declare it with `var best_avg = ...` on line 33 if it needs to change; `best_avg = best_avg.something` is allowed as a transform of the same value
+exit: 1

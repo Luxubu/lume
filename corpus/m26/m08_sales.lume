@@ -1,0 +1,78 @@
+# DELIBERATELY AWKWARD #2: a sales rollup written as long chains.
+#
+# Checks: functions of my own that take a block (`(T) -> Int`, `(T) -> ()`),
+# a block parameter handed straight on to a built-in (`xs.sum(f)`), generics
+# used incidentally, the `_` shorthand as a block, `group_by`, `partition`,
+# `fold` with an init argument and a trailing block, `sort_by` then `reverse`,
+# `x |> puts` and a two-step `x |> f(y) |> puts`, a `do |x|` block with an
+# indented body whose result is bound, and a list used again after being
+# handed to a function.
+#
+# EXPECTED OUTPUT:
+# 6 items, total 1300
+# big reps: ana, bo
+# north  n=3 total=400 avg=133.3
+# south  n=2 total=400 avg=200.0
+# east   n=1 total=500 avg=500.0
+# big 3 / small 3
+# ana:500 bo:340 ana:205 ana:120 cy:75 bo:60
+# 1300
+# 50.0%
+# max amount: 500
+# tapped 2
+# kept: ana/bo
+# big still: 2
+
+struct Sale:
+  region: Str
+  rep: Str
+  amount: Int
+
+def summarise[T](xs: [T], f: (T) -> Int) -> Str:
+  "#{xs.len} items, total #{xs.sum(f)}"
+
+def tap[T](x: T, f: (T) -> ()) -> T:
+  f(x)
+  x
+
+def pct_of(part: Int, whole: Int) -> Str:
+  "#{(part.to_float * 100.0 / whole.to_float).decimals(1)}%"
+
+def main:
+  sales = [
+    Sale("north", "ana", 120),
+    Sale("south", "bo", 340),
+    Sale("north", "cy", 75),
+    Sale("east", "ana", 500),
+    Sale("south", "bo", 60),
+    Sale("north", "ana", 205),
+  ]
+
+  puts summarise(sales, _.amount)
+
+  big = sales.filter { |s| s.amount >= 100 }.map(_.rep).to_list.uniq
+  puts "big reps: #{big.join(", ")}"
+
+  by_region = sales.group_by(_.region)
+  for r in by_region.keys:
+    group = by_region[r].or([])
+    sub = group.sum(_.amount)
+    avg = sub.to_float / group.len.to_float
+    puts "#{r.pad_right(6)} n=#{group.len} total=#{sub} avg=#{avg.decimals(1)}"
+
+  parts = sales.partition { |s| s.amount >= 200 }
+  puts "big #{parts.0.len} / small #{parts.1.len}"
+
+  ranked = sales.sort_by(_.amount).reverse
+  puts ranked.map { |s| "#{s.rep}:#{s.amount}" }.to_list.join(" ")
+
+  grand = sales.sum(_.amount)
+  grand |> puts
+  grand |> pct_of(2600) |> puts
+
+  puts "max amount: #{sales.fold(0) { |acc, s| acc.max(s.amount) }}"
+
+  kept = tap(big) do |xs|
+    puts "tapped #{xs.len}"
+  puts "kept: #{kept.join("/")}"
+  puts "big still: #{big.len}"

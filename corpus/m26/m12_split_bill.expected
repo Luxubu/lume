@@ -1,0 +1,16 @@
+skipped: no `:` in `di 300`
+skipped: negative amount for ed
+rows: 3 total cents: 2195
+total: 21.95
+shares: 732 732 731
+ana  owes 7.32
+bo   owes 7.32
+cy   owes 7.31
+archived 3, still have 3
+grid sum: 6
+0.5 -> 1
+1.5 -> 2
+2.5 -> 3
+-2.5 -> -3
+7.000
+exit: 0

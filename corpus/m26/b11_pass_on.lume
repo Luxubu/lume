@@ -1,0 +1,84 @@
+# b11 — handing the same block onward, more than once.
+#
+# The README says a block parameter can be handed on to another function,
+# and that the block is compiled into the call rather than boxed. That
+# makes "the same block, used twice" the interesting case: the compiler
+# has to inline the same body into two different call sites.
+#
+# Checks: a block parameter passed to the same function twice in one
+# expression (`map_of(map_of(xs, f), f)`); passed to two separate calls
+# whose results are combined; passed down two levels of functions; a
+# method of a struct handing its block parameter on to a free function
+# twice; and a `do` block with a side effect, so the number of calls is
+# observable — it must be four, not two.
+#
+# EXPECTED OUTPUT:
+# [3, 4, 5]
+# [4, 8, 12]
+# [21, 22, 23]
+# n1,n2 / n3
+# 120
+# 10
+# [20, 24]
+# 4
+# 9
+# 28
+
+def map_of[T, U](xs: [T], f: (T) -> U) -> [U]:
+  var out: [U] = []
+  for x in xs:
+    out.push(f(x))
+  out
+
+def inner[T](xs: [T], f: (T) -> Int) -> Int:
+  var n = 0
+  for x in xs:
+    n += f(x)
+  n
+
+# the same block parameter, twice in one expression
+def apply_twice[T](xs: [T], f: (T) -> T) -> [T]:
+  map_of(map_of(xs, f), f)
+
+# the same block parameter, given to two separate calls
+def both[T](xs: [T], ys: [T], f: (T) -> Str) -> Str:
+  a = map_of(xs, f)
+  b = map_of(ys, f)
+  a.join(",") + " / " + b.join(",")
+
+# two levels down, twice
+def outer[T](xs: [T], f: (T) -> Int) -> Int:
+  inner(xs, f) + inner(xs, f)
+
+def bump(n: Int) -> Int = n + 1
+
+struct Row:
+  vals: [Int]
+
+  def total(f: (Int) -> Int) -> Int:
+    inner(vals, f)
+
+  def doubled_total(f: (Int) -> Int) -> Int:
+    inner(vals, f) + inner(vals, f)
+
+def main:
+  puts apply_twice([1, 2, 3], bump)
+  puts apply_twice([1, 2, 3], _ * 2)
+  puts apply_twice([1, 2, 3]) { |n| n + 10 }
+
+  puts both([1, 2], [3]) { |n| "n#{n}" }
+
+  puts outer([1, 2, 3], _ * 10)
+  puts outer([1, 2], bump)
+
+  # the block has a side effect, so it must run four times, not two
+  var calls = 0
+  doubled = apply_twice([5, 6]) do |n|
+    calls += 1
+    n * 2
+  puts doubled
+  puts calls
+
+  r = Row(vals: [1, 2, 3])
+  puts r.total(_ + 1)
+  puts r.doubled_total { |n| n * n }

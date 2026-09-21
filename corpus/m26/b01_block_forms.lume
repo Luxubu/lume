@@ -1,0 +1,66 @@
+# b01 — the four ways to hand behaviour to a parameter, on my own functions.
+#
+# Checks: a parameter typed `(T) -> ()`, `(T) -> U`, `(A, B) -> C` and
+# `() -> ()`; passed as an inline `{ |x| ... }` block, as `do |x|` with an
+# indented body, as the `_` shorthand, and as a function's name. Also that
+# a block can be the last argument of a call that already has two arguments,
+# and that `() -> ()` takes `do` with no parameter list.
+#
+# EXPECTED OUTPUT:
+# inline 1
+# inline 2
+# inline 3
+# do ADA
+#   len 3
+# do BO
+#   len 2
+# [3, 6, 9]
+# n=7 n=8
+# 13
+# xxx
+# tick
+# tick
+
+def apply_each[T](xs: [T], f: (T) -> ()):
+  for x in xs:
+    f(x)
+
+def transform[T, U](xs: [T], f: (T) -> U) -> [U]:
+  var out: [U] = []
+  for x in xs:
+    out.push(f(x))
+  out
+
+def combine[A, B, C](a: A, b: B, f: (A, B) -> C) -> C:
+  f(a, b)
+
+def twice(f: () -> ()):
+  f()
+  f()
+
+def label(n: Int) -> Str = "n=#{n}"
+
+def main:
+  # 1. an inline block written after the call
+  apply_each([1, 2, 3]) { |n| puts "inline #{n}" }
+
+  # 2. `do |x|` with an indented body, for more than one statement
+  apply_each(["ada", "bo"]) do |name|
+    puts "do #{name.upcase}"
+    puts "  len #{name.len}"
+
+  # 3. the `_` shorthand
+  tripled = transform([1, 2, 3], _ * 3)
+  puts tripled
+
+  # 4. a function's name
+  labelled = transform([7, 8], label)
+  puts labelled.join(" ")
+
+  # a two-argument block, passed after a call that already has two arguments
+  puts combine(3, 4) { |a, b| a * b + 1 }
+  puts combine("x", 3) { |s, n| s.repeat(n) }
+
+  # `() -> ()`: the block is the only argument, so the parentheses go
+  twice do
+    puts "tick"

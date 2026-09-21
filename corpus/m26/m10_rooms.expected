@@ -1,0 +1,12 @@
+A1: 3 slots
+B2: 2 slots
+shared slots: 2
+A1 only: 1
+B2 subset of A1? true
+clash: A1 mon at 9
+people: 6
+bo    A1 mon 10:00
+ed    B2 tue 14:00
+fay   A1 tue 14:00
+earliest 9 latest 14 avg 10.83
+exit: 0

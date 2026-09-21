@@ -1,0 +1,82 @@
+# A stock-advice program: enums, a tuple `match` with guards and alternatives,
+# optionals, and `T or Error`.
+#
+# Checks: two enums used together in a tuple pattern, `|` alternatives inside a
+# tuple pattern, a guard, exhaustiveness through the tuple, `find` returning a
+# `T?`, `?` in a function returning `T?`, `.or_error(...)` turning that into a
+# `T or Error`, `?` on a `T or Error`, and `return Error(...)` as an early exit.
+#
+# EXPECTED OUTPUT:
+# rice: fine (12)
+# saffron: only 2 left, spoils fast
+# order hammer now
+# atlas: low (4)
+# 12
+# -1
+# 10
+# -1
+# -1
+# err: bad amount: 0
+
+enum Category:
+  Food
+  Tool
+  Book
+
+enum Stock:
+  Out
+  Low(n: Int)
+  Plenty(n: Int)
+
+struct Item:
+  name: Str
+  cat: Category
+  qty: Int
+
+  def stock -> Stock:
+    if qty == 0: Out
+    elif qty < 5: Low(qty)
+    else: Plenty(qty)
+
+def advice(i: Item) -> Str:
+  match (i.cat, i.stock):
+    (_, Out)                -> "order #{i.name} now"
+    (Food, Low(n)) if n < 3 -> "#{i.name}: only #{n} left, spoils fast"
+    (Food | Book, Low(n))   -> "#{i.name}: low (#{n})"
+    (Tool, Low(n))          -> "#{i.name}: #{n} tool(s) left"
+    (_, Plenty(n))          -> "#{i.name}: fine (#{n})"
+
+def find_item(items: [Item], want: Str) -> Item?:
+  items.find { |i| i.name == want }
+
+def qty_of(items: [Item], want: Str) -> Int?:
+  it = find_item(items, want)?
+  it.qty
+
+def restock(items: [Item], want: Str, add: Str) -> Int or Error:
+  n = add.to_int?
+  if n <= 0:
+    return Error("bad amount: #{n}")
+  q = qty_of(items, want).or_error("no such item: #{want}")?
+  q + n
+
+def main:
+  items = [
+    Item("rice", Food, 12),
+    Item("saffron", Food, 2),
+    Item("hammer", Tool, 0),
+    Item("atlas", Book, 4),
+  ]
+
+  for i in items:
+    puts advice(i)
+
+  puts qty_of(items, "rice").or(-1)
+  puts qty_of(items, "ghost").or(-1)
+  puts restock(items, "atlas", "6").or(-1)
+  puts restock(items, "atlas", "six").or(-1)
+  puts restock(items, "ghost", "6").or(-1)
+
+  match restock(items, "rice", "0"):
+    Ok(n)    -> puts "ok #{n}"
+    Error(e) -> puts "err: #{e.message}"

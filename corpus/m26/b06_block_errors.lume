@@ -1,0 +1,70 @@
+# b06 — a block that may fail: `(A) -> B or Error`, and `?` inside a block.
+#
+# Checks: a parameter typed `(T) -> U or Error` (does `or Error` attach to
+# the block's result, or swallow the whole parameter type?); `?` applied to
+# a block call inside the function that owns it; `?` written *inside the
+# block body itself*, which is the interesting one, because the block is
+# inlined into a caller that also returns `T or Error`; a bare value in a
+# `T or E` block being `Ok` automatically; `.or`, `.error?` and `match
+# Ok/Error` on what comes back; and `if: ... else: Error(...)` as the whole
+# body of a `T or Error` function.
+#
+# EXPECTED OUTPUT:
+# ok [1, 2, 3]
+# err odd: 5
+# 12
+# 3
+# true
+# 1
+# ok [1, 3]
+
+def map_or_fail[T, U](xs: [T], f: (T) -> U or Error) -> [U] or Error:
+  var out: [U] = []
+  for x in xs:
+    out.push(f(x)?)
+  out
+
+def total_with[T](xs: [T], f: (T) -> Int or Error) -> Int or Error:
+  var t = 0
+  for x in xs:
+    t += f(x)?
+  t
+
+def half(n: Int) -> Int or Error:
+  if n % 2 == 1:
+    return Error("odd: #{n}")
+  n / 2
+
+# the whole body is one `if`/`else` whose arms are an Int and an Error
+def third(n: Int) -> Int or Error:
+  if n % 3 == 0: n / 3
+  else: Error("not by 3: #{n}")
+
+def main -> () or Error:
+  r1 = map_or_fail([2, 4, 6], half)
+  match r1:
+    Ok(v)     -> puts "ok #{v}"
+    Error(er) -> puts "err #{er.message}"
+
+  # `?` inside the block body, on a call that fails halfway through
+  r2 = map_or_fail([2, 5, 6]) { |n| half(n)? * 10 }
+  match r2:
+    Ok(v)     -> puts "ok #{v}"
+    Error(er) -> puts "err #{er.message}"
+
+  # `?` inside the block on a built-in `T or Error`, then a bare Int back
+  r3 = total_with(["1", "2", "3"]) { |s| s.to_int? * 2 }
+  puts r3.or(0)
+
+  # `?` at the call site instead, in a `() or Error` main
+  r4 = total_with([2, 4]) { |n| half(n) }?
+  puts r4
+
+  r5 = map_or_fail([1, 2]) { |n| half(n) }
+  puts r5.error?
+  puts r5.or([0]).len
+
+  r6 = map_or_fail([3, 9], third)
+  match r6:
+    Ok(v)     -> puts "ok #{v}"
+    Error(er) -> puts "err #{er.message}"

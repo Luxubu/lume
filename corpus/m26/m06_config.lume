@@ -1,0 +1,74 @@
+# A key=value config reader with `#` comments.
+#
+# Checks: `index_of` returning an `Int?` and matched with `Some`/`None`,
+# exclusive slicing `s[a...b]`, `trim_left` and `trim_right` chained,
+# `or_error` + `?`, a tuple returned from a function and destructured inside an
+# `Ok(...)` pattern, `Char` predicates through `chars.all?`/`chars.count`,
+# a `{Str: Str}` that keeps insertion order, `at`, and a clamped slice.
+#
+# EXPECTED OUTPUT:
+# error: no `=` in `oops`
+# error: empty key
+# name     str  [lume]
+# version  int  [25]
+# debug    bool  [true]
+# empty    empty  []
+# keys: name, version, debug, empty
+# first key: name
+# version + 1 = 26
+# letters: 8 digits: 2
+# tail: 25true
+# empty slice: []
+
+def strip_comment(line: Str) -> Str:
+  match line.index_of("#"):
+    Some(i) -> line[0...i]
+    None    -> line
+
+def split_kv(line: Str) -> (Str, Str) or Error:
+  i = line.index_of("=").or_error("no `=` in `#{line}`")?
+  key = line[0...i].trim
+  val = line[i + 1...line.len].trim_left.trim_right
+  if key.empty?:
+    return Error("empty key")
+  (key, val)
+
+def kind(v: Str) -> Str:
+  if v.empty?: "empty"
+  elif v.chars.all? { |c| c.digit? }: "int"
+  elif v == "true" or v == "false": "bool"
+  else: "str"
+
+def main:
+  text = """
+    # settings
+    name = lume      # the language
+    version=  25
+    debug = true
+    empty =
+    oops
+    =nope
+    """
+
+  var conf: {Str: Str} = {}
+  for raw in text.lines:
+    line = strip_comment(raw).trim
+    if line.empty?:
+      next
+    match split_kv(line):
+      Ok((name, value)) -> conf[name] = value
+      Error(e)          -> puts "error: #{e.message}"
+
+  for k in conf.keys:
+    puts "#{k.pad_right(8)} #{kind(conf[k].or(""))}  [#{conf[k].or("")}]"
+
+  puts "keys: #{conf.keys.to_list.join(", ")}"
+  puts "first key: #{conf.keys.to_list.at(0)}"
+
+  ver = conf["version"].or("0")
+  puts "version + 1 = #{ver.to_int.or(0) + 1}"
+
+  all = conf.values.to_list.join("")
+  puts "letters: #{all.chars.count { |c| c.alpha? }} digits: #{all.chars.count { |c| c.digit? }}"
+  puts "tail: #{all[4..99]}"
+  puts "empty slice: [#{all[3...3]}]"

@@ -1,0 +1,66 @@
+# A word-frequency report over a small block of text.
+#
+# Checks: a top-level `{Str}` constant, a triple-quoted string, `lines`/`split`,
+# a `{Str: Int}` used as a counter with `m[w] = m[w].or(0) + 1`, `for ... where`,
+# `pad_right`, `xs.at(i)` on a sorted key list, and `Float.decimals`.
+#
+# EXPECTED OUTPUT:
+# words: 9
+# distinct: 8
+# barks   1
+# brown   1
+# dog     2
+# fox     1
+# jumps   1
+# lazy    1
+# over    1
+# quick   1
+# repeated: dog
+# first key: barks
+# last key: quick
+# avg count: 1.13
+#
+# The last line is deliberate: 9/8 is exactly 1.125 in binary, and the README
+# says `decimals` rounds halves away from zero, so it must be 1.13. Rust's own
+# `{:.2}` and Python's `%.2f` both round half to even and print 1.12, so this
+# line tells me whether `decimals` really implements what the README claims.
+
+STOP = {"the", "a", "of"}
+
+def words(text: Str) -> [Str]:
+  var out: [Str] = []
+  for line in text.lines:
+    for raw in line.split:
+      w = raw.trim.downcase
+      out.push(w) unless w.empty? or STOP.contains?(w)
+  out
+
+def counts(ws: [Str]) -> {Str: Int}:
+  var m: {Str: Int} = {}
+  for w in ws:
+    m[w] = m[w].or(0) + 1
+  m
+
+def main:
+  text = """
+    The quick brown fox
+    jumps over the lazy dog
+    the dog barks
+    """
+  ws = words(text)
+  puts "words: #{ws.len}"
+
+  m = counts(ws)
+  puts "distinct: #{m.len}"
+
+  keys = m.keys.to_list.sort
+  for k in keys:
+    puts "#{k.pad_right(8)}#{m[k].or(0)}"
+
+  for k in keys where m[k].or(0) > 1:
+    puts "repeated: #{k}"
+
+  puts "first key: #{keys.at(0)}"
+  puts "last key: #{keys.at(keys.len - 1)}"
+  avg = ws.len.to_float / m.len.to_float
+  puts "avg count: #{avg.decimals(2)}"

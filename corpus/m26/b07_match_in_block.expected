@@ -1,0 +1,7 @@
+error: a field of `Num` needs a name, not just the type `Int`
+  --> corpus/m26/b07_match_in_block.lume:20:7
+   |
+20 |   Num(Int)
+   |       ^
+  help: write `Num(value: Int)` — the name shows when the value prints, and names the argument when one is built
+exit: 1

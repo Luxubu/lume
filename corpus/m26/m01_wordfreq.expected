@@ -1,0 +1,15 @@
+words: 9
+distinct: 8
+barks   1
+brown   1
+dog     2
+fox     1
+jumps   1
+lazy    1
+over    1
+quick   1
+repeated: dog
+first key: barks
+last key: quick
+avg count: 1.13
+exit: 0

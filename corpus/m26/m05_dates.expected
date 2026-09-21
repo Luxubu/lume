@@ -1,0 +1,8 @@
+2024-02-29 is day 60
+bad 2023-02-29: day out of range: 29
+bad 2024-13-01: month out of range: 13
+2024-03-07 is day 67
+bad oops: expected Y-M-D, got 1 parts
+true
+false
+exit: 0

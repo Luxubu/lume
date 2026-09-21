@@ -1,0 +1,85 @@
+# g01: generic functions — inference from arguments, from nested calls, and
+# from the type the result goes into.
+#
+# What this checks:
+#   - one type parameter (`identity`, `pick`) and two (`swap`, `pair_up`)
+#   - a type parameter used twice in one signature, so both arguments must
+#     agree (`pick(flag, a, b)`)
+#   - a generic function whose argument is the result of another generic
+#     call (`identity(identity(true))`)
+#   - a type parameter that appears ONLY in the return type (`blank`), so it
+#     has to be read off the typed binding it lands in
+#   - a generic function that takes a block whose type mentions T
+#     (`twice(x, f: (T) -> T)`), called in the trailing-block form
+#   - tuple type parameters: `(A, B)` in and `(B, A)` out
+#
+# EXPECT (exact output, line by line):
+# 3
+# ada
+# true
+# one|1
+# 1|one
+# 10
+# no
+# 2
+# 1|a
+# 2|b
+# 1
+# 7
+# 20
+# hi!!
+
+def identity[T](x: T) -> T:
+  x
+
+def swap[A, B](p: (A, B)) -> (B, A):
+  (p.1, p.0)
+
+def pick[T](flag: Bool, a: T, b: T) -> T:
+  if flag:
+    a
+  else:
+    b
+
+def pair_up[A, B](xs: [A], ys: [B]) -> [(A, B)]:
+  var out: [(A, B)] = []
+  var i = 0
+  while i < xs.len and i < ys.len:
+    out.push((xs.at(i), ys.at(i)))
+    i += 1
+  out
+
+# `T` is nowhere in the parameters: the binding has to supply it.
+def blank[T](n: Int) -> [T]:
+  []
+
+def show_pair[A, B](p: (A, B)) -> Str:
+  "#{p.0}|#{p.1}"
+
+def twice[T](x: T, f: (T) -> T) -> T:
+  f(f(x))
+
+def main:
+  puts identity(3)
+  puts identity("ada")
+  puts identity(identity(true))
+
+  s = swap((1, "one"))
+  puts show_pair(s)
+  puts show_pair(swap(s))
+
+  puts pick(true, 10, 20)
+  puts pick(false, "yes", "no")
+
+  ps = pair_up([1, 2, 3], ["a", "b"])
+  puts ps.len
+  for p in ps:
+    puts show_pair(p)
+
+  var none_yet: [Int] = blank(0)
+  none_yet.push(7)
+  puts none_yet.len
+  puts none_yet.at(0)
+
+  puts twice(5) { |n| n * 2 }
+  puts twice("hi") { |t| t + "!" }

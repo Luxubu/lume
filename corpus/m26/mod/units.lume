@@ -1,0 +1,32 @@
+# Module 1 of 3 (imported by mod/table.lume and by m04_report.lume).
+# A quantity with a unit, parsed out of ragged text.
+#
+# Note: methods of a `pub struct` are written with a plain `def` here. The
+# README says "only `pub` items cross a file boundary" but never says whether a
+# method of a public struct needs its own `pub`.
+
+pub struct Qty:
+  amount: Float
+  unit: Str
+
+  def to_grams -> Float or Error:
+    match unit:
+      "g"  -> amount
+      "kg" -> amount * 1000.0
+      "mg" -> amount / 1000.0
+      _    -> Error("unknown unit: #{unit}")
+
+  def label -> Str:
+    "#{amount.decimals(1)} #{unit}"
+
+pub def parse_qty(s: Str) -> Qty or Error:
+  t = s.trim
+  cs = t.chars
+  var i = 0
+  while i < cs.len and (cs[i].or(" ").digit? or cs[i].or(" ") == "."):
+    i += 1
+  if i == 0:
+    return Error("no number in `#{t}`")
+  amount = t[0...i].to_float?
+  unit = t[i...t.len].trim
+  Qty(amount: amount, unit: unit)

@@ -1,0 +1,49 @@
+# EXPECT: a compile error.
+#
+# This is an ordinary "who scored best" loop with the classic mistake in it:
+# `best` and `best_avg` are declared immutable at the top of `report` and then
+# assigned from inside an `if` inside a `for`. The README says rebinding an
+# outer name inside a loop or branch is an error ("`total = total + i` would
+# silently make a new `total`; the error says to declare it `var`"), and it
+# lists "assignment to an immutable binding (pointing at where it was
+# declared)" as a separate error. So I expect this to be rejected with a
+# message naming `best_avg` and `best`, pointing back at the two `=`
+# declarations at the top of `report` and telling me to write `var`.
+#
+# The rest of the file is meant to be valid, so the error should be exactly
+# those two assignments and nothing else. In particular `var lines: [Str] = []`
+# and the two `lines.push(...)` calls should be fine.
+#
+# If the rule turns out to cover loops but not `if` branches, this compiles and
+# prints the right answer by accident; that would still be worth knowing.
+#
+# WITH `var` ADDED the program would print:
+# Ana    80.0
+# Bo     80.0
+# Cy     94.0
+# best: Cy (94.0)
+
+struct Student:
+  name: Str
+  marks: [Int]
+
+def report(ss: [Student]) -> Str:
+  var lines: [Str] = []
+  best = ""
+  best_avg = 0.0
+  for s in ss:
+    avg = s.marks.avg
+    if avg > best_avg:
+      best_avg = avg
+      best = s.name
+    lines.push("#{s.name.pad_right(6)} #{avg.decimals(1)}")
+  lines.push("best: #{best} (#{best_avg.decimals(1)})")
+  lines.join("\n")
+
+def main:
+  ss = [
+    Student("Ana", [90, 80, 70]),
+    Student("Bo", [60, 100]),
+    Student("Cy", [95, 99, 88]),
+  ]
+  puts report(ss)

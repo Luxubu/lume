@@ -621,6 +621,21 @@ impl Parser {
                     while !self.at_sym(")") {
                         let (fname, fl, fc) = self.ident("a field name")?;
                         if !self.eat_sym(":") {
+                            // `Num(Int)` — a type where a name belongs. That
+                            // is the positional form other languages use, so
+                            // say what Lume wants rather than blaming `Int`
+                            // for having no type of its own.
+                            if fname.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+                                // A type of one's own suggests a name; a
+                                // built-in scalar does not, so fall back to
+                                // `value` there.
+                                let suggested = match fname.as_str() {
+                                    "Int" | "Float" | "Str" | "Bool" | "Char" => "value".to_string(),
+                                    _ => fname.to_lowercase(),
+                                };
+                                return Err(LumeError::new(fl, fc, format!("a field of `{}` needs a name, not just the type `{}`", vname, fname))
+                                    .with_help(format!("write `{}({}: {})` — the name shows when the value prints, and names the argument when one is built", vname, suggested, fname)));
+                            }
                             return Err(self.err(format!("field `{}` of `{}` needs a type", fname, vname))
                                 .with_help(format!("write `{}({}: Float)`", vname, fname)));
                         }

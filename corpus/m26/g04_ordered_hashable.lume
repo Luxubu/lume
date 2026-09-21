@@ -1,0 +1,122 @@
+# g04: the built-in bounds `Ordered` and `Hashable`.
+#
+# What this checks:
+#   - `[T: Ordered]` gives `<` on a bare T, for Int, Str and Float in the
+#     same program (three instantiations of one insertion sort)
+#   - `[T: Ordered]` returning a tuple optional `(T, T)?`, with `xs[0]?`
+#     doing the early return on an empty list
+#   - `[T: Hashable]` as a set item (`{T}`) and as a map key (`{T: Int}`)
+#   - Hashable satisfied by a user struct and by a tuple, not just by the
+#     scalar types — the README says a struct/enum made of Int/Str/Bool is a
+#     legal key, so it should also satisfy the bound
+#   - two Hashable parameters at once: `invert[K: Hashable, V: Hashable]`,
+#     which uses V as a key in its result, and matches on `m[k]` (a `V?`)
+#     inside generic code
+#   - `join` on a list whose element type is a type parameter that happened
+#     to be Int / Float (the README lists `join` for lists with no element
+#     restriction)
+#
+# EXPECT (exact output, line by line):
+# 9,3,2
+# pear,fig,apple
+# 3.25,2.5,1.5
+# 1..7
+# empty
+# 3,1,2
+# a,b
+# 3
+# 3
+# 0
+# 2
+# 2
+# 2
+# 2
+# 2
+# b
+# a
+
+struct Tag:
+  name: Str
+  rank: Int
+
+# Descending insertion sort: x goes before the first item smaller than it.
+def sorted_desc[T: Ordered](xs: [T]) -> [T]:
+  var out: [T] = []
+  for x in xs:
+    var at = out.len
+    var i = 0
+    while i < out.len:
+      if out.at(i) < x:
+        at = i
+        i = out.len
+      else:
+        i += 1
+    out.insert(at, x)
+  out
+
+def min_max[T: Ordered](xs: [T]) -> (T, T)?:
+  var lo = xs[0]?
+  var hi = xs[0]?
+  for x in xs:
+    if x < lo:
+      lo = x
+    if hi < x:
+      hi = x
+  Some((lo, hi))
+
+def counts[T: Hashable](xs: [T]) -> {T: Int}:
+  var m: {T: Int} = {}
+  for x in xs:
+    m[x] = m[x].or(0) + 1
+  m
+
+def dedup[T: Hashable](xs: [T]) -> [T]:
+  var seen: {T} = {}
+  var out: [T] = []
+  for x in xs:
+    if seen.add(x):
+      out.push(x)
+  out
+
+def invert[K: Hashable, V: Hashable](m: {K: V}) -> {V: K}:
+  var out: {V: K} = {}
+  for k in m.keys:
+    match m[k]:
+      Some(v) -> out[v] = k
+      None    -> ()
+  out
+
+def main:
+  puts sorted_desc([3, 9, 2]).join(",")
+  puts sorted_desc(["pear", "apple", "fig"]).join(",")
+  puts sorted_desc([2.5, 1.5, 3.25]).join(",")
+
+  match min_max([4, 1, 7, 3]):
+    Some(p) -> puts "#{p.0}..#{p.1}"
+    None    -> puts "empty"
+
+  nothing: [Int] = []
+  match min_max(nothing):
+    Some(p) -> puts "#{p.0}..#{p.1}"
+    None    -> puts "empty"
+
+  puts dedup([3, 1, 3, 2, 1]).join(",")
+  puts dedup(["a", "b", "a"]).join(",")
+
+  cs = counts(["a", "b", "a", "c", "a"])
+  puts cs.len
+  puts cs["a"].or(0)
+  puts cs["z"].or(0)
+
+  ts = counts([Tag(name: "x", rank: 1), Tag(name: "x", rank: 1), Tag(name: "y", rank: 2)])
+  puts ts.len
+  puts ts[Tag(name: "x", rank: 1)].or(0)
+
+  pairs = counts([(1, "a"), (1, "a"), (2, "b")])
+  puts pairs.len
+  puts pairs[(1, "a")].or(0)
+
+  inv = invert(counts(["a", "b", "b"]))
+  puts inv.len
+  puts inv[2].or("?")
+  puts inv[1].or("?")

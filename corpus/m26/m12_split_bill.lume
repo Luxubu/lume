@@ -1,0 +1,102 @@
+# DELIBERATELY AWKWARD #3: splitting a bill, from ragged pasted-in text.
+#
+# Checks: `trim_left`/`trim_right` doing real work on lines padded with spaces
+# and tabs, `index_of` + `or_error` + `?`, exclusive slicing on both sides of a
+# separator, `return Error(...)`, integer division and `%` to split money with
+# no float drift, `at` inside `enumerate`, a list used again after it is bound
+# to another name, mutation inside two nested loops, and `decimals` on halves
+# that are exactly representable in binary (0.5, 1.5, 2.5, -2.5) — the README
+# says halves go away from zero, so 2.5 to 0 places must be 3, not 2.
+#
+# Also deliberate: `split_evenly` assigns a multi-line `if`/`else` expression to
+# a binding, with `else` aligned under the `if`. The README only ever shows that
+# shape as the tail of a function, so the continuation layout is a guess.
+#
+# Also deliberate: `i` is the name of two different loop variables in `main`,
+# and `row` is once a `var` declared inside a loop body and once a loop
+# variable of a later loop. Both are separate scopes, so I believe this is
+# legal, but Lume rejects shadowing and this is where that line sits.
+#
+# EXPECTED OUTPUT:
+# skipped: no `:` in `di 300`
+# skipped: negative amount for ed
+# rows: 3 total cents: 2195
+# total: 21.95
+# shares: 732 732 731
+# ana  owes 7.32
+# bo   owes 7.32
+# cy   owes 7.31
+# archived 3, still have 3
+# grid sum: 6
+# 0.5 -> 1
+# 1.5 -> 2
+# 2.5 -> 3
+# -2.5 -> -3
+# 7.000
+
+struct Row:
+  who: Str
+  cents: Int
+
+def parse_row(line: Str) -> Row or Error:
+  t = line.trim_right
+  i = t.index_of(":").or_error("no `:` in `#{t.trim_left}`")?
+  who = t[0...i].trim_left.trim_right
+  n = t[i + 1...t.len].trim_left.trim_right.to_int?
+  if n < 0:
+    return Error("negative amount for #{who}")
+  Row(who, n)
+
+def split_evenly(total: Int, n: Int) -> [Int]:
+  if n <= 0:
+    return []
+  base = total / n
+  var out: [Int] = []
+  for i in 0..n - 1:
+    extra = if i < total % n: 1
+            else: 0
+    out.push(base + extra)
+  out
+
+def main:
+  raw = [
+    "  ana : 1250  ",
+    "bo:900",
+    "\tcy :  45 \t",
+    "di 300",
+    "  ed : -5",
+  ]
+
+  var rows: [Row] = []
+  for line in raw:
+    match parse_row(line):
+      Ok(r)    -> rows.push(r)
+      Error(e) -> puts "skipped: #{e.message}"
+
+  total = rows.sum(_.cents)
+  puts "rows: #{rows.len} total cents: #{total}"
+  puts "total: #{(total.to_float / 100.0).decimals(2)}"
+
+  shares = split_evenly(total, rows.len)
+  puts "shares: #{shares.join(" ")}"
+  for i, r in rows.enumerate:
+    puts "#{r.who.pad_right(4)} owes #{(shares.at(i).to_float / 100.0).decimals(2)}"
+
+  archive = rows
+  puts "archived #{archive.len}, still have #{rows.len}"
+
+  var grid: [[Int]] = []
+  for i in 0..2:
+    var row: [Int] = []
+    for j in 0..2:
+      row.push(shares.at(i) % (j + 2))
+    grid.push(row)
+  var flat = 0
+  for row in grid:
+    for v in row:
+      flat += v
+  puts "grid sum: #{flat}"
+
+  for h in [0.5, 1.5, 2.5, -2.5]:
+    puts "#{h} -> #{h.decimals(0)}"
+  puts 7.decimals(3)

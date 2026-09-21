@@ -1,0 +1,9 @@
+# A variant's fields are declared with names, even though they are built and
+# matched positionally. Writing just the type is the form other languages use.
+
+enum Token:
+  Num(Int)
+  Word(Str)
+
+def main:
+  puts Num(1)

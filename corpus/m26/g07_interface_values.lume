@@ -1,0 +1,96 @@
+# g07: a parameterised interface used as a VALUE type, at two different
+# arguments in the same program.
+#
+# What this checks:
+#   - `Renders[Str]` and `Renders[Int]` — the same interface at two
+#     different arguments, with different types conforming to each
+#   - `Renders[Str]` as a parameter type (`shout_with`) and as a list
+#     element type (`[Renders[Str]]`, holding two unrelated structs)
+#   - a default method on a parameterised interface (`render_all`) that
+#     calls the required method and is reached both on a struct and on a
+#     built-in that only conforms through `extend`
+#   - `extend Str with Renders[Int]:` — a built-in conforming to a
+#     parameterised interface at an argument that is not `Str`
+#   - `render_list[T, R: Renders[T]]`: T appears in another parameter's
+#     bound and in an argument, so it has to be worked out from both
+#   - a `[Renders[Int]]` list mixing a struct and an extended `Str`
+#
+# EXPECT (exact output, line by line):
+# [hi]
+# [a],[b]
+# [LOUD]
+# (x) X!
+# 12
+# 3,6
+# 15|18
+# ababab
+# --,---
+# *|****
+# 6
+# ===
+
+interface Renders[T]:
+  def render(x: T) -> Str
+
+  def render_all(xs: [T]) -> [Str]:
+    var out: [Str] = []
+    for x in xs:
+      out.push(render(x))
+    out
+
+struct Bracket:
+  open: Str
+  close: Str
+
+  def render(x: Str) -> Str:
+    open + x + close
+
+struct Shouty:
+  extra: Str
+
+  def render(x: Str) -> Str:
+    x.upcase + extra
+
+struct Times:
+  n: Int
+
+  def render(x: Int) -> Str:
+    "#{x * n}"
+
+extend Str with Renders[Int]:
+  def render(x: Int) -> Str:
+    self.repeat(x)
+
+def shout_with(r: Renders[Str], word: Str) -> Str:
+  r.render(word).upcase
+
+def render_each(rs: [Renders[Str]], word: Str) -> [Str]:
+  var out: [Str] = []
+  for r in rs:
+    out.push(r.render(word))
+  out
+
+def render_list[T, R: Renders[T]](r: R, xs: [T]) -> Str:
+  r.render_all(xs).join("|")
+
+def main:
+  b = Bracket(open: "[", close: "]")
+  puts b.render("hi")
+  puts b.render_all(["a", "b"]).join(",")
+  puts shout_with(b, "loud")
+
+  mixed: [Renders[Str]] = [Bracket(open: "(", close: ")"), Shouty(extra: "!")]
+  puts render_each(mixed, "x").join(" ")
+
+  t = Times(n: 3)
+  puts t.render(4)
+  puts t.render_all([1, 2]).join(",")
+  puts render_list(t, [5, 6])
+
+  puts "ab".render(3)
+  puts "-".render_all([2, 3]).join(",")
+  puts render_list("*", [1, 4])
+
+  ints: [Renders[Int]] = [Times(n: 2), "="]
+  for x in ints:
+    puts x.render(3)

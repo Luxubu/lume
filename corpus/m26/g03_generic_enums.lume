@@ -1,0 +1,109 @@
+# g03: generic enums — a recursive one, a two-parameter one, a generic enum
+# holding itself at a generic argument, and a generic fold that hands a
+# block on to its own recursive call.
+#
+# What this checks:
+#   - `Chain[T]` is recursive through `Link(head: T, tail: Chain[T])`; the
+#     Box Rust needs must be emitted for a field whose type mentions T
+#   - methods on a generic enum that `match self` and recurse (`len`,
+#     `values`)
+#   - `Chain[Chain[Int]]`: a generic enum instantiated at itself
+#   - a bare `Empty` whose type comes only from the binding / from the
+#     generic function's declared return type
+#   - `fold_chain[T, A]` — two parameters, one of which appears only in the
+#     block's type — and the block is passed on to the recursive call, which
+#     is the awkward case for "a block is inlined at the call, not boxed"
+#   - `Either[L, R]`: two parameters, constructed bare (`Left(x)`), matched
+#     in a `match` statement, and a method that matches on `self`
+#
+# EXPECT (exact output, line by line):
+# 4
+# 1-2-3-4
+# 10
+# 1234
+# 2
+# red+green
+# 2
+# 3
+# odd 1
+# even 2
+# odd 3
+# even 4
+# false
+# true
+# 0
+# 0
+
+enum Chain[T]:
+  Empty
+  Link(head: T, tail: Chain[T])
+
+  def len -> Int:
+    match self:
+      Empty      -> 0
+      Link(_, t) -> 1 + t.len
+
+  def values -> [T]:
+    match self:
+      Empty      -> []
+      Link(h, t) -> [h] + t.values
+
+enum Either[L, R]:
+  Left(value: L)
+  Right(value: R)
+
+  def left? -> Bool:
+    match self:
+      Left(_)  -> true
+      Right(_) -> false
+
+def chain_of[T](xs: [T]) -> Chain[T]:
+  var c: Chain[T] = Empty
+  for x in xs.reverse:
+    c = Link(x, c)
+  c
+
+# `A` lives only in the block's type and the return type.
+def fold_chain[T, A](c: Chain[T], start: A, f: (A, T) -> A) -> A:
+  match c:
+    Empty      -> start
+    Link(h, t) -> fold_chain(t, f(start, h), f)
+
+def split_evens(xs: [Int]) -> [Either[Int, Str]]:
+  var out: [Either[Int, Str]] = []
+  for x in xs:
+    if x % 2 == 0:
+      out.push(Left(x))
+    else:
+      out.push(Right("odd #{x}"))
+  out
+
+def main:
+  c = chain_of([1, 2, 3, 4])
+  puts c.len
+  puts c.values.map { |n| "#{n}" }.to_list.join("-")
+  puts fold_chain(c, 0) { |a, x| a + x }
+  puts fold_chain(c, "") { |a, x| a + "#{x}" }
+
+  words = chain_of(["red", "green"])
+  puts words.len
+  puts words.values.join("+")
+
+  nested: Chain[Chain[Int]] = Link(chain_of([1, 2]), Link(chain_of([3]), Empty))
+  puts nested.len
+  var total = 0
+  for inner in nested.values:
+    total += inner.len
+  puts total
+
+  es = split_evens([1, 2, 3, 4])
+  for e in es:
+    match e:
+      Left(n)  -> puts "even #{n}"
+      Right(s) -> puts s
+  puts es.at(0).left?
+  puts es.at(1).left?
+
+  empty: Chain[Str] = Empty
+  puts empty.len
+  puts empty.values.len

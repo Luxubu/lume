@@ -1,0 +1,40 @@
+# Module 3 of 3: the program. A quantity report over ragged input.
+#
+# Checks: three files importing each other (mod/units.lume, mod/table.lume and
+# this one), `import a.b.Name` for a single name, `as` to rename a module, a
+# module-qualified type in a typed binding (`var rows: [t.Row] = []`), a
+# module-qualified keyword constructor, `match` on a `T or Error`, and
+# `Float.decimals` in a table.
+#
+# See mod/table.lume for the one thing I had to guess: whether a module's own
+# import path is relative to the program or to the importing file.
+#
+# EXPECTED OUTPUT:
+# skip: no number in `kg`
+# input   |qty     |grams
+# 1.5 kg  |1.5 kg  |1500.0
+# 250 g   |250.0 g |250.0
+# 40 mg   |40.0 mg |0.0
+# 3 stone |3.0 stone|0.0
+# total grams: 1750.04
+#
+# (the header line ends with three trailing spaces after "grams")
+
+import mod.table as t
+import mod.units.parse_qty
+
+def main:
+  raw = ["1.5 kg", "250 g", "40 mg", "3 stone", "kg"]
+
+  var rows: [t.Row] = []
+  for s in raw:
+    match parse_qty(s):
+      Ok(q)    -> rows.push(t.Row(name: s, qty: q))
+      Error(e) -> puts "skip: #{e.message}"
+
+  puts t.header(["input", "qty", "grams"], 8)
+  for r in rows:
+    puts t.line(r, 8)
+
+  total = rows.sum { |r| t.grams(r) }
+  puts "total grams: #{total.decimals(2)}"

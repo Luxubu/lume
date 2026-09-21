@@ -1,0 +1,56 @@
+# g11: DELIBERATE ERROR TEST — a bare type parameter used as if it had a
+# bound it was never given.
+#
+# EXPECT: a compile error. Nothing should run.
+#
+# `tally_bad[T]` puts a `T` in a `{T: Int}` map and `biggest_bad[T]`
+# compares two `T`s with `<`, but neither declares a bound. The README says
+# "a bound says what the parameter can do: `[T: Ordered]` for `<`,
+# `[T: Hashable]` to be a map key or set item", so both should be refused
+# even though both calls happen to be at `Str` and `Int`, which do have
+# those abilities. The point is that a generic body must be checked once,
+# against its bounds, not once per instantiation.
+#
+# EXPECT a Lume error naming the missing `Hashable` bound on `T` in
+# `tally_bad` (pointing at `{T: Int}` or at `m[x]`), and ideally, if the
+# compiler reports more than one, the missing `Ordered` bound on `T` in
+# `biggest_bad` (pointing at `best < x`). The fix it suggests should be to
+# write `[T: Hashable]` / `[T: Ordered]`.
+#
+# It must NOT be accepted, and it must NOT leak a rustc error about
+# `Hash`/`Eq`/`PartialOrd` not being implemented for a type parameter.
+#
+# The two good twins below are here so the message has something correct
+# to be contrasted with; they should not be reported.
+
+def tally_good[T: Hashable](xs: [T]) -> {T: Int}:
+  var m: {T: Int} = {}
+  for x in xs:
+    m[x] = m[x].or(0) + 1
+  m
+
+def biggest_good[T: Ordered](xs: [T]) -> T?:
+  var best = xs[0]?
+  for x in xs:
+    if best < x:
+      best = x
+  Some(best)
+
+def tally_bad[T](xs: [T]) -> {T: Int}:
+  var m: {T: Int} = {}
+  for x in xs:
+    m[x] = m[x].or(0) + 1
+  m
+
+def biggest_bad[T](xs: [T]) -> T?:
+  var best = xs[0]?
+  for x in xs:
+    if best < x:
+      best = x
+  Some(best)
+
+def main:
+  puts tally_good(["a", "b", "a"]).len
+  puts biggest_good([3, 9, 2]).or(0)
+  puts tally_bad(["a", "b", "a"]).len
+  puts biggest_bad([3, 9, 2]).or(0)

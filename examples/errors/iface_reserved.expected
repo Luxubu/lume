@@ -1,4 +1,4 @@
-error: `Clone` cannot be a type name: the generated Rust uses this name
+error: `Clone` cannot be a type name: the compiler keeps this name for itself
   --> examples/errors/iface_reserved.lume:2:1
   |
 2 | interface Clone:

@@ -1,0 +1,71 @@
+# Room bookings: a map of sets, tuples as set items, and clash detection.
+#
+# Checks: `{Str: {(Str, Int)}}` with `m[k].add(v)` growing the stored set in
+# place from a missing key, tuples of mixed types as set items, `intersect` /
+# `diff` / `subset?`, `add` returning whether the value was new used with a
+# trailing `unless`, a tuple of three as a set item and a list item, `enumerate`
+# through `for i, x in`, `for ... where`, and `avg` with `decimals`.
+#
+# EXPECTED OUTPUT:
+# A1: 3 slots
+# B2: 2 slots
+# shared slots: 2
+# A1 only: 1
+# B2 subset of A1? true
+# clash: A1 mon at 9
+# people: 6
+# bo    A1 mon 10:00
+# ed    B2 tue 14:00
+# fay   A1 tue 14:00
+# earliest 9 latest 14 avg 10.83
+
+struct Booking:
+  room: Str
+  day: Str
+  hour: Int
+  who: Str
+
+def slots(bs: [Booking]) -> {Str: {(Str, Int)}}:
+  var m: {Str: {(Str, Int)}} = {}
+  for b in bs:
+    m[b.room].add((b.day, b.hour))
+  m
+
+def clashes(bs: [Booking]) -> [(Str, Str, Int)]:
+  var seen: {(Str, Str, Int)} = {}
+  var out: [(Str, Str, Int)] = []
+  for b in bs:
+    key = (b.room, b.day, b.hour)
+    out.push(key) unless seen.add(key)
+  out
+
+def main:
+  bs = [
+    Booking("A1", "mon", 9, "ana"),
+    Booking("A1", "mon", 10, "bo"),
+    Booking("B2", "mon", 9, "cy"),
+    Booking("A1", "mon", 9, "di"),
+    Booking("B2", "tue", 14, "ed"),
+    Booking("A1", "tue", 14, "fay"),
+  ]
+
+  s = slots(bs)
+  for room in s.keys.to_list.sort:
+    puts "#{room}: #{s[room].or({}).len} slots"
+
+  a1 = s["A1"].or({})
+  b2 = s["B2"].or({})
+  puts "shared slots: #{a1.intersect(b2).len}"
+  puts "A1 only: #{a1.diff(b2).len}"
+  puts "B2 subset of A1? #{b2.subset?(a1)}"
+
+  for c in clashes(bs):
+    puts "clash: #{c.0} #{c.1} at #{c.2}"
+
+  puts "people: #{bs.map(_.who).to_list.to_set.len}"
+
+  for b in bs where b.hour >= 10:
+    puts "#{b.who.pad_right(5)} #{b.room} #{b.day} #{b.hour}:00"
+
+  hours = bs.map(_.hour).to_list
+  puts "earliest #{hours.min.or(0)} latest #{hours.max.or(0)} avg #{hours.avg.decimals(2)}"

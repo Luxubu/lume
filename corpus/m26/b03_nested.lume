@@ -1,0 +1,58 @@
+# b03 — blocks inside blocks.
+#
+# Checks: a `do` block whose body calls another block-taking function with
+# its own block; two `{ ... }` blocks nested on one line (the lexer has to
+# match braces, not just find the next `}`); an inner block that reads the
+# outer block's parameter; and three levels of `do` blocks changing one
+# `var` from the bottom, then dedenting all the way back out in one step.
+#
+# EXPECTED OUTPUT:
+# [2,4] [6,8,10] []
+# 20
+# 1:10 1:20 2:10 2:20
+# 27
+
+def each_of[T](xs: [T], f: (T) -> ()):
+  for x in xs:
+    f(x)
+
+def map_of[T, U](xs: [T], f: (T) -> U) -> [U]:
+  var out: [U] = []
+  for x in xs:
+    out.push(f(x))
+  out
+
+def sum_of[T](xs: [T], f: (T) -> Int) -> Int:
+  var n = 0
+  for x in xs:
+    n += f(x)
+  n
+
+def main:
+  rows = [[1, 2], [3, 4, 5], []]
+
+  # a `do` block that hands its own block to another function
+  var lines: [Str] = []
+  each_of(rows) do |row|
+    parts = map_of(row) { |n| "#{n * 2}" }
+    lines.push("[#{parts.join(",")}]")
+  puts lines.join(" ")
+
+  # two inline blocks nested on one line
+  grid = map_of(rows) { |row| map_of(row) { |n| n + 1 } }
+  puts sum_of(grid) { |row| sum_of(row) { |n| n } }
+
+  # the inner block reads the outer block's parameter
+  var pairs: [Str] = []
+  each_of([1, 2]) do |a|
+    each_of([10, 20]) do |b|
+      pairs.push("#{a}:#{b}")
+  puts pairs.join(" ")
+
+  # three levels deep, all changing one `var` from outside
+  var deep = 0
+  each_of([1, 2]) do |a|
+    each_of([1, 2]) do |b|
+      each_of([1, 2]) do |c|
+        deep += a * b * c
+  puts deep

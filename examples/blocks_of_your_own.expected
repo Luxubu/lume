@@ -30,3 +30,7 @@ bag holds 4
 [1, 4, 9, 16]
 [3, 4]
 [PEAR, FIG]
+Ok([20, 40])
+Error(`no` is not an integer)
+60
+7

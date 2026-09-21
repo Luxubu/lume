@@ -1,0 +1,80 @@
+# b09 — blocks over maps, sets and strings, not just lists.
+#
+# Checks: `m[k] = m[k].or(0) + 1` written *inside a block* rather than a
+# `for` body (the block must reach the map where it is stored, not a copy);
+# a map's `filter`/`reject`/`each` taking two block parameters `|k, v|`;
+# `map_values` with the `_` shorthand; a set's `filter`/`reject` giving a
+# set back, and `each` walking it in insertion order; and block methods on
+# `s.chars` and on the lazy `s.split`.
+#
+# EXPECTED OUTPUT:
+# 6
+# the,cat,sat,on,mat,end
+# 8
+# the
+# 5
+# 16
+# the=3
+# 10
+# thecasonmd
+# aeo
+# cdhmnst
+# 10
+# 2
+# LUME-BLOCKS
+# 10
+# t,c,s,o,m,e
+# 3
+
+def main:
+  text = "the cat sat on the mat the end"
+
+  # counting into a `var` map from inside a block
+  var counts: {Str: Int} = {}
+  text.split.each { |w| counts[w] = counts[w].or(0) + 1 }
+  puts counts.len
+  puts counts.keys.join(",")
+  puts counts.values.sum
+
+  # a map's block methods: two parameters for filter/reject/each
+  big = counts.filter { |w, n| n > 1 }
+  puts big.keys.join(",")
+  small = counts.reject { |w, n| n > 1 }
+  puts small.len
+  doubled = counts.map_values(_ * 2)
+  puts doubled.values.sum
+
+  var lines: [Str] = []
+  counts.each do |w, n|
+    if n > 1:
+      lines.push("#{w}=#{n}")
+  puts lines.join(" ")
+
+  # sets
+  vowels = {"a", "e", "i", "o", "u"}
+  letters = text.replace(" ", "").chars.map(_.to_s).to_set
+  puts letters.len
+
+  var order: [Str] = []
+  letters.each { |c| order.push(c) }
+  puts order.join("")
+
+  vs = letters.filter { |c| vowels.contains?(c) }
+  puts vs.sort.join("")
+  cons = letters.reject { |c| vowels.contains?(c) }
+  puts cons.sort.join("")
+
+  var code = 0
+  letters.each { |c| code += c.len }
+  puts code
+
+  # strings: chars is a [Char], split is a lazy chain
+  s = "Lume Blocks"
+  puts s.chars.count(_.upper?)
+  puts s.split.map(_.upcase).join("-")
+  puts s.split.fold(0) { |acc, w| acc + w.len }
+
+  # group the words by first character, with a slice inside the block
+  by = text.split.group_by { |w| w[0..0] }
+  puts by.keys.join(",")
+  puts by["t"].or([]).len

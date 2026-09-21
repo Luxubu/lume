@@ -20,7 +20,7 @@ program takes about 1 s in Python and 1.4 s in Ruby.
 The language design lives in the [Lume Language Design](https://claude.ai/code/artifact/1872fe63-1816-4b1e-9983-dec2774382fb)
 document. This repository is the compiler and the examples.
 
-## Status: milestones 1–25 done
+## Status: milestones 1–26 done
 
 | # | Milestone | Status |
 | --- | --- | --- |
@@ -42,6 +42,7 @@ document. This repository is the compiler and the examples.
 | 16 | Ownership by analysis: liveness-based copy or move, recursive enums boxed, `.or` on optional fields, string comparisons in blocks, `for var a in xs`, `xs[i].method` | done: review corpus leaks 6 → 0 |
 | 17 | Pattern completeness: a real exhaustiveness checker with nested witnesses, `A \| B` alternatives; the everyday standard methods; statements in inline blocks | done: 37 new methods, corpus 40 ok / 26 Lume errors / 0 leaks |
 | 18 | `{T}` sets with literals, algebra and iteration; `s[i]` / `s[a..b]` / `xs[a..b]` by character and position; structs and enums as map keys | done |
+| 26 | Fourth review round (`corpus/m26/`, 36 programs by a fourth reviewer): how a block travels — reused, forwarded, handed to a built-in, carrying a failure — plus conformance at an argument other than `Self` and a generic enum's boxed field | done: 11 ranked problems fixed, 30 ok / 6 Lume errors / 0 leaks; `Box` is a name you can use again |
 | 25 | Interfaces that take type parameters: `interface Comparable[T]:`, bounds that carry arguments (`[T: Comparable[T]]`), `extend Int with Measures[Str]`, conformance that works the arguments out | done: the gap the library hit; structural conformance unchanged |
 | 24 | Dogfood a library: `seq` (24 generic helpers), `table` (a typed CSV table) and a program using both, then fix the six things writing it exposed | done: generics and blocks needed no workaround; `pub def`, keywords as method names, `at`, `trim_left`/`trim_right`, `decimals` |
 | 23 | Blocks of your own: a parameter typed `(A) -> B` takes a `{ \|x\| ... }` block, a `do \|x\|` body, the `_` shorthand, or a function's name | done: `map`, `retry`, `time_it` and friends are writeable in Lume; a block is inlined at the call, not boxed |
@@ -61,8 +62,11 @@ self-transform rebinding), blocks in three forms (`xs.map(_.name)`,
 `filter`, `reject`, `each`, `sum`, `count`, `any?`, `all?`, `sort_by`, plus
 `take`, `skip`, `to_list` — chains are lazy and compile to one fused Rust
 iterator, `find`/`take_while`/`fold`/`min_by`/`max_by`/`enumerate`, `enum`
-with data and methods (`Shape.Circle(1.0)`, bare `Circle(1.0)` where
-unambiguous), `match` as an expression with variant, literal, range, tuple,
+with data and methods (one variant per line under `enum Shape:`, its fields
+named and typed in parentheses — `Circle(radius: Float)` — then the methods;
+built as `Shape.Circle(1.0)`, or bare `Circle(1.0)` where unambiguous, or by
+name, `Circle(radius: 1.0)`), `match` as an expression with variant,
+literal, range, tuple,
 list (`[]`, `[x]`, `[first, ..rest]`) and string patterns, nested patterns
 through a recursive enum's fields (`Binary("+", Num(0.0), r, _)` reaches
 inside the pointer a recursive field lives behind), `Variant(..)` to ignore a
@@ -122,7 +126,11 @@ indented body, or `each(xs, _ * 2)`, or `each(xs, double)` naming a function;
 `() -> ()` takes a block with no arguments, and when the block is the only
 argument the parentheses go (`repeat do`); a block closes over what is around
 it and may change it; a method of your own wins over the built-in of the same
-name; a block parameter can be handed on to another function; the block is
+name; a block parameter can be handed on to another function, given to a
+built-in (`def total[T](xs: [T], f: (T) -> Int) = xs.sum(f)`), or handed to
+the function's own recursive call; a block declared to give back a
+`T or Error` or a `T?` ends the way a function does, so a bare value is the
+implied `Ok` and `?` leaves the block; the block is
 compiled into the call, so there is no boxing and no lookup at run time;
 behaviour cannot be stored in a field or returned yet), generics
 (`def first[T](xs: [T]) -> T?`, `struct Stack[T]:`, `enum Tree[T]:`,
@@ -244,12 +252,13 @@ The suite also runs `lume test` on `examples/tests/`, `lume fmt` on
 `examples/fmt/`, checks that formatting every example is idempotent and leaves
 the generated Rust unchanged, and runs the review corpora (programs written by
 independent reviewers who did not know the compiler).
-`tests/corpus.sh` classifies the corpus (151 programs from three review
+`tests/corpus.sh` classifies the corpus (187 programs from four review
 rounds: `corpus/` and `corpus/edge/` after milestone 14, `corpus/m17/` on the
-pattern and standard-method surface, `corpus/m18/` on sets and slicing): 111
-run, 40 stop with a Lume error (each a deliberate rule or a deliberate error
-test: no first-class closures, no shadowing, no `Float / Int`, ...), none
-leaks a rustc error.
+pattern and standard-method surface, `corpus/m18/` on sets and slicing, and
+`corpus/m26/` on generics, parameterised interfaces and blocks): 141
+run, 46 stop with a Lume error (each a deliberate rule or a deliberate error
+test: no shadowing, no `Float / Int`, an unbounded `T` as a map key, ...),
+none leaks a rustc error. Each round has a `REPORT.md` beside its programs.
 
 Tests in a Lume file:
 

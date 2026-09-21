@@ -1,0 +1,90 @@
+# g02: generic structs — one and two parameters, nested instantiation, a
+# generic method that introduces its own parameter, and a generic struct
+# used as another generic struct's argument.
+#
+# What this checks:
+#   - `Box[T]` with a `var self` setter, so the field is written through T
+#   - `Box[Box[Int]]` and `Box[Box[Str]]`: a generic holding a generic, both
+#     inferred from the call and given by the binding
+#   - `Pair[A, B].swapped -> Pair[B, A]` (the parameters change places)
+#   - `Pair[A, B].with_left[C](x: C) -> Pair[C, B]`: a generic METHOD on a
+#     generic struct that adds a third parameter, read off the argument
+#   - `Counter[Pair[Int, Str]]`: a generic instantiated at a generic type,
+#     starting from an empty list that only the binding can type
+#   - a list of `Box[Int]` through a block
+#
+# EXPECT (exact output, line by line):
+# 10
+# 42
+# 5
+# DEEP
+# 1
+# one
+# one
+# 1
+# true
+# one
+# 2
+# b
+# 10,20,30
+
+struct Box[T]:
+  item: T
+
+  def get -> T:
+    item
+
+  def set(var self, x: T):
+    item = x
+
+struct Pair[A, B]:
+  left: A
+  right: B
+
+  def swapped -> Pair[B, A]:
+    Pair(left: right, right: left)
+
+  def with_left[C](x: C) -> Pair[C, B]:
+    Pair(left: x, right: right)
+
+struct Counter[T]:
+  items: [T]
+
+  def add(var self, x: T):
+    items.push(x)
+
+  def size -> Int:
+    items.len
+
+def main:
+  var b = Box(item: 10)
+  puts b.get
+  b.set(42)
+  puts b.get
+
+  nested = Box(item: Box(item: 5))
+  puts nested.get.get
+
+  deep: Box[Box[Str]] = Box(item: Box(item: "deep"))
+  puts deep.get.get.upcase
+
+  p = Pair(left: 1, right: "one")
+  puts p.left
+  puts p.right
+
+  q = p.swapped
+  puts q.left
+  puts q.right
+
+  r = p.with_left(true)
+  puts r.left
+  puts r.right
+
+  var c: Counter[Pair[Int, Str]] = Counter(items: [])
+  c.add(Pair(left: 1, right: "a"))
+  c.add(Pair(left: 2, right: "b"))
+  puts c.size
+  puts c.items.at(1).right
+
+  boxes = [Box(item: 1), Box(item: 2), Box(item: 3)]
+  puts boxes.map { |x| "#{x.get * 10}" }.to_list.join(",")

@@ -1,0 +1,154 @@
+# g06: an interface that takes type parameters, used as a bound.
+#
+# What this checks:
+#   - `interface Comparable[T]` with defaults written in terms of T
+#   - `[T: Comparable[T]]` — the bound that talks about the type it is
+#     applied to — on three functions and on a generic STRUCT
+#   - structural conformance working the argument out: `Ver` and `Score` never
+#     name `Comparable`, they just have `compare(other: Ver)` /
+#     `compare(other: Score)`
+#   - a conformance where the argument is NOT the conforming type: `Ruler`
+#     has `compare(other: Int)`, so it is a `Comparable[Int]`. It should get
+#     `before?(other: Int)` as its own method, and satisfy the bound
+#     `[T: Comparable[Int]]` (the `Measures[Str]` shape from the README).
+#   - a `compare` that deliberately reverses the order (`Score`), to check
+#     that the default `before?` really goes through the type's own method
+#     and not through some built-in `<`
+#   - PROBE: `struct Sorted[T: Comparable[T]]` — a parameterised bound on a
+#     generic struct's parameter, whose `var self` method calls a top-level
+#     generic function carrying the same bound.
+#
+# EXPECT (exact output, line by line):
+# -5
+# true
+# true
+# 0.9.9 < 1.2.0 < 1.2.5
+# 0.9.9
+# 10pt,7pt,3pt
+# 1
+# 3
+# 0.9.9,1.2.0,1.2.5
+# 2
+# true
+# 11
+
+interface Comparable[T]:
+  def compare(other: T) -> Int
+
+  def before?(other: T) -> Bool:
+    compare(other) < 0
+
+  def same?(other: T) -> Bool:
+    compare(other) == 0
+
+struct Ver:
+  major: Int
+  minor: Int
+  patch: Int
+
+  def compare(other: Ver) -> Int:
+    if major != other.major:
+      return major - other.major
+    if minor != other.minor:
+      return minor - other.minor
+    patch - other.patch
+
+  def text -> Str:
+    "#{major}.#{minor}.#{patch}"
+
+# Reversed on purpose: more points comes first.
+struct Score:
+  points: Int
+
+  def compare(other: Score) -> Int:
+    other.points - points
+
+  def text -> Str:
+    "#{points}pt"
+
+# Conforms to Comparable[Int], not to Comparable[Ruler].
+struct Ruler:
+  unit: Int
+
+  def compare(other: Int) -> Int:
+    unit - other
+
+def sort_c[T: Comparable[T]](xs: [T]) -> [T]:
+  var out: [T] = []
+  for x in xs:
+    var at = out.len
+    var i = 0
+    while i < out.len:
+      if x.before?(out.at(i)):
+        at = i
+        i = out.len
+      else:
+        i += 1
+    out.insert(at, x)
+  out
+
+def min_of[T: Comparable[T]](xs: [T]) -> T?:
+  var best = xs[0]?
+  for x in xs:
+    if x.before?(best):
+      best = x
+  Some(best)
+
+def count_same[T: Comparable[T]](xs: [T], target: T) -> Int:
+  var n = 0
+  for x in xs:
+    if x.same?(target):
+      n += 1
+  n
+
+def closest[T: Comparable[Int]](probe: T, xs: [Int]) -> Int?:
+  var best = xs[0]?
+  var bestd = probe.compare(best).abs
+  for x in xs:
+    d = probe.compare(x).abs
+    if d < bestd:
+      bestd = d
+      best = x
+  Some(best)
+
+struct Sorted[T: Comparable[T]]:
+  items: [T]
+
+  def insert_one(var self, x: T):
+    items = sort_c(items + [x])
+
+  def len -> Int:
+    items.len
+
+def main:
+  a = Ver(major: 1, minor: 2, patch: 0)
+  b = Ver(major: 1, minor: 2, patch: 5)
+  c = Ver(major: 0, minor: 9, patch: 9)
+
+  puts a.compare(b)
+  puts a.before?(b)
+  puts a.same?(Ver(major: 1, minor: 2, patch: 0))
+
+  puts sort_c([b, c, a]).map { |v| v.text }.to_list.join(" < ")
+
+  match min_of([b, c, a]):
+    Some(v) -> puts v.text
+    None    -> puts "none"
+
+  ss = [Score(points: 3), Score(points: 10), Score(points: 7)]
+  puts sort_c(ss).map { |s| s.text }.to_list.join(",")
+  puts count_same(ss, Score(points: 7))
+
+  var box: Sorted[Ver] = Sorted(items: [])
+  box.insert_one(b)
+  box.insert_one(c)
+  box.insert_one(a)
+  puts box.len
+  puts box.items.map { |v| v.text }.to_list.join(",")
+
+  ruler = Ruler(unit: 12)
+  puts ruler.compare(10)
+  puts ruler.before?(20)
+  match closest(ruler, [1, 5, 11, 30]):
+    Some(n) -> puts n
+    None    -> puts "none"

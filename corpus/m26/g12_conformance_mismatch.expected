@@ -1,0 +1,7 @@
+error: `smallest` needs `T: Comparable[Cell]`, and `Cell` is not Comparable[Cell]
+  --> corpus/m26/g12_conformance_mismatch.lume:53:9
+   |
+53 |   match smallest(cs):
+   |         ^
+  help: its `compare` is `(other: Int) -> Int`, and `Comparable[Cell]` asks for `(other: Cell) -> Int`
+exit: 1

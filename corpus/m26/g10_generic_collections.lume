@@ -1,0 +1,94 @@
+# g10: generic code over maps, sets and tuples.
+#
+# What this checks:
+#   - a generic struct whose FIELD type is a map built from its own
+#     parameters (`Index[K: Hashable, V]` holding `{K: [V]}`), started from
+#     an empty `{}` that only the binding can type
+#   - a `var self` method that reads and writes that map through the
+#     parameters (`slots[k] = slots[k].or([]) + [v]`), with `.or([])`
+#     supplying a `[V]` whose element type is a parameter
+#   - `Index[Int, [Str]]`: V is itself a list type, so the field is a map of
+#     lists of lists
+#   - `Index[(Int, Int), Str]`: K is a tuple, which the README says is a
+#     legal key, so it should satisfy `Hashable`
+#   - a generic function over sets: `{T}` from `to_set`, `intersect`,
+#     `to_list`
+#   - a generic function over a list of tuples building a `{K: [V]}`
+#     (`grouped`), at (Str, Int) and at (Int, Str)
+#
+# EXPECT (exact output, line by line):
+# 2
+# 1,3
+# 0
+# a/b
+# 2
+# xyz
+# 2
+# ab
+# 3,4
+# 1
+# 2
+# 1+3
+# 2
+# one,uno
+# 2
+
+struct Index[K: Hashable, V]:
+  slots: {K: [V]}
+
+  def add(var self, k: K, v: V):
+    slots[k] = slots[k].or([]) + [v]
+
+  def get(k: K) -> [V]:
+    slots[k].or([])
+
+  def keys -> [K]:
+    slots.keys
+
+  def size -> Int:
+    slots.len
+
+def common[T: Hashable](a: [T], b: [T]) -> {T}:
+  a.to_set.intersect(b.to_set)
+
+def grouped[K: Hashable, V](pairs: [(K, V)]) -> {K: [V]}:
+  var out: {K: [V]} = {}
+  for p in pairs:
+    out[p.0] = out[p.0].or([]) + [p.1]
+  out
+
+def main:
+  var idx: Index[Str, Int] = Index(slots: {})
+  idx.add("a", 1)
+  idx.add("b", 2)
+  idx.add("a", 3)
+  puts idx.size
+  puts idx.get("a").join(",")
+  puts idx.get("z").len
+  puts idx.keys.join("/")
+
+  var nested: Index[Int, [Str]] = Index(slots: {})
+  nested.add(1, ["x", "y"])
+  nested.add(1, ["z"])
+  puts nested.get(1).len
+  puts nested.get(1).flatten.join("")
+
+  var grid: Index[(Int, Int), Str] = Index(slots: {})
+  grid.add((0, 0), "a")
+  grid.add((0, 0), "b")
+  grid.add((1, 2), "c")
+  puts grid.size
+  puts grid.get((0, 0)).join("")
+
+  puts common([1, 2, 3, 4], [3, 4, 5]).to_list.join(",")
+  puts common(["a", "b"], ["b", "c"]).len
+
+  g = grouped([("f", 1), ("g", 2), ("f", 3)])
+  puts g.len
+  puts g["f"].or([]).join("+")
+  puts g["g"].or([]).join("+")
+
+  tags: [(Int, Str)] = [(1, "one"), (2, "two"), (1, "uno")]
+  t = grouped(tags)
+  puts t[1].or([]).join(",")
+  puts t.keys.len

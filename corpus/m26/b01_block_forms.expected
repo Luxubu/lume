@@ -1,0 +1,14 @@
+inline 1
+inline 2
+inline 3
+do ADA
+  len 3
+do BO
+  len 2
+[3, 6, 9]
+n=7 n=8
+13
+xxx
+tick
+tick
+exit: 0

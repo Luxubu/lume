@@ -1,0 +1,48 @@
+# b12 — DELIBERATE ERROR TEST. Two scope rules, seen from inside a block.
+#
+# EXPECT: a compile error, not a running program. The compiler may report
+# only the first of the two.
+#
+# (a) `bump_all` binds its block parameter `n` while an outer `n` is
+#     already in scope. The README lists "no shadowing" among the rules the
+#     corpus deliberately trips, and "nested rebinding is an error", so I
+#     expect something like:
+#
+#       error: `n` is already bound (at the `n = 5` above)
+#         help: the block parameter shadows it; give one of them another name
+#
+#     If shadowing inside a block is in fact allowed, then the only
+#     acceptable behaviour is for the block parameter to win: `out` must
+#     end up `[2, 3, 4]`. Quietly using the outer `n` (`[6, 6, 6]`), or
+#     letting the outer `n` leak back out changed, would be the defect.
+#
+# (b) `add_all` writes to `total`, which is an immutable binding declared
+#     outside the block. The README says exactly this case is caught for a
+#     loop or branch (`total = total + i` "would silently make a new
+#     `total`; the error says to declare it `var`"). A block body is the
+#     same situation, so I expect:
+#
+#       error: cannot assign to `total`, an immutable binding
+#         help: declare it `var total = 0`
+#
+#     Silently making a fresh `total` inside the block, so the `puts` below
+#     prints 0, is the defect this guards against.
+
+def each_of[T](xs: [T], f: (T) -> ()):
+  for x in xs:
+    f(x)
+
+def bump_all(xs: [Int]) -> [Int]:
+  n = 5
+  var out: [Int] = []
+  each_of(xs) { |n| out.push(n + 1) }
+  out
+
+def add_all(xs: [Int]) -> Int:
+  total = 0
+  each_of(xs) { |x| total = total + x }
+  total
+
+def main:
+  puts bump_all([1, 2, 3])
+  puts add_all([1, 2, 3])

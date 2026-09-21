@@ -1,0 +1,88 @@
+# A small expense ledger: money as whole cents, with operator methods.
+#
+# Checks: a struct with operator methods (`def +`, `def -`, `def <`), the
+# derived `>=`/`==`/`sort` that the README says follow from `<` and `==`, an
+# interface with a default method reached by structural conformance (no
+# `extend` needed), `pad_right`, `repeat`, `at`, and `if`/`else` as the tail of
+# a function.
+#
+# EXPECTED OUTPUT:
+# coffee     $4.50
+# book       $12.99
+# refund     -$5.00
+# bus        $2.75
+# --------------------
+# total      $15.24
+# sorted: -$5.00 $2.75 $4.50 $12.99
+# biggest: $12.99
+# after fee: $14.99
+# 100 < 200: true
+# 300 >= 300: true
+# equal: true
+# loud: <<$4.50>>
+
+def sign_of(n: Int) -> Str:
+  if n < 0: "-"
+  else: ""
+
+def zero_pad(n: Int) -> Str:
+  if n < 10: "0#{n}"
+  else: "#{n}"
+
+struct Money:
+  cents: Int
+
+  def +(o: Money) -> Money:
+    Money(cents: cents + o.cents)
+
+  def -(o: Money) -> Money:
+    Money(cents: cents - o.cents)
+
+  def <(o: Money) -> Bool:
+    cents < o.cents
+
+  def label -> Str:
+    "#{sign_of(cents)}$#{cents.abs / 100}.#{zero_pad(cents.abs % 100)}"
+
+interface Priced:
+  def amount -> Money
+
+  # a default: any type with `amount` gets this for free
+  def loud -> Str:
+    "<<#{amount.label}>>"
+
+struct Line:
+  what: Str
+  cost: Money
+
+  def amount -> Money:
+    cost
+
+  def label -> Str:
+    "#{what.pad_right(10)} #{cost.label}"
+
+def main:
+  lines = [
+    Line("coffee", Money(cents: 450)),
+    Line("book", Money(cents: 1299)),
+    Line("refund", Money(cents: -500)),
+    Line("bus", Money(cents: 275)),
+  ]
+
+  var total = Money(cents: 0)
+  for l in lines:
+    total = total + l.amount
+    puts l.label
+
+  puts "-".repeat(20)
+  puts "#{"total".pad_right(10)} #{total.label}"
+
+  amounts = lines.map(_.cost).to_list.sort
+  puts "sorted: #{amounts.map(_.label).to_list.join(" ")}"
+  puts "biggest: #{amounts.last.or(Money(cents: 0)).label}"
+  puts "after fee: #{(total - Money(cents: 25)).label}"
+
+  puts "100 < 200: #{Money(cents: 100) < Money(cents: 200)}"
+  puts "300 >= 300: #{Money(cents: 300) >= Money(cents: 300)}"
+  puts "equal: #{Money(cents: 100) == Money(cents: 100)}"
+  puts "loud: #{lines.at(0).loud}"
