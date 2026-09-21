@@ -1,0 +1,6 @@
+error: `Comparable` takes 1 type argument, but 0 were given
+  --> examples/errors/iface_arity.lume:5:13
+  |
+5 | def largest[T: Comparable](xs: [T]) -> T?:
+  |             ^
+  help: it is declared `Comparable[T]`

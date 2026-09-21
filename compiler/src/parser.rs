@@ -375,6 +375,7 @@ impl Parser {
             return Err(LumeError::new(nl, nc, format!("interface names start with a capital letter: `{}`", name))
                 .with_help(format!("rename it `{}`", capitalize(&name))));
         }
+        let generics = self.generic_params("interface Name")?;
         if !self.eat_sym(":") {
             return Err(self.err(format!("expected `:` after `interface {}`", name)));
         }
@@ -412,7 +413,7 @@ impl Parser {
         if required.is_empty() && defaults.is_empty() {
             return Err(LumeError::new(line, col, format!("interface `{}` has no methods", name)));
         }
-        Ok(InterfaceDef { name, public: false, required, defaults, line, col })
+        Ok(InterfaceDef { name, public: false, generics, required, defaults, line, col })
     }
 
     /// `def name(params) -> T` alone (a required interface method) or with
@@ -462,9 +463,9 @@ impl Parser {
         if !self.eat_kw("with") && !matches!(self.peek(), Tok::Ident(s) if s == "with") {
             return Err(self.err("expected `with` and an interface name").with_help("write `extend Str with Shape:`"));
         }
-        let (iface, _, _) = self.ident("an interface name")?;
+        let iface = self.parse_type_atom()?;
         if !self.eat_sym(":") {
-            return Err(self.err(format!("expected `:` after `extend ... with {}`", iface)));
+            return Err(self.err(format!("expected `:` after `extend ... with {}`", crate::codegen::type_name(&iface))));
         }
         if !matches!(self.peek(), Tok::Newline) || !matches!(self.peek_at(1), Tok::Indent) {
             return Err(self.err("expected the methods of the extension on the following lines, indented"));
@@ -804,7 +805,7 @@ impl Parser {
             if out.iter().any(|p: &TypeParam| p.name == name) {
                 return Err(LumeError::new(l, c, format!("type parameter `{}` is listed twice", name)));
             }
-            let bound = if self.eat_sym(":") { Some(self.ident("an interface name")?.0) } else { None };
+            let bound = if self.eat_sym(":") { Some(self.parse_type_atom()?) } else { None };
             out.push(TypeParam { name, bound, line: l, col: c });
             if !self.eat_sym(",") {
                 break;

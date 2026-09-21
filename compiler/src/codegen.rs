@@ -465,6 +465,8 @@ struct EnumInfo {
 
 #[derive(Clone)]
 struct IfaceInfo {
+    /// `interface Comparable[T]:` — what the interface is generic over.
+    generics: Vec<TypeParam>,
     /// Ordered by name, so the generated Rust is the same on every run.
     methods: BTreeMap<String, Sig>,
     required: Vec<String>,
@@ -619,6 +621,10 @@ pub struct Gen {
     consts: HashMap<String, Type>,
     /// Type parameters of the definition being compiled, innermost last.
     type_params: Vec<TypeParam>,
+    /// While emitting a method inside a trait impl: how the interface
+    /// declared its parameters. Where it said `T`, Rust lends the value
+    /// whatever this type turned out to be.
+    trait_decl: Option<Vec<Type>>,
     /// The type the position being compiled expects, innermost last. A bare
     /// variant name (`Num(v)`) is resolved against it when it is ambiguous.
     want: Vec<Type>,
@@ -645,6 +651,7 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, deps: &[Dep], t
         enums: HashMap::new(),
         interfaces: HashMap::new(),
         type_params: Vec::new(),
+        trait_decl: None,
         ext_methods: HashMap::new(),
         ext_targets: HashMap::new(),
         local_types: HashSet::new(),
@@ -841,7 +848,7 @@ impl Gen {
     /// Rust spelling of a type; names of imported items go through their module path.
     fn rt(&self, t: &Type) -> String {
         match t {
-            Type::Named(_) if self.is_interface(t) => format!("Box<dyn {}>", self.path_of(match t { Type::Named(n) => n, _ => unreachable!() })),
+            _ if self.is_interface(t) => format!("Box<dyn {}>", self.rust_iface(t)),
             Type::Named(n) if self.foreign_types.contains_key(n) => {
                 let ft = &self.foreign_types[n];
                 if ft.lifetimes == 0 { ft.rust_path.clone() } else { format!("{}<{}>", ft.rust_path, vec!["'_"; ft.lifetimes].join(", ")) }
@@ -922,6 +929,16 @@ impl Gen {
         }
     }
 
+    /// A definition's type parameters, with each bound canonicalised and
+    /// with the definition's own names read as parameters: the bound of
+    /// `[T: Comparable[T]]` becomes `Comparable[Var T]`, so filling `T` in
+    /// at a call reaches it.
+    fn norm_generics(&self, gs: &[TypeParam]) -> Vec<TypeParam> {
+        gs.iter()
+            .map(|p| TypeParam { bound: p.bound.as_ref().map(|b| self.ct(&Self::as_vars(b, gs))), ..p.clone() })
+            .collect()
+    }
+
     fn sig_of(&self, f: &FnDef) -> Sig {
         Sig {
             params: f.params.iter().map(|p| (p.name.clone(), Self::as_vars(&self.ct(&p.ty), &f.generics))).collect(),
@@ -929,7 +946,7 @@ impl Gen {
             ret: f.ret.as_ref().map(|t| Self::as_vars(&self.ct(t), &f.generics)).unwrap_or(Type::Unknown),
             self_kind: f.self_kind,
             is_async: f.is_async,
-            generics: f.generics.clone(),
+            generics: self.norm_generics(&f.generics),
         }
     }
 
@@ -938,6 +955,7 @@ impl Gen {
     /// Compiles the definition's own type parameters into scope: inside it,
     /// `T` means the parameter, not a type of that name.
     fn push_generics(&mut self, gs: &[TypeParam]) -> Vec<TypeParam> {
+        let gs = &self.norm_generics(gs);
         let mut all = self.type_params.clone();
         for g in gs {
             all.retain(|p| p.name != g.name);
@@ -962,16 +980,31 @@ impl Gen {
         if let Some(e) = self.enums.get(key) {
             return e.generics.clone();
         }
+        if let Some(i) = self.interfaces.get(key) {
+            return i.generics.clone();
+        }
         Vec::new()
     }
 
     /// `Stack[Int]` seen against `struct Stack[T]` gives `T -> Int`.
     fn subst_for(&self, t: &Type) -> HashMap<String, Type> {
         let mut m = HashMap::new();
-        if let Type::App(n, args) = t {
-            for (p, a) in self.generics_of(&self.canon(n)).iter().zip(args) {
-                m.insert(p.name.clone(), a.clone());
+        match t {
+            Type::App(n, args) => {
+                for (p, a) in self.generics_of(&self.canon(n)).iter().zip(args) {
+                    m.insert(p.name.clone(), a.clone());
+                }
             }
+            // `T` bounded by `Sized[Str]`: the interface's own parameters
+            // stand for what the bound gave them
+            Type::Var(n) => {
+                if let Some(Type::App(iname, args)) = self.type_param(n).and_then(|p| p.bound.clone()) {
+                    for (p, a) in self.generics_of(&self.canon(&iname)).iter().zip(&args) {
+                        m.insert(p.name.clone(), a.clone());
+                    }
+                }
+            }
+            _ => {}
         }
         m
     }
@@ -1053,25 +1086,33 @@ impl Gen {
         }
     }
 
+    /// The name at the head of a bound: `Ordered`, or the interface.
+    fn bound_name(t: &Type) -> &str {
+        match t {
+            Type::Named(n) | Type::App(n, _) => n,
+            _ => "",
+        }
+    }
+
     /// Does `t` satisfy `bound`? Built-in bounds first, then interfaces.
-    fn meets_bound(&self, t: &Type, bound: &str) -> bool {
-        match bound {
+    fn meets_bound(&self, t: &Type, bound: &Type) -> bool {
+        // a type parameter carries only what its own bound promised
+        if let Type::Var(n) = t {
+            return match self.type_param(n).and_then(|p| p.bound.clone()) {
+                Some(b) => self.type_key(&b) == self.type_key(bound) && b == *bound,
+                None => false,
+            };
+        }
+        match Self::bound_name(bound) {
             "Ordered" => match t {
                 Type::Int | Type::Float | Type::Str | Type::Char | Type::Bool => true,
                 Type::List(i) | Type::Option(i) => self.meets_bound(i, bound),
                 Type::Tuple(ts) => ts.iter().all(|x| self.meets_bound(x, bound)),
                 Type::Named(n) => self.methods_of(&self.canon(n)).map(|m| m.contains_key("<")).unwrap_or(false),
-                Type::Var(n) => self.type_param(n).and_then(|p| p.bound.clone()).as_deref() == Some("Ordered"),
                 _ => false,
             },
-            "Hashable" => match t {
-                Type::Var(n) => self.type_param(n).and_then(|p| p.bound.clone()).as_deref() == Some("Hashable"),
-                other => self.key_ok(other, &mut Vec::new()) && *other != Type::Unknown,
-            },
-            iface => match t {
-                Type::Var(n) => self.type_param(n).and_then(|p| p.bound.clone()).as_deref() == Some(iface),
-                other => matches!(self.conformance(other, iface), Conformance::Yes),
-            },
+            "Hashable" => self.key_ok(t, &mut Vec::new()) && *t != Type::Unknown,
+            _ => matches!(self.conformance(t, bound), Conformance::Yes),
         }
     }
 
@@ -1083,20 +1124,28 @@ impl Gen {
     /// copied, compared and printed; the declared bound adds to that.
     fn rust_bounds(&self, p: &TypeParam) -> String {
         let mut parts = vec!["Clone".to_string(), "std::fmt::Debug".to_string(), "PartialEq".to_string(), "LumeShow".to_string()];
-        match p.bound.as_deref() {
-            Some("Ordered") => parts.push("PartialOrd".into()),
-            Some("Hashable") => {
-                parts.push("std::hash::Hash".into());
-                parts.push("Eq".into());
+        if let Some(b) = &p.bound {
+            match Self::bound_name(b) {
+                "Ordered" => parts.push("PartialOrd".into()),
+                "Hashable" => {
+                    parts.push("std::hash::Hash".into());
+                    parts.push("Eq".into());
+                }
+                _ => parts.push(self.rust_iface(b)),
             }
-            Some(iface) => parts.push(self.path_of(iface)),
-            None => {}
         }
         format!("{}: {}", p.name, parts.join(" + "))
     }
 
-    /// How a block is spelled in Rust. Its parameters follow the same rule
-    /// as a function's: copied types by value, everything else lent.
+    /// An interface as a Rust trait, with its arguments when it takes any.
+    fn rust_iface(&self, t: &Type) -> String {
+        match t {
+            Type::App(n, args) => format!("{}<{}>", self.path_of(n), args.iter().map(|a| self.rt(a)).collect::<Vec<_>>().join(", ")),
+            Type::Named(n) => self.path_of(n),
+            other => self.rt(other),
+        }
+    }
+
     fn rust_fn_bound(&self, ins: &[Type], out: &Type) -> String {
         let ps: Vec<String> = ins.iter().map(|t| self.rust_block_param(t)).collect();
         let ret = if *out == Type::Unit { String::new() } else { format!(" -> {}", self.rt(out)) };
@@ -1142,14 +1191,20 @@ impl Gen {
                     .with_help("a type argument is one concrete type; a list of mixed values is written `[Interface]` instead"));
             }
             if let Some(b) = &p.bound {
-                if !self.meets_bound(a, b) {
-                    let e = LumeError::new(line, col, format!("{} needs `{}: {}`, and `{}` is not {}", what, p.name, b, type_name(a), b));
-                    return Err(match b.as_str() {
+                // `[T: Comparable[T]]` — the bound talks about the arguments
+                // this call filled in, so fill them in there too
+                let filled: HashMap<String, Type> = gs.iter().map(|q| q.name.clone()).zip(args.iter().cloned()).collect();
+                let b = Self::subst(b, &filled);
+                if !self.meets_bound(a, &b) {
+                    let bn = type_name(&b);
+                    let e = LumeError::new(line, col, format!("{} needs `{}: {}`, and `{}` is not {}", what, p.name, bn, type_name(a), bn));
+                    return Err(match Self::bound_name(&b) {
                         "Ordered" => e.with_help("`Ordered` means `<` works: `Int`, `Float`, `Str`, `Char`, or a type with its own `def <`"),
                         "Hashable" => e.with_help("`Hashable` means the value can be a map key: `Int`, `Str`, `Bool`, `Char`, tuples of those, or a struct or enum made of them"),
-                        _ => match self.conformance(a, b) {
-                            Conformance::Missing(m) => e.with_help(format!("`{}` has no `{}` method; add it, or `extend {} with {}:`", type_name(a), m.join("`, `"), type_name(a), b)),
-                            _ => e.with_help(format!("give `{}` the methods `{}` asks for", type_name(a), b)),
+                        _ => match self.conformance(a, &b) {
+                            Conformance::Missing(m) if !m.is_empty() => e.with_help(format!("`{}` has no `{}` method; add it, or `extend {} with {}:`", type_name(a), m.join("`, `"), type_name(a), bn)),
+                            Conformance::Mismatch { method, expected, actual } => e.with_help(format!("its `{}` is `{}`, and `{}` asks for `{}`", method, actual, bn, expected)),
+                            _ => e.with_help(format!("give `{}` the methods `{}` asks for", type_name(a), bn)),
                         },
                     });
                 }
@@ -1181,6 +1236,23 @@ impl Gen {
         if gs.iter().any(|p| !m.contains_key(&p.name)) {
             if let Some(w) = self.want.last().cloned() {
                 Self::unify(ret, &w, &mut m);
+            }
+        }
+        // `[K, V, T: Keyed[K, V]]` — K and V appear nowhere but the bound,
+        // so they come from how `T` conforms
+        if gs.iter().any(|p| !m.contains_key(&p.name)) {
+            for p in gs {
+                let (known, bound) = (m.get(&p.name).cloned(), p.bound.clone());
+                if let (Some(t), Some(Type::App(iname, args))) = (known, bound) {
+                    if args.iter().any(|a| gs.iter().any(|q| Self::mentions_var(a, &q.name))) {
+                        let (verdict, got) = self.conformance_with(&t, &Type::Named(self.canon(&iname)));
+                        if matches!(verdict, Conformance::Yes) {
+                            for (a, g) in args.iter().zip(got) {
+                                Self::unify(a, &g, &mut m);
+                            }
+                        }
+                    }
+                }
             }
         }
         m
@@ -1574,7 +1646,7 @@ impl Gen {
     }
 
     fn is_interface(&self, t: &Type) -> bool {
-        matches!(t, Type::Named(n) if self.interfaces.contains_key(&self.canon(n)))
+        matches!(t, Type::Named(n) | Type::App(n, _) if self.interfaces.contains_key(&self.canon(n)))
     }
 
     /// The key under which `extend` methods and conformance are recorded
@@ -1584,7 +1656,7 @@ impl Gen {
             Type::Named(n) | Type::App(n, _) => self.canon(n),
             // a type parameter answers with the methods its bound promises
             Type::Var(n) => match self.type_param(n).and_then(|p| p.bound.clone()) {
-                Some(b) if !Self::is_builtin_bound(&b) => self.canon(&b),
+                Some(b) if !Self::is_builtin_bound(Self::bound_name(&b)) => self.type_key(&b),
                 _ => type_name(t),
             },
             other => type_name(other),
@@ -1608,26 +1680,57 @@ impl Gen {
                 continue;
             }
             if let Some(sig) = info.methods.get(name) {
-                if matches!(self.conformance(t, iname), Conformance::Yes) {
-                    return Some(sig.clone());
+                let (verdict, args) = self.conformance_with(t, &Type::Named(iname.clone()));
+                if matches!(verdict, Conformance::Yes) {
+                    // a generic interface's default speaks of the arguments
+                    // this type conforms with
+                    let sub: HashMap<String, Type> = info.generics.iter().map(|g| g.name.clone()).zip(args).collect();
+                    return Some(Sig { params: sig.params.iter().map(|(n, x)| (n.clone(), Self::subst(x, &sub))).collect(), ret: Self::subst(&sig.ret, &sub), ..sig.clone() });
                 }
             }
         }
         None
     }
 
-    fn conformance(&self, t: &Type, iface: &str) -> Conformance {
-        let iface = self.canon(iface);
-        let info = match self.interfaces.get(&iface) {
+    fn conformance(&self, t: &Type, iface: &Type) -> Conformance {
+        self.conformance_with(t, iface).0
+    }
+
+    /// Conformance, plus the arguments the interface ends up with: for a
+    /// generic interface given no arguments, they are read off the type's
+    /// own methods (`Version` has `def compare(o: Version)`, so it is a
+    /// `Comparable[Version]`).
+    fn conformance_with(&self, t: &Type, iface: &Type) -> (Conformance, Vec<Type>) {
+        let key = self.type_key(iface);
+        let info = match self.interfaces.get(&key) {
             Some(i) => i,
-            None => return Conformance::Missing(vec![]),
+            None => return (Conformance::Missing(vec![]), Vec::new()),
         };
         if self.is_interface(t) {
-            return if self.type_key(t) == iface { Conformance::Yes } else { Conformance::Missing(info.required.clone()) };
+            let same = self.type_key(t) == key;
+            return (if same { Conformance::Yes } else { Conformance::Missing(info.required.clone()) }, Vec::new());
         }
         let have = self.methods_of(&self.type_key(t)).unwrap_or_default();
+        // what the interface's own parameters stand for here
+        let mut sub: HashMap<String, Type> = HashMap::new();
+        if let Type::App(_, args) = iface {
+            for (p, a) in info.generics.iter().zip(args) {
+                sub.insert(p.name.clone(), a.clone());
+            }
+        } else if !info.generics.is_empty() {
+            // no arguments written: read them off the methods the type has
+            for (name, want) in &info.methods {
+                if let Some(got) = have.get(name) {
+                    for ((_, w), (_, g)) in want.params.iter().zip(&got.params) {
+                        Self::unify(w, g, &mut sub);
+                    }
+                    Self::unify(&want.ret, &got.ret, &mut sub);
+                }
+            }
+        }
         let mut missing = Vec::new();
         for (name, want) in &info.methods {
+            let want = Sig { params: want.params.iter().map(|(n, x)| (n.clone(), Self::subst(x, &sub))).collect(), ret: Self::subst(&want.ret, &sub), ..want.clone() };
             match have.get(name) {
                 None => {
                     if info.required.contains(name) {
@@ -1639,13 +1742,21 @@ impl Gen {
                         && got.params.iter().zip(&want.params).all(|((_, a), (_, b))| a == b || *a == Type::Unknown || *b == Type::Unknown)
                         && (got.ret == want.ret || got.ret == Type::Unknown || want.ret == Type::Unknown);
                     if !same {
-                        return Conformance::Mismatch { method: name.clone(), expected: self.describe_sig(want), actual: self.describe_sig(got) };
+                        return (Conformance::Mismatch { method: name.clone(), expected: self.describe_sig(&want), actual: self.describe_sig(got) }, Vec::new());
                     }
                 }
             }
         }
         missing.sort();
-        if missing.is_empty() { Conformance::Yes } else { Conformance::Missing(missing) }
+        let args: Vec<Type> = info.generics.iter().map(|p| sub.get(&p.name).cloned().unwrap_or(Type::Unknown)).collect();
+        if !missing.is_empty() {
+            return (Conformance::Missing(missing), args);
+        }
+        // a parameter no method mentions cannot be worked out
+        if args.iter().any(|a| !type_is_known(a)) {
+            return (Conformance::Missing(Vec::new()), args);
+        }
+        (Conformance::Yes, args)
     }
 
     fn describe_sig(&self, s: &Sig) -> String {
@@ -1654,11 +1765,16 @@ impl Gen {
     }
 
     /// Error for a value of type `t` used where interface `iface` is needed.
-    fn require_conforms(&self, t: &Type, iface: &str, line: usize, col: usize) -> Result<()> {
-        match self.conformance(t, iface) {
+    fn require_conforms(&self, t: &Type, iface: &Type, line: usize, col: usize) -> Result<()> {
+        let key = self.type_key(iface);
+        let iface = &type_name(iface).clone();
+        match self.conformance(t, &self.ct(&Type::Named(key.clone()))) {
             Conformance::Yes => Ok(()),
             Conformance::Missing(m) => {
-                let info = &self.interfaces[&self.canon(iface)];
+                let info = match self.interfaces.get(&key) {
+                    Some(i) => i,
+                    None => return Err(LumeError::new(line, col, format!("unknown interface `{}`", iface))),
+                };
                 let needs: Vec<String> = m.iter().filter_map(|n| info.methods.get(n).map(|s| format!("def {} {}", n, self.describe_sig(s)))).collect();
                 Err(LumeError::new(line, col, format!("`{}` is used as a `{}` here, but it has no `{}` method", type_name(t), iface, m.join("`, `")))
                     .with_help(format!("`{}` needs: {}. Add {} to `{}`, or `extend {} with {}:`", iface, needs.join("; "), if m.len() == 1 { "it" } else { "them" }, type_name(t), type_name(t), iface)))
@@ -1676,10 +1792,10 @@ impl Gen {
         if *from == Type::Char && *to == Type::Str {
             return Ok(format!("({}).to_string()", text));
         }
-        if let Type::Named(iface) = to {
+        if let Type::Named(_) | Type::App(..) = to {
             if self.is_interface(to) && !self.is_interface(from) && *from != Type::Unknown {
-                self.require_conforms(from, iface, line, col)?;
-                return Ok(format!("(Box::new({}) as Box<dyn {}>)", text, self.path_of(iface)));
+                self.require_conforms(from, to, line, col)?;
+                return Ok(format!("(Box::new({}) as Box<dyn {}>)", text, self.rust_iface(to)));
             }
         }
         Ok(text)
@@ -1830,6 +1946,7 @@ impl Gen {
         for (n, info) in &ex.interfaces {
             let key = format!("{}.{}", key_prefix, n);
             let qualified = IfaceInfo {
+                generics: info.generics.clone(),
                 methods: info.methods.iter().map(|(m, sg)| (m.clone(), qualify_sig(sg, id, ex))).collect(),
                 required: info.required.clone(),
                 defaults: Vec::new(),
@@ -2006,7 +2123,7 @@ impl Gen {
                     let methods = self.collect_methods(&s.methods, &s.name, &fnames)?;
                     let fields = s.fields.iter().map(|p| (p.name.clone(), self.ct(&p.ty))).collect();
                     self.pop_generics(saved);
-                    self.structs.insert(s.name.clone(), StructInfo { generics: s.generics.clone(), fields, methods });
+                    self.structs.insert(s.name.clone(), StructInfo { generics: self.norm_generics(&s.generics), fields, methods });
                 }
                 Item::Enum(e) => {
                     reserved_type_name(&e.name, e.line, e.col)?;
@@ -2021,13 +2138,15 @@ impl Gen {
                         .map(|v| (v.name.clone(), v.fields.iter().map(|p| (p.name.clone(), self.ct(&p.ty))).collect()))
                         .collect();
                     self.pop_generics(saved);
-                    self.enums.insert(e.name.clone(), EnumInfo { generics: e.generics.clone(), variants, methods });
+                    self.enums.insert(e.name.clone(), EnumInfo { generics: self.norm_generics(&e.generics), variants, methods });
                     self.local_types.insert(e.name.clone());
                 }
                 Item::Interface(i) => {
+                    reserved_type_name(&i.name, i.line, i.col)?;
                     if !seen.insert(i.name.clone()) {
                         return Err(LumeError::new(i.line, i.col, format!("`{}` is defined twice", i.name)));
                     }
+                    let saved = self.push_generics(&i.generics);
                     let mut methods = HashMap::new();
                     for m in i.required.iter().chain(&i.defaults) {
                         if m.self_kind == SelfKind::Mutate {
@@ -2038,9 +2157,10 @@ impl Gen {
                             return Err(LumeError::new(m.line, m.col, format!("method `{}` is listed twice in `{}`", m.name, i.name)));
                         }
                     }
+                    self.pop_generics(saved);
                     self.interfaces.insert(
                         i.name.clone(),
-                        IfaceInfo { methods: methods.into_iter().collect(), required: i.required.iter().map(|m| m.name.clone()).collect(), defaults: i.defaults.clone(), local: true },
+                        IfaceInfo { generics: self.norm_generics(&i.generics), methods: methods.into_iter().collect(), required: i.required.iter().map(|m| m.name.clone()).collect(), defaults: i.defaults.clone(), local: true },
                     );
                 }
                 Item::Extend(_) => {}
@@ -2056,9 +2176,10 @@ impl Gen {
             if let Item::Extend(x) = item {
                 let target = self.ct(&x.target);
                 self.check_type(&target, x.line, x.col)?;
-                let iface = self.canon(&x.iface);
+                let iface_ty = self.ct(&x.iface);
+                let iface = self.type_key(&iface_ty);
                 if !self.interfaces.contains_key(&iface) {
-                    return Err(LumeError::new(x.line, x.col, format!("unknown interface `{}`", x.iface)));
+                    return Err(LumeError::new(x.line, x.col, format!("unknown interface `{}`", type_name(&x.iface))));
                 }
                 if self.is_interface(&target) {
                     return Err(LumeError::new(x.line, x.col, "an interface cannot be extended with another; extend the concrete types"));
@@ -2073,8 +2194,8 @@ impl Gen {
                         return Err(LumeError::new(m.line, m.col, "methods in an `extend` block cannot take `var self`"));
                     }
                     if !self.interfaces[&iface].methods.contains_key(&m.name) {
-                        return Err(LumeError::new(m.line, m.col, format!("`{}` is not a method of `{}`", m.name, x.iface))
-                            .with_help(format!("`{}` has: {}", x.iface, self.interfaces[&iface].methods.keys().cloned().collect::<Vec<_>>().join(", "))));
+                        return Err(LumeError::new(m.line, m.col, format!("`{}` is not a method of `{}`", m.name, type_name(&x.iface)))
+                            .with_help(format!("`{}` has: {}", type_name(&x.iface), self.interfaces[&iface].methods.keys().cloned().collect::<Vec<_>>().join(", "))));
                     }
                     if existing.contains_key(&m.name) {
                         return Err(LumeError::new(m.line, m.col, format!("`{}` already has a `{}` method", type_name(&target), m.name)));
@@ -2127,8 +2248,16 @@ impl Gen {
                         return Err(LumeError::new(i.line, i.col, format!("interface `{}` has a method with type parameters, which is not supported yet", i.name))
                             .with_help("an interface method takes concrete types; a generic function can take the interface instead"));
                     }
+                    self.check_generics(&i.generics, &format!("`{}`", i.name))?;
+                    let sig_types: Vec<Type> = i
+                        .required
+                        .iter()
+                        .chain(&i.defaults)
+                        .flat_map(|m| m.params.iter().map(|p| p.ty.clone()).chain(m.ret.clone()))
+                        .collect();
+                    self.check_generics_used(&i.generics, sig_types.iter(), &format!("interface `{}`", i.name))?;
                     for m in i.required.iter().chain(&i.defaults) {
-                        self.check_sig_types(m, &[])?;
+                        self.check_sig_types(m, &i.generics)?;
                         if m.params.iter().any(|p| self.is_interface(&self.ct(&p.ty))) || m.ret.as_ref().map(|r| self.is_interface(&self.ct(r))).unwrap_or(false) {
                             return Err(LumeError::new(m.line, m.col, format!("interface method `{}` mentions an interface in its signature, which is not supported yet", m.name))
                                 .with_help("use concrete types in interface signatures for now"));
@@ -2399,7 +2528,7 @@ impl Gen {
         for p in gs {
             if !all.iter().any(|t| Self::mentions_var(t, &p.name)) {
                 return Err(LumeError::new(p.line, p.col, format!("{} never uses `{}`", what, p.name))
-                    .with_help(format!("give a field the type `{}`, or drop `{}` from the type parameters", p.name, p.name)));
+                    .with_help(format!("mention `{}` in a field or a method signature, or drop it from the type parameters", p.name)));
             }
         }
         Ok(())
@@ -2412,16 +2541,27 @@ impl Gen {
                 Some(b) => b,
                 None => continue,
             };
-            if Self::is_builtin_bound(b) {
+            let head = Self::bound_name(b);
+            if Self::is_builtin_bound(head) {
+                if matches!(b, Type::App(..)) {
+                    return Err(LumeError::new(p.line, p.col, format!("`{}` takes no type arguments", head)));
+                }
                 continue;
             }
-            if !self.interfaces.contains_key(&self.canon(b)) {
-                let e = LumeError::new(p.line, p.col, format!("unknown bound `{}` on `{}` of {}", b, p.name, what));
+            let key = self.canon(head);
+            if !self.interfaces.contains_key(&key) {
+                let e = LumeError::new(p.line, p.col, format!("unknown bound `{}` on `{}` of {}", type_name(b), p.name, what));
                 let cands = self.interfaces.keys().cloned().chain(["Ordered", "Hashable"].iter().map(|s| s.to_string()));
-                return Err(match self.suggest_from(b, cands) {
+                return Err(match self.suggest_from(head, cands) {
                     Some(s) => e.with_help(format!("did you mean `{}`?", s)),
                     None => e.with_help("a bound is `Ordered`, `Hashable`, or the name of an `interface`"),
                 });
+            }
+            let want = self.interfaces[&key].generics.len();
+            let got = match b { Type::App(_, a) => a.len(), _ => 0 };
+            if want != got {
+                return Err(LumeError::new(p.line, p.col, format!("`{}` takes {} {}, but {} {} given", head, want, plural(want, "type argument", "type arguments"), got, plural(got, "was", "were")))
+                    .with_help(if want == 0 { format!("write it as `{}`", head) } else { format!("it is declared `{}[{}]`", head, self.interfaces[&key].generics.iter().map(|q| q.name.clone()).collect::<Vec<_>>().join(", ")) }));
             }
         }
         Ok(())
@@ -3019,7 +3159,7 @@ impl Gen {
             "+" => (numeric(lt) && same) || (*lt == Type::Str && rt == Type::Str) || (matches!(lt, Type::List(_) | Type::Iter(..)) && self.assignable(lt, &rt)) || text_like(lt) && text_like(&rt),
             "-" | "*" | "/" | "%" | "**" => numeric(lt) && same,
             // a type parameter compares when its bound says it is `Ordered`
-            "<" | "<=" | ">" | ">=" => (same && (numeric(lt) || *lt == Type::Str || (matches!(lt, Type::Var(_)) && self.meets_bound(lt, "Ordered")))) || (text_like(lt) && text_like(&rt)),
+            "<" | "<=" | ">" | ">=" => (same && (numeric(lt) || *lt == Type::Str || (matches!(lt, Type::Var(_)) && self.meets_bound(lt, &Type::Named("Ordered".into()))))) || (text_like(lt) && text_like(&rt)),
             "==" | "!=" => same || (text_like(lt) && text_like(&rt)),
             _ => true,
         };
@@ -3226,12 +3366,10 @@ impl Gen {
             (Type::Var(a), Type::Var(b)) => a == b,
             (Type::Fn(ps, r), Type::Fn(qs, s)) => ps.len() == qs.len() && ps.iter().zip(qs).all(|(x, y)| self.assign_ok_n(x, y)) && self.assign_ok_n(r, s),
             (Type::Fn(..), _) | (_, Type::Fn(..)) => false,
-            (Type::App(a, xs), Type::App(b, ys)) => self.canon(a) == self.canon(b) && xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| self.assign_ok_n(x, y)),
+            (Type::App(a, xs), Type::App(b, ys)) if self.canon(a) == self.canon(b) => xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| self.assign_ok_n(x, y)),
+            // a value where an interface is wanted: it must have the methods
+            (_, Type::Named(_) | Type::App(..)) if self.is_interface(want) => matches!(self.conformance(have, want), Conformance::Yes),
             (Type::Var(_), _) | (_, Type::Var(_)) | (Type::App(..), _) | (_, Type::App(..)) => false,
-            (_, Type::Named(iface)) if self.is_interface(want) => {
-                // a value where an interface is wanted: it must have the methods
-                matches!(self.conformance(have, &self.canon(iface)), Conformance::Yes)
-            }
             (Type::Named(_), _) | (_, Type::Named(_)) => false,
             (a, b) => a == b,
         }
@@ -3294,11 +3432,11 @@ impl Gen {
         self.want.push(want.clone());
         let have = self.ty_of(e);
         self.want.pop();
-        if let Type::Named(iface) = want {
+        if let Type::Named(_) | Type::App(..) = want {
             // an interface slot: the detailed conformance error says what is missing
             if self.is_interface(want) && have != Type::Unknown && !self.is_interface(&have.materialized()) {
-                let iface = iface.clone();
-                return self.require_conforms(&have.materialized(), &iface, e.line, e.col);
+                let want = want.clone();
+                return self.require_conforms(&have.materialized(), &want, e.line, e.col);
             }
         }
         if self.assignable(&have, want) {
@@ -3696,7 +3834,10 @@ impl Gen {
     // ----- items ------------------------------------------------------------
 
     fn interface_def(&mut self, i: &InterfaceDef) -> Result<()> {
-        self.line(&format!("pub trait {}: LumeShow {{", i.name));
+        let saved_gs = self.push_generics(&i.generics);
+        let gen = self.rust_generics(&i.generics);
+        let gargs = Self::rust_generic_args(&i.generics);
+        self.line(&format!("pub trait {}{}: LumeShow {{", i.name, gen));
         self.indent += 1;
         let info = self.interfaces[&i.name].clone();
         for m in &i.required {
@@ -3711,7 +3852,12 @@ impl Gen {
         self.indent -= 1;
         self.line("}");
         // Boxed values forward to the value inside.
-        self.line(&format!("impl<T: {} + ?Sized> {} for Box<T> {{", i.name, i.name));
+        let box_gen = if i.generics.is_empty() {
+            format!("<Inner: {} + ?Sized>", i.name)
+        } else {
+            format!("<{}, Inner: {}{} + ?Sized>", i.generics.iter().map(|p| self.rust_bounds(p)).collect::<Vec<_>>().join(", "), i.name, gargs)
+        };
+        self.line(&format!("impl{} {}{} for Box<Inner> {{", box_gen, i.name, gargs));
         self.indent += 1;
         for (name, sg) in &info.methods {
             let args: Vec<String> = sg.params.iter().map(|(n, _)| rust_name(n)).collect();
@@ -3726,18 +3872,34 @@ impl Gen {
         }
         self.indent -= 1;
         self.line("}");
+        self.pop_generics(saved_gs);
         Ok(())
     }
 
     /// `&self, a: &A, b: i64` for a method signature.
     fn sig_params_rust(&self, sg: &Sig, with_self: bool) -> String {
+        self.sig_params_rust_as(sg, None, with_self)
+    }
+
+    fn sig_params_rust_as(&self, sg: &Sig, decl: Option<&[Type]>, with_self: bool) -> String {
         let mut parts: Vec<String> = Vec::new();
         if with_self {
             parts.push("&self".into());
         }
         for (i, (n, t)) in sg.params.iter().enumerate() {
             let rt = self.rt(t);
-            let rt = if sg.var_params.get(i).copied().unwrap_or(false) { format!("&mut {}", rt) } else if t.is_copy() { rt } else if *t == Type::Str { "&str".into() } else { format!("&{}", rt) };
+            let lent = decl.and_then(|d| d.get(i)).map(|d| matches!(d, Type::Var(_))).unwrap_or(false);
+            let rt = if sg.var_params.get(i).copied().unwrap_or(false) {
+                format!("&mut {}", rt)
+            } else if lent {
+                format!("&{}", rt)
+            } else if t.is_copy() {
+                rt
+            } else if *t == Type::Str {
+                "&str".into()
+            } else {
+                format!("&{}", rt)
+            };
             parts.push(format!("{}: {}", rust_name(n), rt));
         }
         parts.join(", ")
@@ -3752,7 +3914,7 @@ impl Gen {
         for item in program {
             if let Item::Extend(x) = item {
                 let key = self.type_key(&self.ct(&x.target));
-                ext_bodies.entry((key, self.canon(&x.iface))).or_default().extend(x.methods.iter().cloned());
+                ext_bodies.entry((key, self.type_key(&self.ct(&x.iface)))).or_default().extend(x.methods.iter().cloned());
             }
         }
         // candidate types: local structs/enums, extend targets, imported types (when the interface is local)
@@ -3785,40 +3947,62 @@ impl Gen {
                 if !done.insert((tkey.clone(), iname.clone())) {
                     continue;
                 }
-                if !matches!(self.conformance(t, iname), Conformance::Yes) {
+                // an `extend` may name the interface's arguments; otherwise
+                // they are read off the type's own methods
+                let written = program.iter().find_map(|it| match it {
+                    Item::Extend(x) if self.type_key(&self.ct(&x.target)) == *tkey && self.type_key(&self.ct(&x.iface)) == *iname => Some(self.ct(&x.iface)),
+                    _ => None,
+                });
+                let asked = written.clone().unwrap_or_else(|| Type::Named(iname.clone()));
+                let (verdict, targs) = self.conformance_with(t, &asked);
+                if !matches!(verdict, Conformance::Yes) {
                     if let Some(x) = program.iter().find_map(|it| match it {
-                        Item::Extend(x) if self.type_key(&self.ct(&x.target)) == *tkey && self.canon(&x.iface) == *iname => Some(x),
+                        Item::Extend(x) if self.type_key(&self.ct(&x.target)) == *tkey && self.type_key(&self.ct(&x.iface)) == *iname => Some(x),
                         _ => None,
                     }) {
                         // an extend that still leaves methods missing is an error here
-                        if let Conformance::Missing(m) = self.conformance(t, iname) {
-                            let info = &self.interfaces[iname];
-                            let needs: Vec<String> = m.iter().filter_map(|n| info.methods.get(n).map(|s| format!("def {} {}", n, self.describe_sig(s)))).collect();
-                            return Err(LumeError::new(x.line, x.col, format!("`extend {} with {}` is missing `{}`", type_name(t), x.iface, m.join("`, `")))
-                                .with_help(format!("`{}` needs: {}. Add {} inside this `extend` block", x.iface, needs.join("; "), if m.len() == 1 { "it" } else { "them" })));
+                        if let Conformance::Missing(m) = verdict {
+                            if !m.is_empty() {
+                                let info = &self.interfaces[iname];
+                                let needs: Vec<String> = m.iter().filter_map(|n| info.methods.get(n).map(|s| format!("def {} {}", n, self.describe_sig(s)))).collect();
+                                return Err(LumeError::new(x.line, x.col, format!("`extend {} with {}` is missing `{}`", type_name(t), type_name(&x.iface), m.join("`, `")))
+                                    .with_help(format!("`{}` needs: {}. Add {} inside this `extend` block", type_name(&x.iface), needs.join("; "), if m.len() == 1 { "it" } else { "them" })));
+                            }
+                            return Err(LumeError::new(x.line, x.col, format!("cannot tell what `{}` stands for in `{}`", info.generics.iter().map(|g| g.name.clone()).collect::<Vec<_>>().join("`, `"), iname))
+                                .with_help(format!("name it: `extend {} with {}[{}]:`", type_name(t), iname, type_name(t))));
                         }
-                        self.require_conforms(t, iname, x.line, x.col)?;
+                        self.require_conforms(t, &asked, x.line, x.col)?;
                     }
                     continue;
                 }
+                let iface_rust = if info.generics.is_empty() {
+                    self.path_of(iname)
+                } else {
+                    format!("{}<{}>", self.path_of(iname), targs.iter().map(|a| self.rt(a)).collect::<Vec<_>>().join(", "))
+                };
+                let isub: HashMap<String, Type> = info.generics.iter().map(|g| g.name.clone()).zip(targs.iter().cloned()).collect();
                 let bodies = ext_bodies.get(&(tkey.clone(), iname.clone())).cloned().unwrap_or_default();
                 let targets: Vec<String> = match t {
                     Type::Str => vec!["str".into(), "String".into()],
                     other => vec![self.rt(other)],
                 };
                 for target in targets {
-                    self.line(&format!("impl {} for {} {{", self.path_of(iname), target));
+                    self.line(&format!("impl {} for {} {{", iface_rust, target));
                     self.indent += 1;
                     let inherent = self.methods_of(tkey).unwrap_or_default();
-                    for (mname, sg) in &info.methods {
+                    for (mname, sg0) in &info.methods {
+                        let sg = &Sig { params: sg0.params.iter().map(|(n, x)| (n.clone(), Self::subst(x, &isub))).collect(), ret: Self::subst(&sg0.ret, &isub), ..sg0.clone() };
+                        let decl_tys: Vec<Type> = sg0.params.iter().map(|(_, x)| x.clone()).collect();
                         if let Some(body) = bodies.iter().find(|b| b.name == *mname) {
                             if target == "String" {
                                 // delegate to the str impl
                                 let args: Vec<String> = sg.params.iter().map(|(n, _)| rust_name(n)).collect();
-                                self.line(&format!("fn {}({}) -> {} {{ self.as_str().{}({}) }}", rust_name(mname), self.sig_params_rust(sg, true), self.rt(&sg.ret), rust_name(mname), args.join(", ")));
+                                self.line(&format!("fn {}({}) -> {} {{ self.as_str().{}({}) }}", rust_name(mname), self.sig_params_rust_as(sg, Some(&decl_tys), true), self.rt(&sg.ret), rust_name(mname), args.join(", ")));
                             } else {
                                 self.in_trait_impl = true;
+                                self.trait_decl = Some(decl_tys.clone());
                                 self.fn_def(body, Some(tkey))?;
+                                self.trait_decl = None;
                                 self.in_trait_impl = false;
                             }
                         } else if inherent.contains_key(mname) && !self.ext_methods.get(tkey).map(|m| m.contains_key(mname)).unwrap_or(false) {
@@ -3826,7 +4010,7 @@ impl Gen {
                             self.line(&format!(
                                 "fn {}({}) -> {} {{ {}::{}(self{}{}) }}",
                                 rust_name(mname),
-                                self.sig_params_rust(sg, true),
+                                self.sig_params_rust_as(sg, Some(&decl_tys), true),
                                 self.rt(&sg.ret),
                                 self.rt(t),
                                 rust_name(mname),
@@ -4102,7 +4286,7 @@ impl Gen {
             if self.is_interface(&pty) && !self.in_trait_impl {
                 // `s: Shape` — one generic parameter per interface-typed parameter (static dispatch)
                 let g = format!("Iface{}", generics.len());
-                let iface = match &pty { Type::Named(n) => self.path_of(n), _ => unreachable!() };
+                let iface = self.rust_iface(&pty);
                 generics.push(format!("{}: {}", g, iface));
                 parts.push(format!("{}: &{}", rust_name(&p.name), g));
                 continue;
@@ -4116,7 +4300,18 @@ impl Gen {
                 continue;
             }
             let rt = self.rt(&pty);
-            let rt = if p.mutable { format!("&mut {}", rt) } else if pty.is_copy() { rt } else if pty == Type::Str { "&str".to_string() } else { format!("&{}", rt) };
+            let lent = self.trait_decl.as_ref().and_then(|d| d.get(parts.len() - usize::from(owner.is_some()))).map(|d| matches!(d, Type::Var(_))).unwrap_or(false);
+            let rt = if p.mutable {
+                format!("&mut {}", rt)
+            } else if lent {
+                format!("&{}", rt)
+            } else if pty.is_copy() {
+                rt
+            } else if pty == Type::Str {
+                "&str".to_string()
+            } else {
+                format!("&{}", rt)
+            };
             parts.push(format!("{}: {}", rust_name(&p.name), rt));
         }
         let vis = if self.in_trait_impl { "" } else { "pub " };
@@ -5237,6 +5432,12 @@ impl Gen {
     }
 
     fn expr_arg_inner(&mut self, e: &Expr, t: &Type) -> Result<String> {
+        // a slot the definition spelled `T`, filled in with `Str`: Rust
+        // wants a `&String` there, and Lume's strings travel as `&str`
+        if matches!(t, Type::Var(_)) && self.ty_of(e).materialized() == Type::Str {
+            let owned = self.expr_owned(e)?;
+            return Ok(format!("&{}", owned));
+        }
         if let Type::Fn(ins, out) = t {
             let (ins, out) = (ins.clone(), out.clone());
             return self.block_arg(e, &ins, &ins, &out);
@@ -5261,10 +5462,8 @@ impl Gen {
         if self.is_interface(t) {
             // static dispatch through a generic parameter; the value must conform
             let at = self.ty_of(e).materialized();
-            if let Type::Named(iface) = t {
-                if at != Type::Unknown && !self.is_interface(&at) {
-                    self.require_conforms(&at, iface, e.line, e.col)?;
-                }
+            if at != Type::Unknown && !self.is_interface(&at) {
+                self.require_conforms(&at, t, e.line, e.col)?;
             }
         }
         if let Type::Iter(elem, by_ref) = self.ty_of(e) {
@@ -6385,7 +6584,7 @@ impl Gen {
     /// has no total equality) and types that hold one are not allowed.
     fn check_key_type(&self, t: &Type, what: &str, line: usize, col: usize) -> Result<()> {
         if let Type::Var(n) = t {
-            if self.type_param(n).and_then(|p| p.bound.clone()).as_deref() == Some("Hashable") {
+            if self.type_param(n).and_then(|p| p.bound.clone()).map(|b| Self::bound_name(&b) == "Hashable").unwrap_or(false) {
                 return Ok(());
             }
             return Err(LumeError::new(line, col, format!("`{}` could be any type, so it cannot be {} of a {}", n, if what == "map" { "the key" } else { "an item" }, what))
@@ -8359,11 +8558,11 @@ fn describe_names(names: &[&String]) -> String {
 fn reserved_type_name(name: &str, line: usize, col: usize) -> Result<()> {
     const RESERVED: &[&str] = &[
         "Int", "Float", "Str", "Char", "Bool", "List", "Map", "Set", "Option", "Result", "Box", "Vec", "String", "Task", "Time", "File", "Math", "Rc", "Arc", "Mutex", "Some",
-        "None", "Ok", "Err",
+        "None", "Ok", "Err", "Sized", "Clone", "Copy", "Iterator", "Ordering", "Self",
     ];
     if RESERVED.contains(&name) {
         let why = match name {
-            "Box" | "Vec" | "String" | "Rc" | "Arc" | "Mutex" => "the generated Rust uses this name",
+            "Box" | "Vec" | "String" | "Rc" | "Arc" | "Mutex" | "Sized" | "Clone" | "Copy" | "Iterator" | "Ordering" | "Self" => "the generated Rust uses this name",
             _ => "this is a built-in Lume name",
         };
         return Err(LumeError::new(line, col, format!("`{}` cannot be a type name: {}", name, why))

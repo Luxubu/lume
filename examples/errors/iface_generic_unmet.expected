@@ -1,0 +1,6 @@
+error: `largest` needs `T: Comparable[Tick]`, and `Tick` is not Comparable[Tick]
+  --> examples/errors/iface_generic_unmet.lume:16:8
+   |
+16 |   puts largest([Tick(at: 1)])
+   |        ^
+  help: its `compare` is `(other: Int) -> Int`, and `Comparable[Tick]` asks for `(other: Tick) -> Int`

@@ -1,0 +1,6 @@
+error: `Clone` cannot be a type name: the generated Rust uses this name
+  --> examples/errors/iface_reserved.lume:2:1
+  |
+2 | interface Clone:
+  | ^
+  help: pick another name, like `MyClone`

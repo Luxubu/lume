@@ -1,0 +1,35 @@
+# An interface's type parameters lay out like any other: no space before
+# the bracket, one after each comma, one after a bound's colon.
+interface Comparable[T]:
+  def compare(other: T) -> Int
+  def before?(other: T) -> Bool = compare(other) < 0
+
+interface Keyed[K, V]:
+  def key -> K
+  def value -> V
+  def pair -> (K, V) = (key, value)
+
+struct Version:
+  major: Int
+
+  def compare(other: Version) -> Int = major - other.major
+
+extend Int with Comparable[Int]:
+  def compare(other: Int) -> Int = self - other
+
+def largest[T: Comparable[T]](xs: [T]) -> T?:
+  var best = xs[0]?
+  for x in xs:
+    if best.before?(x):
+      best = x
+  Some(best)
+
+def keys_of[K, V, T: Keyed[K, V]](xs: [T]) -> [K]:
+  var out: [K] = []
+  for x in xs:
+    out.push(x.key)
+  out
+
+def main:
+  puts largest([Version(major: 2), Version(major: 5)])
+  puts largest([3, 9, 1])

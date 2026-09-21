@@ -123,6 +123,11 @@ expected to: `1234.5.decimals(2)` is `"1234.50"`, `0.125.decimals(2)` is
   need an interface with a type parameter, which interfaces cannot take.
   That is the next real gap, and it is bigger than anything above.
 
+  *Milestone 25 closed half of it: interfaces now take type parameters, so
+  `interface Container[T]` can be written and used as a bound. The other
+  half — making the built-in `[T]`, `{T}` and `{K: V}` conform to one —
+  needs `extend` to be generic over the type it extends, which it is not.*
+
 ---
 
 ## What the fixes came to

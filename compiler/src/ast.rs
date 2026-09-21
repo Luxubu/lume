@@ -78,8 +78,10 @@ impl Type {
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypeParam {
     pub name: String,
-    /// The interface every argument must conform to, if the definition asks.
-    pub bound: Option<String>,
+    /// What every argument must satisfy: a built-in bound (`Ordered`,
+    /// `Hashable`) or an interface, which may carry arguments of its own
+    /// (`Comparable[T]`).
+    pub bound: Option<Type>,
     pub line: usize,
     pub col: usize,
 }
@@ -173,6 +175,8 @@ impl Import {
 pub struct InterfaceDef {
     pub name: String,
     pub public: bool,
+    /// `interface Comparable[T]:` — type parameters the interface declares.
+    pub generics: Vec<TypeParam>,
     /// Required: signature only. `body` is None.
     pub required: Vec<FnDef>,
     pub defaults: Vec<FnDef>,
@@ -184,7 +188,9 @@ pub struct InterfaceDef {
 #[derive(Debug, Clone)]
 pub struct ExtendDef {
     pub target: Type,
-    pub iface: String,
+    /// `extend Version with Comparable[Version]:` — the interface, with its
+    /// arguments when it takes any.
+    pub iface: Type,
     pub methods: Vec<FnDef>,
     pub line: usize,
     pub col: usize,

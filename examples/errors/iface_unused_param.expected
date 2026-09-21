@@ -1,0 +1,6 @@
+error: interface `Holds` never uses `T`
+  --> examples/errors/iface_unused_param.lume:3:17
+  |
+3 | interface Holds[T]:
+  |                 ^
+  help: mention `T` in a field or a method signature, or drop it from the type parameters

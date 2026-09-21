@@ -1,0 +1,9 @@
+# `Comparable` takes one type argument; a bound must say it.
+interface Comparable[T]:
+  def compare(other: T) -> Int
+
+def largest[T: Comparable](xs: [T]) -> T?:
+  xs[0]
+
+def main:
+  puts largest([1, 2])

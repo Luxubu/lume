@@ -1,0 +1,6 @@
+# An interface becomes a Rust trait, so it cannot take a name Rust uses.
+interface Clone:
+  def copy_of -> Str
+
+def main:
+  puts 1

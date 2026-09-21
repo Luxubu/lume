@@ -1,0 +1,13 @@
+# A parameter no method signature mentions could never be worked out
+# from a type's own methods, so there would be no way to conform.
+interface Holds[T]:
+  def held -> Str
+
+struct Slot:
+  n: Int
+
+  def held -> Str:
+    "#{n}"
+
+def main:
+  puts Slot(n: 1).held

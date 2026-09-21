@@ -3,4 +3,4 @@ error: struct `Holder` never uses `T`
   |
 2 | struct Holder[T]:
   |               ^
-  help: give a field the type `T`, or drop `T` from the type parameters
+  help: mention `T` in a field or a method signature, or drop it from the type parameters

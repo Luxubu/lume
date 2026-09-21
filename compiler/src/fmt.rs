@@ -384,7 +384,7 @@ impl Fmt {
                 out
             }
             Item::Interface(i) => {
-                let mut out = format!("{}interface {}:", if i.public { "pub " } else { "" }, i.name);
+                let mut out = format!("{}interface {}{}:", if i.public { "pub " } else { "" }, i.name, generics_str(&i.generics));
                 self.indent += 1;
                 let mut all: Vec<(&FnDef, bool)> = i.required.iter().map(|f| (f, true)).chain(i.defaults.iter().map(|f| (f, false))).collect();
                 all.sort_by_key(|(f, _)| (f.line, f.col));
@@ -393,7 +393,7 @@ impl Fmt {
                 out
             }
             Item::Extend(x) => {
-                let mut out = format!("extend {} with {}:", type_str(&x.target), x.iface);
+                let mut out = format!("extend {} with {}:", type_str(&x.target), type_str(&x.iface));
                 self.indent += 1;
                 let all: Vec<(&FnDef, bool)> = x.methods.iter().map(|f| (f, false)).collect();
                 out.push_str(&self.defs_text(&all, true));
@@ -1084,7 +1084,7 @@ fn generics_str(gs: &[TypeParam]) -> String {
         return String::new();
     }
     let parts: Vec<String> = gs.iter().map(|p| match &p.bound {
-        Some(b) => format!("{}: {}", p.name, b),
+        Some(b) => format!("{}: {}", p.name, type_str(b)),
         None => p.name.clone(),
     }).collect();
     format!("[{}]", parts.join(", "))

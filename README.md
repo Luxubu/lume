@@ -20,7 +20,7 @@ program takes about 1 s in Python and 1.4 s in Ruby.
 The language design lives in the [Lume Language Design](https://claude.ai/code/artifact/1872fe63-1816-4b1e-9983-dec2774382fb)
 document. This repository is the compiler and the examples.
 
-## Status: milestones 1–24 done
+## Status: milestones 1–25 done
 
 | # | Milestone | Status |
 | --- | --- | --- |
@@ -42,6 +42,7 @@ document. This repository is the compiler and the examples.
 | 16 | Ownership by analysis: liveness-based copy or move, recursive enums boxed, `.or` on optional fields, string comparisons in blocks, `for var a in xs`, `xs[i].method` | done: review corpus leaks 6 → 0 |
 | 17 | Pattern completeness: a real exhaustiveness checker with nested witnesses, `A \| B` alternatives; the everyday standard methods; statements in inline blocks | done: 37 new methods, corpus 40 ok / 26 Lume errors / 0 leaks |
 | 18 | `{T}` sets with literals, algebra and iteration; `s[i]` / `s[a..b]` / `xs[a..b]` by character and position; structs and enums as map keys | done |
+| 25 | Interfaces that take type parameters: `interface Comparable[T]:`, bounds that carry arguments (`[T: Comparable[T]]`), `extend Int with Measures[Str]`, conformance that works the arguments out | done: the gap the library hit; structural conformance unchanged |
 | 24 | Dogfood a library: `seq` (24 generic helpers), `table` (a typed CSV table) and a program using both, then fix the six things writing it exposed | done: generics and blocks needed no workaround; `pub def`, keywords as method names, `at`, `trim_left`/`trim_right`, `decimals` |
 | 23 | Blocks of your own: a parameter typed `(A) -> B` takes a `{ \|x\| ... }` block, a `do \|x\|` body, the `_` shorthand, or a function's name | done: `map`, `retry`, `time_it` and friends are writeable in Lume; a block is inlined at the call, not boxed |
 | 22 | User-defined generics: `def first[T]`, `struct Stack[T]`, `enum Tree[T]`, two parameters, interface bounds and the built-in `Ordered` and `Hashable` | done: real Rust generics, no boxing; type arguments read off the call |
@@ -106,7 +107,15 @@ with bodies; a type conforms by having the methods, with nothing to declare,
 and then has the defaults as its own methods (`q.describe`);
 `def describe(s: Shape)` is a generic function, `[Shape]` holds mixed types
 behind a pointer and says so once; `extend Str with Shape:` adds the methods
-to a type you do not own; `pub interface` crosses modules), blocks of
+to a type you do not own; `pub interface` crosses modules; an interface
+may take type parameters — `interface Comparable[T]: def compare(other: T)
+-> Int`, with defaults written in terms of them, a bound that carries
+arguments (`def largest[T: Comparable[T]](xs: [T])`), `Renders[Str]` as a
+value type, and `extend Int with Measures[Str]:`; conformance stays
+structural and works the arguments out from the type's own methods, so
+`Version` with `def compare(other: Version)` is a `Comparable[Version]`
+without naming it, and a parameter that appears only inside another's
+bound comes from that conformance), blocks of
 your own (a parameter typed `(A) -> B` takes behaviour: `def each[T](xs: [T],
 f: (T) -> ())` is called `each(xs) { |x| puts x }`, or with `do |x|` and an
 indented body, or `each(xs, _ * 2)`, or `each(xs, double)` naming a function;
@@ -382,6 +391,7 @@ examples/modules/        a three-file program: app.lume imports users/model and 
 examples/interfaces.lume interfaces, extend, operator methods
 examples/generics.lume   generic functions, structs and enums; Ordered, Hashable, interface bounds
 examples/blocks_of_your_own.lume  functions that take behaviour: each, map, keep, fold, retry, time_it
+examples/generic_interfaces.lume  interfaces with type parameters: bounds, defaults, values, extend
 examples/lib/            a library written in Lume: seq (generic helpers), table (typed CSV),
                          a report program that uses both, and what writing it exposed
 examples/tests/          files with `test` blocks; expected `lume test` output

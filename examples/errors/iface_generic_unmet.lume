@@ -1,0 +1,16 @@
+# `Tick` compares against an `Int`, so it is a `Comparable[Int]`, and
+# `largest` asks for a type that compares against itself.
+interface Comparable[T]:
+  def compare(other: T) -> Int
+
+struct Tick:
+  at: Int
+
+  def compare(other: Int) -> Int:
+    at - other
+
+def largest[T: Comparable[T]](xs: [T]) -> T?:
+  xs[0]
+
+def main:
+  puts largest([Tick(at: 1)])

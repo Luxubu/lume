@@ -1,0 +1,184 @@
+# Milestone 25: interfaces that take type parameters.
+#
+# An interface already says what a type must be able to do. A parameter
+# lets it say what the type must be able to do it *to*: compare against
+# another of its own kind, render a `Str`, hold a key of type K.
+#
+# Conformance stays structural, and now works the arguments out for
+# itself: `Version` has `def compare(other: Version)`, so it is a
+# `Comparable[Version]` without ever naming the interface.
+
+interface Comparable[T]:
+  def compare(other: T) -> Int
+
+  # A default written once, in terms of the parameter.
+  def before?(other: T) -> Bool:
+    compare(other) < 0
+
+  def after?(other: T) -> Bool:
+    compare(other) > 0
+
+struct Version:
+  major: Int
+  minor: Int
+
+  def compare(other: Version) -> Int:
+    if major != other.major:
+      return major - other.major
+    minor - other.minor
+
+struct Weight:
+  grams: Int
+
+  def compare(other: Weight) -> Int:
+    grams - other.grams
+
+# A bound that talks about the type it is applied to.
+def largest[T: Comparable[T]](xs: [T]) -> T?:
+  var best = xs[0]?
+  for x in xs:
+    if best.before?(x):
+      best = x
+  Some(best)
+
+def ordered[T: Comparable[T]](xs: [T]) -> [T]:
+  var out: [T] = []
+  for x in xs:
+    var at = out.len
+    var i = 0
+    while i < out.len:
+      if x.before?(out.at(i)):
+        at = i
+        i = out.len
+      else:
+        i += 1
+    out.insert(at, x)
+  out
+
+# Two parameters, and a default that uses both.
+interface Keyed[K, V]:
+  def key -> K
+  def value -> V
+
+  def pair -> (K, V):
+    (key, value)
+
+struct Entry:
+  name: Str
+  count: Int
+
+  def key -> Str:
+    name
+
+  def value -> Int:
+    count
+
+struct Slot:
+  at: Int
+  tag: Str
+
+  def key -> Int:
+    at
+
+  def value -> Str:
+    tag
+
+# `K` and `V` appear nowhere but the bound, so they come from how `T`
+# conforms — nothing at the call site has to say them.
+def keys_of[K, V, T: Keyed[K, V]](xs: [T]) -> [K]:
+  var out: [K] = []
+  for x in xs:
+    out.push(x.key)
+  out
+
+def pairs_of[K, V, T: Keyed[K, V]](xs: [T]) -> [(K, V)]:
+  var out: [(K, V)] = []
+  for x in xs:
+    out.push(x.pair)
+  out
+
+# An interface with arguments as a value type: one parameter takes any
+# conforming value, and a list of them holds a mixture.
+interface Renders[T]:
+  def render(x: T) -> Str
+
+struct Loud:
+  mark: Str
+
+  def render(x: Str) -> Str:
+    x.upcase + mark
+
+struct Quiet:
+  mark: Str
+
+  def render(x: Str) -> Str:
+    x.downcase + mark
+
+def describe(r: Renders[Str], word: Str) -> Str:
+  r.render(word)
+
+# And `extend` gives a type you do not own the methods an interface asks
+# for, naming the arguments where they are not obvious.
+interface Measures[T]:
+  def size_of(x: T) -> Int
+
+extend Int with Measures[Str]:
+  def size_of(x: Str) -> Int:
+    x.len + self
+
+def total_size[M: Measures[Str]](m: M, words: [Str]) -> Int:
+  var n = 0
+  for w in words:
+    n += m.size_of(w)
+  n
+
+def main:
+  a = Version(major: 1, minor: 2)
+  b = Version(major: 1, minor: 9)
+  c = Version(major: 0, minor: 5)
+
+  puts a.compare(b)
+  puts a.before?(b)
+  puts a.after?(c)
+  puts largest([a, b, c])
+  puts ordered([b, c, a])
+
+  # the same two functions, on a type that shares nothing with Version
+  puts largest([Weight(grams: 30), Weight(grams: 12)])
+  puts ordered([Weight(grams: 30), Weight(grams: 12)])
+
+  entries = [Entry(name: "ada", count: 3), Entry(name: "bo", count: 1)]
+  puts keys_of(entries)
+  puts pairs_of(entries)
+
+  slots = [Slot(at: 2, tag: "x"), Slot(at: 7, tag: "y")]
+  puts keys_of(slots)
+  puts pairs_of(slots)
+
+  puts describe(Loud(mark: "!"), "hello")
+  puts describe(Quiet(mark: "."), "HELLO")
+
+  mixed: [Renders[Str]] = [Loud(mark: "!"), Quiet(mark: ".")]
+  for r in mixed:
+    puts r.render("Both")
+
+  puts total_size(10, ["ab", "cde"])
+
+test "conformance works the arguments out":
+  assert Version(major: 2, minor: 0).before?(Version(major: 2, minor: 1))
+  assert Weight(grams: 5).after?(Weight(grams: 1))
+  assert largest([Weight(grams: 1), Weight(grams: 9)]) == Some(Weight(grams: 9))
+
+test "a parameter that lives only in a bound":
+  assert keys_of([Entry(name: "a", count: 1)]) == ["a"]
+  assert keys_of([Slot(at: 3, tag: "t")]) == [3]
+  assert pairs_of([Slot(at: 3, tag: "t")]) == [(3, "t")]
+
+test "an interface value holds any conforming type":
+  one: Renders[Str] = Loud(mark: "!")
+  assert one.render("x") == "X!"
+  assert describe(Quiet(mark: "?"), "Y") == "y?"
+
+test "extend makes a built-in conform":
+  assert total_size(1, ["ab"]) == 3
+  assert total_size(0, ["a", "bb"]) == 3
