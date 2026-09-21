@@ -1,0 +1,6 @@
+error: `[T]` is used as a `Bag[Str]`, but its `items` is `-> [T]` and `Bag[Str]` needs `-> [Str]`
+  --> corpus/m28/x12_error_argument_mismatch.lume:61:1
+   |
+61 | extend [T] with Bag[Str]:
+   | ^
+exit: 1

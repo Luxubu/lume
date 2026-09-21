@@ -1,0 +1,108 @@
+# z06_scheduler.lume — pack meetings into as few rooms as possible.
+#
+# Probes: blocks of my own with two parameters, one of them a list
+# (`(Int, [Slot]) -> ()`) called with `do |i, r|` and an indented body that
+# itself loops; a generic helper handing its block straight to a built-in
+# (`xs.map(show)`); a function returning a tuple of two lists, destructured
+# with `(picked, rest) = ...`; `[[Slot]]` as a type; a `while` driven by a
+# rebound `var`; `Int.to_char` for room letters; and clock formatting from
+# integer minutes.
+#
+# MEANT TO RUN.
+#
+# Greedy by finish time, repeated until nothing is left, so the room split is
+# fully determined. All eight finish times are distinct, so `sort_by` order is
+# unambiguous. Nothing prints a Float, list, map, set or optional directly.
+#
+# EXPECTED OUTPUT:
+# == schedule ==
+# room A
+#    9:00-9:15   standup
+#    9:15-9:45   1:1 ana
+#    9:45-10:45  hiring
+#   11:00-12:00  planning
+#   12:00-12:30  lunch sync
+# room B
+#    9:10-10:20  design
+#   10:30-11:30  demo
+# room C
+#   10:00-11:00  retro
+#
+# rooms used: 3
+# meetings: 8
+# busiest room: A with 5
+# total booked: 385 min
+# longest: design (70 min)
+# agenda: standup | 1:1 ana | hiring | planning | lunch sync
+
+struct Slot:
+  name: Str
+  start: Int
+  finish: Int
+
+  def length -> Int = finish - start
+
+def clock(m: Int) -> Str:
+  mm = m % 60
+  "#{m / 60}:#{if mm < 10: "0#{mm}" else: "#{mm}"}"
+
+def line_of(s: Slot) -> Str:
+  "  #{clock(s.start).pad(5)}-#{clock(s.finish).pad_right(6)} #{s.name}"
+
+def greedy(sorted: [Slot]) -> ([Slot], [Slot]):
+  var picked: [Slot] = []
+  var rest: [Slot] = []
+  var last = 0
+  for s in sorted:
+    if s.start >= last:
+      picked.push(s)
+      last = s.finish
+    else:
+      rest.push(s)
+  (picked, rest)
+
+def each_room(rooms: [[Slot]], f: (Int, [Slot]) -> ()):
+  for i, r in rooms.enumerate:
+    f(i, r)
+
+def summarise[T](xs: [T], show: (T) -> Str) -> Str = xs.map(show).to_list.join(" | ")
+
+def main:
+  meetings = [
+    Slot("standup", 540, 555),
+    Slot("design", 550, 620),
+    Slot("1:1 ana", 555, 585),
+    Slot("retro", 600, 660),
+    Slot("hiring", 585, 645),
+    Slot("lunch sync", 720, 750),
+    Slot("demo", 630, 690),
+    Slot("planning", 660, 720),
+  ]
+
+  var pending = meetings.sort_by(_.finish).to_list
+  var rooms: [[Slot]] = []
+  while not pending.empty?:
+    (picked, rest) = greedy(pending)
+    rooms.push(picked)
+    pending = rest
+
+  puts "== schedule =="
+  each_room(rooms) do |i, r|
+    puts "room #{(65 + i).to_char.to_s}"
+    for s in r:
+      puts line_of(s)
+
+  var best = 0
+  for i, r in rooms.enumerate:
+    if r.len > rooms.at(best).len:
+      best = i
+
+  puts ""
+  puts "rooms used: #{rooms.len}"
+  puts "meetings: #{meetings.len}"
+  puts "busiest room: #{(65 + best).to_char.to_s} with #{rooms.at(best).len}"
+  puts "total booked: #{meetings.sum(_.length)} min"
+  match meetings.sort_by(_.length).last:
+    Some(s) -> puts "longest: #{s.name} (#{s.length} min)"
+    None    -> puts "longest: none"
+  puts "agenda: #{summarise(rooms.at(0), _.name)}"

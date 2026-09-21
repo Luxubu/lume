@@ -1,0 +1,90 @@
+# y07 — async meeting generics, blocks and `shared`.
+#
+# Probes: an `async def` that is *also* generic *and* takes a block
+# (`async def widths[T](xs: [T], size: (T) -> Int)`), called both with a
+# named function and with a trailing `{ |n| ... }` block after `await`;
+# `spawn:` around a call to a generic function, awaited as a list giving
+# `[Int?]`; `shared var` for an Int and for a list, written from tasks
+# built by a `map { |i| spawn: ... }` block; a `shared` read-only value
+# and a plain local both captured by a spawned block.
+#
+# Meant to RUN. Output is made order-independent with `sort` where tasks
+# finish in an unspecified order.
+#
+# Renderings relied on: Int and Str in `#{}` only.
+#
+# EXPECTED OUTPUT:
+# item1
+# item1,item2,item3
+# 7
+# 14
+# hits: 15
+# t1 t2 t3
+# 9/10
+# job-1 job-2 job-3
+# 24
+
+async def fetch(id: Int) -> Str:
+  await Time.sleep(2)
+  "item#{id}"
+
+# generic, async, and takes a block
+async def widths[T](xs: [T], size: (T) -> Int) -> Int:
+  var total = 0
+  for x in xs:
+    await Time.sleep(1)
+    total += size(x)
+  total
+
+def square(n: Int) -> Int = n * n
+
+def biggest[T: Ordered](xs: [T]) -> T? = xs.max
+
+async def main:
+  puts await fetch(1)
+
+  var tasks: [Task[Str]] = []
+  for i in 1..3:
+    tasks.push(spawn: await fetch(i))
+  names = await tasks
+  puts names.sort.join(",")
+
+  # the `_` shorthand as the block of a generic async function
+  puts await widths(["fig", "pear"], _.len)
+
+  # a named function, then the same call with a trailing block after `await`
+  five = await widths([1, 2], square)
+  nine = await widths([3]) { |n| n * n }
+  puts five + nine
+
+  # one counter, many tasks
+  shared var hits = 0
+  var workers: [Task[()]] = []
+  for i in 1..5:
+    w = spawn:
+      hits += i
+    workers.push(w)
+  await workers
+  puts "hits: #{hits}"
+
+  # a shared list, appended to from blocks that build tasks
+  shared var log: [Str] = []
+  ws = (1..3).map { |i| spawn: log.push("t#{i}") }.to_list
+  await ws
+  puts log.sort.join(" ")
+
+  # a generic call inside a task; the result is a list of `Int?`
+  a = spawn: biggest([3, 9, 2])
+  b = spawn: biggest([10, 1])
+  best = await [a, b]
+  puts best.map { |o| "#{o.or(0)}" }.to_list.join("/")
+
+  # a read-only `shared`, handed to every task
+  shared prefix = "job"
+  labels = await (1..3).map { |i| spawn: "#{prefix}-#{i}" }.to_list
+  puts labels.join(" ")
+
+  # a plain local copied into each task
+  factor = 4
+  scaled = await (1..3).map { |i| spawn: i * factor }.to_list
+  puts scaled.sum

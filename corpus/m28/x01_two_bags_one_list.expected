@@ -1,0 +1,10 @@
+list     3 [alpha, beta, gamma]
+set      2 [red, green]
+map      2 [one, two]
+deque    3 [a, b, c]
+alpha | beta | gamma
+14
+3 and 3
+10-20-30
+6
+exit: 0

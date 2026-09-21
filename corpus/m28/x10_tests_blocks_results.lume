@@ -1,0 +1,109 @@
+# x10 — generic `extend` meeting the rest of the language: `pub`, `test`
+# blocks, block parameters, `T?` and `T or Error`.
+#
+# Probes:
+#   * `pub interface Source[T]` with `pub struct` and `pub def` beside it.
+#     I did NOT write `pub extend`: the README says only `pub` items cross
+#     a file boundary and that `pub interface` crosses modules, but it
+#     never says how — or whether — an `extend` travels. See x-notes.
+#   * a default returning a `T?` (`first_row`) and a default returning a
+#     `T or Error` (`need`), with the implied `Ok` and a `match` on the
+#     result at the call site.
+#   * a default that takes a *block* (`pick(ok: (T) -> Bool)`) and hands it
+#     straight to a built-in (`rows.find(ok)`).
+#   * a default with its own extra type parameter (`mapped[U]`), called
+#     with a `{ |n| ... }` block and with the `_` shorthand.
+#   * `test` blocks asserting the defaults on a list, a map and a struct,
+#     including `== Some(...)` and `== Ok(...)`.
+#
+# Meant to RUN. `lume run` strips the tests, so only `main`'s output is
+# listed below; `lume test` should report 2 tests, both passing.
+#
+# EXPECTED OUTPUT:
+# 3
+# ada
+# bo
+# cy
+# ADA,BO,CY
+# bo
+# true
+# -
+# no row 0
+# 2
+# beta
+# 3:ada
+# true
+# 2
+# X/Y
+
+pub interface Source[T]:
+  def rows -> [T]
+
+  def size -> Int = rows.len
+  def first_row -> T? = rows.first
+
+  # a default that takes behaviour and hands it on to a built-in
+  def pick(ok: (T) -> Bool) -> T? = rows.find(ok)
+
+  # a default with a type parameter of its own, beside the interface's
+  def mapped[U](f: (T) -> U) -> [U] = rows.map(f).to_list
+
+  # a default that ends the way a function does: a bare value is `Ok`
+  def need(i: Int) -> T or Error:
+    match rows[i]:
+      Some(x) -> x
+      None    -> Error("no row #{i}")
+
+extend [T] with Source[T]:
+  def rows -> [T] = self
+
+extend {K: V} with Source[V]:
+  def rows -> [V] = self.values.to_list
+
+pub struct Feed[T]:
+  buffered: [T]
+
+extend Feed[T] with Source[T]:
+  def rows -> [T] = buffered
+
+pub def scan[S: Source[Str]](s: S) -> Str or Error:
+  head = s.need(0)?
+  "#{s.size}:#{head}"
+
+def main -> () or Error:
+  names = ["ada", "bo", "cy"]
+  puts names.size
+  puts names.first_row.or("-")
+  puts names.pick { |n| n.len == 2 }.or("-")
+  puts names.pick { |n| n.starts_with?("c") }.or("-")
+  puts names.mapped { |n| n.upcase }.join(",")
+  puts names.need(1)?
+  puts names.need(9).error?
+
+  empty: [Str] = []
+  puts empty.first_row.or("-")
+  match empty.need(0):
+    Ok(x)    -> puts "unexpected #{x}"
+    Error(e) -> puts e.message
+
+  m = {"a": "alpha", "b": "beta"}
+  puts m.size
+  puts m.need(1)?
+
+  puts scan(names)?
+  puts scan(empty).error?
+
+  f = Feed(buffered: ["x", "y"])
+  puts f.size
+  puts f.mapped(_.upcase).join("/")
+
+test "the defaults reach a list, a map and a struct alike":
+  assert ["a", "b"].size == 2
+  assert {"k": "v"}.size == 1
+  assert Feed(buffered: ["z"]).first_row == Some("z")
+  assert ["p", "q", "r"].pick { |x| x == "q" } == Some("q")
+
+test "a default that gives back a result":
+  assert ["a"].need(0).ok?
+  assert ["a"].need(3).error?
+  assert scan(["p", "q"]) == Ok("2:p")

@@ -1,0 +1,127 @@
+# z02_inventory.lume — a warehouse stock report and restock list.
+#
+# Probes: an interface with a default (`banner`) satisfied structurally by a
+# struct AND by `Str` through `extend`, a generic function bounded by that
+# interface (`labels_of[T: Labelled]`), `{Str: {Str}}` built with the
+# "missing key starts empty" rule, `sort_by(...).reverse`, integer money,
+# and three differently shaped aligned column layouts in one program.
+#
+# MEANT TO RUN.
+#
+# Same padding assumption as z01: `pad(n)` right-aligns, `pad_right(n)`
+# left-aligns, no field ever exceeds its width. Nothing here prints a Float,
+# a list, a map, a set or an optional directly.
+#
+# EXPECTED OUTPUT:
+# == INVENTORY ==
+# sku    name      qty    value  flag
+# C-777  tarp       25   247.50  ok
+# E-001  glue       15    67.50  LOW
+# C-500  rope        3    55.50  LOW
+# B-010  hinge       8    19.20  LOW
+# A-201  nut       120    14.40  ok
+# A-100  bolt       40    14.00  LOW
+# D-042  lantern     0     0.00  LOW
+#
+# == RESTOCK ==
+#   restock lantern x  8    260.00
+#   restock rope    x  7    129.50
+#   restock glue    x 15     67.50
+#   restock hinge   x 12     28.80
+#   restock bolt    x 60     21.00
+#
+# == HARDWARE ==
+#   A-100 A-201 B-010
+# == OUTDOOR ==
+#   C-500 C-777 D-042
+# == SHOP ==
+#   E-001
+#
+# inventory value     418.10
+# restock cost        506.80
+# low items: 5 of 7
+# low: bolt, hinge, rope, lantern, glue
+# x/y
+
+interface Labelled:
+  def label -> Str
+
+  def banner -> Str:
+    "== #{label.upcase} =="
+
+struct Item:
+  sku: Str
+  name: Str
+  category: Str
+  on_hand: Int
+  reorder_at: Int
+  unit_cents: Int
+
+  def label -> Str:
+    name
+
+  def value -> Int = on_hand * unit_cents
+  def low? -> Bool = on_hand <= reorder_at
+  def want -> Int = if low?: reorder_at * 2 - on_hand else: 0
+  def restock_cost -> Int = want * unit_cents
+
+extend Str with Labelled:
+  def label -> Str = self
+
+def num(n: Int, w: Int) -> Str:
+  s = "#{n}"
+  s.pad(w)
+
+def money(cents: Int) -> Str:
+  frac = cents.abs % 100
+  f = if frac < 10: "0#{frac}" else: "#{frac}"
+  "#{cents.abs / 100}.#{f}"
+
+def labels_of[T: Labelled](xs: [T]) -> [Str] = xs.map(_.label).to_list
+
+def stock_line(x: Item) -> Str:
+  flag = if x.low?: "LOW" else: "ok"
+  "#{x.sku}  #{x.name.pad_right(8)} #{num(x.on_hand, 4)} #{money(x.value).pad(8)}  #{flag}"
+
+def restock_line(x: Item) -> Str:
+  "  restock #{x.name.pad_right(8)} x#{num(x.want, 3)}  #{money(x.restock_cost).pad(8)}"
+
+def main:
+  items = [
+    Item("A-100", "bolt", "hardware", 40, 50, 35),
+    Item("A-201", "nut", "hardware", 120, 50, 12),
+    Item("B-010", "hinge", "hardware", 8, 10, 240),
+    Item("C-500", "rope", "outdoor", 3, 5, 1850),
+    Item("C-777", "tarp", "outdoor", 25, 10, 990),
+    Item("D-042", "lantern", "outdoor", 0, 4, 3250),
+    Item("E-001", "glue", "shop", 15, 15, 450),
+  ]
+
+  puts "inventory".banner
+  puts "#{"sku".pad_right(5)}  #{"name".pad_right(8)} #{"qty".pad(4)} #{"value".pad(8)}  flag"
+  for x in items.sort_by(_.value).reverse.to_list:
+    puts stock_line(x)
+
+  low = items.filter(_.low?).to_list
+  puts ""
+  puts "restock".banner
+  for x in low.sort_by(_.restock_cost).reverse.to_list:
+    puts restock_line(x)
+
+  var cats: {Str: {Str}} = {}
+  for x in items:
+    cats[x.category].add(x.sku)
+
+  puts ""
+  for c in cats.keys:
+    puts c.banner
+    puts "  #{cats[c].or({}).to_list.sort.join(" ")}"
+
+  total_value = items.sum(_.value)
+  total_restock = low.sum(_.restock_cost)
+  puts ""
+  puts "#{"inventory value".pad_right(17)}#{money(total_value).pad(9)}"
+  puts "#{"restock cost".pad_right(17)}#{money(total_restock).pad(9)}"
+  puts "low items: #{low.len} of #{items.len}"
+  puts "low: #{labels_of(low).join(", ")}"
+  puts labels_of(["x", "y"]).join("/")

@@ -1,0 +1,20 @@
+== schedule ==
+room Some(A)
+   9:00-9:15   standup
+   9:15-9:45   1:1 ana
+   9:45-10:45  hiring
+  11:00-12:00  planning
+  12:00-12:30  lunch sync
+room Some(B)
+   9:10-10:20  design
+  10:30-11:30  demo
+room Some(C)
+  10:00-11:00  retro
+
+rooms used: 3
+meetings: 8
+busiest room: Some(A) with 5
+total booked: 385 min
+longest: design (70 min)
+agenda: standup | 1:1 ana | hiring | planning | lunch sync
+exit: 0

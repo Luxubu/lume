@@ -1,0 +1,7 @@
+error: `?` cannot be used inside a block
+  --> corpus/m28/y12_err_question_in_block.lume:67:37
+   |
+67 |   out = render_all(rows) { |s| "[#{s.to_int? * 2}]" }
+   |                                     ^
+  help: handle the missing or failed value with `match` or `.or(default)` inside the block, or declare the block `(T) -> U or Error` so `?` has somewhere to go
+exit: 1

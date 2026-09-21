@@ -1,0 +1,111 @@
+# y10 — the pipe meeting generic calls, blocks and `T or Error`.
+#
+# Probes: `xs |> f` where `f` is a plain function and where it is generic;
+# `xs |> only(_.len == 3)` — a piped call whose remaining argument is a
+# `_` block; a multi-line pipe whose stages alternate between user
+# functions and built-in methods; a pipe producing a `T or Error` that is
+# then handled with `.or` and `.error?`; and a generic function taking a
+# block used both piped and called directly.
+#
+# Meant to RUN.
+#
+# Renderings relied on: Int, Str and Bool in `#{}` / `puts`. Every list is
+# joined into a Str before printing.
+#
+# EXPECTED OUTPUT:
+# the=3
+# 7
+# fig, pear
+# plum-fig-pear
+# fig:2, pear:5, plum:1
+# 6
+# -1
+# true
+# 126
+# 6
+# 1, 4, 9
+# 1, 2, 3
+
+struct Entry:
+  word: Str
+  n: Int
+
+def only[T](xs: [T], ok: (T) -> Bool) -> [T]:
+  var out: [T] = []
+  for x in xs:
+    out.push(x) if ok(x)
+  out
+
+def shown[T](xs: [T], show: (T) -> Str) -> Str:
+  var out: [Str] = []
+  for x in xs:
+    out.push(show(x))
+  out.join(", ")
+
+def tally(words: [Str]) -> {Str: Int}:
+  var m: {Str: Int} = {}
+  for w in words:
+    m[w] = m[w].or(0) + 1
+  m
+
+def loudest(m: {Str: Int}) -> Str:
+  var best = ""
+  var top = 0
+  for k in m.keys:
+    v = m[k].or(0)
+    if v > top:
+      top = v
+      best = k
+  "#{best}=#{top}"
+
+def sum_all(xs: [Str]) -> Int or Error:
+  var t = 0
+  for x in xs:
+    t += x.to_int?
+  t
+
+def as_text(n: Int) -> Str = "#{n}"
+
+def main:
+  text = "the cat sat on the mat the end"
+  words = text.split.to_list
+
+  # two user functions in a row, then `puts`
+  words |> tally |> loudest |> puts
+
+  # a piped generic call whose second argument is a `_` block
+  words |> only(_.len == 3) |> .len |> puts
+
+  entries = [Entry("fig", 2), Entry("pear", 5), Entry("plum", 1)]
+
+  entries
+    |> only(_.n > 1)
+    |> shown(_.word)
+    |> puts
+
+  entries
+    |> .sort_by(_.n)
+    |> .map(_.word)
+    |> .to_list
+    |> .join("-")
+    |> puts
+
+  # the same generic function, called with a trailing block instead
+  puts shown(entries) { |e| "#{e.word}:#{e.n}" }
+
+  # a pipe whose result is a `T or Error`
+  ok = ["1", "2", "3"] |> sum_all
+  puts ok.or(-1)
+  bad = ["1", "x"] |> sum_all
+  puts bad.or(-1)
+  puts bad.error?
+
+  # a lazy range chain, entirely in pipes
+  (1..10) |> .filter(_ % 3 == 0) |> .map { |n| n * n } |> .to_list |> .sum |> puts
+
+  # a pipe into a set
+  words |> .to_set |> .len |> puts
+
+  # the generic block function, both ways round
+  puts shown([1, 2, 3]) { |n| "#{n * n}" }
+  [1, 2, 3] |> shown(as_text) |> puts

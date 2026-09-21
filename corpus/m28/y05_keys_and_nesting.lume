@@ -1,0 +1,125 @@
+# y05 — maps and sets whose items are structs, enums and tuples, and
+# containers inside containers.
+#
+# Probes: `{Cell}` (a set of structs) and `{Cell: Str}` (a struct as a map
+# key); `{Suit: Int}` (an enum as a map key) counted with
+# `m[k] = m[k].or(0) + 1`; `{Str: {(Int, Int)}}` — a map whose value is a
+# set of tuples, changed in place through `edges["a"].add(...)` on a
+# missing key; a map of maps written `grid[i][j] = v`; `group_by` over
+# structs; set algebra on tuple sets; `filter` on a set giving a set back.
+#
+# Meant to RUN.
+#
+# Renderings relied on: Int and Bool only. Every set and map is reported
+# by `len`, `contains?` or an explicitly built Str, so no set/map/struct
+# rendering is assumed. Insertion order is assumed for `keys` and
+# `to_list` (README: "each value once, insertion order kept",
+# "`{K: V}` is an insertion-ordered hash map").
+#
+# EXPECTED OUTPUT:
+# 5
+# true
+# false
+# 00,02,11,20,22
+# 2
+# 2
+# 2
+# 1
+# 2
+# ana
+# ?
+# (0,0) (2,2)
+# 3
+# 3
+# 1
+# 3
+# 1
+# 1
+# 5
+# true
+# 4
+# true
+# false
+# 2
+# 2
+# x
+
+struct Cell:
+  row: Int
+  col: Int
+
+enum Suit:
+  Clubs
+  Hearts
+  Spades
+
+struct Card:
+  suit: Suit
+  rank: Int
+
+def main:
+  # a set of structs, built in a nested loop
+  var board: {Cell} = {}
+  for i in 0..2:
+    for j in 0..2:
+      board.add(Cell(i, j)) if (i + j) % 2 == 0
+  puts board.len
+  puts board.contains?(Cell(1, 1))
+  puts board.contains?(Cell(0, 1))
+  puts board.to_list.map { |c| "#{c.row}#{c.col}" }.to_list.join(",")
+  puts board.filter { |c| c.row == 0 }.len
+
+  # a map whose value is a set of tuples; a missing key starts empty
+  var edges: {Str: {(Int, Int)}} = {}
+  edges["a"].add((1, 2))
+  edges["a"].add((1, 2))
+  edges["a"].add((2, 3))
+  edges["b"].add((9, 9))
+  puts edges.len
+  puts edges["a"].or({}).len
+  puts edges["b"].or({}).len
+
+  # a struct as a map key
+  var owner: {Cell: Str} = {}
+  owner[Cell(0, 0)] = "ana"
+  owner[Cell(2, 2)] = "bo"
+  puts owner.len
+  puts owner[Cell(0, 0)].or("?")
+  puts owner[Cell(1, 1)].or("?")
+  puts owner.keys.map { |c| "(#{c.row},#{c.col})" }.to_list.join(" ")
+
+  # an enum as a map key
+  cards = [Card(Clubs, 3), Card(Hearts, 3), Card(Clubs, 7), Card(Spades, 1), Card(Clubs, 9)]
+  var by_suit: {Suit: Int} = {}
+  for c in cards:
+    by_suit[c.suit] = by_suit[c.suit].or(0) + 1
+  puts by_suit.len
+  puts by_suit[Clubs].or(0)
+  puts by_suit[Spades].or(0)
+
+  # set algebra over tuples
+  ones = {(1, "a"), (2, "b")}
+  twos = {(2, "b"), (3, "c")}
+  puts ones.union(twos).len
+  puts ones.intersect(twos).len
+  puts ones.diff(twos).len
+
+  # a set of structs that hold an enum
+  hand = cards.to_set
+  puts hand.len
+  puts hand.contains?(Card(Hearts, 3))
+
+  groups = cards.group_by { |c| c.rank }
+  puts groups.len
+  puts groups.contains?(3)
+  puts groups.contains?(4)
+
+  # a map of maps, written through two indexes
+  var grid: {Int: {Int: Str}} = {}
+  grid[0][1] = "x"
+  grid[0][2] = "y"
+  grid[1][0] = "z"
+  puts grid.len
+  inner = grid[0].or({})
+  puts inner.len
+  puts inner[1].or("-")

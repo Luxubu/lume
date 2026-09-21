@@ -1,0 +1,113 @@
+# x05 — generic `extend` meeting the three kinds of bound at once:
+# `Ordered`, `Hashable`, and a bound that is itself an interface.
+#
+# Three generic extends on `[T]` live in this file, each with a different
+# bound, so `[Int]` should pick up two of them (Ordered, Hashable), `[Str]`
+# the same two, and `[Track]` only the third (Titled) — a list is not
+# suddenly `Ranked` because some other list is.
+#
+# Probes:
+#   * `interface Ranked[T: Ordered]` + `extend [T: Ordered] with Ranked[T]`
+#     (bound repeated on the extend) and `extend {T} with Ranked[T]` (bound
+#     taken from the interface, because `:` inside `{...}` means a map).
+#   * `interface Counted[T: Hashable]`: a default that builds a `{T: Int}`
+#     out of an unbounded-looking `T`, which is only legal because of the
+#     interface's own bound.
+#   * `interface Roster[T: Titled]`: a bound that is a user interface, with
+#     defaults that call `Titled`'s own default (`shout`) — a default
+#     reaching through a bound into another interface's default.
+#   * `ladder_of[T: Ordered, R: Ranked[T]]`: `T` appears only inside another
+#     parameter's bound, so nothing at the call site writes it.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# 9
+# 3
+# 3 < 3 < 7 < 9
+# 3
+# 22
+# apple < fig < pear
+# pear
+# echo, drift
+# ECHO! DRIFT!
+# 3
+# 3
+# 3 < 3 < 7 < 9
+# fig < pear
+
+interface Titled:
+  def title -> Str
+
+  def shout -> Str = title.upcase + "!"
+
+struct Track:
+  name: Str
+  secs: Int
+
+  def title -> Str:
+    name
+
+interface Ranked[T: Ordered]:
+  def all -> [T]
+
+  def best -> T? = all.max
+  def worst -> T? = all.min
+  def in_order -> [T] = all.sort
+  def ladder -> Str = in_order.map { |x| "#{x}" }.to_list.join(" < ")
+
+extend [T: Ordered] with Ranked[T]:
+  def all -> [T] = self
+
+extend {T} with Ranked[T]:
+  def all -> [T] = self.to_list
+
+interface Counted[T: Hashable]:
+  def all_keys -> [T]
+
+  def tally -> {T: Int}:
+    var counts: {T: Int} = {}
+    for k in all_keys:
+      counts[k] = counts[k].or(0) + 1
+    counts
+
+  def distinct -> Int = tally.len
+
+extend [T: Hashable] with Counted[T]:
+  def all_keys -> [T] = self
+
+interface Roster[T: Titled]:
+  def members -> [T]
+
+  def titles -> [Str] = members.map { |m| m.title }.to_list
+  # reaches `Titled`'s own default, through the bound
+  def marquee -> Str = members.map { |m| m.shout }.to_list.join(" ")
+
+extend [T: Titled] with Roster[T]:
+  def members -> [T] = self
+
+def ladder_of[T: Ordered, R: Ranked[T]](r: R) -> Str:
+  r.ladder
+
+def main:
+  scores = [7, 3, 9, 3]
+  puts scores.best.or(0)
+  puts scores.worst.or(0)
+  puts scores.ladder
+  puts scores.distinct
+  puts scores.in_order.sum
+
+  words = {"pear", "fig", "apple"}
+  puts words.ladder
+  puts words.best.or("-")
+
+  tracks = [Track(name: "echo", secs: 200), Track(name: "drift", secs: 150)]
+  puts tracks.titles.join(", ")
+  puts tracks.marquee
+
+  letters = ["a", "b", "a", "c", "a"]
+  puts letters.distinct
+  puts letters.tally["a"].or(0)
+
+  puts ladder_of(scores)
+  puts ladder_of(["pear", "fig"])

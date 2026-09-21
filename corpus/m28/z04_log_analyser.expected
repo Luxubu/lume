@@ -1,0 +1,23 @@
+== log summary ==
+lines: 12  parsed: 10  rejected: 2
+  ! want 6 fields, got 4
+  ! want 6 fields, got 8
+
+by level
+  INFO     5
+  WARN     2
+  ERROR    3
+
+by hour
+  08   5
+  09   3
+  10   2
+
+slowest paths (avg ms)
+  /pay      1204   x1
+  /search    561   x2
+  /login     113   x2
+
+total 2668 ms over 10 requests, avg 266 ms
+non-200: 3   server errors: 2
+exit: 0

@@ -124,7 +124,7 @@ for f in examples/fmt/*.lume; do
 done
 
 # The review corpus: real-user programs. A leaked rustc error is never accepted.
-for f in corpus/*.lume corpus/edge/*.lume corpus/m17/*.lume corpus/m18/*.lume corpus/m18/mod1/main.lume corpus/m26/*.lume; do
+for f in corpus/*.lume corpus/edge/*.lume corpus/m17/*.lume corpus/m18/*.lume corpus/m18/mod1/main.lume corpus/m26/*.lume corpus/m28/*.lume; do
   name="corpus/${f#corpus/}"; name=${name%.lume}
   exp="${f%.lume}.expected"
   out=$("$LUME" run "$f" 2>&1); code=$?
@@ -137,7 +137,7 @@ for f in corpus/*.lume corpus/edge/*.lume corpus/m17/*.lume corpus/m18/*.lume co
 exit: $code"
   fi
 done
-rm -rf corpus/.lume corpus/edge/.lume corpus/m17/.lume corpus/m18/.lume corpus/m18/mod1/.lume corpus/m26/.lume corpus/m26/mod/.lume
+rm -rf corpus/.lume corpus/edge/.lume corpus/m17/.lume corpus/m18/.lume corpus/m18/mod1/.lume corpus/m26/.lume corpus/m26/mod/.lume corpus/m28/.lume
 
 # The formatter must be idempotent and must not change what a program means.
 tmp=$(mktemp -d)

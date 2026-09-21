@@ -1,0 +1,82 @@
+# x01 — two parameterised interfaces over the same container shape, and one
+# of them over four shapes at once.
+#
+# Probes:
+#   * `extend [T] with Bag[T]` and `extend [T] with Joined[T]` in one file:
+#     does a second generic extend on the same target work, and do the two
+#     sets of defaults both land on `[Str]`?
+#   * the same interface reaching `[T]`, `{T}`, `{K: V}` (at V) and a user
+#     generic struct with two fields.
+#   * a default that takes an argument (`glued(sep)`) and a default written
+#     in terms of it (`width`).
+#   * one bounded helper `report[B: Bag[Str]]` over all four shapes.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# list     3 [alpha, beta, gamma]
+# set      2 [red, green]
+# map      2 [one, two]
+# deque    3 [a, b, c]
+# alpha | beta | gamma
+# 14
+# 3 and 3
+# 10-20-30
+# 6
+
+interface Bag[T]:
+  def items -> [T]
+
+  def size -> Int = items.len
+  def listed -> Str = items.map { |x| "#{x}" }.to_list.join(", ")
+
+# A second interface over the very same shapes. Nothing is named twice, so
+# `[Str]` should end up with `size`, `listed`, `glued` and `width` together.
+interface Joined[T]:
+  def parts -> [T]
+
+  def glued(sep: Str) -> Str = parts.map { |x| "#{x}" }.to_list.join(sep)
+  # a default written in terms of another default, with an argument
+  def width -> Int = glued("").len
+
+extend [T] with Bag[T]:
+  def items -> [T] = self
+
+extend [T] with Joined[T]:
+  def parts -> [T] = self
+
+extend {T} with Bag[T]:
+  def items -> [T] = self.to_list
+
+extend {K: V} with Bag[V]:
+  def items -> [V] = self.values.to_list
+
+# A user generic type whose items are not one field but two.
+struct Deque[T]:
+  front: [T]
+  back: [T]
+
+extend Deque[T] with Bag[T]:
+  def items -> [T] = front + back
+
+# One helper, four shapes. `B` is whatever was passed; `Bag[Str]` pins what
+# it has to hold.
+def report[B: Bag[Str]](name: Str, b: B) -> Str:
+  "#{name.pad_right(8)} #{b.size} [#{b.listed}]"
+
+def main:
+  words = ["alpha", "beta", "gamma"]
+  puts report("list", words)
+  puts report("set", {"red", "green"})
+  puts report("map", {1: "one", 2: "two"})
+  puts report("deque", Deque(front: ["a"], back: ["b", "c"]))
+
+  # the second interface's defaults, called straight on the list
+  puts words.glued(" | ")
+  puts words.width
+  puts "#{words.size} and #{words.parts.len}"
+
+  # and on a list of a different item type, with no helper in between
+  nums = [10, 20, 30]
+  puts nums.glued("-")
+  puts nums.width

@@ -1,0 +1,7 @@
+error: a space between `puts` and `(` is ambiguous: a call, or a value in parentheses?
+  --> corpus/m28/y08_report_text.lume:99:8
+   |
+99 |   puts (-0.125).decimals(2)
+   |        ^
+  help: for a call write `puts(...)` with no space; for a value in parentheses, drop the outer parentheses or wrap the whole argument: `puts((a + b) * 2)`
+exit: 1

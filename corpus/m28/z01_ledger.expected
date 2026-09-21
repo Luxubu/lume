@@ -1,0 +1,18 @@
+ #  item          amount    balance
+-----------------------------------
+ 1  salary      +2500.00    2500.00
+ 2  rent        -1200.00    1300.00
+ 3  card fee       -2.50    1297.50
+ 4  refund        +45.99    1343.49
+ 5  groceries     -87.10    1256.39
+ 6  wire fee      -15.00    1241.39
+-----------------------------------
+
+deposits       2545.99
+withdrawals    1287.10
+fees             17.50
+balance        1241.39
+
+deposit=2 withdraw=2 fee=2
+largest: salary +2500.00
+exit: 0

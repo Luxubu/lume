@@ -1,0 +1,68 @@
+# y12 — DELIBERATE ERROR. This program should be REJECTED.
+#
+# The seam: `?` meeting a block parameter's declared result type. The
+# README says a block "declared to give back a `T or Error` or a `T?`
+# ends the way a function does, so a bare value is the implied `Ok` and
+# `?` leaves the block". `render_all`'s block is declared `(Str) -> Str`:
+# it cannot carry a failure, so `?` inside it has nowhere to return to.
+#
+# The file shows the correct spelling first — `read_all` declares its
+# block `(Str) -> Str or Error` and uses `?` inside it happily — so the
+# only difference at the bad line is the declared block type.
+#
+# EXPECTED ERROR: at the marked line in `main` —
+#     out = render_all(rows) { |s| "[#{s.to_int? * 2}]" }
+# Lume should say that `?` is used where no error can be returned (the
+# block gives back a `Str`, not a `Str or Error`), and should point at the
+# `s.to_int?` inside the block, or at least at that line. The README
+# promises "`?` in a function that cannot return `None` or an error (with
+# the right fix for each mismatch)" — for a block the "function" is the
+# block, and the fix would be to declare `render_all`'s parameter
+# `(Str) -> Str or Error`.
+#
+# What I am checking: that the error names the BLOCK as the thing that
+# cannot fail, and does not instead blame `main` (which returns
+# `() or Error` and therefore could perfectly well absorb the failure) or
+# silently let the `?` escape the block into `main`.
+#
+# No output is expected: the program must not compile.
+
+def read_all(rows: [Str], f: (Str) -> Str or Error) -> [Str] or Error:
+  var out: [Str] = []
+  for r in rows:
+    out.push(f(r)?)
+  out
+
+# the block here cannot carry a failure
+def render_all(rows: [Str], f: (Str) -> Str) -> [Str]:
+  var out: [Str] = []
+  for r in rows:
+    out.push(f(r))
+  out
+
+def width_of(xs: [Str]) -> Int:
+  var w = 0
+  for x in xs:
+    w = x.len if x.len > w
+  w
+
+def main -> () or Error:
+  rows = ["10", "20", "30"]
+
+  # correct: the block is declared `(Str) -> Str or Error`, so `?` in it
+  # leaves the block and `read_all` passes the failure on
+  good = read_all(rows) do |s|
+    n = s.to_int?
+    "[#{n * 2}]"
+  lines = good?
+  puts lines.join(" ")
+  puts width_of(lines)
+
+  # also correct: no `?` at all, the failure handled inside the block
+  safe = render_all(rows) { |s| "[#{s.to_int.or(0) * 2}]" }
+  puts safe.join(" ")
+
+  # ERROR HERE: `render_all`'s block is `(Str) -> Str`, so `?` has
+  # nowhere to go
+  out = render_all(rows) { |s| "[#{s.to_int? * 2}]" }
+  puts out.join(" ")

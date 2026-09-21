@@ -1,0 +1,17 @@
+== samples ==
+daily      5  7, 4, 9, 4, 6
+voters     3  ana, bo, cy
+by name    3  12, 8, 15
+panel      3  5, 3, 5
+nothing   (empty)
+
+== ranked ==
+top daily: 9
+daily: 9, 7, 6, 4, 4
+top fruit: pear
+fruit: pear, fig, apple
+
+counts: 5 3 3 3 0
+blank? false false false false true
+judges: x/y
+exit: 0

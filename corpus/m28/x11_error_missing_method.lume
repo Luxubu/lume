@@ -1,0 +1,68 @@
+# x11 — DELIBERATE ERROR. This program should be REJECTED.
+#
+# `Shelf[T]` requires two methods, `stock` and `label`. The generic
+# `extend [T] with Shelf[T]` near the bottom supplies `stock` and never
+# supplies `label`, which has no default to fall back on.
+#
+# The README promises an error for "an `extend` that leaves a method out".
+# The question this file asks is whether that check still fires when the
+# extend is the *generic* kind — the target is `[T]` rather than a named
+# type, so there is no single concrete type to hang the message on.
+#
+# WHAT I EXPECT
+#   * one error, pointing at the `extend [T] with Shelf[T]:` line (line 57
+#     as written), not at the `puts ["x", "y"].line` call site and not at
+#     `Shelf`'s declaration.
+#   * the message should name `label` as the missing method and show the
+#     signature `Shelf` asks for (`def label -> Str`).
+#   * it should NOT be phrased as "`[T]` does not have `label`" in a way
+#     that suggests adding `label` to the list type, and it should not be
+#     confused by the fact that `stock_count`, `empty_shelf?` and `line`
+#     do have defaults.
+#
+# `stock_count` is spelt that way on purpose: `count` is already a block
+# method of `[T]`, and shadowing a built-in is x09's question, not this
+# file's — the only thing wrong here should be the missing `label`.
+#
+# Everything else in the file is meant to be correct, so an error anywhere
+# other than that one `extend` is a finding too.
+
+interface Shelf[T]:
+  def stock -> [T]
+  def label -> Str
+
+  def stock_count -> Int = stock.len
+  def empty_shelf? -> Bool = stock_count == 0
+  def line -> Str = "#{label}: #{stock_count}"
+
+# A user generic type that conforms properly: both required methods.
+struct Aisle[T]:
+  name: Str
+  goods: [T]
+
+  def stock -> [T]:
+    goods
+
+  def label -> Str:
+    name
+
+# A generic extend that conforms properly, for contrast: `label` is a
+# constant here, which is exactly what the list extend below could have
+# written and did not.
+extend {K: V} with Shelf[V]:
+  def stock -> [V] = self.values.to_list
+  def label -> Str = "map"
+
+# THE ERROR. `label` is required by `Shelf` and is never written here.
+extend [T] with Shelf[T]:
+  def stock -> [T] = self
+
+def report[S: Shelf[Str]](s: S) -> Str:
+  s.line
+
+def main:
+  puts report(Aisle(name: "tools", goods: ["saw", "file"]))
+  puts report({"a": "apple"})
+  puts ["x", "y"].line
+  puts ["x", "y"].stock_count
+  puts ["x", "y"].empty_shelf?

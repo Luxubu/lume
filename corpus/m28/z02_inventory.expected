@@ -1,0 +1,30 @@
+== INVENTORY ==
+sku    name      qty    value  flag
+C-777  tarp       25   247.50  ok
+E-001  glue       15    67.50  LOW
+C-500  rope        3    55.50  LOW
+B-010  hinge       8    19.20  LOW
+A-201  nut       120    14.40  ok
+A-100  bolt       40    14.00  LOW
+D-042  lantern     0     0.00  LOW
+
+== RESTOCK ==
+  restock lantern  x  8    260.00
+  restock rope     x  7    129.50
+  restock glue     x 15     67.50
+  restock hinge    x 12     28.80
+  restock bolt     x 60     21.00
+
+== HARDWARE ==
+  A-100 A-201 B-010
+== OUTDOOR ==
+  C-500 C-777 D-042
+== SHOP ==
+  E-001
+
+inventory value     418.10
+restock cost        506.80
+low items: 5 of 7
+low: bolt, hinge, rope, lantern, glue
+x/y
+exit: 0

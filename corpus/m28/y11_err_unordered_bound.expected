@@ -1,0 +1,7 @@
+error: a space between `puts` and `(` is ambiguous: a call, or a value in parentheses?
+  --> corpus/m28/y11_err_unordered_bound.lume:66:8
+   |
+66 |   puts (Card("ace", 14) == Card("ace", 14))
+   |        ^
+  help: for a call write `puts(...)` with no space; for a value in parentheses, drop the outer parentheses or wrap the whole argument: `puts((a + b) * 2)`
+exit: 1

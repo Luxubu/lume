@@ -1,0 +1,139 @@
+# z07_diff.lume — a real line diff (longest common subsequence) with output
+# in the usual +/- shape.
+#
+# Probes: a `[[Int]]` grid built row by row and written with `grid[i][j] = v`,
+# read with `at(i).at(j)` (a bare `dp[i][j]` would be a `[Int]?` indexed
+# again, which the README says is an error), descending `while` loops because
+# ranges only count up, an enum of changes with `|` alternatives in a method,
+# `count` with a predicate method, and integer percentage arithmetic.
+#
+# MEANT TO RUN.
+#
+# The LCS is "def main:", "  puts hello", "  done()" (length 3). The
+# tie-break in the walk (`dp[i+1][j] >= dp[i][j+1]` prefers a deletion) is
+# mine, so the emitted order is fully determined.
+# similarity = 3 * 200 / (4 + 5) = 600 / 9 = 66 by Int division.
+#
+# EXPECTED OUTPUT:
+# --- old
+# +++ new
+#   def main:
+# +   setup()
+#     puts hello
+# -   puts world
+#     done()
+# +   log()
+#
+# 3 unchanged, 2 added, 1 removed
+# changed lines: 3
+# similarity: 66%
+# kept: def main: / puts hello / done()
+
+enum Change:
+  Same(line: Str)
+  Add(line: Str)
+  Del(line: Str)
+
+  def mark -> Str = match self:
+    Same(_) -> "  "
+    Add(_)  -> "+ "
+    Del(_)  -> "- "
+
+  def text -> Str = match self:
+    Same(l) -> l
+    Add(l)  -> l
+    Del(l)  -> l
+
+  def same? -> Bool = match self:
+    Same(_) -> true
+    _       -> false
+
+  def added? -> Bool = match self:
+    Add(_) -> true
+    _      -> false
+
+  def removed? -> Bool = match self:
+    Del(_) -> true
+    _      -> false
+
+  def changed? -> Bool = match self:
+    Add(_) | Del(_) -> true
+    Same(_)         -> false
+
+  def render -> Str = "#{mark}#{text}"
+
+def table(a: [Str], b: [Str]) -> [[Int]]:
+  n = a.len
+  m = b.len
+  var dp: [[Int]] = []
+  for ri in 0..n:
+    var row: [Int] = []
+    for ci in 0..m:
+      row.push(0)
+    dp.push(row)
+  var r = n - 1
+  while r >= 0:
+    var c = m - 1
+    while c >= 0:
+      if a.at(r) == b.at(c):
+        dp[r][c] = 1 + dp.at(r + 1).at(c + 1)
+      else:
+        dp[r][c] = dp.at(r + 1).at(c).max(dp.at(r).at(c + 1))
+      c -= 1
+    r -= 1
+  dp
+
+def diff(a: [Str], b: [Str]) -> [Change]:
+  n = a.len
+  m = b.len
+  dp = table(a, b)
+  var out: [Change] = []
+  var i = 0
+  var j = 0
+  while i < n and j < m:
+    if a.at(i) == b.at(j):
+      out.push(Change.Same(a.at(i)))
+      i += 1
+      j += 1
+    elif dp.at(i + 1).at(j) >= dp.at(i).at(j + 1):
+      out.push(Change.Del(a.at(i)))
+      i += 1
+    else:
+      out.push(Change.Add(b.at(j)))
+      j += 1
+  while i < n:
+    out.push(Change.Del(a.at(i)))
+    i += 1
+  while j < m:
+    out.push(Change.Add(b.at(j)))
+    j += 1
+  out
+
+def main:
+  old = [
+    "def main:",
+    "  puts hello",
+    "  puts world",
+    "  done()",
+  ]
+  fresh = [
+    "def main:",
+    "  setup()",
+    "  puts hello",
+    "  done()",
+    "  log()",
+  ]
+
+  changes = diff(old, fresh)
+  puts "--- old"
+  puts "+++ new"
+  for c in changes:
+    puts c.render
+
+  kept = changes.count(_.same?)
+  puts ""
+  puts "#{kept} unchanged, #{changes.count(_.added?)} added, #{changes.count(_.removed?)} removed"
+  puts "changed lines: #{changes.count(_.changed?)}"
+  puts "similarity: #{kept * 200 / (old.len + fresh.len)}%"
+  kept_text = changes.filter(_.same?).map { |c| c.text.trim }.to_list
+  puts "kept: #{kept_text.join(" / ")}"

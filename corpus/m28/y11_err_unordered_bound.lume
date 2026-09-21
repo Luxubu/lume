@@ -1,0 +1,71 @@
+# y11 — DELIBERATE ERROR. This program should be REJECTED.
+#
+# The seam: a generic bound (`[T: Ordered]`) meeting a user type that
+# defines some operator methods but not `<`. `Card` has `==` and `+`, so
+# it looks comparable at a glance, and the same generic function is used
+# correctly three times earlier in the file with `Int`, `Str` and `Rank`
+# (which does define `<`). Only the last call is wrong.
+#
+# EXPECTED ERROR: at the marked line in `main` —
+#     puts best(cards).or(Card("none", 0)).rank
+# Lume should say that `Card` does not satisfy `Ordered` (the bound on
+# `best`'s `T`), and name the missing `<` method. The README promises "a
+# value used as an interface it does not satisfy (naming the missing
+# method or the signature that differs)" and "`sort` on a type without
+# `<`".
+#
+# What I am checking: that the error points at the CALL SITE in `main`,
+# not at the `if top < x` line inside `best` — the body of `best` is
+# correct for every type that does satisfy the bound, so blaming it would
+# be blaming the wrong code. If Lume reports the error inside `best`, or
+# reports it as "no method `<` on Card" with no mention of the bound or
+# of which call caused it, that is worth recording.
+#
+# No output is expected: the program must not compile.
+
+struct Rank:
+  label: Str
+  weight: Int
+
+  def <(o: Rank) -> Bool = weight < o.weight
+  def ==(o: Rank) -> Bool = weight == o.weight
+
+struct Card:
+  rank: Str
+  weight: Int
+
+  # `==` and `+` but no `<`
+  def ==(o: Card) -> Bool = rank == o.rank and weight == o.weight
+  def +(o: Card) -> Card = Card("#{rank}+#{o.rank}", weight + o.weight)
+
+def best[T: Ordered](xs: [T]) -> T?:
+  var top = xs[0]?
+  for x in xs:
+    if top < x:
+      top = x
+  Some(top)
+
+def spread[T: Ordered](xs: [T]) -> Str:
+  lo = xs.min
+  hi = xs.max
+  "#{lo.some?} #{hi.some?}"
+
+def main:
+  # all of these are fine
+  puts best([3, 9, 2]).or(0)
+  puts best(["pear", "fig"]).or("")
+  puts spread([1, 2, 3])
+
+  ranks = [Rank("low", 1), Rank("high", 9)]
+  puts best(ranks).or(Rank("none", 0)).label
+  puts ranks.sort.map { |r| r.label }.to_list.join(",")
+
+  # `Card` has `==` and `+`, and the two of them are used happily here
+  cards = [Card("ace", 14), Card("two", 2)]
+  puts cards[0].or(Card("none", 0)).rank
+  puts (Card("ace", 14) == Card("ace", 14))
+  merged = Card("ace", 14) + Card("two", 2)
+  puts merged.weight
+
+  # ERROR HERE: `Card` has no `<`, so it is not `Ordered`
+  puts best(cards).or(Card("none", 0)).rank

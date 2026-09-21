@@ -1,0 +1,120 @@
+# y06 — ownership corners where two features meet.
+#
+# Probes: a struct stored in a list and then used again (copy), and
+# `var u = t` making a copy rather than a second name; a `var self` method
+# reached through `xs[i].method(...)` where `xs` is a *field* of another
+# struct (`b.items[0].bump(100)`); `for var t in items` inside a `var self`
+# method; a `for` loop whose body pushes to the collection it is walking
+# (README: "walks a snapshot"); a block that changes an outer `var` while
+# a set decides the branch; and a `var xs: [Int]` parameter filled in
+# place by the callee.
+#
+# Meant to RUN.
+#
+# Renderings relied on: Int and Str in `#{}` only.
+#
+# EXPECTED OUTPUT:
+# a=1
+# 1
+# a=1 / a=6
+# 6
+# 36
+# x=111
+# x=111 y=12 z=13
+# 1,2,3,10,20
+# 3 2
+# p=1 q=2
+# p=11 q=12
+# ababab
+# 6
+# 4
+
+struct Tag:
+  name: Str
+  hits: Int
+
+  def bump(var self, n: Int):
+    hits += n
+
+  def show -> Str = "#{name}=#{hits}"
+
+struct Crate:
+  items: [Tag]
+
+  def add(var self, t: Tag):
+    items.push(t)
+
+  def bump_all(var self, n: Int):
+    for var t in items:
+      t.bump(n)
+
+  def total -> Int = items.sum { |t| t.hits }
+
+def fill(var xs: [Int], n: Int):
+  var i = 0
+  while i < n:
+    xs.push(i)
+    i += 1
+
+def main:
+  # stored in a list, then used again: the compiler must copy
+  t = Tag("a", 1)
+  kept = [t]
+  puts t.show
+  puts kept.len
+
+  # a copy, not a second name for the same value
+  var u = t
+  u.bump(5)
+  puts "#{t.show} / #{u.show}"
+
+  var b = Crate(items: [])
+  b.add(Tag("x", 1))
+  b.add(Tag("y", 2))
+  b.add(Tag("z", 3))
+  puts b.total
+
+  # `for var` inside a `var self` method
+  b.bump_all(10)
+  puts b.total
+
+  # reaching one item of a field's list and changing it in place
+  b.items[0].bump(100)
+  puts b.items[0].show
+  puts b.items.map { |x| x.show }.to_list.join(" ")
+
+  # the loop walks a snapshot of the list it is changing
+  var xs = [1, 2, 3]
+  for n in xs:
+    xs.push(n * 10) if n < 3
+  puts xs.map { |n| "#{n}" }.to_list.join(",")
+
+  # a set decides a branch while a block-free loop changes two `var`s
+  var seen: {Str} = {}
+  var dups = 0
+  for w in "the cat the hat the".split:
+    dups += 1 unless seen.add(w)
+  puts "#{seen.len} #{dups}"
+
+  # `xs[i].method` through a plain local list
+  var tags = [Tag("p", 0), Tag("q", 0)]
+  var i = 0
+  while i < tags.len:
+    tags[i].bump(i + 1)
+    i += 1
+  puts tags.map { |x| x.show }.to_list.join(" ")
+
+  for var x in tags:
+    x.bump(10)
+  puts tags.map { |x| x.show }.to_list.join(" ")
+
+  # a value used for the last time is moved, not copied
+  big = ["ab"].map { |s| s.repeat(3) }.to_list
+  moved = big
+  puts moved.join("")
+
+  # a `var` list filled in place by a callee
+  var ns: [Int] = []
+  fill(ns, 4)
+  puts ns.sum
+  puts ns.len

@@ -1,0 +1,126 @@
+# y04 — a generic recursive enum meeting `match`, `T?`, blocks, bounds
+# and tuple patterns.
+#
+# Probes: `enum Tree[T]` with methods that `match self`; a bounded generic
+# function (`[T: Ordered]`) that rebuilds the enum from the names an arm
+# bound; a generic function with two independent parameters matching on a
+# tuple of two `Bool`s; a generic fold that takes a block; and one
+# deliberate probe of a nested pattern reaching through a *recursive*
+# field (`lone_left?`).
+#
+# NOTE on `lone_left?`: the README says both that nested patterns reach
+# through a recursive field ("nested patterns through a recursive enum's
+# fields ... reaches inside the pointer a recursive field lives behind")
+# and, in the Ownership section, that "a nested pattern on such a field is
+# an error that says to `match` the field in the arm". The expected output
+# below assumes the first. If Lume rejects it, the error must point at the
+# `Node(_, Leaf, Leaf)` line and nothing else.
+#
+# Meant to RUN.
+#
+# Renderings relied on: Int, Str and Bool in `#{}` / `puts`.
+#
+# EXPECTED OUTPUT:
+# 1 2 3 5 8 9
+# 6
+# 3
+# 1
+# 28
+# 123589
+# apple,fig,pear,plum
+# 4
+# apple
+# 16
+# true
+# false
+# false
+# 0
+# left is bigger
+
+enum Tree[T]:
+  Leaf
+  Node(value: T, left: Tree[T], right: Tree[T])
+
+  def count -> Int = match self:
+    Leaf -> 0
+    Node(_, l, r) -> 1 + l.count + r.count
+
+  def depth -> Int = match self:
+    Leaf -> 0
+    Node(_, l, r) -> 1 + l.depth.max(r.depth)
+
+def insert[T: Ordered](t: Tree[T], v: T) -> Tree[T]:
+  match t:
+    Leaf -> Node(v, Leaf, Leaf)
+    Node(x, l, r) ->
+      if v < x:
+        Node(x, insert(l, v), r)
+      elif v > x:
+        Node(x, l, insert(r, v))
+      else:
+        Node(x, l, r)
+
+def tree_of[T: Ordered](xs: [T]) -> Tree[T]:
+  var t: Tree[T] = Leaf
+  for x in xs:
+    t = insert(t, x)
+  t
+
+def walk[T](t: Tree[T]) -> [T]:
+  match t:
+    Leaf -> []
+    Node(x, l, r) -> walk(l) + [x] + walk(r)
+
+# a recursive `T?`, written with a `match` on the field rather than a
+# nested pattern
+def smallest[T](t: Tree[T]) -> T?:
+  match t:
+    Leaf -> None
+    Node(x, l, _) ->
+      match l:
+        Leaf -> Some(x)
+        _ -> smallest(l)
+
+# a nested pattern that does reach through a recursive field
+def lone_left?[T](t: Tree[T]) -> Bool:
+  match t:
+    Node(_, Leaf, Leaf) -> true
+    _ -> false
+
+# a generic taking a block, over a generic enum
+def fold_tree[T, A](t: Tree[T], start: A, f: (A, T) -> A) -> A:
+  var acc = start
+  for x in walk(t):
+    acc = f(acc, x)
+  acc
+
+# two independent parameters, decided by a tuple match
+def compare_sizes[T, U](a: Tree[T], b: Tree[U]) -> Str:
+  match (a.count < b.count, a.count == b.count):
+    (true, _) -> "left is smaller"
+    (false, true) -> "same size"
+    (false, false) -> "left is bigger"
+
+def main:
+  t = tree_of([5, 2, 8, 1, 9, 3])
+  puts walk(t).map { |n| "#{n}" }.to_list.join(" ")
+  puts t.count
+  puts t.depth
+  puts smallest(t).or(0)
+  puts fold_tree(t, 0) { |acc, n| acc + n }
+  puts fold_tree(t, "") { |acc, n| "#{acc}#{n}" }
+
+  words = tree_of(["pear", "fig", "plum", "apple"])
+  puts walk(words).join(",")
+  puts words.count
+  puts smallest(words).or("?")
+  puts fold_tree(words, 0) { |acc, w| acc + w.len }
+
+  puts lone_left?(tree_of([1]))
+  puts lone_left?(t)
+
+  empty: Tree[Int] = Leaf
+  puts smallest(empty).some?
+  puts empty.count
+
+  puts compare_sizes(t, words)

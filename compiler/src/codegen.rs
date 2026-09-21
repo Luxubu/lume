@@ -85,53 +85,53 @@ struct LumeAssert(String);
 #[derive(Debug, Clone, PartialEq)]
 struct Error { message: String }
 impl LumeShow for Error { fn lume_str(&self) -> String { format!("Error({})", self.message) } }
-impl<T: LumeShow, E: LumeShow> LumeShow for Result<T, E> {
+impl<T: LumeShow, E: LumeShow> LumeShow for ::std::result::Result<T, E> {
     fn lume_str(&self) -> String { match self { Ok(x) => format!("Ok({})", x.lume_str()), Err(e) => e.lume_str() } }
 }
-fn lume_to_int(s: &str) -> Result<i64, Error> {
+fn lume_to_int(s: &str) -> ::std::result::Result<i64, Error> {
     s.trim().parse::<i64>().map_err(|_| Error { message: format!("`{}` is not an integer", s) })
 }
-fn lume_to_float(s: &str) -> Result<f64, Error> {
+fn lume_to_float(s: &str) -> ::std::result::Result<f64, Error> {
     s.trim().parse::<f64>().map_err(|_| Error { message: format!("`{}` is not a number", s) })
 }
-fn lume_read_file(path: &str) -> Result<String, Error> {
+fn lume_read_file(path: &str) -> ::std::result::Result<String, Error> {
     std::fs::read_to_string(path).map_err(|e| Error { message: format!("cannot read `{}`: {}", path, e) })
 }
-fn lume_write_file(path: &str, text: &str) -> Result<(), Error> {
+fn lume_write_file(path: &str, text: &str) -> ::std::result::Result<(), Error> {
     std::fs::write(path, text).map_err(|e| Error { message: format!("cannot write `{}`: {}", path, e) })
 }
 fn lume_args() -> Vec<String> { std::env::args().skip(1).collect() }
 /// Everything on standard input, to the end.
-fn lume_stdin() -> Result<String, Error> {
+fn lume_stdin() -> ::std::result::Result<String, Error> {
     use std::io::Read;
     let mut s = String::new();
     std::io::stdin().read_to_string(&mut s).map_err(|e| Error { message: format!("cannot read input: {}", e) })?;
     Ok(s)
 }
-fn lume_append_file(path: &str, text: &str) -> Result<(), Error> {
+fn lume_append_file(path: &str, text: &str) -> ::std::result::Result<(), Error> {
     use std::io::Write;
     std::fs::OpenOptions::new().create(true).append(true).open(path)
         .and_then(|mut f| f.write_all(text.as_bytes()))
         .map_err(|e| Error { message: format!("cannot append to `{}`: {}", path, e) })
 }
-fn lume_remove_file(path: &str) -> Result<(), Error> {
+fn lume_remove_file(path: &str) -> ::std::result::Result<(), Error> {
     std::fs::remove_file(path).map_err(|e| Error { message: format!("cannot remove `{}`: {}", path, e) })
 }
-fn lume_file_size(path: &str) -> Result<i64, Error> {
+fn lume_file_size(path: &str) -> ::std::result::Result<i64, Error> {
     std::fs::metadata(path).map(|m| m.len() as i64).map_err(|e| Error { message: format!("cannot read `{}`: {}", path, e) })
 }
 /// Seconds since the epoch, as `File.modified` reports them.
-fn lume_file_modified(path: &str) -> Result<i64, Error> {
+fn lume_file_modified(path: &str) -> ::std::result::Result<i64, Error> {
     std::fs::metadata(path)
         .and_then(|m| m.modified())
         .map_err(|e| Error { message: format!("cannot read `{}`: {}", path, e) })
         .map(|t| t.duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0))
 }
-fn lume_dir_make(path: &str) -> Result<(), Error> {
+fn lume_dir_make(path: &str) -> ::std::result::Result<(), Error> {
     std::fs::create_dir_all(path).map_err(|e| Error { message: format!("cannot make `{}`: {}", path, e) })
 }
 /// The names inside a directory, sorted, without `.` and `..`.
-fn lume_dir_list(path: &str) -> Result<Vec<String>, Error> {
+fn lume_dir_list(path: &str) -> ::std::result::Result<Vec<String>, Error> {
     let mut out = Vec::new();
     let entries = std::fs::read_dir(path).map_err(|e| Error { message: format!("cannot list `{}`: {}", path, e) })?;
     for e in entries {
@@ -142,7 +142,7 @@ fn lume_dir_list(path: &str) -> Result<Vec<String>, Error> {
     Ok(out)
 }
 /// Every file under a directory, sorted, directories walked in order.
-fn lume_dir_walk(path: &str) -> Result<Vec<String>, Error> {
+fn lume_dir_walk(path: &str) -> ::std::result::Result<Vec<String>, Error> {
     let mut out = Vec::new();
     let mut stack = vec![path.to_string()];
     while let Some(dir) = stack.pop() {
@@ -154,7 +154,7 @@ fn lume_dir_walk(path: &str) -> Result<Vec<String>, Error> {
     out.sort();
     Ok(out)
 }
-fn lume_dir_remove(path: &str) -> Result<(), Error> {
+fn lume_dir_remove(path: &str) -> ::std::result::Result<(), Error> {
     std::fs::remove_dir_all(path).map_err(|e| Error { message: format!("cannot remove `{}`: {}", path, e) })
 }
 fn lume_path_join(a: &str, b: &str) -> String {
@@ -803,7 +803,7 @@ pub fn rust_type(t: &Type) -> String {
         Type::Named(n) => n.clone(),
         Type::Option(inner) => format!("Option<{}>", rust_type(inner)),
         Type::Tuple(ts) => format!("({})", ts.iter().map(rust_type).collect::<Vec<_>>().join(", ")),
-        Type::Result(t, e) => format!("Result<{}, {}>", rust_type(t), rust_type(e)),
+        Type::Result(t, e) => format!("::std::result::Result<{}, {}>", rust_type(t), rust_type(e)),
         Type::Map(k, v) => format!("LumeMap<{}, {}>", rust_type(k), rust_type(v)),
         Type::Set(t) => format!("LumeSet<{}>", rust_type(t)),
         Type::Iter(inner, _) => format!("Vec<{}>", rust_type(inner)),
@@ -883,7 +883,7 @@ impl Gen {
             Type::List(inner) => format!("Vec<{}>", self.rt(inner)),
             Type::Option(inner) => format!("Option<{}>", self.rt(inner)),
             Type::Tuple(ts) => format!("({})", ts.iter().map(|x| self.rt(x)).collect::<Vec<_>>().join(", ")),
-            Type::Result(a, b) => format!("Result<{}, {}>", self.rt(a), self.rt(b)),
+            Type::Result(a, b) => format!("::std::result::Result<{}, {}>", self.rt(a), self.rt(b)),
             Type::Map(k, v) => format!("LumeMap<{}, {}>", self.rt(k), self.rt(v)),
             Type::Set(t) => format!("LumeSet<{}>", self.rt(t)),
             Type::Iter(inner, _) => format!("Vec<{}>", self.rt(inner)),
@@ -1096,7 +1096,9 @@ impl Gen {
                 Self::unify(dr, ar, m);
             }
             // a block whose result is a `T or E` given a plain value: the
-            // value is the `Ok` part, as it is at the end of a function
+            // value is the `Ok` part, as it is at the end of a function —
+            // unless it is the error itself, which says nothing about `T`
+            (Type::Result(_, e), a) if *a == Type::Named("Error".to_string()) => Self::unify(e, a, m),
             (Type::Result(d, _), a) if !matches!(a, Type::Result(..)) => Self::unify(d, a, m),
             (Type::Option(d), a) if !matches!(a, Type::Option(_)) => Self::unify(d, a, m),
             // `xs: [T]` given an empty list says nothing about `T`
@@ -1159,7 +1161,10 @@ impl Gen {
     /// One parameter with every bound it has to satisfy at once: what it
     /// was declared with, and what an interface asks of it.
     fn rust_bounds_many(&self, name: &str, bounds: &[Type]) -> String {
-        let mut parts = vec!["Clone".to_string(), "std::fmt::Debug".to_string(), "PartialEq".to_string(), "LumeShow".to_string()];
+        // `'static` because a value held as an interface lives behind a
+        // pointer to a trait; every Lume value owns what it holds, so this
+        // is always true and never constrains a program.
+        let mut parts = vec!["Clone".to_string(), "std::fmt::Debug".to_string(), "PartialEq".to_string(), "LumeShow".to_string(), "'static".to_string()];
         let mut add = |p: String, parts: &mut Vec<String>| {
             if !parts.contains(&p) {
                 parts.push(p);
@@ -1515,6 +1520,16 @@ impl Gen {
     fn methods_for(&self, t: &Type) -> Option<HashMap<String, Sig>> {
         let key = self.type_key(t);
         let m = self.methods_of(&key)?;
+        // reached through a bound that carries arguments — `P: Pairish[Int,
+        // Int]` — the interface's own names stand for those arguments
+        if let Type::Var(n) = t {
+            if let Some(Type::App(iname, iargs)) = self.type_param(n).and_then(|p| p.bound.clone()) {
+                if let Some(info) = self.interfaces.get(&self.canon(&iname)) {
+                    let sub: HashMap<String, Type> = info.generics.iter().map(|g| g.name.clone()).zip(iargs.iter().cloned()).collect();
+                    return Some(m.into_iter().map(|(k, v)| (k, Sig { params: v.params.iter().map(|(pn, x)| (pn.clone(), Self::subst(x, &sub))).collect(), ret: Self::subst(&v.ret, &sub), ..v })).collect());
+                }
+            }
+        }
         if !self.ext_generics.contains_key(&key) {
             return Some(m);
         }
@@ -1849,6 +1864,15 @@ impl Gen {
         self.type_key(&self.ct(&x.target))
     }
 
+    /// `Chain<T>` names a type; `Chain::<T>` names it in a path, which is
+    /// what calling one of its own methods needs.
+    fn turbofish(rust_ty: &str) -> String {
+        match rust_ty.find('<') {
+            Some(i) => format!("{}::{}", &rust_ty[..i], &rust_ty[i..]),
+            None => rust_ty.to_string(),
+        }
+    }
+
     /// The shape of a built-in container, ignoring what it holds: `[Int]`
     /// and `[T]` are both `[]`. A generic `extend` on a built-in registers
     /// under this, because there is no name to register under. A user's own
@@ -1859,6 +1883,8 @@ impl Gen {
             Type::Set(_) => "{}".to_string(),
             Type::Map(..) => "{:}".to_string(),
             Type::Option(_) => "?".to_string(),
+            // a tuple's shape is how many parts it has
+            Type::Tuple(parts) => format!("({})", ",".repeat(parts.len().saturating_sub(1))),
             _ => return None,
         })
     }
@@ -2086,8 +2112,12 @@ impl Gen {
     /// Error for a value of type `t` used where interface `iface` is needed.
     fn require_conforms(&self, t: &Type, iface: &Type, line: usize, col: usize) -> Result<()> {
         let key = self.type_key(iface);
+        // Check against the interface as it was asked for, arguments and
+        // all: re-checking against the bare name lets the arguments be
+        // inferred again, which accepts whatever the type happens to say.
+        let asked = self.ct(iface);
         let iface = &type_name(iface).clone();
-        match self.conformance(t, &self.ct(&Type::Named(key.clone()))) {
+        match self.conformance(t, &asked) {
             Conformance::Yes => Ok(()),
             Conformance::Missing(m) => {
                 let info = match self.interfaces.get(&key) {
@@ -3132,6 +3162,28 @@ impl Gen {
         Some(Expr::new(ExprKind::Method { recv: recv.clone(), name: name.clone(), args: vec![Arg { name: None, value: lam }] }, e.line, e.col))
     }
 
+    /// `total?` where nothing is called `total?` but `total` is a value
+    /// here: the `?` is propagation, not part of the name. The lexer folds
+    /// a trailing `?` into an identifier, so only this can tell them apart.
+    fn split_ident_try(&mut self, e: &Expr) -> Option<Expr> {
+        let n = match &e.kind {
+            ExprKind::Ident(n) => n,
+            // a zero-argument function called bare parses as a call
+            ExprKind::Call { name, args } if args.is_empty() => name,
+            _ => return None,
+        };
+        if !n.ends_with('?') || n.len() < 2 || self.lookup(n).is_some() {
+            return None;
+        }
+        let base = &n[..n.len() - 1];
+        let known = self.lookup(base).is_some() || self.field_type(base).is_some() || self.consts.contains_key(&self.canon(base));
+        if !known {
+            return None;
+        }
+        let inner = Expr::new(ExprKind::Ident(base.to_string()), e.line, e.col);
+        Some(Expr::new(ExprKind::Try(Box::new(inner)), e.line, e.col))
+    }
+
     /// `x.name?` where no method `name?` exists but `name` does means
     /// `x.name` followed by `?` (propagation). Returns the rewritten
     /// expression in that case.
@@ -3172,6 +3224,11 @@ impl Gen {
     // ----- type inference ---------------------------------------------------
 
     fn ty_of(&mut self, e: &Expr) -> Type {
+        if matches!(&e.kind, ExprKind::Ident(_) | ExprKind::Call { .. }) {
+            if let Some(ne) = self.split_ident_try(e) {
+                return self.ty_of(&ne);
+            }
+        }
         if let ExprKind::Method { .. } = &e.kind {
             if let Some(ne) = self.split_trailing_try(e) {
                 return self.ty_of(&ne);
@@ -3330,7 +3387,7 @@ impl Gen {
                             return Self::subst(ft, &sub);
                         }
                     }
-                    if let Some(m) = self.methods_of(sn).and_then(|m| m.get(name).cloned()) {
+                    if let Some(m) = self.methods_for(&rt).and_then(|m| m.get(name).cloned()) {
                         let ret = Self::subst(&self.call_ret(&m, args), &sub);
                         return if m.is_async { Type::Future(Box::new(ret)) } else { ret };
                     }
@@ -3341,8 +3398,12 @@ impl Gen {
                         return Type::Str;
                     }
                 }
-                if let Some(m) = self.ext_methods.get(&self.type_key(&rt)).and_then(|m| m.get(name)) {
-                    return m.ret.clone();
+                if self.ext_methods.get(&self.type_key(&rt)).map(|m| m.contains_key(name)).unwrap_or(false) {
+                    // through `methods_for`, so a generic `extend`'s names
+                    // are read as what this receiver holds
+                    if let Some(m) = self.methods_for(&rt).and_then(|m| m.get(name).cloned()) {
+                        return m.ret;
+                    }
                 }
                 if let Some(m) = self.iface_default(&rt, name) {
                     return m.ret;
@@ -4162,9 +4223,15 @@ impl Gen {
         let saved_gs = self.push_generics(&i.generics);
         let gen = self.rust_generics(&i.generics);
         let gargs = Self::rust_generic_args(&i.generics);
-        self.line(&format!("pub trait {}{}: LumeShow {{", i.name, gen));
+        // `Debug` as well, because a value held as an interface still ends
+        // up inside a struct that derives it.
+        self.line(&format!("pub trait {}{}: LumeShow + std::fmt::Debug {{", i.name, gen));
         self.indent += 1;
         let info = self.interfaces[&i.name].clone();
+        // A value held as an interface is behind a pointer, and a pointer to
+        // a trait cannot be cloned on its own: the value inside makes the
+        // copy, through this.
+        self.line(&format!("fn lume_box(&self) -> ::std::boxed::Box<dyn {}{}>;", i.name, gargs));
         for m in &i.required {
             let sg = &info.methods[&m.name];
             self.line(&format!("fn {}({}) -> {};", rust_name(&m.name), self.sig_params_rust(sg, true), self.rt(&sg.ret)));
@@ -4184,6 +4251,7 @@ impl Gen {
         };
         self.line(&format!("impl{} {}{} for ::std::boxed::Box<Inner> {{", box_gen, i.name, gargs));
         self.indent += 1;
+        self.line(&format!("fn lume_box(&self) -> ::std::boxed::Box<dyn {}{}> {{ (**self).lume_box() }}", i.name, gargs));
         for (name, sg) in &info.methods {
             let args: Vec<String> = sg.params.iter().map(|(n, _)| rust_name(n)).collect();
             self.line(&format!(
@@ -4197,6 +4265,20 @@ impl Gen {
         }
         self.indent -= 1;
         self.line("}");
+        // A list or a field of interface values copies element by element.
+        let clone_gen = if i.generics.is_empty() {
+            String::new()
+        } else {
+            format!("<{}>", i.generics.iter().map(|p| self.rust_bounds(p)).collect::<Vec<_>>().join(", "))
+        };
+        self.line(&format!(
+            "impl{} Clone for ::std::boxed::Box<dyn {}{}> {{ fn clone(&self) -> Self {{ (**self).lume_box() }} }}",
+            clone_gen, i.name, gargs
+        ));
+        self.line(&format!(
+            "impl{} PartialEq for ::std::boxed::Box<dyn {}{}> {{ fn eq(&self, o: &Self) -> bool {{ self.lume_str() == o.lume_str() }} }}",
+            clone_gen, i.name, gargs
+        ));
         self.pop_generics(saved_gs);
         Ok(())
     }
@@ -4250,7 +4332,12 @@ impl Gen {
             if self.ext_generics.contains_key(n) && self.ext_targets.contains_key(n) {
                 continue;
             }
-            types.push((n.clone(), Type::Named(n.clone())));
+            // a generic type conforms at its own parameters: `Chain[T]`,
+            // not the bare name, or the impl would speak of a `T` it never
+            // introduced
+            let gs = self.generics_of(n);
+            let t = if gs.is_empty() { Type::Named(n.clone()) } else { Type::App(n.clone(), gs.iter().map(|g| Type::Var(g.name.clone())).collect()) };
+            types.push((n.clone(), t));
         }
         for (k, t) in &self.ext_targets {
             types.push((k.clone(), t.clone()));
@@ -4279,7 +4366,12 @@ impl Gen {
                 }
                 // a generic `extend` wrote everything below in terms of the
                 // names its target introduced, so they are in scope here
-                let egens = self.ext_impl_generics.get(&(tkey.clone(), iname.clone())).cloned().unwrap_or_default();
+                // an `extend` brings its own parameters; a type that
+                // conforms by having the methods brings its own
+                let egens = match self.ext_impl_generics.get(&(tkey.clone(), iname.clone())) {
+                    Some(g) => g.clone(),
+                    None => self.generics_of(tkey),
+                };
                 let saved_eg = self.push_generics(&egens);
                 let r = self.emit_one_conformance(program, tkey, t, iname, info, &ext_bodies, &egens);
                 self.pop_generics(saved_eg);
@@ -4367,6 +4459,9 @@ impl Gen {
                 for target in targets {
                     self.line(&format!("impl{} {} for {} {{", impl_gen, iface_rust, target));
                     self.indent += 1;
+                    // how this type makes the copy a pointer-to-interface needs
+                    let boxed_self = if target == "str" { "self.to_string()" } else { "self.clone()" };
+                    self.line(&format!("fn lume_box(&self) -> ::std::boxed::Box<dyn {}> {{ ::std::boxed::Box::new({}) }}", iface_rust, boxed_self));
                     let inherent = self.methods_of(tkey).unwrap_or_default();
                     for (mname, sg0) in &info.methods {
                         let sg = &Sig { params: sg0.params.iter().map(|(n, x)| (n.clone(), Self::subst(x, &isub))).collect(), ret: Self::subst(&sg0.ret, &isub), ..sg0.clone() };
@@ -4404,7 +4499,7 @@ impl Gen {
                                 rust_name(mname),
                                 self.sig_params_rust_as(sg, Some(&decl_tys), true),
                                 self.rt(&sg.ret),
-                                self.rt(t),
+                                Self::turbofish(&self.rt(t)),
                                 rust_name(mname),
                                 if args.is_empty() { "" } else { ", " },
                                 args.join(", ")
@@ -4499,7 +4594,10 @@ impl Gen {
                 }
             }
         }
-        let manual_eq = (!shared_fields.is_empty() || foreign_no_eq) && !s.methods.iter().any(|m| m.name == "==");
+        // a field held as an interface is behind a pointer to a trait, which
+        // `derive` cannot compare: it is compared by what it shows
+        let iface_fields: Vec<&Param> = s.fields.iter().filter(|f| self.is_interface(&self.ct(&f.ty))).collect();
+        let manual_eq = (!shared_fields.is_empty() || foreign_no_eq || !iface_fields.is_empty()) && !s.methods.iter().any(|m| m.name == "==");
         if manual_eq {
             self.line("#[derive(Debug, Clone)]");
         } else {
@@ -4529,6 +4627,8 @@ impl Gen {
                     let n = rust_name(&f.name);
                     if matches!(self.ct(&f.ty), Type::Shared(_, true)) {
                         format!("(std::sync::Arc::ptr_eq(&self.{n}, &o.{n}) || *self.{n}.lock().unwrap() == *o.{n}.lock().unwrap())", n = n)
+                    } else if self.is_interface(&self.ct(&f.ty)) {
+                        format!("self.{n}.lume_str() == o.{n}.lume_str()", n = n)
                     } else if self.foreign_type(&self.ct(&f.ty)).map(|ft| !ft.partial_eq).unwrap_or(false) {
                         // a crate type without `==`: it does not take part in the comparison
                         "true".to_string()
@@ -4839,7 +4939,9 @@ impl Gen {
             // a bare error value in a `T or E` function is the implied `Err`
             let have = self.ty_of(e).materialized();
             let is_err_value = matches!(&ret, Type::Result(_, err_t) if have == **err_t);
-            if !is_err_value {
+            // the value part is still open: this value is what fills it
+            let open_ok = matches!(&ret, Type::Result(ok, _) if matches!(**ok, Type::Var(_) | Type::Unknown));
+            if !is_err_value && !open_ok {
                 self.check_assign(e, &ret, &what)?;
             }
         }
@@ -4897,6 +4999,17 @@ impl Gen {
             return true;
         }
         self.rest_stack.iter().any(|rest| rest.iter().any(|st| stmt_uses(st, name)))
+    }
+
+    /// Emits one argument of a call while the arguments still to come count
+    /// as later uses: `Heading(level: n, title: t, slug: slug(t))` must copy
+    /// `t` into the field rather than move it, because `slug(t)` follows.
+    fn arg_with_rest(&mut self, a: &Expr, want: &Type, rest: &[&Expr]) -> Result<String> {
+        let later: Vec<Stmt> = rest.iter().map(|x| Stmt::Expr((*x).clone())).collect();
+        self.rest_stack.push(later);
+        let r = self.expr_owned_as(a, want);
+        self.rest_stack.pop();
+        r
     }
 
     /// True when a name bound in the current block is not used by any later
@@ -5626,10 +5739,23 @@ impl Gen {
                 let r = self.lvalue(recv)?;
                 match rt {
                     Type::List(_) | Type::Unknown => Ok(format!("{}[({}) as usize]", r, self.expr(index)?)),
-                    Type::Map(ref kt, _) => {
+                    Type::Map(ref kt, ref vt) => {
                         let kt = (**kt).clone();
                         let k = self.map_key_text(index, &kt, &rt)?;
-                        Ok(format!("(*{}.get_mut({}).expect(\"no such key in map\"))", r, k))
+                        // Writing through a missing key creates it, the way a
+                        // plain `m[k] = v` does — but only where the value has
+                        // an empty form to start from.
+                        let makes_itself = matches!(
+                            **vt,
+                            Type::Map(..) | Type::Set(_) | Type::List(_) | Type::Str | Type::Int | Type::Float | Type::Bool
+                        );
+                        if makes_itself {
+                            // the map keeps the key it creates, so it gets one of its own
+                            let owned = self.expr_owned(index)?;
+                            Ok(format!("(*{}.slot({}))", r, owned))
+                        } else {
+                            Ok(format!("(*{}.get_mut({}).expect(\"no such key in map\"))", r, k))
+                        }
                     }
                     other => Err(LumeError::new(e.line, e.col, format!("`{}` values cannot be indexed", type_name(&other)))),
                 }
@@ -6404,13 +6530,18 @@ impl Gen {
     fn check_branches(&mut self, what: &str, values: Vec<(Type, usize, usize)>) -> Result<()> {
         // At a function's tail, a branch may give the plain value, the error, or `None`:
         // each is the implied form of the declared result type.
-        let ret = self.current_ret.clone();
-        let at_tail = self.tail_of_fn && !self.in_block;
+        // A block the program declared to give back a `T or E` ends the way
+        // a function does, so its branches may give the value or the error.
+        let block_result = matches!(&self.block_ret, Some(Type::Result(..)) | Some(Type::Option(_)));
+        let ret = if block_result { self.block_ret.clone().unwrap_or(Type::Unknown) } else { self.current_ret.clone() };
+        let at_tail = self.tail_of_fn && (!self.in_block || block_result);
         let normalize = |g: &Self, t: Type| -> Type {
             if !at_tail {
                 return t;
             }
             match &ret {
+                // the value part is still open, so any branch value is it
+                Type::Result(ok, _) if matches!(**ok, Type::Var(_) | Type::Unknown) => ret.clone(),
                 Type::Result(ok, err) if g.assignable(&t, ok) || g.assignable(&t, err) || g.assignable(&t, &ret) => ret.clone(),
                 Type::Option(inner) if g.assignable(&t, inner) || g.assignable(&t, &ret) => ret.clone(),
                 _ => t,
@@ -7343,7 +7474,8 @@ impl Gen {
         let mut parts = Vec::new();
         for (i, (a, (fname, fty))) in bound.iter().zip(&fields).enumerate() {
             self.check_assign(a, fty, &format!("`{}.{}` takes `{}: {}`", en, vname, fname, type_name(fty)))?;
-            let v = self.expr_owned_as(a, fty)?;
+            let rest: Vec<&Expr> = bound[i + 1..].to_vec();
+            let v = self.arg_with_rest(a, fty, &rest)?;
             // whether the field is boxed was settled by how it was declared,
             // not by what this instantiation filled in
             if self.boxed_field(en, declared.get(i).unwrap_or(fty)) {
@@ -7391,6 +7523,9 @@ impl Gen {
                 }
             }
             ExprKind::Ident(name) => {
+                if let Some(ne) = self.split_ident_try(e) {
+                    return self.expr(&ne);
+                }
                 if let Some(b) = self.lookup(name).cloned() {
                     if let Type::Shared(inner, true) = &b.ty {
                         if !self.want_handle {
@@ -7793,6 +7928,11 @@ impl Gen {
                 }
             }
             ExprKind::Call { name: raw_name, args } => {
+                if args.is_empty() {
+                    if let Some(ne) = self.split_ident_try(e) {
+                        return self.expr(&ne);
+                    }
+                }
                 let cname = self.canon(raw_name);
                 let name = &cname;
                 // `f(x)` where `f` is a block this function was handed: run it
@@ -7829,9 +7969,11 @@ impl Gen {
                     let info = self.instantiate_struct(name, &info, args, e.line, e.col)?;
                     let bound = self.bind_args(&format!("`{}`", name), &info.fields, args, e.line, e.col)?;
                     let mut parts = Vec::new();
-                    for (a, (fname, fty)) in bound.iter().zip(&info.fields) {
+                    for (i, (a, (fname, fty))) in bound.iter().zip(&info.fields).enumerate() {
                         self.check_assign(a, fty, &format!("`{}` field `{}` is `{}`", name, fname, type_name(fty)))?;
-                        parts.push(format!("{}: {}", rust_name(fname), self.expr_owned_as(a, fty)?));
+                        let rest: Vec<&Expr> = bound[i + 1..].to_vec();
+                        let v = self.arg_with_rest(a, fty, &rest)?;
+                        parts.push(format!("{}: {}", rust_name(fname), v));
                     }
                     format!("{} {{ {} }}", self.path_of(name), parts.join(", "))
                 } else if let Some(en) = self.resolve_variant(name, e.line, e.col)? {
@@ -7848,8 +7990,14 @@ impl Gen {
                         );
                         return self.expr(&call);
                     }
+                    if self.self_has_builtin(name) {
+                        return self.expr(&self.self_call(name, args, e));
+                    }
                     return Err(self.unknown_fn(name, e.line, e.col));
                 } else {
+                    if self.self_has_builtin(name) {
+                        return self.expr(&self.self_call(name, args, e));
+                    }
                     return Err(self.unknown_fn(name, e.line, e.col));
                 }
             }
@@ -8056,7 +8204,9 @@ impl Gen {
                 if matches!(name.as_str(), "or" | "or_error") {
                     let inner_copy = match &rt {
                         Type::Option(i) => i.is_copy(),
-                        Type::Result(t, _) => t.is_copy(),
+                        // an `Error` is never copied, so neither is the
+                        // `T or Error` around it, whatever `T` is
+                        Type::Result(..) => false,
                         _ => true,
                     };
                     let lives_on = self.is_borrowed_place(recv) || matches!(&recv.kind, ExprKind::Ident(n) if self.lookup(n).is_some() && self.used_after(n));
@@ -8120,7 +8270,11 @@ impl Gen {
                 // methods a built-in type gained through `extend`
                 if !matches!(rt, Type::Named(_)) {
                     let key = self.type_key(&rt);
-                    if let Some(m) = self.ext_methods.get(&key).and_then(|m| m.get(name)).cloned() {
+                    // through `methods_for`, so a generic `extend`'s names
+                    // are read as what this receiver holds
+                    let ext_here = self.ext_methods.get(&key).map(|m| m.contains_key(name)).unwrap_or(false);
+                    let found = if ext_here { self.methods_for(&rt).and_then(|m| m.get(name).cloned()) } else { None };
+                    if let Some(m) = found {
                         let bound = self.bind_args(&format!("`{}.{}`", type_name(&rt), name), &m.params, args, e.line, e.col)?;
                         let mut parts = Vec::new();
                         let callee = format!("{}.{}", type_name(&rt), name);
@@ -8292,6 +8446,24 @@ impl Gen {
             ExprKind::SelfRef => self.require_var_self(method, line, col),
             _ => Ok(()),
         }
+    }
+
+    /// Inside an `extend` on a built-in, `self` is a list, a set or a map,
+    /// so a bare `contains?(x)` means `self.contains?(x)` the same way a
+    /// bare sibling method does inside a struct.
+    fn self_has_builtin(&self, name: &str) -> bool {
+        match &self.current_self_ty {
+            Some(st) => builtin_method_type(st, name) != Type::Unknown || is_builtin_name(name),
+            None => false,
+        }
+    }
+
+    fn self_call(&self, name: &str, args: &[Arg], e: &Expr) -> Expr {
+        Expr::new(
+            ExprKind::Method { recv: Box::new(Expr::new(ExprKind::SelfRef, e.line, e.col)), name: name.to_string(), args: args.to_vec() },
+            e.line,
+            e.col,
+        )
     }
 
     fn unknown_fn(&self, name: &str, line: usize, col: usize) -> LumeError {
@@ -9041,7 +9213,7 @@ fn describe_names(names: &[&String]) -> String {
 /// Names of built-in types and Rust types the generated code relies on.
 fn reserved_type_name(name: &str, line: usize, col: usize) -> Result<()> {
     const RESERVED: &[&str] = &[
-        "Int", "Float", "Str", "Char", "Bool", "List", "Map", "Set", "Option", "Result", "Vec", "String", "Task", "Time", "File", "Math", "Rc", "Arc", "Mutex", "Some",
+        "Int", "Float", "Str", "Char", "Bool", "List", "Map", "Set", "Option", "Vec", "String", "Task", "Time", "File", "Math", "Rc", "Arc", "Mutex", "Some",
         "None", "Ok", "Err", "Sized", "Clone", "Copy", "Iterator", "Ordering", "Self",
     ];
     if RESERVED.contains(&name) {

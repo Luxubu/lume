@@ -1,0 +1,124 @@
+# z08_route_planner.lume — shortest routes across a small road network
+# (Dijkstra, scanning for the minimum instead of a heap).
+#
+# Probes: `{Str: [(Str, Int)]}` adjacency grown with `graph[a].push((b, w))`,
+# a `{Str}` visited set, a `{Str: Str}` predecessor map, a function returning
+# a tuple of two maps destructured with `(dist, prev) = route(...)`, a
+# two-name `for n, w in ...` over a list of tuples, `insert(0, x)` to build a
+# path front to back, `for ... where` with a set test, and a top-level
+# constant used as an infinity.
+#
+# MEANT TO RUN.
+#
+# All shortest paths here are unique (no ties in total cost along any two
+# routes to the same city), so the predecessor chain is determined regardless
+# of the order neighbours are relaxed in. Nothing prints a Float, list, map,
+# set or optional directly.
+#
+# Distances from Ash, worked by hand:
+#   Crag 2, Brook 2+1=3, Dell 3+5=8, Elm 8+2=10, Fen 10+3=13.
+#
+# EXPECTED OUTPUT:
+# == routes from Ash ==
+# to       cost  path
+# Brook       3  Ash -> Crag -> Brook
+# Crag        2  Ash -> Crag
+# Dell        8  Ash -> Crag -> Brook -> Dell
+# Elm        10  Ash -> Crag -> Brook -> Dell -> Elm
+# Fen        13  Ash -> Crag -> Brook -> Dell -> Elm -> Fen
+#
+# reachable: 6 of 6
+# farthest: Fen at 13
+# hops to Fen: 5
+# total edge weight: 41
+
+INF = 1000000
+
+struct Edge:
+  a: Str
+  b: Str
+  w: Int
+
+def num(n: Int, w: Int) -> Str:
+  s = "#{n}"
+  s.pad(w)
+
+def build(edges: [Edge]) -> {Str: [(Str, Int)]}:
+  var graph: {Str: [(Str, Int)]} = {}
+  for e in edges:
+    graph[e.a].push((e.b, e.w))
+    graph[e.b].push((e.a, e.w))
+  graph
+
+def route(graph: {Str: [(Str, Int)]}, cities: [Str], start: Str) -> ({Str: Int}, {Str: Str}):
+  var dist: {Str: Int} = {}
+  var prev: {Str: Str} = {}
+  var done: {Str} = {}
+  for c in cities:
+    dist[c] = INF
+  dist[start] = 0
+  while done.len < cities.len:
+    var best = ""
+    var bd = INF
+    for c in cities where not done.contains?(c):
+      d = dist[c].or(INF)
+      if d < bd:
+        bd = d
+        best = c
+    if best == "":
+      return (dist, prev)
+    done.add(best)
+    for n, w in graph[best].or([]):
+      step = bd + w
+      if step < dist[n].or(INF):
+        dist[n] = step
+        prev[n] = best
+  (dist, prev)
+
+def path_to(prev: {Str: Str}, start: Str, target: Str) -> [Str]:
+  var out = [target]
+  var cur = target
+  while cur != start:
+    match prev[cur]:
+      None -> return out
+      Some(p) ->
+        out.insert(0, p)
+        cur = p
+  out
+
+def main:
+  edges = [
+    Edge("Ash", "Brook", 4),
+    Edge("Ash", "Crag", 2),
+    Edge("Brook", "Crag", 1),
+    Edge("Brook", "Dell", 5),
+    Edge("Crag", "Dell", 8),
+    Edge("Crag", "Elm", 10),
+    Edge("Dell", "Elm", 2),
+    Edge("Dell", "Fen", 6),
+    Edge("Elm", "Fen", 3),
+  ]
+  cities = ["Ash", "Brook", "Crag", "Dell", "Elm", "Fen"]
+  start = "Ash"
+
+  graph = build(edges)
+  (dist, prev) = route(graph, cities, start)
+
+  puts "== routes from #{start} =="
+  puts "#{"to".pad_right(9)}#{"cost".pad(4)}  path"
+  for c in cities where c != start:
+    d = dist[c].or(INF)
+    puts "#{c.pad_right(9)}#{num(d, 4)}  #{path_to(prev, start, c).join(" -> ")}"
+
+  var far = start
+  for c in cities:
+    here = dist[c].or(INF)
+    if here < INF and here > dist[far].or(INF):
+      far = c
+
+  puts ""
+  reachable = cities.count { |c| dist[c].or(INF) < INF }
+  puts "reachable: #{reachable} of #{cities.len}"
+  puts "farthest: #{far} at #{dist[far].or(INF)}"
+  puts "hops to #{far}: #{path_to(prev, start, far).len - 1}"
+  puts "total edge weight: #{edges.sum(_.w)}"

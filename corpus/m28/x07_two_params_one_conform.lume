@@ -1,0 +1,100 @@
+# x07 — a user generic type with two parameters conforming at one of them,
+# and the same type conforming to a second interface at the *other* one.
+#
+# `extend Stack[T] with Bag[T]` (the README's example) uses its one
+# parameter. `extend Pair[A, B] with Bag[B]` leaves `A` unused by the
+# interface entirely, and `extend Pair[A, B] with Labelled[A]` then leaves
+# `B` unused. Both extends are live at once, so a `Pair[Str, Int]` should
+# be a `Bag[Int]` and a `Labelled[Str]` at the same time.
+#
+# Probes:
+#   * an `extend` parameter that the interface argument never mentions.
+#   * one target, two interfaces, at two different parameters.
+#   * `Tagged[L, R]` whose conforming field is a `[R]`, not an `R`.
+#   * `describe[T, B: Bag[T]]` — `T` lives only inside another parameter's
+#     bound, over shapes whose conforming parameter is the second one.
+#   * a `Pair` nested inside a `Pair`, so `T` is itself a `Pair`.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# 1
+# 42
+# count
+# 1: 42
+# 3
+# a, b, c
+# 3: a, b, c
+# 1
+# one
+# 2: 10, 20
+# 2: true, false
+# 1
+
+interface Bag[T]:
+  def items -> [T]
+
+  def size -> Int = items.len
+  def listed -> Str = items.map { |x| "#{x}" }.to_list.join(", ")
+
+interface Labelled[T]:
+  def label_of -> T
+
+  def label_text -> Str = "#{label_of}"
+
+struct Pair[A, B]:
+  left: A
+  right: B
+
+struct Tagged[L, R]:
+  label: L
+  payload: [R]
+
+# `A` is introduced by the target and used by neither the interface nor the
+# method body.
+extend Pair[A, B] with Bag[B]:
+  def items -> [B] = [right]
+
+# ...and here it is `B` that goes unused.
+extend Pair[A, B] with Labelled[A]:
+  def label_of -> A = left
+
+# The conforming parameter is already a list inside the struct.
+extend Tagged[L, R] with Bag[R]:
+  def items -> [R] = payload
+
+extend [T] with Bag[T]:
+  def items -> [T] = self
+
+extend {K: V} with Bag[V]:
+  def items -> [V] = self.values.to_list
+
+def describe[T, B: Bag[T]](b: B) -> Str:
+  "#{b.size}: #{b.listed}"
+
+# The same shape of bound, but only the count is used, so `T` may be
+# anything at all — including another `Pair`.
+def nested_size[T, B: Bag[T]](b: B) -> Int:
+  b.size
+
+def main:
+  p = Pair(left: "count", right: 42)
+  puts p.size
+  puts p.listed
+  puts p.label_text
+  puts describe(p)
+
+  t = Tagged(label: 7, payload: ["a", "b", "c"])
+  puts t.size
+  puts t.listed
+  puts describe(t)
+
+  # the parameters the other way round
+  q = Pair(left: 1, right: "one")
+  puts q.label_text
+  puts q.listed
+
+  puts describe({"x": 10, "y": 20})
+  puts describe([true, false])
+
+  puts nested_size(Pair(left: "outer", right: Pair(left: "inner", right: 5)))

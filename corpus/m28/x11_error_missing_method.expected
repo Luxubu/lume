@@ -1,0 +1,7 @@
+error: `extend [T] with Shelf[T]` is missing `label`
+  --> corpus/m28/x11_error_missing_method.lume:57:1
+   |
+57 | extend [T] with Shelf[T]:
+   | ^
+  help: `Shelf[T]` needs: def label -> Str. Add it inside this `extend` block
+exit: 1

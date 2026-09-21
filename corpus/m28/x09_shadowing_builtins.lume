@@ -1,0 +1,99 @@
+# x09 — a generic `extend` whose interface defaults are named after methods
+# the extended container already has.
+#
+# The README says a method of your own wins over the built-in of the same
+# name, but it says it about a method on your own struct. Here the names
+# arrive as *defaults*, on `[T]` and `{T}`, which already have `count`,
+# `first`, `sum` and `contains?`.
+#
+#   count     — a list's `count` takes a block; this one takes none
+#   first     — a list's `first` is a `T?`; this one is a `Str`
+#   sum       — a list's `sum` is numeric; this one is a `Str`
+#   contains? — a list's `contains?` takes a `T`; this one takes a `Str`,
+#               so on a `[Int]` the two differ in argument type as well
+#
+# `Chain[T]` then supplies `count` itself, so a type's own method, an
+# interface default and a built-in all collide on one name.
+#
+# I deliberately did NOT override `len`: the default `count = raw.len`
+# would then call itself, and I would rather report that hazard than hang
+# the test suite on it.
+#
+# Meant to RUN. If Lume rejects any of these shadowings instead, the error
+# should name the built-in being shadowed and the line of the default, not
+# the call site.
+#
+# EXPECTED OUTPUT:
+# 3
+# <3>
+# 102030
+# true
+# false
+# 302010
+# 2
+# <2>
+# ab
+# true
+# ba
+# 3
+# 2
+# 200
+# <2>
+# pq
+
+interface Compact[T]:
+  def raw -> [T]
+
+  def count -> Int = raw.len
+  def first -> Str = "<#{raw.len}>"
+  def sum -> Str = raw.map { |x| "#{x}" }.to_list.join("")
+  def contains?(x: Str) -> Bool = raw.any? { |y| "#{y}" == x }
+
+  # no collision, and it does by hand what `reverse` would do — calling
+  # `.reverse` here would be ambiguous in exactly the way this file is about
+  def backwards -> Str:
+    var out = ""
+    for x in raw:
+      out = "#{x}" + out
+    out
+
+extend [T] with Compact[T]:
+  def raw -> [T] = self
+
+extend {T} with Compact[T]:
+  def raw -> [T] = self.to_list
+
+struct Chain[T]:
+  links: [T]
+
+  def raw -> [T]:
+    links
+
+  # the type's own method, against the interface's default of the same name
+  def count -> Int:
+    links.len * 100
+
+def main:
+  xs = [10, 20, 30]
+  puts xs.count
+  puts xs.first
+  puts xs.sum
+  puts xs.contains?("20")
+  puts xs.contains?("40")
+  puts xs.backwards
+
+  s = {"a", "b"}
+  puts s.count
+  puts s.first
+  puts s.sum
+  puts s.contains?("b")
+  puts s.backwards
+
+  # names this file did not take are still the built-ins
+  puts [1, 2, 3].len
+  puts [[1], [2]].flatten.len
+
+  c = Chain(links: ["p", "q"])
+  puts c.count
+  puts c.first
+  puts c.sum

@@ -1,0 +1,22 @@
+warning: `hits` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/m28/y07_async_generics.lume:61:3
+   |
+61 |   shared var hits = 0
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+warning: `log` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/m28/y07_async_generics.lume:71:3
+   |
+71 |   shared var log: [Str] = []
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+item1
+item1,item2,item3
+7
+14
+hits: 15
+t1 t2 t3
+9/10
+job-1 job-2 job-3
+24
+exit: 0

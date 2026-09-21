@@ -1,0 +1,102 @@
+# x03 — an interface parameter that appears only in a method's *argument*.
+#
+# `Bag[T]` puts `T` in the result (`items -> [T]`), so conformance can be
+# worked out from what a method gives back. `Accepts[T]` never does: `T`
+# only ever appears as an argument type. That is the direction the compiler
+# has to read backwards.
+#
+# Probes:
+#   * `extend [T: Hashable] with Accepts[T]` — a bound written on the extend
+#     for a target that is a list.
+#   * `extend {T} with Accepts[T]` — the set's item is `Hashable` without
+#     saying so.
+#   * `extend {K: V} with Accepts[K]` — conformance at the *key*, not the
+#     value, which is the one the README's examples never take.
+#   * a plain struct `Span` with `def accepts?(x: Int)` and nothing else: it
+#     should be an `Accepts[Int]` without naming the interface.
+#   * defaults (`any_of`, `count_of`) written over the argument-only
+#     parameter, and a bounded helper `filtered[A: Accepts[Int]]`.
+#   * a bare method call on self (`contains?(x)`) in one extend and an
+#     explicit `self.` in another.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# true
+# false
+# true
+# 3
+# true
+# 3
+# true
+# false
+# true
+# 3
+# 3,8,4
+# 2,3,5
+
+interface Accepts[T]:
+  def accepts?(x: T) -> Bool
+
+  def any_of(xs: [T]) -> Bool:
+    for x in xs:
+      if accepts?(x):
+        return true
+    false
+
+  def count_of(xs: [T]) -> Int:
+    var n = 0
+    for x in xs:
+      if accepts?(x):
+        n += 1
+    n
+
+# The bound goes where every other generic puts it.
+extend [T: Hashable] with Accepts[T]:
+  def accepts?(x: T) -> Bool = contains?(x)
+
+# Inside `{...}` a `:` would mean a map, so the item's `Hashable` is implied.
+extend {T} with Accepts[T]:
+  def accepts?(x: T) -> Bool = self.contains?(x)
+
+# Conformance at the key. `V` is introduced by the target and used nowhere
+# in the interface argument at all.
+extend {K: V} with Accepts[K]:
+  def accepts?(x: K) -> Bool = self.keys.contains?(x)
+
+# Structural conformance with the argument worked out: `Span` says nothing
+# about `Accepts`, and `Int` is written only once, in the parameter.
+struct Span:
+  lo: Int
+  hi: Int
+
+  def accepts?(x: Int) -> Bool:
+    x >= lo and x <= hi
+
+def filtered[A: Accepts[Int]](a: A, xs: [Int]) -> [Int]:
+  xs.filter { |x| a.accepts?(x) }.to_list
+
+def main:
+  primes = [2, 3, 5, 7, 11]
+  puts primes.accepts?(5)
+  puts primes.accepts?(6)
+  puts primes.any_of([4, 6, 7])
+  puts primes.count_of([2, 4, 5, 7, 8])
+
+  vowels = {"a", "e", "i"}
+  puts vowels.accepts?("e")
+  puts vowels.count_of(["a", "b", "e", "c", "i"])
+
+  ages = {"ada": 36, "bo": 7}
+  puts ages.accepts?("bo")
+  puts ages.any_of(["cy", "dee"])
+
+  s = Span(lo: 3, hi: 8)
+  puts s.accepts?(3)
+  puts s.count_of([1, 3, 5, 9, 8])
+
+  # the same helper over a struct and over a built-in list
+  # (`.map { "#{x}" }` first, because the README never says whether `join`
+  # accepts an `[Int]` or only a `[Str]`)
+  puts filtered(s, [1, 2, 3, 9, 8, 4]).map { |x| "#{x}" }.to_list.join(",")
+  puts filtered(primes, [1, 2, 3, 4, 5]).map { |x| "#{x}" }.to_list.join(",")

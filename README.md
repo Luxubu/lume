@@ -20,7 +20,7 @@ program takes about 1 s in Python and 1.4 s in Ruby.
 The language design lives in the [Lume Language Design](https://claude.ai/code/artifact/1872fe63-1816-4b1e-9983-dec2774382fb)
 document. This repository is the compiler and the examples.
 
-## Status: milestones 1–27 done
+## Status: milestones 1–28 done
 
 | # | Milestone | Status |
 | --- | --- | --- |
@@ -42,6 +42,7 @@ document. This repository is the compiler and the examples.
 | 16 | Ownership by analysis: liveness-based copy or move, recursive enums boxed, `.or` on optional fields, string comparisons in blocks, `for var a in xs`, `xs[i].method` | done: review corpus leaks 6 → 0 |
 | 17 | Pattern completeness: a real exhaustiveness checker with nested witnesses, `A \| B` alternatives; the everyday standard methods; statements in inline blocks | done: 37 new methods, corpus 40 ok / 26 Lume errors / 0 leaks |
 | 18 | `{T}` sets with literals, algebra and iteration; `s[i]` / `s[a..b]` / `xs[a..b]` by character and position; structs and enums as map keys | done |
+| 28 | Fifth review round (`corpus/m28/`, 36 programs by three reviewers): generic `extend`, the seams where features meet, and whole programs | done: 12 ranked problems fixed, 27 ok / 9 Lume errors / 0 leaks; `Result` is a name you can use again |
 | 27 | Generic `extend`: an `extend` introduces a type parameter by using one, so `[T]`, `{T}`, `{K: V}` and a user's own `Stack[T]` all conform to the same interface | done: the second half of the gap milestone 24 found; one bounded helper now reaches every container |
 | 26 | Fourth review round (`corpus/m26/`, 36 programs by a fourth reviewer): how a block travels — reused, forwarded, handed to a built-in, carrying a failure — plus conformance at an argument other than `Self` and a generic enum's boxed field | done: 11 ranked problems fixed, 30 ok / 6 Lume errors / 0 leaks; `Box` is a name you can use again |
 | 25 | Interfaces that take type parameters: `interface Comparable[T]:`, bounds that carry arguments (`[T: Comparable[T]]`), `extend Int with Measures[Str]`, conformance that works the arguments out | done: the gap the library hit; structural conformance unchanged |
@@ -123,7 +124,9 @@ without naming it, and a parameter that appears only inside another's
 bound comes from that conformance; an `extend` may introduce a type
 parameter by using one, so the built-in containers conform too —
 `extend [T] with Bag[T]:`, `extend {T} with Bag[T]:`,
-`extend {K: V} with Bag[V]:` and `extend Stack[T] with Bag[T]:`, after
+`extend {K: V} with Bag[V]:` and `extend Stack[T] with Bag[T]:` — and so do
+a tuple and an optional, `extend (A, B) with Pairish[A, B]:` and
+`extend T? with Holder[T]:` — after
 which one `def describe[B: Bag[Str]](b: B)` reaches all of them. A name
 inside the target that is no type of yours is a parameter; a bare target
 must still be a real type, so `extend Poimt with Named` is an unknown
@@ -174,7 +177,8 @@ copied value, so character-at-a-time code runs at Rust speed; it compares
 with and matches one-character string literals (`c == "a"`, `"a" | "e" ->`),
 has `digit?`, `alpha?`, `space?`, `alnum?`, `upper?`, `lower?`, `upcase`,
 `downcase`, `code`, goes in sets and map keys, and becomes a `Str` with
-`.to_s` or wherever a `Str` is wanted; `Int.to_char` goes back),
+`.to_s` or wherever a `Str` is wanted; `Int.to_char` goes back, and gives a
+`Char?` because not every number is a character),
 multi-line strings (a `"""` block, with the leading line break and the common
 indentation removed; escapes and `#{}` work as usual), `1e15` and `2.5e-3`,
 `xs.at(i)` (the item when the position is already known to be good — the
@@ -264,11 +268,13 @@ The suite also runs `lume test` on `examples/tests/`, `lume fmt` on
 `examples/fmt/`, checks that formatting every example is idempotent and leaves
 the generated Rust unchanged, and runs the review corpora (programs written by
 independent reviewers who did not know the compiler).
-`tests/corpus.sh` classifies the corpus (187 programs from four review
+`tests/corpus.sh` classifies the corpus (223 programs from five review
 rounds: `corpus/` and `corpus/edge/` after milestone 14, `corpus/m17/` on the
-pattern and standard-method surface, `corpus/m18/` on sets and slicing, and
-`corpus/m26/` on generics, parameterised interfaces and blocks): 141
-run, 46 stop with a Lume error (each a deliberate rule or a deliberate error
+pattern and standard-method surface, `corpus/m18/` on sets and slicing,
+`corpus/m26/` on generics, parameterised interfaces and blocks, and
+`corpus/m28/` on generic `extend`, the seams between features, and whole
+programs): 168
+run, 55 stop with a Lume error (each a deliberate rule or a deliberate error
 test: no shadowing, no `Float / Int`, an unbounded `T` as a map key, ...),
 none leaks a rustc error. Each round has a `REPORT.md` beside its programs.
 

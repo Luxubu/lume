@@ -1,0 +1,81 @@
+# x12 — DELIBERATE ERROR. This program should be REJECTED.
+#
+# A generic `extend` introduces `T` by using it in the target, but then
+# claims conformance to `Bag[Str]` — a *fixed* argument — while the method
+# it supplies gives back `[T]`:
+#
+#     extend [T] with Bag[Str]:
+#       def items -> [T] = self
+#
+# For `["a", "b"]` that would be fine and for `[1, 2]` it would be wrong,
+# and nothing in the extend says which. Either the target should have been
+# written `extend [Str] with Bag[Str]`, or the argument should have been
+# written `Bag[T]`. This is the mistake I would actually make while
+# copying the README's `extend Int with Measures[Str]` line, where a fixed
+# argument *is* right because the target has no parameter.
+#
+# WHAT I EXPECT
+#   * one error at the `extend [T] with Bag[Str]:` line (line 61 as
+#     written) or at the `def items -> [T]` line immediately under it.
+#   * the message should compare the two types: `items` must give back
+#     `[Str]` for `Bag[Str]`, and gives back `[T]`. The README's wording
+#     for this family is "a value used as an interface it does not satisfy
+#     (naming the missing method or the signature that differs)", so the
+#     signature that differs is what I am looking for.
+#   * it should NOT say "unknown type `T`" — `T` is introduced legitimately
+#     by the target — and it should NOT silently accept the extend and then
+#     fail later at `describe(["a", "b"])`.
+#
+# A second mistake worth a separate run is at the bottom of this file,
+# commented out because the compiler will stop at the first error.
+#
+# Everything above the marked line is meant to be correct.
+
+interface Bag[T]:
+  def items -> [T]
+
+  def size -> Int = items.len
+  def listed -> Str = items.map { |x| "#{x}" }.to_list.join(", ")
+
+interface Named:
+  def name_of -> Str
+
+  def tagged -> Str = "[#{name_of}]"
+
+struct Point:
+  x: Int
+  y: Int
+
+  def name_of -> Str:
+    "(#{x},#{y})"
+
+# correct generic extends, for contrast
+extend {T} with Bag[T]:
+  def items -> [T] = self.to_list
+
+extend {K: V} with Bag[V]:
+  def items -> [V] = self.values.to_list
+
+# THE ERROR: the interface argument is fixed to `Str`, the method gives
+# back `[T]`, and `T` is whatever the list happens to hold.
+extend [T] with Bag[Str]:
+  def items -> [T] = self
+
+def describe[B: Bag[Str]](b: B) -> Str:
+  "#{b.size}: #{b.listed}"
+
+def main:
+  puts describe({"red", "green"})
+  puts describe({1: "one"})
+  puts Point(1, 2).tagged
+  puts describe(["a", "b"])
+
+# THE SECOND MISTAKE, for a separate run — uncomment this and comment out
+# the extend above. The README says a bare target must still be a real
+# type, "so `extend Poimt with Named` is an unknown type rather than a
+# silent parameter". I expect an unknown-type error naming `Poimt`, with
+# "did you mean `Point`?", and explicitly NOT a silent acceptance in which
+# `Poimt` becomes a type parameter and `Named` is extended onto everything.
+#
+# extend Poimt with Named:
+#   def name_of -> Str = "poimt"

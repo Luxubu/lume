@@ -1,0 +1,140 @@
+# z05_ini_parser.lume — a parser for a tiny INI-like config format.
+#
+# Probes: an enum of line shapes returned as `Line or Error`, `match` on
+# nested patterns through the result (`Ok(Section(name))`, `Ok(Pair(k, v))`),
+# `match` on an `Int?` from `index_of`, exclusive slicing to cut a header,
+# `Char` predicates (`alnum?`, `c == "_"`) validating a key, a
+# `{Str: [(Str, Str)]}` grown with the "missing key starts empty" rule, a
+# tuple-destructuring `for` over the stored pairs, and error messages that
+# carry a line number.
+#
+# MEANT TO RUN.
+#
+# Things I am deliberately probing and could not confirm from the README:
+#   - a bare `#` inside a string literal ("# demo config", `starts_with?("#")`).
+#     The README only promises that `#{}` interpolates; it never says a lone
+#     `#` is literal.
+#   - `cfg[section].push((k, v))` on a `{Str: [(Str, Str)]}` — the README
+#     gives `idx[w].add(x)` and `grid[i].push(x)`, so this shape should hold.
+#   - assigning to an outer `var section` from inside a `match` arm inside a
+#     `for` loop.
+#
+# EXPECTED OUTPUT:
+# == config ==
+# [server]
+#   host    = localhost
+#   port    = 8080
+# [limits]
+#   retries = 3
+#   timeout = 250
+#   label   = fast lane
+#
+# 4 problems:
+#   line 2: `stray` outside a section
+#   line 12: unclosed section header
+#   line 13: expected key = value
+#   line 14: bad key `bad key!`
+#
+# port as Int: 8080
+# retries as Int: 3
+# timeout doubled: 500
+# missing key host in limits: (none)
+# sections: server, limits
+# keys in server: 2
+
+enum Line:
+  Blank
+  Section(name: Str)
+  Pair(key: Str, value: Str)
+
+def valid_key?(k: Str) -> Bool:
+  if k.empty?:
+    return false
+  for c in k.chars:
+    if not (c.alnum? or c == "_"):
+      return false
+  true
+
+def read_line(raw: Str, n: Int) -> Line or Error:
+  s = raw.trim
+  if s.empty? or s.starts_with?("#") or s.starts_with?(";"):
+    return Blank
+  if s.starts_with?("["):
+    if not s.ends_with?("]"):
+      return Error("line #{n}: unclosed section header")
+    name = s[1...s.len - 1].trim
+    if name.empty?:
+      return Error("line #{n}: empty section name")
+    return Section(name)
+  match s.index_of("="):
+    None -> Error("line #{n}: expected key = value")
+    Some(i) ->
+      key = s[0...i].trim
+      value = s[i + 1...s.len].trim
+      if valid_key?(key):
+        Pair(key, value)
+      else:
+        Error("line #{n}: bad key `#{key}`")
+
+def lookup(cfg: {Str: [(Str, Str)]}, sec: Str, key: Str) -> Str?:
+  for k, v in cfg[sec].or([]):
+    if k == key:
+      return Some(v)
+  None
+
+def main:
+  lines = [
+    "# demo config",
+    "stray = 1",
+    "[server]",
+    "host = localhost",
+    "port = 8080",
+    "",
+    "; limits below",
+    "[limits]",
+    "retries = 3",
+    "timeout = 250",
+    "label = fast lane",
+    "[bad",
+    "no equals here",
+    "bad key! = 2",
+  ]
+
+  var cfg: {Str: [(Str, Str)]} = {}
+  var order: [Str] = []
+  var errs: [Str] = []
+  var section = ""
+
+  for i, raw in lines.enumerate:
+    n = i + 1
+    match read_line(raw, n):
+      Error(e)          -> errs.push(e.message)
+      Ok(Blank)         -> ()
+      Ok(Section(name)) ->
+        section = name
+        if not order.contains?(name):
+          order.push(name)
+      Ok(Pair(k, v)) ->
+        if section.empty?:
+          errs.push("line #{n}: `#{k}` outside a section")
+        else:
+          cfg[section].push((k, v))
+
+  puts "== config =="
+  for sec in order:
+    puts "[#{sec}]"
+    for k, v in cfg[sec].or([]):
+      puts "  #{k.pad_right(7)} = #{v}"
+
+  puts ""
+  puts "#{errs.len} problems:"
+  for e in errs:
+    puts "  #{e}"
+
+  puts ""
+  puts "port as Int: #{lookup(cfg, "server", "port").or("0").to_int.or(0)}"
+  puts "retries as Int: #{lookup(cfg, "limits", "retries").or("0").to_int.or(0)}"
+  puts "timeout doubled: #{lookup(cfg, "limits", "timeout").or("0").to_int.or(0) * 2}"
+  puts "missing key host in limits: #{lookup(cfg, "limits", "host").or("(none)")}"
+  puts "sections: #{order.join(", ")}"
+  puts "keys in server: #{cfg["server"].or([]).len}"

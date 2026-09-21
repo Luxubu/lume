@@ -1,0 +1,145 @@
+# z11_doc_toc.lume — AWKWARD (3 of 3).
+#
+# A Markdown table-of-contents and word-wrap tool. This one leans on the
+# string-and-text corners I was least sure of while reading the README.
+#
+# Probes:
+#   - a `"""` block whose common indentation must be stripped, fed to
+#     `.lines` (I reject blank lines so any trailing-newline question is
+#     moot, but the LEADING indentation stripping is load bearing);
+#   - raw strings as both the template and the search text of `replace`:
+#     `r"#{title}"` must NOT interpolate, while the ordinary `"#{h.level}"`
+#     right beside it must;
+#   - a multi-line pipe chain with leading `|>` continuing an expression,
+#     and `x |> wrap(30)` meaning `wrap(x, 30)`;
+#   - `Str +=` building a string a `Char` at a time, `c == "#"`, `c.alnum?`,
+#     `c.downcase.to_s`;
+#   - `"  ".repeat(0)` (the README never says what repeat(0) gives);
+#   - a trailing `unless` on a `push`;
+#   - `T?.map { }.or(default)` to get at the first heading's title.
+#
+# MEANT TO RUN.
+#
+# Deliberately avoided: writing `#` immediately before `#{`, since I cannot
+# tell from the README whether `"##{slug}"` lexes as a literal `#` followed
+# by an interpolation. A bare `#` elsewhere in a literal IS probed
+# (`starts_with?`-style comparison `c == "#"` and the `"""` content).
+#
+# Wrapping worked by hand at width 30 over the 36 body words; the seven
+# output lines are 26, 25, 22, 27, 25, 26 and 30 characters wide.
+#
+# EXPECTED OUTPUT:
+# == toc ==
+# - Lume Notes  ->  lume-notes
+#   - Getting Started  ->  getting-started
+#   - Language Tour  ->  language-tour
+#     - Blocks  ->  blocks
+#     - Generics  ->  generics
+# - Appendix  ->  appendix
+#
+# == body, wrapped at 30 ==
+# | Lume is small and fast. It
+# | compiles to Rust and runs
+# | native. Install a Rust
+# | toolchain first. A block is
+# | inlined at the call. Type
+# | arguments are read off the
+# | call. Nothing to see here yet.
+#
+# levels: 1=2 2=2 3=2
+# slugs unique: true
+# [Lume Notes] has 36 words in 6 sections
+
+TEMPLATE = r"[#{title}] has #{words} words in #{sections} sections"
+
+struct Heading:
+  level: Int
+  title: Str
+  slug: Str
+
+def heading_level(line: Str) -> Int:
+  var n = 0
+  for c in line.chars:
+    if c == "#":
+      n += 1
+    else:
+      return n
+  n
+
+def slug(title: Str) -> Str:
+  var out = ""
+  for c in title.chars:
+    if c.alnum?:
+      out += c.downcase.to_s
+    elif (not out.empty?) and (not out.ends_with?("-")):
+      out += "-"
+  out = out.trim
+  if out.ends_with?("-"): out[0...out.len - 1] else: out
+
+def wrap(text: Str, width: Int) -> [Str]:
+  var lines: [Str] = []
+  var cur = ""
+  for w in text.split:
+    if cur.empty?:
+      cur = w
+    elif cur.len + 1 + w.len <= width:
+      cur += " #{w}"
+    else:
+      lines.push(cur)
+      cur = w
+  lines.push(cur) unless cur.empty?
+  lines
+
+def main:
+  doc = """
+    # Lume Notes
+    Lume is small and fast.
+    It compiles to Rust and runs native.
+    ## Getting Started
+    Install a Rust toolchain first.
+    ## Language Tour
+    ### Blocks
+    A block is inlined at the call.
+    ### Generics
+    Type arguments are read off the call.
+    # Appendix
+    Nothing to see here yet.
+    """
+
+  var headings: [Heading] = []
+  var body: [Str] = []
+  for line in doc.lines.reject(_.trim.empty?):
+    n = heading_level(line)
+    if n == 0:
+      body.push(line.trim)
+    else:
+      title = line[n...line.len].trim
+      headings.push(Heading(n, title, slug(title)))
+
+  puts "== toc =="
+  for h in headings:
+    puts "#{"  ".repeat(h.level - 1)}- #{h.title}  ->  #{h.slug}"
+
+  puts ""
+  puts "== body, wrapped at 30 =="
+  wrapped = body.join(" ") |> wrap(30)
+  for w in wrapped:
+    puts "| #{w}"
+
+  var levels: {Str: Int} = {}
+  for h in headings:
+    levels["#{h.level}"] = levels["#{h.level}"].or(0) + 1
+
+  puts ""
+  shown = levels.keys.map { |k| "#{k}=#{levels[k].or(0)}" }.to_list
+  puts "levels: #{shown.join(" ")}"
+  slugs = headings.map(_.slug).to_list.to_set
+  puts "slugs unique: #{slugs.len == headings.len}"
+
+  total_words = body.map { |l| l.split.to_list.len }.sum
+  doc_title = headings.first.map { |h| h.title }.or("(untitled)")
+  out = TEMPLATE
+    |> .replace(r"#{title}", doc_title)
+    |> .replace(r"#{words}", "#{total_words}")
+    |> .replace(r"#{sections}", "#{headings.len}")
+  puts out

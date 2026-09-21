@@ -1,0 +1,93 @@
+# z12_err_budget.lume — DELIBERATE ERROR PROGRAM. This must be REJECTED.
+#
+# A monthly budget-vs-actuals report, written the way someone would write it
+# on a first try, with exactly ONE mistake buried well down the file: the
+# per-category subtotal `spent` is declared without `var` and then
+# accumulated inside the inner `for`. The README calls this out by name:
+#
+#   "rebinding an outer name inside a loop or branch (`total = total + i`
+#    would silently make a new `total`; the error says to declare it `var`)"
+#
+# and separately promises "assignment to an immutable binding (pointing at
+# where it was declared)". Either wording is a good answer here.
+#
+# WHAT I EXPECT:
+#   - compilation stops with a Lume error (never a rustc error) on the line
+#     `      spent = spent + e.cents` (line 84), which is the ONLY defect in
+#     the file; `spent = 0` is on line 82;
+#   - the message names `spent`, and either tells me to declare it `var` or
+#     points back at the `spent = 0` line above where it was declared;
+#   - nothing else in this file is reported, because nothing else is wrong.
+#     Everything above and below that line is ordinary, valid Lume: an enum
+#     with data and a method, an `if`/`elif`/`else` used as a value, `pad`
+#     alignment, `sum` with a block, `sort_by(...).last` matched as a `T?`.
+#
+# If instead this compiles and runs, that is the bug the README says it is
+# not: `spent` would silently become a fresh binding each time round the
+# inner loop and every category would report 0.00 spent.
+
+enum Verdict:
+  Under(by: Int)
+  Close
+  Over(by: Int)
+
+  def word -> Str = match self:
+    Under(_) -> "under"
+    Close    -> "close"
+    Over(_)  -> "over"
+
+struct Expense:
+  category: Str
+  label: Str
+  cents: Int
+
+struct Budget:
+  category: Str
+  limit: Int
+
+def money(cents: Int) -> Str:
+  frac = cents.abs % 100
+  f = if frac < 10: "0#{frac}" else: "#{frac}"
+  "#{cents.abs / 100}.#{f}"
+
+def verdict(spent: Int, limit: Int) -> Verdict:
+  if spent > limit:
+    Over(spent - limit)
+  elif limit - spent <= limit / 10:
+    Close
+  else:
+    Under(limit - spent)
+
+def main:
+  expenses = [
+    Expense("food", "groceries", 24500),
+    Expense("food", "cafe", 3200),
+    Expense("home", "rent", 120000),
+    Expense("home", "power", 8400),
+    Expense("fun", "cinema", 2600),
+    Expense("fun", "books", 4150),
+    Expense("travel", "train", 9900),
+  ]
+  budgets = [
+    Budget("food", 30000),
+    Budget("home", 130000),
+    Budget("fun", 5000),
+    Budget("travel", 12000),
+  ]
+
+  puts "== budget =="
+  puts "#{"category".pad_right(10)}#{"spent".pad(10)}#{"limit".pad(10)}  status"
+
+  for b in budgets:
+    spent = 0
+    for e in expenses where e.category == b.category:
+      spent = spent + e.cents
+    v = verdict(spent, b.limit)
+    puts "#{b.category.pad_right(10)}#{money(spent).pad(10)}#{money(b.limit).pad(10)}  #{v.word}"
+
+  puts ""
+  puts "total spent #{money(expenses.sum(_.cents))}"
+  puts "largest single expense:"
+  match expenses.sort_by(_.cents).last:
+    Some(e) -> puts "  #{e.label} #{money(e.cents)}"
+    None    -> puts "  none"

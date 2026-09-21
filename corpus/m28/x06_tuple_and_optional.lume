@@ -1,0 +1,91 @@
+# x06 — a generic `extend` on shapes the README does not list: a tuple and
+# an optional.
+#
+# The rule as written is "an `extend` introduces a type parameter by using
+# one, so the built-in containers conform too", and the four shapes shown
+# are `[T]`, `{T}`, `{K: V}` and `Stack[T]`. A tuple `(A, B)` and an
+# optional `T?` are built-in shapes made out of type parameters in exactly
+# the same way, so I have written them as if the rule is general.
+#
+# Probes:
+#   * `extend (A, B) with Pairish[A, B]` — two parameters introduced by one
+#     target, both handed to the interface, and `self.0` / `self.1` inside
+#     an extend body.
+#   * a default that gives back a tuple built from two required methods
+#     (`flipped -> (B, A)`), then `.0` taken off the result of a default.
+#   * `extend T? with Holder[T]` — a bare `T?` target, with `match self`
+#     over `Some`/`None` inside the extend.
+#   * a `Pairish[Int, Int]`-bounded helper, i.e. a bound on an interface
+#     with two arguments both pinned.
+#
+# Meant to RUN. This is the program I am least sure about: if `extend T?
+# with ...` or `extend (A, B) with ...` is not allowed, I would expect a
+# clear error at that `extend` line saying which shapes may be extended,
+# rather than an unknown-type message about `A`, `B` or `T`.
+#
+# EXPECTED OUTPUT:
+# (3 . three)
+# three
+# 4
+# (a . true)
+# true
+# has 7
+# nothing
+# true
+# 0
+# has ada
+# 3
+
+interface Pairish[A, B]:
+  def left_side -> A
+  def right_side -> B
+
+  def flipped -> (B, A) = (right_side, left_side)
+  def shown -> Str = "(#{left_side} . #{right_side})"
+
+extend (A, B) with Pairish[A, B]:
+  def left_side -> A = self.0
+  def right_side -> B = self.1
+
+interface Holder[T]:
+  def got -> [T]
+
+  def present? -> Bool = got.len == 1
+
+  def described -> Str:
+    if present?:
+      "has #{got.at(0)}"
+    else:
+      "nothing"
+
+extend T? with Holder[T]:
+  def got -> [T]:
+    match self:
+      Some(x) -> [x]
+      None    -> []
+
+def describe_pair[P: Pairish[Int, Int]](p: P) -> Str:
+  "#{p.left_side + p.right_side}"
+
+def main:
+  p = (3, "three")
+  puts p.shown
+  puts p.flipped.0
+  puts p.left_side + 1
+
+  # the same extend at a different pair of arguments
+  q = ("a", true)
+  puts q.shown
+  puts q.right_side
+
+  found: Int? = Some(7)
+  missing: Int? = None
+  puts found.described
+  puts missing.described
+  puts found.present?
+  puts missing.got.len
+
+  name: Str? = Some("ada")
+  puts name.described
+
+  puts describe_pair((1, 2))

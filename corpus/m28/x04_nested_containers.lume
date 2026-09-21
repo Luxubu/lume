@@ -1,0 +1,87 @@
+# x04 — a generic `extend` whose target is a *nested* container, and
+# conformance whose interface argument has to be worked out rather than
+# written anywhere.
+#
+# Probes:
+#   * `extend [[T]] with Flat[T]` — the parameter is two levels down, and
+#     the interface argument is the inner type, not the outer one.
+#   * `extend {Str: [T]} with Flat[T]` — a target that mixes a real type
+#     (`Str`, so concrete) with a name that is no type of this program's
+#     (`T`, so a parameter), and where the parameter is again nested.
+#   * `Grid[T]` and `Wordbook`, which never name `Flat`: the argument comes
+#     out of the result type of the method they happen to have. For
+#     `Wordbook` that is `[Str]`, which appears nowhere as a type argument.
+#   * two bounded helpers at different arguments (`Flat[Int]`, `Flat[Str]`)
+#     over the same set of conforming shapes.
+#
+# Meant to RUN. The one rendering I lean on is `#{c}` for an `Int` and a
+# `Str`, which everything else in the examples already does.
+#
+# EXPECTED OUTPUT:
+# 6
+# 1/2/3/4/5/6
+# 21
+# 3
+# ada/amy/bo
+# 3: ada/amy/bo
+# 3: x/y/z
+# xyz
+# 3: cat/cow/dog
+# 60
+
+interface Flat[T]:
+  def cells -> [T]
+
+  def total -> Int = cells.len
+  def shown -> Str = cells.map { |c| "#{c}" }.to_list.join("/")
+
+# `T` is introduced by being used, two levels inside the target.
+extend [[T]] with Flat[T]:
+  def cells -> [T] = self.flatten
+
+# `Str` is a real type, so it stays concrete; `T` is not, so it is the
+# parameter — and the interface takes the inner one.
+extend {Str: [T]} with Flat[T]:
+  def cells -> [T] = self.values.to_list.flatten
+
+# A user generic type holding rows. Conformance is structural: nothing here
+# says `Flat`, and nothing says the argument is `T` rather than `[T]`.
+struct Grid[T]:
+  rows: [[T]]
+
+  def cells -> [T]:
+    rows.flatten
+
+# The hardest one to read: `Wordbook` is not generic at all, so the
+# interface argument `Str` has to come out of the method's result type.
+struct Wordbook:
+  by_letter: {Str: [Str]}
+
+  def cells -> [Str]:
+    by_letter.values.to_list.flatten
+
+def sum_up[F: Flat[Int]](f: F) -> Int:
+  f.cells.sum
+
+def render[F: Flat[Str]](f: F) -> Str:
+  "#{f.total}: #{f.shown}"
+
+def main:
+  grid = [[1, 2], [3], [4, 5, 6]]
+  puts grid.total
+  puts grid.shown
+  puts sum_up(grid)
+
+  names = {"a": ["ada", "amy"], "b": ["bo"]}
+  puts names.total
+  puts names.shown
+  puts render(names)
+
+  g = Grid(rows: [["x", "y"], ["z"]])
+  puts render(g)
+  puts g.cells.join("")
+
+  wb = Wordbook(by_letter: {"c": ["cat", "cow"], "d": ["dog"]})
+  puts render(wb)
+
+  puts sum_up([[10, 20], [30]])

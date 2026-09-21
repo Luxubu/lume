@@ -1,0 +1,126 @@
+# y08 — text work meeting interfaces, generics and slicing.
+#
+# Probes: an interface default method that takes an argument and loops
+# (`line(widths)`), reached through a generic bound `[R: Row]`; `at` on a
+# list inside generic code; `enumerate` giving `i, c`; `xs[i] = v` on a
+# `var` list; `pad_right` for a column, `trim_right` to finish a line;
+# `decimals` on Int and on exact binary fractions; `trim_left`/`trim_right`
+# on the same string; character-counted `s[i]` and `s[a..b]` on a string
+# with non-ASCII letters, next to `s.len`.
+#
+# Meant to RUN.
+#
+# GUESSES flagged in the notes, which this expected output depends on:
+#   * `pad(n)` right-aligns (pads on the left) and `pad_right(n)`
+#     left-aligns. The README shows both but never says which side.
+#   * `"héllo wörld".len` is 11 (characters), not 13 (bytes). The README
+#     only promises character counting for `s[i]`.
+#   * `(-0.125).decimals(2)` is "-0.13" — "halves away from zero".
+#
+# EXPECTED OUTPUT:
+# 5 2 5
+# apple 3  3.75
+# fig   12 4.80
+# plum  2  19.98
+# total 28.53
+# [   7][7   ]
+# 0.13
+# 0.38
+# -0.13
+# 7.0
+# [42 units   ]
+# [   42 units]
+# [42 units]
+# ABC
+# l
+# héllo
+# wörld
+#
+# 11
+# 11
+# 90
+# 50
+# 3
+# *.*.*
+
+interface Row:
+  def cells -> [Str]
+
+  # a default with an argument, a loop, `at` and `trim_right`
+  def line(widths: [Int]) -> Str:
+    var out = ""
+    for i, c in cells.enumerate:
+      out += c.pad_right(widths.at(i))
+      out += " "
+    out.trim_right
+
+struct Sale:
+  item: Str
+  qty: Int
+  each_cents: Int
+
+  def total_cents -> Int = qty * each_cents
+
+  def cells -> [Str]:
+    [item, "#{qty}", (total_cents.to_float / 100.0).decimals(2)]
+
+# generic over anything that is a Row
+def widths_of[R: Row](rows: [R]) -> [Int]:
+  var w: [Int] = []
+  for r in rows:
+    for i, c in r.cells.enumerate:
+      if i >= w.len:
+        w.push(c.len)
+      elif c.len > w.at(i):
+        w[i] = c.len
+  w
+
+def initials(names: [Str]) -> Str:
+  var out = ""
+  for n in names:
+    out += n.slice(0, 1).upcase
+  out
+
+def main:
+  sales = [Sale("apple", 3, 125), Sale("fig", 12, 40), Sale("plum", 2, 999)]
+  w = widths_of(sales)
+  puts w.map { |n| "#{n}" }.to_list.join(" ")
+  for s in sales:
+    puts s.line(w)
+  cents = sales.sum { |s| s.total_cents }
+  puts "total #{(cents.to_float / 100.0).decimals(2)}"
+
+  # which side does each pad?
+  puts "[#{"7".pad(4)}][#{"7".pad_right(4)}]"
+
+  # decimals: exact binary fractions, so only the rounding rule is in play
+  puts 0.125.decimals(2)
+  puts 0.375.decimals(2)
+  puts (-0.125).decimals(2)
+  puts 7.decimals(1)
+
+  raw = "   42 units   "
+  puts "[#{raw.trim_left}]"
+  puts "[#{raw.trim_right}]"
+  puts "[#{raw.trim}]"
+
+  puts initials(["ada", "bo", "cy"])
+  puts "lume"[0].or("?")
+
+  s = "héllo wörld"
+  puts s[0..4]
+  puts s[6...11]
+  puts s[3..2]
+  puts s.len
+  puts s.chars.len
+
+  xs = [10, 20, 30, 40, 50]
+  puts xs[1..3].sum
+  puts xs.at(4)
+  puts xs[2..99].len
+
+  var bar = ""
+  for i in 1..5:
+    bar += "*" if i % 2 == 1
+    bar += "." unless i % 2 == 1
+  puts bar

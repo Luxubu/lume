@@ -1,0 +1,136 @@
+# z01_ledger.lume — a bank-statement ledger with aligned money columns.
+#
+# Probes: an enum with data driving a report, `match self` one-liner methods,
+# `Variant(..)`, enumerate into a struct, integer money formatting (no Float
+# printing depended on anywhere), `pad`/`pad_right` column alignment,
+# a `{Str: Int}` tally read back in *insertion order*, `sort_by(...).last`
+# matched as a `T?`, and `sum` with a block over a lazy `filter`.
+#
+# MEANT TO RUN.
+#
+# Assumptions I had to make (README does not spell these out):
+#   - `pad(n)` right-aligns (pads on the left) and `pad_right(n)` left-aligns.
+#     examples/stdlib.lume shows both but never says which side fills;
+#     examples/collections.lume uses `w.pad_right(6)` before a column, which
+#     only makes sense as left-align. Every width here is >= the content, so
+#     truncation behaviour is never exercised.
+#   - `{K: V}.keys` yields keys in insertion order (README: "`{K: V}` is an
+#     insertion-ordered hash map"). The tally line below depends on that.
+#   - `sort_by` is ascending. All sort keys here are distinct, so stability
+#     does not matter.
+#   - Int `/` truncates toward zero and `%` is non-negative for non-negative
+#     operands. Only non-negative values reach `/` and `%` here.
+#   - `"#{"#{r.n}".pad(2)}"` — an interpolation inside a string inside an
+#     interpolation. examples/stdlib.lume shows one level of nesting
+#     (`"[#{"ab".pad_right(5)}]"`, whose inner string has no `#{}` of its
+#     own); two levels is not attested anywhere. This program is the only
+#     one of my twelve that uses it, deliberately; the others go through a
+#     `def num(n, w)` helper so a lexer problem here cannot take them down
+#     with it.
+#
+# EXPECTED OUTPUT:
+#  #  item          amount    balance
+# -----------------------------------
+#  1  salary      +2500.00    2500.00
+#  2  rent        -1200.00    1300.00
+#  3  card fee       -2.50    1297.50
+#  4  refund        +45.99    1343.49
+#  5  groceries     -87.10    1256.39
+#  6  wire fee      -15.00    1241.39
+# -----------------------------------
+#
+# deposits       2545.99
+# withdrawals    1287.10
+# fees             17.50
+# balance        1241.39
+#
+# deposit=2 withdraw=2 fee=2
+# largest: salary +2500.00
+
+WIDTH = 35
+
+enum Entry:
+  Deposit(who: Str, cents: Int)
+  Withdraw(who: Str, cents: Int)
+  Fee(label: Str, cents: Int)
+
+  def desc -> Str = match self:
+    Deposit(who, _)  -> who
+    Withdraw(who, _) -> who
+    Fee(label, _)    -> "#{label} fee"
+
+  def signed -> Int = match self:
+    Deposit(_, c)  -> c
+    Withdraw(_, c) -> 0 - c
+    Fee(_, c)      -> 0 - c
+
+  def kind -> Str = match self:
+    Deposit(..)  -> "deposit"
+    Withdraw(..) -> "withdraw"
+    Fee(..)      -> "fee"
+
+  def magnitude -> Int = signed.abs
+
+struct Row:
+  n: Int
+  desc: Str
+  amount: Int
+  balance: Int
+
+def money(cents: Int) -> Str:
+  a = cents.abs
+  frac = a % 100
+  f = if frac < 10: "0#{frac}" else: "#{frac}"
+  sign = if cents < 0: "-" else: ""
+  "#{sign}#{a / 100}.#{f}"
+
+def signed_money(cents: Int) -> Str:
+  if cents >= 0: "+#{money(cents)}" else: money(cents)
+
+def render(r: Row) -> Str:
+  "#{"#{r.n}".pad(2)}  #{r.desc.pad_right(10)} #{signed_money(r.amount).pad(9)} #{money(r.balance).pad(10)}"
+
+def total_of(entries: [Entry], kind: Str) -> Int:
+  entries.filter { |e| e.kind == kind }.sum(_.magnitude)
+
+def main:
+  entries = [
+    Entry.Deposit("salary", 250000),
+    Entry.Withdraw("rent", 120000),
+    Entry.Fee("card", 250),
+    Entry.Deposit("refund", 4599),
+    Entry.Withdraw("groceries", 8710),
+    Entry.Fee("wire", 1500),
+  ]
+
+  var rows: [Row] = []
+  var balance = 0
+  for i, e in entries.enumerate:
+    balance += e.signed
+    rows.push(Row(i + 1, e.desc, e.signed, balance))
+
+  puts " #  #{"item".pad_right(10)} #{"amount".pad(9)} #{"balance".pad(10)}"
+  puts "-".repeat(WIDTH)
+  for r in rows:
+    puts render(r)
+  puts "-".repeat(WIDTH)
+
+  deposits = total_of(entries, "deposit")
+  withdrawals = total_of(entries, "withdraw")
+  fees = total_of(entries, "fee")
+
+  puts ""
+  puts "#{"deposits".pad_right(12)}#{money(deposits).pad(10)}"
+  puts "#{"withdrawals".pad_right(12)}#{money(withdrawals).pad(10)}"
+  puts "#{"fees".pad_right(12)}#{money(fees).pad(10)}"
+  puts "#{"balance".pad_right(12)}#{money(balance).pad(10)}"
+  puts ""
+
+  var counts: {Str: Int} = {}
+  for e in entries:
+    counts[e.kind] = counts[e.kind].or(0) + 1
+  puts counts.keys.map { |k| "#{k}=#{counts[k].or(0)}" }.to_list.join(" ")
+
+  match entries.sort_by(_.magnitude).last:
+    Some(e) -> puts "largest: #{e.desc} #{signed_money(e.signed)}"
+    None    -> puts "largest: none"

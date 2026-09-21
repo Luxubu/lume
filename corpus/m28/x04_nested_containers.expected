@@ -1,0 +1,7 @@
+error: `render` needs `F: Flat[Str]`, and `Grid[Str]` is not Flat[Str]
+  --> corpus/m28/x04_nested_containers.lume:81:8
+   |
+81 |   puts render(g)
+   |        ^
+  help: its `cells` is `-> [T]`, and `Flat[Str]` asks for `-> [Str]`
+exit: 1

@@ -1,0 +1,21 @@
+== toc ==
+- Lume Notes  ->  lume-notes
+  - Getting Started  ->  getting-started
+  - Language Tour  ->  language-tour
+    - Blocks  ->  blocks
+    - Generics  ->  generics
+- Appendix  ->  appendix
+
+== body, wrapped at 30 ==
+| Lume is small and fast. It
+| compiles to Rust and runs
+| native. Install a Rust
+| toolchain first. A block is
+| inlined at the call. Type
+| arguments are read off the
+| call. Nothing to see here yet.
+
+levels: 1=2 2=2 3=2
+slugs unique: true
+[Lume Notes] has 36 words in 6 sections
+exit: 0

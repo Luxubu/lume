@@ -1,0 +1,14 @@
+--- old
++++ new
+  def main:
++   setup()
+    puts hello
+-   puts world
+    done()
++   log()
+
+3 unchanged, 2 added, 1 removed
+changed lines: 3
+similarity: 66%
+kept: def main: / puts hello / done()
+exit: 0

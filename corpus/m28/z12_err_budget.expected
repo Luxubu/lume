@@ -1,0 +1,7 @@
+error: `spent` is declared on line 82, outside this block; a new `spent` here would hide it and be lost when the block ends
+  --> corpus/m28/z12_err_budget.lume:84:7
+   |
+84 |       spent = spent + e.cents
+   |       ^
+  help: to change it from here, declare it `var spent` on line 82; to make a separate value, give it another name
+exit: 1

@@ -1,0 +1,123 @@
+# z09_survey_sources.lume — AWKWARD (1 of 3).
+#
+# A survey tool whose readings arrive as a list, as a set of unique voters,
+# as a name->score map, or from a panel type of its own, and which reports
+# all four through one interface. This leans on the newest and (to me,
+# reading the README cold) least comfortable corner of the language:
+# generic `extend`.
+#
+# Probes:
+#   - `extend [T]`, `extend {T}`, `extend {K: V}` and `extend Panel[T]` all
+#     conforming to the same parameterised interface;
+#   - a helper `def report[T, S: Samples[T]]` where `T` appears ONLY inside
+#     another parameter's bound, so it has to come out of the conformance;
+#   - the same `[T]` and `{T}` conforming to a SECOND interface at the same
+#     time (`Scored[T: Ordered]`), with the set's item taking its bound from
+#     the interface declaration because `{T: Ordered}` would read as a map;
+#   - an interface default (`ranked_text`) written in terms of another
+#     default (`ranked`), not just in terms of the required method.
+#
+# MEANT TO RUN.
+#
+# Naming hazard I deliberately stepped around, and could not resolve from
+# the README: if the required method were called `values`, then inside
+# `extend {K: V} with Samples[V]` the body `self.values` would — by the rule
+# "a method of your own wins over the built-in of the same name" — be the
+# method being defined, i.e. unbounded recursion rather than the map's
+# built-in `values`. So the method here is `readings`, and `total_count`
+# rather than `count`, and `blank?` rather than `empty?`.
+#
+# EXPECTED OUTPUT:
+# == samples ==
+# daily      5  7, 4, 9, 4, 6
+# voters     3  ana, bo, cy
+# by name    3  12, 8, 15
+# panel      3  5, 3, 5
+# nothing   (empty)
+#
+# == ranked ==
+# top daily: 9
+# daily: 9, 7, 6, 4, 4
+# top fruit: pear
+# fruit: pear, fig, apple
+#
+# counts: 5 3 3 3 0
+# blank? false false false false true
+# judges: x/y
+
+interface Samples[T]:
+  def readings -> [T]
+
+  def total_count -> Int = readings.len
+  def blank? -> Bool = total_count == 0
+  def shown -> Str = readings.map { |v| "#{v}" }.to_list.join(", ")
+
+extend [T] with Samples[T]:
+  def readings -> [T] = self
+
+extend {T} with Samples[T]:
+  def readings -> [T] = self.to_list
+
+extend {K: V} with Samples[V]:
+  def readings -> [V] = self.values.to_list
+
+struct Panel[T]:
+  judges: [Str]
+  marks: [T]
+
+extend Panel[T] with Samples[T]:
+  def readings -> [T] = marks
+
+interface Scored[T: Ordered]:
+  def scores -> [T]
+
+  def top -> T? = scores.max
+  def ranked -> [T] = scores.sort.reverse.to_list
+  def ranked_text -> Str = ranked.map { |v| "#{v}" }.to_list.join(", ")
+
+extend [T: Ordered] with Scored[T]:
+  def scores -> [T] = self
+
+extend {T} with Scored[T]:
+  def scores -> [T] = self.to_list
+
+def num(n: Int, w: Int) -> Str:
+  s = "#{n}"
+  s.pad(w)
+
+def report[T, S: Samples[T]](label: Str, s: S) -> Str:
+  if s.blank?:
+    "#{label.pad_right(10)}(empty)"
+  else:
+    "#{label.pad_right(10)}#{num(s.total_count, 2)}  #{s.shown}"
+
+def main:
+  daily = [7, 4, 9, 4, 6]
+  voters = {"ana", "bo", "cy", "ana"}
+  by_name = {"ana": 12, "bo": 8, "cy": 15}
+  panel = Panel(judges: ["x", "y"], marks: [5, 3, 5])
+  empty_run: [Int] = []
+  fruit = {"pear", "fig", "apple"}
+
+  puts "== samples =="
+  puts report("daily", daily)
+  puts report("voters", voters)
+  puts report("by name", by_name)
+  puts report("panel", panel)
+  puts report("nothing", empty_run)
+
+  puts ""
+  puts "== ranked =="
+  match daily.top:
+    Some(n) -> puts "top daily: #{n}"
+    None    -> puts "top daily: (none)"
+  puts "daily: #{daily.ranked_text}"
+  match fruit.top:
+    Some(f) -> puts "top fruit: #{f}"
+    None    -> puts "top fruit: (none)"
+  puts "fruit: #{fruit.ranked_text}"
+
+  puts ""
+  puts "counts: #{daily.total_count} #{voters.total_count} #{by_name.total_count} #{panel.total_count} #{empty_run.total_count}"
+  puts "blank? #{daily.blank?} #{voters.blank?} #{by_name.blank?} #{panel.blank?} #{empty_run.blank?}"
+  puts "judges: #{panel.judges.join("/")}"

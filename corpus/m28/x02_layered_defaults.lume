@@ -1,0 +1,95 @@
+# x02 — defaults stacked four deep, reached through a generic `extend`.
+#
+# `generic_extend.lume` shows defaults written in terms of the *required*
+# method. This asks whether a default may be written in terms of another
+# default, and then a third in terms of that, when the conforming type is a
+# built-in container that only ever supplied the one required method.
+#
+#   entries              (required)
+#     -> tally_count     (default, uses entries)
+#       -> empty_ledger? (default, uses tally_count)
+#         -> summary     (default, uses tally_count and empty_ledger?)
+#           -> banner    (default, uses summary, takes an argument)
+#             -> shout   (default, uses banner)
+#
+# `tally_count` is spelt that way on purpose: `count` is already a block
+# method of `[T]`, and shadowing built-ins is x09's job, not this file's.
+#
+# Also probes: the same chain on `[T]`, `{T}`, `{K: V}` at V and a user
+# generic struct, and a `Ledger[Str]`-bounded helper.
+#
+# Meant to RUN. "1 entries" below is the default's wording, not a typo.
+#
+# EXPECTED OUTPUT:
+# == moves: 3 entries ==
+# == MOVES: 3 ENTRIES ==
+# == none: empty ==
+# empty
+# == map: 3 entries ==
+# == SET: 2 ENTRIES ==
+# == journal: 1 entries ==
+# 1
+# false
+# == report: 3 entries ==
+
+interface Ledger[T]:
+  def entries -> [T]
+
+  def tally_count -> Int = count_of(entries)
+  def empty_ledger? -> Bool = tally_count == 0
+
+  def summary -> Str:
+    if empty_ledger?:
+      "empty"
+    else:
+      "#{tally_count} entries"
+
+  def banner(title: Str) -> Str = "== #{title}: #{summary} =="
+  def shout(title: Str) -> Str = banner(title).upcase
+
+# A plain helper: the bottom of the chain is a free generic function rather
+# than the container's own `len`, so a default calling out of the interface
+# is probed too.
+def count_of[T](xs: [T]) -> Int:
+  var n = 0
+  for x in xs:
+    n += 1
+  n
+
+extend [T] with Ledger[T]:
+  def entries -> [T] = self
+
+extend {T} with Ledger[T]:
+  def entries -> [T] = self.to_list
+
+extend {K: V} with Ledger[V]:
+  def entries -> [V] = self.values.to_list
+
+struct Journal[T]:
+  lines: [T]
+
+extend Journal[T] with Ledger[T]:
+  def entries -> [T] = lines
+
+def headline[L: Ledger[Str]](l: L) -> Str:
+  l.banner("report")
+
+def main:
+  moves = ["in", "out", "in"]
+  puts moves.banner("moves")
+  puts moves.shout("moves")
+
+  # the empty branch of `summary`, on a list of a type that is not `Str`
+  none: [Int] = []
+  puts none.banner("none")
+  puts none.summary
+
+  puts({1: "a", 2: "b", 3: "c"}.banner("map"))
+  puts({"x", "y"}.shout("set"))
+
+  j = Journal(lines: ["one"])
+  puts j.banner("journal")
+  puts j.tally_count
+  puts j.empty_ledger?
+
+  puts headline(moves)

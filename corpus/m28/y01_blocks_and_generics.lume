@@ -1,0 +1,113 @@
+# y01 — blocks meeting generics, pipes and closures.
+#
+# Probes: a generic function whose block parameter is handed on to another
+# generic function, to a built-in (`sum`), and to its own recursive call;
+# the `_` shorthand and a function's name as a block; a block that closes
+# over a `var` and changes it; a `do |x|` block used as an argument to
+# `puts`; and a pipe whose right-hand side is a generic call taking a `_`
+# block (`items |> weigh(_.price)`).
+#
+# Meant to RUN.
+#
+# Renderings relied on: Int and Bool inside `#{}` (`15`, `true`). Every
+# list is turned into a Str with `join` before printing, so no list or
+# struct rendering is assumed.
+#
+# EXPECTED OUTPUT:
+# FIG-PEAR-PLUM
+# 3/4/4
+# 9, 18, 27
+# fig:3 pear:5 plum:7
+# 15
+# 11
+# 2
+# run 1 | run 2 | run 3
+# 2
+# 15
+# 15
+# 64
+
+def apply_all[T, U](xs: [T], f: (T) -> U) -> [U]:
+  var out: [U] = []
+  for x in xs:
+    out.push(f(x))
+  out
+
+# the block this function was handed goes straight on to another generic
+def apply_twice[T](xs: [T], f: (T) -> T) -> [T]:
+  apply_all(apply_all(xs, f), f)
+
+# the block goes straight to a built-in
+def weigh[T](xs: [T], w: (T) -> Int) -> Int:
+  xs.sum(w)
+
+def count_where[T](xs: [T], ok: (T) -> Bool) -> Int:
+  var n = 0
+  for x in xs:
+    n += 1 if ok(x)
+  n
+
+# the block goes to the function's own recursive call
+def repeat_until[T](x: T, n: Int, f: (T) -> T) -> T:
+  if n <= 0:
+    return x
+  repeat_until(f(x), n - 1, f)
+
+def gather(n: Int, step: (Int) -> ()):
+  var i = 1
+  while i <= n:
+    step(i)
+    i += 1
+
+def shown[T](xs: [T]) -> Str:
+  var out: [Str] = []
+  for x in xs:
+    out.push("#{x}")
+  out.join(", ")
+
+struct Item:
+  name: Str
+  price: Int
+
+  def label -> Str = "#{name}:#{price}"
+
+def shout(s: Str) -> Str = s.upcase
+
+def main:
+  words = ["fig", "pear", "plum"]
+  items = [Item("fig", 3), Item("pear", 5), Item("plum", 7)]
+
+  # a function's name as the block
+  puts apply_all(words, shout).join("-")
+
+  lens = apply_all(words) { |w| "#{w.len}" }
+  puts lens.join("/")
+
+  # a block handed on twice
+  puts shown(apply_twice([1, 2, 3], _ * 3))
+
+  labels = apply_all(items) { |i| i.label }
+  puts labels.join(" ")
+
+  # a block handed to a built-in, through a generic
+  puts weigh(items, _.price)
+  puts weigh(words) { |w| w.len }
+
+  puts count_where(items) { |i| i.price > 4 }
+
+  # a block that closes over a `var` and changes it
+  var log: [Str] = []
+  gather(3) { |i| log.push("run #{i}") }
+  puts log.join(" | ")
+
+  # a `do |x|` block as an argument to `puts`, changing an outer `var`
+  var total = 0
+  puts count_where(items) do |it|
+    total += it.price
+    it.price > 3
+  puts total
+
+  # a pipe into a generic call that takes a `_` block
+  items |> weigh(_.price) |> puts
+
+  puts repeat_until(2, 5, _ * 2)

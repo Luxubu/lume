@@ -1,0 +1,19 @@
+warning: `stock` holds values of different types behind `Priced`, so calls on its items go through a pointer
+  --> corpus/m28/y03_interfaces_in_collections.lume:78:3
+   |
+78 |   stock: [Priced] = [Book(title: "Lume", price: 1500), Ticket(event: "gig", price: 4000, fee: 250)]
+   |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+book:Lume 1500; ticket:gig 4250
+book:Lume,ticket:gig
+350
+15
+book:solo 999
+$4.99 $12.50 $20.00
+$20.00
+$4.99
+$37.49
+$20.00
+9
+pear
+exit: 0

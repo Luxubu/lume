@@ -1,0 +1,147 @@
+# z03_tournament.lume — a round-robin league table with real tie-breaks.
+#
+# Probes: a parameterised interface (`Comparable[T]`) satisfied structurally,
+# its defaults used by a generic insertion sort bounded `[T: Comparable[T]]`,
+# `for ... where` over a list of results, `return` as an early exit inside a
+# method, `Str` `<` as a tie-break, `enumerate` for row numbers, and a ten
+# column aligned table.
+#
+# MEANT TO RUN.
+#
+# The tie-break chain is points desc, goal difference desc, goals-for desc,
+# then team name ascending, so the order below is fully determined and does
+# not depend on `sort` stability (the sort is my own insertion sort anyway).
+# Nothing prints a Float, list, map, set or optional directly.
+#
+# EXPECTED OUTPUT:
+# Ants 2-1 Bees
+# Cats 0-0 Dogs
+# Ants 1-3 Cats
+# Bees 2-2 Dogs
+# Ants 0-1 Dogs
+# Bees 4-0 Cats
+#
+# pos  team    P  W  D  L  GF  GA  GD  Pts
+#   1  Dogs    3  1  2  0   3   2  +1    5
+#   2  Bees    3  1  1  1   7   4  +3    4
+#   3  Cats    3  1  1  1   3   5  -2    4
+#   4  Ants    3  1  0  2   3   5  -2    3
+#
+# goals: 16
+# biggest win: Bees 4-0 Cats
+# unbeaten: Dogs
+# champion: Dogs
+
+interface Comparable[T]:
+  def compare(other: T) -> Int
+
+  def before?(other: T) -> Bool:
+    compare(other) < 0
+
+struct Result:
+  home: Str
+  away: Str
+  hg: Int
+  ag: Int
+
+  def margin -> Int = (hg - ag).abs
+  def line -> Str = "#{home.pad_right(5)}#{hg}-#{ag} #{away}"
+
+struct Standing:
+  team: Str
+  played: Int
+  won: Int
+  drawn: Int
+  lost: Int
+  gf: Int
+  ga: Int
+
+  def points -> Int = won * 3 + drawn
+  def gd -> Int = gf - ga
+
+  def compare(other: Standing) -> Int:
+    if points != other.points:
+      return other.points - points
+    if gd != other.gd:
+      return other.gd - gd
+    if gf != other.gf:
+      return other.gf - gf
+    if team == other.team:
+      return 0
+    if team < other.team: -1 else: 1
+
+def ordered[T: Comparable[T]](xs: [T]) -> [T]:
+  var out: [T] = []
+  for x in xs:
+    var at = out.len
+    var i = 0
+    while i < out.len:
+      if x.before?(out.at(i)):
+        at = i
+        i = out.len
+      else:
+        i += 1
+    out.insert(at, x)
+  out
+
+def standing_for(team: Str, results: [Result]) -> Standing:
+  var played = 0
+  var won = 0
+  var drawn = 0
+  var lost = 0
+  var gf = 0
+  var ga = 0
+  for r in results where r.home == team or r.away == team:
+    mine = if r.home == team: r.hg else: r.ag
+    theirs = if r.home == team: r.ag else: r.hg
+    played += 1
+    gf += mine
+    ga += theirs
+    if mine > theirs:
+      won += 1
+    elif mine == theirs:
+      drawn += 1
+    else:
+      lost += 1
+  Standing(team, played, won, drawn, lost, gf, ga)
+
+def num(n: Int, w: Int) -> Str:
+  s = "#{n}"
+  s.pad(w)
+
+def signed(n: Int) -> Str = if n > 0: "+#{n}" else: "#{n}"
+
+def row(pos: Int, s: Standing) -> Str:
+  "#{num(pos, 3)}  #{s.team.pad_right(6)} #{num(s.played, 2)} #{num(s.won, 2)} #{num(s.drawn, 2)} #{num(s.lost, 2)} #{num(s.gf, 3)} #{num(s.ga, 3)} #{signed(s.gd).pad(3)} #{num(s.points, 4)}"
+
+def main:
+  results = [
+    Result("Ants", "Bees", 2, 1),
+    Result("Cats", "Dogs", 0, 0),
+    Result("Ants", "Cats", 1, 3),
+    Result("Bees", "Dogs", 2, 2),
+    Result("Ants", "Dogs", 0, 1),
+    Result("Bees", "Cats", 4, 0),
+  ]
+  teams = ["Ants", "Bees", "Cats", "Dogs"]
+
+  for r in results:
+    puts r.line
+
+  table = ordered(teams.map { |t| standing_for(t, results) }.to_list)
+
+  puts ""
+  puts "#{"pos".pad(3)}  #{"team".pad_right(6)} #{"P".pad(2)} #{"W".pad(2)} #{"D".pad(2)} #{"L".pad(2)} #{"GF".pad(3)} #{"GA".pad(3)} #{"GD".pad(3)} #{"Pts".pad(4)}"
+  for i, s in table.enumerate:
+    puts row(i + 1, s)
+
+  puts ""
+  puts "goals: #{results.sum { |r| r.hg + r.ag }}"
+  match results.sort_by(_.margin).last:
+    Some(r) -> puts "biggest win: #{r.home} #{r.hg}-#{r.ag} #{r.away}"
+    None    -> puts "biggest win: none"
+  unbeaten = table.filter { |s| s.lost == 0 }.map(_.team).to_list
+  puts "unbeaten: #{unbeaten.join(", ")}"
+  match table.first:
+    Some(s) -> puts "champion: #{s.team}"
+    None    -> puts "champion: none"

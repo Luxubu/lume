@@ -1,0 +1,101 @@
+# y02 — generics meeting `T or Error`, `T?`, `?` and `match`.
+#
+# Probes: a generic function whose block parameter is declared
+# `(Row) -> T or Error` and whose body uses `?` on the block's result; a
+# block body that itself uses `?` (README: "a block declared to give back a
+# `T or Error` ... ends the way a function does"); `?` on an optional inside
+# a generic function returning `T?`; an early `return None`; a tuple pattern
+# nested inside `Some(...)`; and `.or(fallback)` where the fallback's type
+# is what fixes the generic parameter.
+#
+# Meant to RUN.
+#
+# Renderings relied on: Int and Bool in `#{}` / `puts`. Error text is only
+# ever text this program wrote itself, never the built-in `to_int` message.
+#
+# EXPECTED OUTPUT:
+# 60
+# 120
+# row b: `two` is not a number
+# 10,-1,30
+# b
+# none
+# q
+# -1
+# 40
+# false
+
+struct Row:
+  key: Str
+  raw: Str
+
+def as_int(r: Row) -> Int or Error:
+  if not r.raw.chars.all?(_.digit?):
+    return Error("row #{r.key}: `#{r.raw}` is not a number")
+  r.raw.to_int?
+
+# a generic function whose block may fail; `?` passes the failure up
+def read_all[T](rows: [Row], read: (Row) -> T or Error) -> [T] or Error:
+  var out: [T] = []
+  for r in rows:
+    out.push(read(r)?)
+  out
+
+# the same shape, but the failure becomes a default of the caller's type
+def read_or[T](rows: [Row], fallback: T, read: (Row) -> T or Error) -> [T]:
+  var out: [T] = []
+  for r in rows:
+    out.push(read(r).or(fallback))
+  out
+
+def first_bad(rows: [Row], read: (Row) -> Int or Error) -> Str?:
+  for r in rows:
+    if read(r).error?:
+      return Some(r.key)
+  None
+
+# `?` on an optional inside a generic function that returns `T?`
+def middle[T](xs: [T]) -> T?:
+  if xs.len < 3:
+    return None
+  xs[xs.len / 2]
+
+def both_ends[T](xs: [T]) -> (T, T)?:
+  a = xs.first?
+  b = xs.last?
+  Some((a, b))
+
+def main -> () or Error:
+  rows = [Row("a", "10"), Row("b", "20"), Row("c", "30")]
+  bad = [Row("a", "10"), Row("b", "two"), Row("c", "30")]
+
+  ns = read_all(rows, as_int)?
+  puts ns.sum
+
+  # a block whose own body uses `?`
+  doubled = read_all(rows) do |r|
+    n = as_int(r)?
+    n * 2
+  twice = doubled?
+  puts twice.sum
+
+  match read_all(bad, as_int):
+    Ok(xs) -> puts "unexpected #{xs.len}"
+    Error(e) -> puts e.message
+
+  # `-1` is what tells `read_or` that `T` is `Int`
+  recovered = read_or(bad, -1, as_int)
+  puts recovered.map { |n| "#{n}" }.to_list.join(",")
+
+  puts first_bad(bad, as_int).or("none")
+  puts first_bad(rows, as_int).or("none")
+
+  puts middle(["p", "q", "r"]).or("?")
+  puts middle([1, 2]).or(-1)
+
+  match both_ends([10, 20, 30]):
+    Some((a, b)) -> puts "#{a + b}"
+    None -> puts "empty"
+
+  empty: [Int] = []
+  puts both_ends(empty).some?

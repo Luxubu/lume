@@ -1,0 +1,22 @@
+== config ==
+[server]
+  host    = localhost
+  port    = 8080
+[limits]
+  retries = 3
+  timeout = 250
+  label   = fast lane
+
+4 problems:
+  line 2: `stray` outside a section
+  line 12: unclosed section header
+  line 13: expected key = value
+  line 14: bad key `bad key!`
+
+port as Int: 8080
+retries as Int: 3
+timeout doubled: 500
+missing key host in limits: (none)
+sections: server, limits
+keys in server: 2
+exit: 0

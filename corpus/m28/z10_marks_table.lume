@@ -1,0 +1,131 @@
+# z10_marks_table.lume — AWKWARD (2 of 3).
+#
+# A typed reader over a string table: every column is pulled out through one
+# generic function that takes a block returning `T or Error`. This pushes on
+# the seam I found least comfortable in the README — blocks of your own
+# crossed with generics crossed with results.
+#
+# Probes:
+#   - `def read_column[T](t: Table, name: Str, parse: (Str) -> T or Error)`:
+#     a block parameter whose result type is generic AND fallible;
+#   - the same parameter fed four ways: `{ |c| c.trim }` (a bare value, so
+#     the implied `Ok`), `{ |c| c.to_int }` (already a result), a named
+#     function (`grade_of`), and a `do |c|` body that uses `?` partway
+#     through and then chooses between `Error(...)` and a bare value;
+#   - `?` written directly after a `{ ... }` block call;
+#   - a block parameter handed on unchanged to another function (`read_two`),
+#     which returns `([T], [T]) or Error` — a tuple as the Ok type — and is
+#     then destructured through `?`;
+#   - a struct method that itself returns `T or Error` and uses `?` inside;
+#   - `summarise[T, A]` with a two-argument block and an `if` expression as
+#     the whole inline block body.
+#
+# MEANT TO RUN.
+#
+# I avoided printing any built-in error's message: the only message shown is
+# one `grade_of` wrote. Int division: 104/4 = 26, 316/4 = 79.
+#
+# EXPECTED OUTPUT:
+# == marks ==
+# name   age  grade  score
+# ana     31  A         88
+# bo      16  B         72
+# cy      45  A         95
+# di      12  C         61
+#
+# ages sum 104 avg 26
+# scores sum 316 avg 79 max 95 min 61
+# grades A=2 B=1 C=1
+# adults: 2
+# longest name: ana
+# via read_two: 104 / 316
+# missing column: true
+# bad grade caught: bad grade `Z`
+
+struct Table:
+  header: [Str]
+  rows: [[Str]]
+
+  def column(name: Str) -> [Str] or Error:
+    match header.index_of(name):
+      None    -> Error("no column `#{name}`")
+      Some(i) -> rows.map { |r| r.at(i) }.to_list
+
+def num(n: Int, w: Int) -> Str:
+  s = "#{n}"
+  s.pad(w)
+
+def read_column[T](t: Table, name: Str, parse: (Str) -> T or Error) -> [T] or Error:
+  cells = t.column(name)?
+  var out: [T] = []
+  for c in cells:
+    out.push(parse(c)?)
+  out
+
+def read_two[T](t: Table, a: Str, b: Str, parse: (Str) -> T or Error) -> ([T], [T]) or Error:
+  left = read_column(t, a, parse)?
+  right = read_column(t, b, parse)?
+  (left, right)
+
+def summarise[T, A](xs: [T], start: A, step: (A, T) -> A) -> A:
+  var acc = start
+  for x in xs:
+    acc = step(acc, x)
+  acc
+
+def grade_of(c: Str) -> Str or Error:
+  up = c.trim.upcase
+  if ["A", "B", "C"].contains?(up):
+    up
+  else:
+    Error("bad grade `#{c.trim}`")
+
+def main -> () or Error:
+  rows = [
+    ["ana", "31", "A", "88"],
+    ["bo", "16", "B", "72"],
+    ["cy", "45", "A", "95"],
+    ["di", "12", "C", "61"],
+  ]
+  t = Table(["name", "age", "grade", "score"], rows)
+
+  names = read_column(t, "name") { |c| c.trim }?
+  ages = read_column(t, "age") { |c| c.to_int }?
+  grades = read_column(t, "grade", grade_of)?
+  raw_scores = read_column(t, "score") do |c|
+    n = c.to_int?
+    if n < 0 or n > 100:
+      Error("score out of range: #{n}")
+    else:
+      n
+  scores = raw_scores?
+
+  puts "== marks =="
+  puts "#{"name".pad_right(7)}#{"age".pad(3)}  #{"grade".pad_right(7)}#{"score".pad(5)}"
+  for i, n in names.enumerate:
+    puts "#{n.pad_right(7)}#{num(ages.at(i), 3)}  #{grades.at(i).pad_right(7)}#{num(scores.at(i), 5)}"
+
+  puts ""
+  puts "ages sum #{ages.sum} avg #{ages.sum / ages.len}"
+  puts "scores sum #{scores.sum} avg #{scores.sum / scores.len} max #{scores.max.or(0)} min #{scores.min.or(0)}"
+
+  var tally: {Str: Int} = {}
+  for g in grades:
+    tally[g] = tally[g].or(0) + 1
+  shown = tally.keys.map { |k| "#{k}=#{tally[k].or(0)}" }.to_list
+  puts "grades #{shown.join(" ")}"
+  puts "adults: #{ages.count(_ >= 18)}"
+
+  longest = summarise(names, "") { |best, n| if n.len > best.len: n else: best }
+  puts "longest name: #{longest}"
+
+  (a2, s2) = read_two(t, "age", "score") { |c| c.to_int }?
+  puts "via read_two: #{a2.sum} / #{s2.sum}"
+
+  missing = read_column(t, "nope") { |c| c.to_int }
+  puts "missing column: #{missing.error?}"
+
+  t2 = Table(["name", "age", "grade", "score"], [["ed", "20", "Z", "50"]])
+  match read_column(t2, "grade", grade_of):
+    Ok(_)    -> puts "bad grade caught: none"
+    Error(e) -> puts "bad grade caught: #{e.message}"

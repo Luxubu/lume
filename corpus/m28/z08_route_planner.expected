@@ -1,0 +1,13 @@
+== routes from Ash ==
+to       cost  path
+Brook       3  Ash -> Crag -> Brook
+Crag        2  Ash -> Crag
+Dell        8  Ash -> Crag -> Brook -> Dell
+Elm        10  Ash -> Crag -> Brook -> Dell -> Elm
+Fen        13  Ash -> Crag -> Brook -> Dell -> Elm -> Fen
+
+reachable: 6 of 6
+farthest: Fen at 13
+hops to Fen: 5
+total edge weight: 41
+exit: 0

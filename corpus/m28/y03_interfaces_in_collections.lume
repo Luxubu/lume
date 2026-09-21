@@ -1,0 +1,98 @@
+# y03 — interfaces held in collections, meeting generic bounds and
+# operator methods.
+#
+# Probes: a `[Priced]` list holding two different structs; an interface
+# default (`shown`) reached both through the interface value and straight
+# on the type; a generic bound `[T: Priced]` where `T` is one concrete
+# type; `sort_by` over a list of interface values; a struct with `+`, `<`
+# and `==` and whether `<` alone makes it satisfy the built-in `Ordered`
+# bound of a *user-written* generic function; `sort`/`max`/`min`/`fold`
+# on that type.
+#
+# Meant to RUN.
+#
+# Renderings relied on: Int in `#{}`; every money value goes through
+# `.decimals(2)`, so no Float rendering is assumed.
+#
+# EXPECTED OUTPUT:
+# book:Lume 1500; ticket:gig 4250
+# book:Lume,ticket:gig
+# 350
+# 15
+# book:solo 999
+# $4.99 $12.50 $20.00
+# $20.00
+# $4.99
+# $37.49
+# $20.00
+# 9
+# pear
+
+interface Priced:
+  def cents -> Int
+  def label -> Str
+
+  def shown -> Str = "#{label} #{cents}"
+
+struct Book:
+  title: Str
+  price: Int
+
+  def cents -> Int = price
+  def label -> Str = "book:#{title}"
+
+struct Ticket:
+  event: Str
+  price: Int
+  fee: Int
+
+  def cents -> Int = price + fee
+  def label -> Str = "ticket:#{event}"
+
+# a bound, not an interface value: one concrete type per call
+def total[T: Priced](xs: [T]) -> Int:
+  xs.sum { |x| x.cents }
+
+# an interface value: a list holding a mixture
+def describe_all(xs: [Priced]) -> Str:
+  xs.map { |x| x.shown }.to_list.join("; ")
+
+struct Money:
+  cents: Int
+
+  def +(o: Money) -> Money = Money(cents + o.cents)
+  def <(o: Money) -> Bool = cents < o.cents
+  def ==(o: Money) -> Bool = cents == o.cents
+
+  def show -> Str = "$#{(cents.to_float / 100.0).decimals(2)}"
+
+# `Ordered` is the built-in bound for `<`; `Money` only ever wrote `<`
+def biggest[T: Ordered](xs: [T]) -> T?:
+  var best = xs[0]?
+  for x in xs:
+    if best < x:
+      best = x
+  Some(best)
+
+def main:
+  stock: [Priced] = [Book(title: "Lume", price: 1500), Ticket(event: "gig", price: 4000, fee: 250)]
+  puts describe_all(stock)
+
+  ordered = stock.sort_by { |p| p.cents }
+  puts ordered.map { |p| p.label }.to_list.join(",")
+
+  puts total([Book(title: "a", price: 100), Book(title: "b", price: 250)])
+  puts total([Ticket(event: "x", price: 10, fee: 5)])
+
+  # the default, straight on the type, with no interface in sight
+  puts Book(title: "solo", price: 999).shown
+
+  ms = [Money(1250), Money(499), Money(2000)]
+  puts ms.sort.map { |m| m.show }.to_list.join(" ")
+  puts ms.max.or(Money(0)).show
+  puts ms.min.or(Money(0)).show
+  puts ms.fold(Money(0)) { |acc, m| acc + m }.show
+
+  puts biggest(ms).or(Money(0)).show
+  puts biggest([3, 9, 2]).or(0)
+  puts biggest(["pear", "fig"]).or("")

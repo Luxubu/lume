@@ -1,0 +1,96 @@
+# y09 — `test` blocks and `assert` over generic, interface and operator
+# code.
+#
+# Probes: `assert` comparing a generic function's `[Str]` result to a list
+# literal; `assert` on a `T?` returned by a generic function taking a
+# block, both `== Some(x)` and `.none?`; `assert` on operator methods that
+# a type never declared (`>=` and `sort` following from `<`); `!` inside a
+# test (README: "`!` is silent inside tests"); and statements before the
+# asserts inside a `test` block.
+#
+# Meant to RUN under `lume run` (which strips the tests) and to PASS under
+# `lume test`.
+#
+# `lume run` EXPECTED OUTPUT:
+# <rex> <bo>
+# <Oslo>
+# bo
+# 1,5,9
+# 9
+#
+# `lume test` should report 5 tests, 5 passed, 0 failed.
+
+interface Named:
+  def name -> Str
+  def tag -> Str = "<#{name}>"
+
+struct Dog:
+  call: Str
+
+  def name -> Str = call
+
+struct City:
+  title: Str
+  people: Int
+
+  def name -> Str = title
+
+def tags_of[T: Named](xs: [T]) -> [Str]:
+  xs.map { |x| x.tag }.to_list
+
+def pick[T](xs: [T], ok: (T) -> Bool) -> T?:
+  for x in xs:
+    if ok(x):
+      return Some(x)
+  None
+
+struct Score:
+  points: Int
+
+  def <(o: Score) -> Bool = points < o.points
+  def ==(o: Score) -> Bool = points == o.points
+
+def ranked[T: Ordered](xs: [T]) -> [T] = xs.sort
+
+def main:
+  dogs = [Dog("rex"), Dog("bo")]
+  puts tags_of(dogs).join(" ")
+  puts tags_of([City(title: "Oslo", people: 700000)]).join("")
+
+  short = pick(dogs) { |d| d.name.len == 2 }
+  puts short.or(Dog("none")).name
+
+  ss = [Score(5), Score(1), Score(9)]
+  puts ranked(ss).map { |s| "#{s.points}" }.to_list.join(",")
+  puts ss.max.or(Score(0)).points
+
+test "an interface default reaches a generic helper":
+  assert tags_of([Dog("a")]) == ["<a>"]
+  assert Dog("z").tag == "<z>"
+  assert tags_of([City(title: "Rio", people: 6)]) == ["<Rio>"]
+
+test "a block parameter inside a generic function, giving a T?":
+  even = pick([1, 2, 3, 4]) { |n| n % 2 == 0 }
+  assert even == Some(2)
+  none = pick([1, 3]) { |n| n % 2 == 0 }
+  assert none.none?
+  word = pick(["ab", "cde"]) { |s| s.len == 3 }
+  assert word == Some("cde")
+
+test "operator methods a type never wrote":
+  assert Score(4) < Score(9)
+  assert Score(9) >= Score(4)
+  assert Score(4) != Score(9)
+  assert ranked([Score(3), Score(1)]) == [Score(1), Score(3)]
+
+test "max and min over a user type, through T?":
+  assert [Score(2), Score(7)].max == Some(Score(7))
+  assert [Score(2), Score(7)].min == Some(Score(2))
+  empty: [Score] = []
+  assert empty.max.none?
+
+test "! is silent inside a test":
+  n = "12".to_int!
+  assert n == 12
+  found = pick([n]) { |x| x > 10 }
+  assert found! == 12

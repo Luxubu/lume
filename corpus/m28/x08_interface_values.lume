@@ -1,0 +1,82 @@
+# x08 — a built-in container held *as* an interface value, and a
+# parameterised interface used as a struct field type.
+#
+# Milestone 10 gave `[Shape]` holding mixed types behind a pointer.
+# Milestone 25 gave `Renders[Str]` as a value type. This asks whether the
+# two meet the containers milestone 27 made conform: can a `[Int]`, a
+# `{Int}`, a `{Str: Int}` and a user `Crate[Int]` all sit in one
+# `[Bag[Int]]`, and can a struct field be typed `Bag[Int]`?
+#
+# Probes:
+#   * `[Bag[Int]]` holding four different shapes, iterated with `for`.
+#   * a struct field typed `Bag[Int]`, filled once with a user type and
+#     once with a bare list literal.
+#   * a method of the holding struct calling the interface's defaults.
+#   * a single binding `one: Bag[Int] = {9, 9, 8}` — a set literal going
+#     straight into an interface-typed binding, which also pins that the
+#     set drops the repeat and keeps insertion order.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# 3 -> 1+2+3
+# 2 -> 4+5
+# 1 -> 6
+# 2 -> 7+8
+# 8
+# north: 2 (10+20)
+# south: 4 (1+2+3+4)
+# 10
+# 2
+# 9+8
+
+interface Bag[T]:
+  def items -> [T]
+
+  def size -> Int = items.len
+  def listed -> Str = items.map { |x| "#{x}" }.to_list.join("+")
+
+extend [T] with Bag[T]:
+  def items -> [T] = self
+
+extend {T} with Bag[T]:
+  def items -> [T] = self.to_list
+
+extend {K: V} with Bag[V]:
+  def items -> [V] = self.values.to_list
+
+struct Crate[T]:
+  contents: [T]
+
+extend Crate[T] with Bag[T]:
+  def items -> [T] = contents
+
+# An interface with an argument, as the declared type of a field.
+struct Shipment:
+  name: Str
+  cargo: Bag[Int]
+
+  def summary -> Str:
+    "#{name}: #{cargo.size} (#{cargo.listed})"
+
+def main:
+  bags: [Bag[Int]] = [[1, 2, 3], {4, 5}, {"a": 6}, Crate(contents: [7, 8])]
+  for b in bags:
+    puts "#{b.size} -> #{b.listed}"
+
+  var grand = 0
+  for b in bags:
+    grand += b.size
+  puts grand
+
+  s = Shipment(name: "north", cargo: Crate(contents: [10, 20]))
+  puts s.summary
+
+  # a bare list literal going into a `Bag[Int]` field
+  t = Shipment(name: "south", cargo: [1, 2, 3, 4])
+  puts t.summary
+  puts t.cargo.items.sum
+
+  one: Bag[Int] = {9, 9, 8}
+  puts one.size
+  puts one.listed

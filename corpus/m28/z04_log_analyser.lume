@@ -1,0 +1,125 @@
+# z04_log_analyser.lume — parse a request log, reject bad lines, report.
+#
+# Probes: `T or Error` parsing with list patterns over `split` (no separator,
+# i.e. whitespace), collecting successes and failures side by side with
+# `match Ok/Error`, three `{Str: Int}` tallies read back in insertion order,
+# a derived struct built from map keys, `sort_by(...).reverse.take(n)`,
+# `count` with a block, and string slicing (`time[0..1]`) to bucket by hour.
+#
+# MEANT TO RUN.
+#
+# Deliberately avoided: printing the message of a built-in error (`to_int`'s
+# text is not pinned down by the README), so every error message shown here
+# is one this program wrote. All averages are Int division (truncating):
+# 94/3 = 31, 1123/2 = 561, 227/2 = 113, 2668/10 = 266.
+#
+# EXPECTED OUTPUT:
+# == log summary ==
+# lines: 12  parsed: 10  rejected: 2
+#   ! want 6 fields, got 4
+#   ! want 6 fields, got 8
+#
+# by level
+#   INFO     5
+#   WARN     2
+#   ERROR    3
+#
+# by hour
+#   08   5
+#   09   3
+#   10   2
+#
+# slowest paths (avg ms)
+#   /pay      1204   x1
+#   /search    561   x2
+#   /login     113   x2
+#
+# total 2668 ms over 10 requests, avg 266 ms
+# non-200: 3   server errors: 2
+
+struct Record:
+  time: Str
+  level: Str
+  method: Str
+  path: Str
+  status: Int
+  ms: Int
+
+  def hour -> Str = time[0..1]
+
+struct PathStat:
+  path: Str
+  calls: Int
+  total: Int
+
+  def avg -> Int = total / calls
+
+def num(n: Int, w: Int) -> Str:
+  s = "#{n}"
+  s.pad(w)
+
+def parse(line: Str) -> Record or Error:
+  match line.split:
+    [t, lv, m, p, st, ms] -> Record(t, lv, m, p, st.to_int?, ms.to_int?)
+    parts                 -> Error("want 6 fields, got #{parts.len}")
+
+def main:
+  log = [
+    "08:14 INFO GET /home 200 34",
+    "08:14 INFO GET /about 200 12",
+    "08:15 WARN GET /search 200 512",
+    "08:17 ERROR POST /login 500 87",
+    "08:31 INFO GET /home 200 29",
+    "09:02 INFO POST /login 200 140",
+    "09:02 ERROR GET /missing 404 8",
+    "09:44 WARN GET /search 200 611",
+    "10:05 INFO GET /home 200 31",
+    "10:05 ERROR POST /pay 500 1204",
+    "09:10 INFO GET /home",
+    "garbage line here with seven words now ok",
+  ].join("\n")
+
+  lines = log.lines.reject(_.trim.empty?).to_list
+
+  var records: [Record] = []
+  var errs: [Str] = []
+  for line in lines:
+    match parse(line):
+      Ok(r)    -> records.push(r)
+      Error(e) -> errs.push(e.message)
+
+  puts "== log summary =="
+  puts "lines: #{lines.len}  parsed: #{records.len}  rejected: #{errs.len}"
+  for e in errs:
+    puts "  ! #{e}"
+
+  var by_level: {Str: Int} = {}
+  var by_hour: {Str: Int} = {}
+  var total_ms: {Str: Int} = {}
+  var calls: {Str: Int} = {}
+  for r in records:
+    by_level[r.level] = by_level[r.level].or(0) + 1
+    by_hour[r.hour] = by_hour[r.hour].or(0) + 1
+    total_ms[r.path] = total_ms[r.path].or(0) + r.ms
+    calls[r.path] = calls[r.path].or(0) + 1
+
+  puts ""
+  puts "by level"
+  for lv in by_level.keys:
+    puts "  #{lv.pad_right(8)}#{num(by_level[lv].or(0), 2)}"
+
+  puts ""
+  puts "by hour"
+  for h in by_hour.keys:
+    puts "  #{h}  #{num(by_hour[h].or(0), 2)}"
+
+  stats = total_ms.keys.map { |p| PathStat(p, calls[p].or(0), total_ms[p].or(0)) }.to_list
+  puts ""
+  puts "slowest paths (avg ms)"
+  for s in stats.sort_by(_.avg).reverse.take(3).to_list:
+    puts "  #{s.path.pad_right(9)}#{num(s.avg, 5)}   x#{s.calls}"
+
+  total = records.sum(_.ms)
+  puts ""
+  puts "total #{total} ms over #{records.len} requests, avg #{total / records.len} ms"
+  puts "non-200: #{records.count(_.status != 200)}   server errors: #{records.count(_.status >= 500)}"

@@ -1,0 +1,7 @@
+error: interface `Source` has a method with type parameters, which is not supported yet
+  --> corpus/m28/x10_tests_blocks_results.lume:39:5
+   |
+39 | pub interface Source[T]:
+   |     ^
+  help: an interface method takes concrete types; a generic function can take the interface instead
+exit: 1
