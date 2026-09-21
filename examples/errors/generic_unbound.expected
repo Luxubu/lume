@@ -1,0 +1,6 @@
+error: `T` could be any type, so `<` has nothing to compare
+  --> examples/errors/generic_unbound.lume:5:13
+  |
+5 |     if best < x:
+  |             ^
+  help: declare it `[T: Ordered]`, which promises every type it is given can be compared

@@ -295,6 +295,7 @@ impl Parser {
             return Err(LumeError::new(nl, nc, format!("struct names start with a capital letter: `{}`", name))
                 .with_help(format!("rename it `{}`", capitalize(&name))));
         }
+        let generics = self.generic_params("struct Name")?;
         if !self.eat_sym(":") {
             return Err(self
                 .err(format!("expected `:` after `struct {}`", name))
@@ -345,7 +346,7 @@ impl Parser {
             return Err(LumeError::new(line, col, format!("struct `{}` has no fields", name))
                 .with_help("a struct needs at least one `name: Type` field"));
         }
-        Ok(StructDef { name, public: false, fields, methods, line, col })
+        Ok(StructDef { name, public: false, generics, fields, methods, line, col })
     }
 
     fn interface_def(&mut self) -> Result<InterfaceDef> {
@@ -431,7 +432,7 @@ impl Parser {
                     return Err(e);
                 }
                 self.end_stmt()?;
-                Ok((FnDef { name, public: true, is_async: false, params, ret, self_kind: SelfKind::Read, body: Block::default(), line, col }, false))
+                Ok((FnDef { name, public: true, is_async: false, generics: Vec::new(), params, ret, self_kind: SelfKind::Read, body: Block::default(), line, col }, false))
             }
         }
     }
@@ -566,6 +567,7 @@ impl Parser {
             return Err(LumeError::new(nl, nc, format!("enum names start with a capital letter: `{}`", name))
                 .with_help(format!("rename it `{}`", capitalize(&name))));
         }
+        let generics = self.generic_params("enum Name")?;
         if !self.eat_sym(":") {
             return Err(self.err(format!("expected `:` after `enum {}`", name)));
         }
@@ -626,7 +628,7 @@ impl Parser {
         if variants.is_empty() {
             return Err(LumeError::new(line, col, format!("enum `{}` has no variants", name)));
         }
-        Ok(EnumDef { name, public: false, variants, methods, line, col })
+        Ok(EnumDef { name, public: false, generics, variants, methods, line, col })
     }
 
     fn fn_def(&mut self, in_struct: bool) -> Result<FnDef> {
@@ -647,6 +649,7 @@ impl Parser {
             }
             _ => self.ident("a function name")?.0,
         };
+        let generics = self.generic_params("def name")?;
         let mut params = Vec::new();
         let mut self_kind = SelfKind::Read;
         if self.eat_sym("(") {
@@ -728,7 +731,7 @@ impl Parser {
                 .err(format!("expected `:` or `=` after the signature of `{}`, found {}", name, self.describe()))
                 .with_help("`def f(x: Int) -> Int:` starts a block; `def f(x: Int) -> Int = x * 2` is a one-liner"));
         };
-        Ok(FnDef { name, public: false, is_async, params, ret, self_kind, body, line, col })
+        Ok(FnDef { name, public: false, is_async, generics, params, ret, self_kind, body, line, col })
     }
 
     /// `test "name":` followed by an indented body.
@@ -762,6 +765,33 @@ impl Parser {
         }
         let body = self.block()?;
         Ok(TestDef { name, body, line, col })
+    }
+
+    /// `[T]`, `[T: Ordered]`, `[K, V]` right after a `def`, `struct` or
+    /// `enum` name. Nothing there means the definition is not generic.
+    fn generic_params(&mut self, what: &str) -> Result<Vec<TypeParam>> {
+        if !self.at_sym("[") {
+            return Ok(Vec::new());
+        }
+        self.advance();
+        let mut out: Vec<TypeParam> = Vec::new();
+        loop {
+            let (name, l, c) = self.ident("a type parameter name")?;
+            if !name.chars().next().map(|ch| ch.is_uppercase()).unwrap_or(false) {
+                return Err(LumeError::new(l, c, format!("type parameters start with a capital letter: `{}`", name))
+                    .with_help(format!("`{}[T]` is the usual spelling; `[K, V]` when there are two", what)));
+            }
+            if out.iter().any(|p: &TypeParam| p.name == name) {
+                return Err(LumeError::new(l, c, format!("type parameter `{}` is listed twice", name)));
+            }
+            let bound = if self.eat_sym(":") { Some(self.ident("an interface name")?.0) } else { None };
+            out.push(TypeParam { name, bound, line: l, col: c });
+            if !self.eat_sym(",") {
+                break;
+            }
+        }
+        self.expect_sym("]", "to close the type parameters")?;
+        Ok(out)
     }
 
     fn parse_type(&mut self) -> Result<Type> {
@@ -844,6 +874,18 @@ impl Parser {
             }
             break;
         }
+        // `Stack[Int]`, `Pair[Str, Int]` — a generic type with its arguments.
+        let mut targs: Vec<Type> = Vec::new();
+        if self.at_sym("[") && !self.toks[self.pos].space_before && !name.ends_with('?') {
+            self.advance();
+            loop {
+                targs.push(self.parse_type()?);
+                if !self.eat_sym(",") {
+                    break;
+                }
+            }
+            self.expect_sym("]", "to close the type arguments")?;
+        }
         // The lexer folds a trailing `?` into identifiers (`empty?`); for a
         // type it means optional: `Int?`.
         let mut optional = 0;
@@ -871,8 +913,13 @@ impl Parser {
                 return Err(LumeError::new(l, c, "an optional value is written `T?`, not `Option[T]`")
                     .with_help("for example `Int?` or `User?`"));
             }
+            _ if !targs.is_empty() => Type::App(name.clone(), targs.clone()),
             _ => Type::Named(name),
         };
+        if !targs.is_empty() && !matches!(base, Type::App(..)) {
+            return Err(LumeError::new(l, c, format!("`{}` takes no type arguments", crate::codegen::type_name(&base)))
+                .with_help("only a `struct` or `enum` with type parameters can be written `Name[T]`"));
+        }
         let mut t = base;
         for _ in 0..optional {
             t = Type::Option(Box::new(t));

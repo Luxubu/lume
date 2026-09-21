@@ -1,0 +1,7 @@
+# Nothing in the call says what `T` is, and nothing is waiting for the
+# result either.
+def empty[T]() -> [T]:
+  []
+
+def main:
+  puts empty()

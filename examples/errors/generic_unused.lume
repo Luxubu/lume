@@ -1,0 +1,6 @@
+# A type parameter no field mentions could never be worked out.
+struct Holder[T]:
+  count: Int
+
+def main:
+  puts Holder(count: 1).count

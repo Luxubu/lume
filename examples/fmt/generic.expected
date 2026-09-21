@@ -1,0 +1,49 @@
+# Type parameters are laid out like everything else: no space before the
+# bracket, one after each comma, one after the colon of a bound.
+struct Stack[T]:
+  items: [T]
+
+  def push(var self, x: T):
+    items.push(x)
+
+  def pop(var self) -> T? = items.pop
+
+enum Tree[T]:
+  Leaf
+  Node(value: T, left: Tree[T], right: Tree[T])
+
+  def size -> Int = match self:
+    Leaf          -> 0
+    Node(_, l, r) -> 1 + l.size + r.size
+
+struct Pair[A, B]:
+  left: A
+  right: B
+
+  def swapped -> Pair[B, A] = Pair(left: right, right: left)
+
+def first[T](xs: [T]) -> T? = xs[0]
+
+def largest[T: Ordered](xs: [T]) -> T?:
+  var best = xs[0]?
+  for x in xs:
+    if best < x:
+      best = x
+  Some(best)
+
+def tally[K: Hashable, V](pairs: [(K, V)]) -> {K: Int}:
+  var counts: {K: Int} = {}
+  for k, _ in pairs:
+    counts[k] = counts[k].or(0) + 1
+  counts
+
+def main:
+  var s: Stack[Int] = Stack(items: [])
+  s.push(1)
+  puts s.pop
+  puts first(["a", "b"])
+  puts largest([3, 1, 2])
+  puts tally([("a", 1), ("a", 2)])
+  var t: Tree[Int] = Node(1, Leaf, Leaf)
+  puts t.size
+  puts Pair(left: 1, right: "x").swapped.left

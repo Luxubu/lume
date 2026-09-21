@@ -1,0 +1,6 @@
+error: struct `Holder` never uses `T`
+  --> examples/errors/generic_unused.lume:2:15
+  |
+2 | struct Holder[T]:
+  |               ^
+  help: give a field the type `T`, or drop `T` from the type parameters

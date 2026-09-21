@@ -1,0 +1,10 @@
+# A bare type parameter promises nothing, so `<` has nothing to work with.
+def largest[T](xs: [T]) -> T?:
+  var best = xs[0]?
+  for x in xs:
+    if best < x:
+      best = x
+  Some(best)
+
+def main:
+  puts largest([3, 1, 2])

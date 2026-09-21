@@ -1,0 +1,6 @@
+error: cannot tell what `T` is in this call to `empty`
+  --> examples/errors/generic_uninferable.lume:7:8
+  |
+7 |   puts empty()
+  |        ^
+  help: say it in the binding's type, as in `xs: [Int] = ...`, or pass a value that fixes it

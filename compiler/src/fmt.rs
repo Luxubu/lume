@@ -370,14 +370,14 @@ impl Fmt {
             }
             Item::Fn(f) => self.fn_text(f, false),
             Item::Struct(s) => {
-                let mut out = format!("{}struct {}:", if s.public { "pub " } else { "" }, s.name);
+                let mut out = format!("{}struct {}{}:", if s.public { "pub " } else { "" }, s.name, generics_str(&s.generics));
                 self.indent += 1;
                 out.push_str(&self.members_text(&s.fields, &[], &s.methods));
                 self.indent -= 1;
                 out
             }
             Item::Enum(e) => {
-                let mut out = format!("{}enum {}:", if e.public { "pub " } else { "" }, e.name);
+                let mut out = format!("{}enum {}{}:", if e.public { "pub " } else { "" }, e.name, generics_str(&e.generics));
                 self.indent += 1;
                 out.push_str(&self.members_text(&[], &e.variants, &e.methods));
                 self.indent -= 1;
@@ -514,6 +514,7 @@ impl Fmt {
         }
         out.push_str("def ");
         out.push_str(&f.name);
+        out.push_str(&generics_str(&f.generics));
         let mut params: Vec<String> = Vec::new();
         if f.self_kind == SelfKind::Mutate {
             params.push("var self".into());
@@ -1075,6 +1076,18 @@ impl Fmt {
     }
 }
 
+/// `[T]` / `[K, V: Ordered]` after a definition's name.
+fn generics_str(gs: &[TypeParam]) -> String {
+    if gs.is_empty() {
+        return String::new();
+    }
+    let parts: Vec<String> = gs.iter().map(|p| match &p.bound {
+        Some(b) => format!("{}: {}", p.name, b),
+        None => p.name.clone(),
+    }).collect();
+    format!("[{}]", parts.join(", "))
+}
+
 pub fn type_str(t: &Type) -> String {
     match t {
         Type::Int => "Int".into(),
@@ -1096,6 +1109,8 @@ pub fn type_str(t: &Type) -> String {
         Type::Iter(e, _) => format!("[{}]", type_str(e)),
         Type::Task(e) => format!("Task[{}]", type_str(e)),
         Type::Future(e) => format!("async {}", type_str(e)),
+        Type::App(n, args) => format!("{}[{}]", n, args.iter().map(type_str).collect::<Vec<_>>().join(", ")),
+        Type::Var(n) => n.clone(),
         Type::Shared(e, true) => format!("shared var {}", type_str(e)),
         Type::Shared(e, false) => format!("shared {}", type_str(e)),
         Type::Unknown => "_".into(),

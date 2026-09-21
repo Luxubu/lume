@@ -1,0 +1,168 @@
+# Milestone 22: generics — one definition that works for many types.
+#
+# A `[T]` after the name says "this works for any type; call it T". The
+# caller never writes T: it is read off the arguments, or off the type the
+# result is going into. There is no boxing and no lookup at run time — the
+# generated Rust has one copy of the code per type actually used.
+
+def first[T](xs: [T]) -> T?:
+  xs[0]
+
+def last_two[T](xs: [T]) -> [T]:
+  if xs.len < 2:
+    return xs
+  xs[xs.len - 2...xs.len]
+
+# `T` says nothing about what a value can do, so a bare `T` can only be
+# moved around. A bound asks for more. `Ordered` means `<` works.
+def largest[T: Ordered](xs: [T]) -> T?:
+  var best = xs[0]?
+  for x in xs:
+    if best < x:
+      best = x
+  Some(best)
+
+# `Hashable` means the value can be a map key or a set item.
+def unique[T: Hashable](xs: [T]) -> [T]:
+  var seen: {T} = {}
+  var out: [T] = []
+  for x in xs:
+    if seen.add(x):
+      out.push(x)
+  out
+
+def tally[T: Hashable](xs: [T]) -> {T: Int}:
+  var counts: {T: Int} = {}
+  for x in xs:
+    counts[x] = counts[x].or(0) + 1
+  counts
+
+# Any interface is a bound too, and conformance stays structural: `Song`
+# never mentions `Titled`, it just has the method.
+interface Titled:
+  def title -> Str
+
+  def shout -> Str:
+    title.upcase + "!"
+
+struct Song:
+  name: Str
+  seconds: Int
+
+  def title -> Str:
+    name
+
+struct Chapter:
+  number: Int
+
+  def title -> Str:
+    "Chapter #{number}"
+
+def shout_all[T: Titled](xs: [T]) -> [Str]:
+  xs.map { |x| x.shout }.to_list
+
+# A generic struct. Its methods see `T` as an ordinary type.
+struct Stack[T]:
+  items: [T]
+
+  def push(var self, x: T):
+    items.push(x)
+
+  def pop(var self) -> T?:
+    items.pop
+
+  def peek -> T?:
+    items[items.len - 1]
+
+  def size -> Int:
+    items.len
+
+  def empty? -> Bool:
+    items.empty?
+
+# Two parameters, and one method that swaps them around.
+struct Pair[A, B]:
+  left: A
+  right: B
+
+  def swapped -> Pair[B, A]:
+    Pair(left: right, right: left)
+
+# A generic enum, including one that holds itself. The recursion is boxed
+# for Rust behind the scenes; here it is just `Tree[T]`.
+enum Tree[T]:
+  Leaf
+  Node(value: T, left: Tree[T], right: Tree[T])
+
+  def size -> Int:
+    match self:
+      Leaf          -> 0
+      Node(_, l, r) -> 1 + l.size + r.size
+
+  def depth -> Int:
+    match self:
+      Leaf          -> 0
+      Node(_, l, r) -> 1 + l.depth.max(r.depth)
+
+def insert[T: Ordered](t: Tree[T], v: T) -> Tree[T]:
+  match t:
+    Leaf -> Node(v, Leaf, Leaf)
+    Node(x, l, r) ->
+      if v < x:
+        Node(x, insert(l, v), r)
+      else:
+        Node(x, l, insert(r, v))
+
+def in_order[T](t: Tree[T]) -> [T]:
+  match t:
+    Leaf          -> []
+    Node(x, l, r) -> in_order(l) + [x] + in_order(r)
+
+def tree_of[T: Ordered](xs: [T]) -> Tree[T]:
+  var t: Tree[T] = Leaf
+  for x in xs:
+    t = insert(t, x)
+  t
+
+def main:
+  puts first([3, 1, 2])
+  puts first(["ada", "bob"])
+  puts last_two([1, 2, 3, 4])
+
+  puts largest([3, 9, 2])
+  puts largest(["pear", "apple", "fig"])
+  puts largest([2.5, 1.5])
+
+  puts unique([3, 1, 3, 2, 1])
+  puts tally(["a", "b", "a", "c", "a"])
+
+  puts shout_all([Song(name: "one", seconds: 90), Song(name: "two", seconds: 120)])
+  puts shout_all([Chapter(number: 4)])
+
+  # The empty stack has nothing to read `T` off, so the binding says it.
+  var names: Stack[Str] = Stack(items: [])
+  names.push("first")
+  names.push("second")
+  puts names.peek
+  puts names.pop
+  puts names.size
+
+  # Here the argument says it, so nothing needs writing down.
+  var ns = Stack(items: [1, 2, 3])
+  puts ns.pop
+  puts ns.empty?
+
+  # A stack of stacks is just another `T`.
+  var layers: Stack[Stack[Int]] = Stack(items: [])
+  layers.push(ns)
+  puts layers.size
+
+  p = Pair(left: 1, right: "one")
+  puts p.left
+  puts p.swapped.left
+
+  t = tree_of([5, 2, 8, 1, 9, 3])
+  puts in_order(t)
+  puts t.size
+  puts t.depth
+  puts in_order(tree_of(["pear", "apple", "fig"]))

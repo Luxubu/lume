@@ -1,0 +1,8 @@
+test first works for every element type ... ok
+test a tuple's parts keep their own types ... ok
+test unique keeps the first of each ... ok
+test a queue is first in, first out ... ok
+test the same queue, holding something else ... ok
+
+5 tests: 5 passed, 0 failed
+exit: 0

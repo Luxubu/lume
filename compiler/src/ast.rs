@@ -24,6 +24,10 @@ pub enum Type {
     Map(Box<Type>, Box<Type>),
     /// `{T}` — a set: each value at most once, insertion order kept
     Set(Box<Type>),
+    /// `Stack[Int]` — a user generic type with its arguments filled in.
+    App(String, Vec<Type>),
+    /// `T` inside a definition that declares it: a type parameter.
+    Var(String),
     /// A lazy chain (`xs.filter(...).map(...)`) not yet collected. The bool
     /// says whether items are references into the source list. Internal:
     /// becomes `[T]` wherever a value is needed, never reaches a signature.
@@ -44,6 +48,8 @@ impl Type {
     pub fn is_copy(&self) -> bool {
         match self {
             Type::Int | Type::Float | Type::Bool | Type::Char | Type::Unit => true,
+            // a type parameter stands for anything, so it is always borrowed
+            Type::Var(_) => false,
             Type::Option(t) => t.is_copy(),
             // a handle is cheap to clone, and cloning is how it is shared
             Type::Shared(..) => true,
@@ -61,6 +67,16 @@ impl Type {
             other => other.clone(),
         }
     }
+}
+
+/// `[T]` / `[T: Ordered]` after a `def`, `struct` or `enum` name.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TypeParam {
+    pub name: String,
+    /// The interface every argument must conform to, if the definition asks.
+    pub bound: Option<String>,
+    pub line: usize,
+    pub col: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -88,6 +104,8 @@ pub struct FnDef {
     pub public: bool,
     /// `async def` — callers `await` the result
     pub is_async: bool,
+    /// `def first[T](...)` — type parameters this function declares.
+    pub generics: Vec<TypeParam>,
     pub params: Vec<Param>,
     /// `None` when the signature has no `-> Type`; inferred from the body.
     pub ret: Option<Type>,
@@ -101,6 +119,7 @@ pub struct FnDef {
 pub struct StructDef {
     pub name: String,
     pub public: bool,
+    pub generics: Vec<TypeParam>,
     pub fields: Vec<Param>,
     pub methods: Vec<FnDef>,
     pub line: usize,
@@ -119,6 +138,7 @@ pub struct Variant {
 pub struct EnumDef {
     pub name: String,
     pub public: bool,
+    pub generics: Vec<TypeParam>,
     pub variants: Vec<Variant>,
     pub methods: Vec<FnDef>,
     pub line: usize,

@@ -429,16 +429,20 @@ struct Sig {
     self_kind: SelfKind,
     /// `async def`: a call gives a `Future` until it is awaited.
     is_async: bool,
+    /// `def first[T](...)` — filled in from the arguments at every call.
+    generics: Vec<TypeParam>,
 }
 
 #[derive(Clone)]
 struct StructInfo {
+    generics: Vec<TypeParam>,
     fields: Vec<(String, Type)>,
     methods: HashMap<String, Sig>,
 }
 
 #[derive(Clone)]
 struct EnumInfo {
+    generics: Vec<TypeParam>,
     variants: Vec<(String, Vec<(String, Type)>)>,
     methods: HashMap<String, Sig>,
 }
@@ -597,6 +601,8 @@ pub struct Gen {
     or_default_is_str: bool,
     /// Top-level constants: name -> type, for the root scope and for exports.
     consts: HashMap<String, Type>,
+    /// Type parameters of the definition being compiled, innermost last.
+    type_params: Vec<TypeParam>,
     /// The type the position being compiled expects, innermost last. A bare
     /// variant name (`Num(v)`) is resolved against it when it is ambiguous.
     want: Vec<Type>,
@@ -622,6 +628,7 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, deps: &[Dep], t
         structs: HashMap::new(),
         enums: HashMap::new(),
         interfaces: HashMap::new(),
+        type_params: Vec::new(),
         ext_methods: HashMap::new(),
         ext_targets: HashMap::new(),
         local_types: HashSet::new(),
@@ -660,7 +667,7 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, deps: &[Dep], t
         foreign_types: HashMap::new(),
     };
     // The built-in Error type: a struct with one field, defined in the prelude.
-    g.structs.insert("Error".into(), StructInfo { fields: vec![("message".into(), Type::Str)], methods: HashMap::new() });
+    g.structs.insert("Error".into(), StructInfo { generics: Vec::new(), fields: vec![("message".into(), Type::Str)], methods: HashMap::new() });
     g.is_entry = rust_mod.is_none();
     g.register_deps(deps)?;
     g.program(program)?;
@@ -691,6 +698,10 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, deps: &[Dep], t
 fn qualify_type(t: &Type, id: &str, ex: &Exports) -> Type {
     match t {
         Type::Named(n) if n != "Error" && (ex.structs.contains_key(n) || ex.enums.contains_key(n)) => Type::Named(format!("{}.{}", id, n)),
+        Type::App(n, args) => {
+            let args = args.iter().map(|x| qualify_type(x, id, ex)).collect();
+            if ex.structs.contains_key(n) || ex.enums.contains_key(n) { Type::App(format!("{}.{}", id, n), args) } else { Type::App(n.clone(), args) }
+        }
         Type::List(i) => Type::List(Box::new(qualify_type(i, id, ex))),
         Type::Option(i) => Type::Option(Box::new(qualify_type(i, id, ex))),
         Type::Iter(i, b) => Type::Iter(Box::new(qualify_type(i, id, ex)), *b),
@@ -709,6 +720,7 @@ fn qualify_sig(sig: &Sig, id: &str, ex: &Exports) -> Sig {
         ret: qualify_type(&sig.ret, id, ex),
         self_kind: sig.self_kind,
         is_async: sig.is_async,
+        generics: sig.generics.clone(),
     }
 }
 
@@ -751,6 +763,8 @@ pub fn rust_type(t: &Type) -> String {
         Type::Future(inner) => format!("impl std::future::Future<Output = {}>", rust_type(inner)),
         Type::Shared(inner, true) => format!("std::sync::Arc<std::sync::Mutex<{}>>", rust_type(inner)),
         Type::Shared(inner, false) => format!("std::sync::Arc<{}>", rust_type(inner)),
+        Type::App(n, args) => format!("{}<{}>", n, args.iter().map(rust_type).collect::<Vec<_>>().join(", ")),
+        Type::Var(n) => n.clone(),
         Type::Unknown => "_".into(),
     }
 }
@@ -775,6 +789,8 @@ pub fn type_name(t: &Type) -> String {
         Type::Future(i) => format!("async {}", type_name(i)),
         Type::Shared(i, true) => format!("shared var {}", type_name(i)),
         Type::Shared(i, false) => format!("shared {}", type_name(i)),
+        Type::App(n, args) => format!("{}[{}]", n, args.iter().map(type_name).collect::<Vec<_>>().join(", ")),
+        Type::Var(n) => n.clone(),
         Type::Unknown => "?".into(),
     }
 }
@@ -813,6 +829,7 @@ impl Gen {
                 if ft.lifetimes == 0 { ft.rust_path.clone() } else { format!("{}<{}>", ft.rust_path, vec!["'_"; ft.lifetimes].join(", ")) }
             }
             Type::Named(n) => self.path_of(n),
+            Type::App(n, args) => format!("{}<{}>", self.path_of(n), args.iter().map(|a| self.rt(a)).collect::<Vec<_>>().join(", ")),
             Type::List(inner) => format!("Vec<{}>", self.rt(inner)),
             Type::Option(inner) => format!("Option<{}>", self.rt(inner)),
             Type::Tuple(ts) => format!("({})", ts.iter().map(|x| self.rt(x)).collect::<Vec<_>>().join(", ")),
@@ -844,7 +861,9 @@ impl Gen {
     /// A type with its named parts canonicalised.
     fn ct(&self, t: &Type) -> Type {
         match t {
+            Type::Named(n) if self.type_param(n).is_some() => Type::Var(n.clone()),
             Type::Named(n) => Type::Named(self.canon(n)),
+            Type::App(n, args) => Type::App(self.canon(n), args.iter().map(|x| self.ct(x)).collect()),
             Type::List(i) => Type::List(Box::new(self.ct(i))),
             Type::Option(i) => Type::Option(Box::new(self.ct(i))),
             Type::Iter(i, b) => Type::Iter(Box::new(self.ct(i)), *b),
@@ -859,14 +878,341 @@ impl Gen {
         }
     }
 
+    /// Names a definition declares as type parameters stop being ordinary
+    /// type names inside its own signature.
+    fn as_vars(t: &Type, gs: &[TypeParam]) -> Type {
+        if gs.is_empty() {
+            return t.clone();
+        }
+        let go = |x: &Type| Box::new(Self::as_vars(x, gs));
+        match t {
+            Type::Named(n) if gs.iter().any(|p| p.name == *n) => Type::Var(n.clone()),
+            Type::App(n, args) => Type::App(n.clone(), args.iter().map(|a| Self::as_vars(a, gs)).collect()),
+            Type::List(i) => Type::List(go(i)),
+            Type::Option(i) => Type::Option(go(i)),
+            Type::Set(i) => Type::Set(go(i)),
+            Type::Task(i) => Type::Task(go(i)),
+            Type::Future(i) => Type::Future(go(i)),
+            Type::Iter(i, b) => Type::Iter(go(i), *b),
+            Type::Shared(i, b) => Type::Shared(go(i), *b),
+            Type::Tuple(ts) => Type::Tuple(ts.iter().map(|x| Self::as_vars(x, gs)).collect()),
+            Type::Result(a, b) => Type::Result(go(a), go(b)),
+            Type::Map(a, b) => Type::Map(go(a), go(b)),
+            other => other.clone(),
+        }
+    }
+
     fn sig_of(&self, f: &FnDef) -> Sig {
         Sig {
-            params: f.params.iter().map(|p| (p.name.clone(), self.ct(&p.ty))).collect(),
+            params: f.params.iter().map(|p| (p.name.clone(), Self::as_vars(&self.ct(&p.ty), &f.generics))).collect(),
             var_params: f.params.iter().map(|p| p.mutable).collect(),
-            ret: f.ret.as_ref().map(|t| self.ct(t)).unwrap_or(Type::Unknown),
+            ret: f.ret.as_ref().map(|t| Self::as_vars(&self.ct(t), &f.generics)).unwrap_or(Type::Unknown),
             self_kind: f.self_kind,
             is_async: f.is_async,
+            generics: f.generics.clone(),
         }
+    }
+
+    // ----- generics -------------------------------------------------------
+
+    /// Compiles the definition's own type parameters into scope: inside it,
+    /// `T` means the parameter, not a type of that name.
+    fn push_generics(&mut self, gs: &[TypeParam]) -> Vec<TypeParam> {
+        let mut all = self.type_params.clone();
+        for g in gs {
+            all.retain(|p| p.name != g.name);
+            all.push(g.clone());
+        }
+        std::mem::replace(&mut self.type_params, all)
+    }
+
+    fn pop_generics(&mut self, saved: Vec<TypeParam>) {
+        self.type_params = saved;
+    }
+
+    fn type_param(&self, name: &str) -> Option<&TypeParam> {
+        self.type_params.iter().find(|p| p.name == name)
+    }
+
+    /// The type parameters a struct or enum declares.
+    fn generics_of(&self, key: &str) -> Vec<TypeParam> {
+        if let Some(s) = self.structs.get(key) {
+            return s.generics.clone();
+        }
+        if let Some(e) = self.enums.get(key) {
+            return e.generics.clone();
+        }
+        Vec::new()
+    }
+
+    /// `Stack[Int]` seen against `struct Stack[T]` gives `T -> Int`.
+    fn subst_for(&self, t: &Type) -> HashMap<String, Type> {
+        let mut m = HashMap::new();
+        if let Type::App(n, args) = t {
+            for (p, a) in self.generics_of(&self.canon(n)).iter().zip(args) {
+                m.insert(p.name.clone(), a.clone());
+            }
+        }
+        m
+    }
+
+    /// A type with its parameters replaced. Unbound parameters stay as they
+    /// are, which is what a definition compiling itself wants.
+    fn subst(t: &Type, m: &HashMap<String, Type>) -> Type {
+        if m.is_empty() {
+            return t.clone();
+        }
+        let go = |x: &Type| Box::new(Self::subst(x, m));
+        match t {
+            Type::Var(n) => m.get(n).cloned().unwrap_or_else(|| t.clone()),
+            Type::App(n, args) => Type::App(n.clone(), args.iter().map(|a| Self::subst(a, m)).collect()),
+            Type::List(i) => Type::List(go(i)),
+            Type::Option(i) => Type::Option(go(i)),
+            Type::Set(i) => Type::Set(go(i)),
+            Type::Task(i) => Type::Task(go(i)),
+            Type::Future(i) => Type::Future(go(i)),
+            Type::Iter(i, b) => Type::Iter(go(i), *b),
+            Type::Shared(i, b) => Type::Shared(go(i), *b),
+            Type::Tuple(ts) => Type::Tuple(ts.iter().map(|x| Self::subst(x, m)).collect()),
+            Type::Result(a, b) => Type::Result(go(a), go(b)),
+            Type::Map(a, b) => Type::Map(go(a), go(b)),
+            other => other.clone(),
+        }
+    }
+
+    /// Reads the type arguments off a value: `[Int]` against the declared
+    /// `[T]` says `T` is `Int`. Silent on a mismatch — the argument check
+    /// that follows reports it in the user's own terms.
+    fn unify(decl: &Type, actual: &Type, m: &mut HashMap<String, Type>) {
+        let actual = actual.materialized();
+        match (decl, &actual) {
+            (Type::Var(n), a) => {
+                if *a != Type::Unknown && !m.contains_key(n) {
+                    m.insert(n.clone(), a.clone());
+                }
+            }
+            (Type::App(_, ds), Type::App(_, as_)) if ds.len() == as_.len() => {
+                for (d, a) in ds.iter().zip(as_) {
+                    Self::unify(d, a, m);
+                }
+            }
+            (Type::List(d), Type::List(a))
+            | (Type::Option(d), Type::Option(a))
+            | (Type::Set(d), Type::Set(a))
+            | (Type::Task(d), Type::Task(a))
+            | (Type::Shared(d, _), Type::Shared(a, _)) => Self::unify(d, a, m),
+            (Type::Result(d1, d2), Type::Result(a1, a2)) | (Type::Map(d1, d2), Type::Map(a1, a2)) => {
+                Self::unify(d1, a1, m);
+                Self::unify(d2, a2, m);
+            }
+            (Type::Tuple(ds), Type::Tuple(as_)) if ds.len() == as_.len() => {
+                for (d, a) in ds.iter().zip(as_) {
+                    Self::unify(d, a, m);
+                }
+            }
+            // `xs: [T]` given an empty list says nothing about `T`
+            _ => {}
+        }
+    }
+
+    fn mentions_var(t: &Type, name: &str) -> bool {
+        match t {
+            Type::Var(n) => n == name,
+            Type::App(_, args) | Type::Tuple(args) => args.iter().any(|a| Self::mentions_var(a, name)),
+            Type::List(i) | Type::Option(i) | Type::Set(i) | Type::Task(i) | Type::Future(i) | Type::Iter(i, _) | Type::Shared(i, _) => Self::mentions_var(i, name),
+            Type::Result(a, b) | Type::Map(a, b) => Self::mentions_var(a, name) || Self::mentions_var(b, name),
+            _ => false,
+        }
+    }
+
+    /// Does `t` satisfy `bound`? Built-in bounds first, then interfaces.
+    fn meets_bound(&self, t: &Type, bound: &str) -> bool {
+        match bound {
+            "Ordered" => match t {
+                Type::Int | Type::Float | Type::Str | Type::Char | Type::Bool => true,
+                Type::List(i) | Type::Option(i) => self.meets_bound(i, bound),
+                Type::Tuple(ts) => ts.iter().all(|x| self.meets_bound(x, bound)),
+                Type::Named(n) => self.methods_of(&self.canon(n)).map(|m| m.contains_key("<")).unwrap_or(false),
+                Type::Var(n) => self.type_param(n).and_then(|p| p.bound.clone()).as_deref() == Some("Ordered"),
+                _ => false,
+            },
+            "Hashable" => match t {
+                Type::Var(n) => self.type_param(n).and_then(|p| p.bound.clone()).as_deref() == Some("Hashable"),
+                other => self.key_ok(other, &mut Vec::new()) && *other != Type::Unknown,
+            },
+            iface => match t {
+                Type::Var(n) => self.type_param(n).and_then(|p| p.bound.clone()).as_deref() == Some(iface),
+                other => matches!(self.conformance(other, iface), Conformance::Yes),
+            },
+        }
+    }
+
+    fn is_builtin_bound(b: &str) -> bool {
+        matches!(b, "Ordered" | "Hashable")
+    }
+
+    /// The Rust bounds a type parameter carries. Every Lume value can be
+    /// copied, compared and printed; the declared bound adds to that.
+    fn rust_bounds(&self, p: &TypeParam) -> String {
+        let mut parts = vec!["Clone".to_string(), "std::fmt::Debug".to_string(), "PartialEq".to_string(), "LumeShow".to_string()];
+        match p.bound.as_deref() {
+            Some("Ordered") => parts.push("PartialOrd".into()),
+            Some("Hashable") => {
+                parts.push("std::hash::Hash".into());
+                parts.push("Eq".into());
+            }
+            Some(iface) => parts.push(self.path_of(iface)),
+            None => {}
+        }
+        format!("{}: {}", p.name, parts.join(" + "))
+    }
+
+    /// `<T: ...>` for a definition's header, empty when it has none.
+    fn rust_generics(&self, gs: &[TypeParam]) -> String {
+        if gs.is_empty() {
+            String::new()
+        } else {
+            format!("<{}>", gs.iter().map(|p| self.rust_bounds(p)).collect::<Vec<_>>().join(", "))
+        }
+    }
+
+    /// `<T, K>` — the parameters again, without their bounds.
+    fn rust_generic_args(gs: &[TypeParam]) -> String {
+        if gs.is_empty() {
+            String::new()
+        } else {
+            format!("<{}>", gs.iter().map(|p| p.name.clone()).collect::<Vec<_>>().join(", "))
+        }
+    }
+
+    /// Checks the arguments a generic definition was given: one per
+    /// parameter, each satisfying its bound, none of them an interface.
+    fn check_type_args(&self, gs: &[TypeParam], args: &[Type], what: &str, line: usize, col: usize) -> Result<()> {
+        for (p, a) in gs.iter().zip(args) {
+            if self.is_interface(a) {
+                return Err(LumeError::new(line, col, format!("`{}` is an interface, so it cannot fill the `{}` of {}", type_name(a), p.name, what))
+                    .with_help("a type argument is one concrete type; a list of mixed values is written `[Interface]` instead"));
+            }
+            if let Some(b) = &p.bound {
+                if !self.meets_bound(a, b) {
+                    let e = LumeError::new(line, col, format!("{} needs `{}: {}`, and `{}` is not {}", what, p.name, b, type_name(a), b));
+                    return Err(match b.as_str() {
+                        "Ordered" => e.with_help("`Ordered` means `<` works: `Int`, `Float`, `Str`, `Char`, or a type with its own `def <`"),
+                        "Hashable" => e.with_help("`Hashable` means the value can be a map key: `Int`, `Str`, `Bool`, `Char`, tuples of those, or a struct or enum made of them"),
+                        _ => match self.conformance(a, b) {
+                            Conformance::Missing(m) => e.with_help(format!("`{}` has no `{}` method; add it, or `extend {} with {}:`", type_name(a), m.join("`, `"), type_name(a), b)),
+                            _ => e.with_help(format!("give `{}` the methods `{}` asks for", type_name(a), b)),
+                        },
+                    });
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Works out a call's type arguments: first from what the arguments
+    /// are, then from the type the surrounding position expects.
+    fn infer_call(&mut self, gs: &[TypeParam], params: &[(String, Type)], args: &[Arg], ret: &Type) -> HashMap<String, Type> {
+        let mut m: HashMap<String, Type> = HashMap::new();
+        if let Ok(bound) = self.bind_args("", params, args, 0, 0) {
+            for (a, (_, pty)) in bound.iter().zip(params) {
+                if gs.iter().any(|p| Self::mentions_var(pty, &p.name)) {
+                    let at = self.ty_of(a);
+                    Self::unify(pty, &at, &mut m);
+                }
+            }
+        }
+        if gs.iter().any(|p| !m.contains_key(&p.name)) {
+            if let Some(w) = self.want.last().cloned() {
+                Self::unify(ret, &w, &mut m);
+            }
+        }
+        m
+    }
+
+    /// What a call to `sig` gives back, with its type parameters filled in.
+    fn call_ret(&mut self, sig: &Sig, args: &[Arg]) -> Type {
+        if sig.generics.is_empty() {
+            return sig.ret.clone();
+        }
+        let m = self.infer_call(&sig.generics, &sig.params, args, &sig.ret);
+        Self::subst(&sig.ret, &m)
+    }
+
+    /// The type `Stack(items: [1])` builds.
+    fn ctor_type(&mut self, name: &str, info: &StructInfo, args: &[Arg]) -> Type {
+        if info.generics.is_empty() {
+            return Type::Named(name.to_string());
+        }
+        let whole = Type::App(name.to_string(), info.generics.iter().map(|p| Type::Var(p.name.clone())).collect());
+        let m = self.infer_call(&info.generics, &info.fields, args, &whole);
+        Self::subst(&whole, &m)
+    }
+
+    /// The type `Node(left, right)` builds for a generic enum.
+    fn variant_type(&mut self, en: &str, vname: &str, args: &[Arg]) -> Type {
+        let info = match self.enums.get(en) {
+            Some(i) => i.clone(),
+            None => return Type::Named(en.to_string()),
+        };
+        if info.generics.is_empty() {
+            return Type::Named(en.to_string());
+        }
+        let fields = info.variants.iter().find(|(n, _)| n == vname).map(|(_, f)| f.clone()).unwrap_or_default();
+        let whole = Type::App(en.to_string(), info.generics.iter().map(|p| Type::Var(p.name.clone())).collect());
+        let m = self.infer_call(&info.generics, &fields, args, &whole);
+        Self::subst(&whole, &m)
+    }
+
+    /// A generic signature with this call's type arguments put in, after
+    /// checking each one against its bound. A plain signature passes through.
+    fn instantiate(&mut self, sig: &Sig, args: &[Arg], what: &str, line: usize, col: usize) -> Result<Sig> {
+        if sig.generics.is_empty() {
+            return Ok(sig.clone());
+        }
+        let m = self.infer_call(&sig.generics, &sig.params, args, &sig.ret);
+        let targs = self.all_bound(&sig.generics, &m, what, line, col)?;
+        self.check_type_args(&sig.generics, &targs, what, line, col)?;
+        Ok(Sig {
+            params: sig.params.iter().map(|(n, t)| (n.clone(), Self::subst(t, &m))).collect(),
+            var_params: sig.var_params.clone(),
+            ret: Self::subst(&sig.ret, &m),
+            self_kind: sig.self_kind,
+            is_async: sig.is_async,
+            generics: Vec::new(),
+        })
+    }
+
+    /// The same for a struct constructor: its fields with `T` filled in.
+    fn instantiate_struct(&mut self, name: &str, info: &StructInfo, args: &[Arg], line: usize, col: usize) -> Result<StructInfo> {
+        if info.generics.is_empty() {
+            return Ok(info.clone());
+        }
+        let what = format!("`{}`", name);
+        let whole = Type::App(name.to_string(), info.generics.iter().map(|p| Type::Var(p.name.clone())).collect());
+        let m = self.infer_call(&info.generics, &info.fields, args, &whole);
+        let targs = self.all_bound(&info.generics, &m, &what, line, col)?;
+        self.check_type_args(&info.generics, &targs, &what, line, col)?;
+        Ok(StructInfo {
+            generics: Vec::new(),
+            fields: info.fields.iter().map(|(n, t)| (n.clone(), Self::subst(t, &m))).collect(),
+            methods: info.methods.clone(),
+        })
+    }
+
+    /// Every parameter the call could not work out, reported once.
+    fn all_bound(&self, gs: &[TypeParam], m: &HashMap<String, Type>, what: &str, line: usize, col: usize) -> Result<Vec<Type>> {
+        let mut out = Vec::new();
+        for p in gs {
+            match m.get(&p.name) {
+                Some(t) if type_is_known(t) => out.push(t.clone()),
+                _ => {
+                    return Err(LumeError::new(line, col, format!("cannot tell what `{}` is in this call to {}", p.name, what))
+                        .with_help("say it in the binding's type, as in `xs: [Int] = ...`, or pass a value that fixes it"))
+                }
+            }
+        }
+        Ok(out)
     }
 
     // ----- output helpers -------------------------------------------------
@@ -1129,7 +1475,12 @@ impl Gen {
     /// for a type: its name for structs/enums, its spelling for built-ins.
     fn type_key(&self, t: &Type) -> String {
         match t {
-            Type::Named(n) => self.canon(n),
+            Type::Named(n) | Type::App(n, _) => self.canon(n),
+            // a type parameter answers with the methods its bound promises
+            Type::Var(n) => match self.type_param(n).and_then(|p| p.bound.clone()) {
+                Some(b) if !Self::is_builtin_bound(&b) => self.canon(&b),
+                _ => type_name(t),
+            },
             other => type_name(other),
         }
     }
@@ -1343,6 +1694,7 @@ impl Gen {
         for (n, info) in &ex.structs {
             let key = format!("{}.{}", key_prefix, n);
             let qualified = StructInfo {
+                generics: info.generics.clone(),
                 fields: info.fields.iter().map(|(f, t)| (f.clone(), qualify_type(t, id, ex))).collect(),
                 methods: info.methods.iter().map(|(m, sg)| (m.clone(), qualify_sig(sg, id, ex))).collect(),
             };
@@ -1352,6 +1704,7 @@ impl Gen {
         for (n, info) in &ex.enums {
             let key = format!("{}.{}", key_prefix, n);
             let qualified = EnumInfo {
+                generics: info.generics.clone(),
                 variants: info.variants.iter().map(|(v, fs)| (v.clone(), fs.iter().map(|(f, t)| (f.clone(), qualify_type(t, id, ex))).collect())).collect(),
                 methods: info.methods.iter().map(|(m, sg)| (m.clone(), qualify_sig(sg, id, ex))).collect(),
             };
@@ -1524,7 +1877,9 @@ impl Gen {
                     if !seen.insert(f.name.clone()) {
                         return Err(LumeError::new(f.line, f.col, format!("function `{}` is defined twice", f.name)));
                     }
+                    let saved = self.push_generics(&f.generics);
                     let sg = self.sig_of(f);
+                    self.pop_generics(saved);
                     self.fns.insert(f.name.clone(), sg);
                 }
                 Item::Struct(s) => {
@@ -1541,22 +1896,26 @@ impl Gen {
                             return Err(LumeError::new(fld.line, fld.col, format!("field `{}` is listed twice in `{}`", fld.name, s.name)));
                         }
                     }
+                    let saved = self.push_generics(&s.generics);
                     let methods = self.collect_methods(&s.methods, &s.name, &fnames)?;
                     let fields = s.fields.iter().map(|p| (p.name.clone(), self.ct(&p.ty))).collect();
-                    self.structs.insert(s.name.clone(), StructInfo { fields, methods });
+                    self.pop_generics(saved);
+                    self.structs.insert(s.name.clone(), StructInfo { generics: s.generics.clone(), fields, methods });
                 }
                 Item::Enum(e) => {
                     reserved_type_name(&e.name, e.line, e.col)?;
                     if !seen.insert(e.name.clone()) {
                         return Err(LumeError::new(e.line, e.col, format!("`{}` is defined twice", e.name)));
                     }
+                    let saved = self.push_generics(&e.generics);
                     let methods = self.collect_methods(&e.methods, &e.name, &HashSet::new())?;
                     let variants = e
                         .variants
                         .iter()
                         .map(|v| (v.name.clone(), v.fields.iter().map(|p| (p.name.clone(), self.ct(&p.ty))).collect()))
                         .collect();
-                    self.enums.insert(e.name.clone(), EnumInfo { variants, methods });
+                    self.pop_generics(saved);
+                    self.enums.insert(e.name.clone(), EnumInfo { generics: e.generics.clone(), variants, methods });
                     self.local_types.insert(e.name.clone());
                 }
                 Item::Interface(i) => {
@@ -1623,33 +1982,45 @@ impl Gen {
         for item in program {
             match item {
                 Item::Import(_) | Item::Test(_) => {}
-                Item::Fn(f) => self.check_sig_types(f)?,
+                Item::Fn(f) => self.check_sig_types(f, &[])?,
                 Item::Const(c) => {
                     if let Some(t) = &c.ty {
                         self.check_type(t, c.line, c.col)?;
                     }
                 }
                 Item::Struct(s) => {
+                    self.check_generics(&s.generics, &format!("`{}`", s.name))?;
+                    let saved = self.push_generics(&s.generics);
                     for fld in &s.fields {
-                        self.check_type(&fld.ty, fld.line, fld.col)?;
+                        self.check_type(&Self::as_vars(&fld.ty, &s.generics), fld.line, fld.col)?;
                     }
+                    self.pop_generics(saved);
                     for m in &s.methods {
-                        self.check_sig_types(m)?;
+                        self.check_sig_types(m, &s.generics)?;
                     }
+                    self.check_generics_used(&s.generics, s.fields.iter().map(|f| &f.ty), &format!("struct `{}`", s.name))?;
                 }
                 Item::Enum(e) => {
+                    self.check_generics(&e.generics, &format!("`{}`", e.name))?;
+                    let saved = self.push_generics(&e.generics);
                     for v in &e.variants {
                         for fld in &v.fields {
-                            self.check_type(&fld.ty, fld.line, fld.col)?;
+                            self.check_type(&Self::as_vars(&fld.ty, &e.generics), fld.line, fld.col)?;
                         }
                     }
+                    self.pop_generics(saved);
                     for m in &e.methods {
-                        self.check_sig_types(m)?;
+                        self.check_sig_types(m, &e.generics)?;
                     }
+                    self.check_generics_used(&e.generics, e.variants.iter().flat_map(|v| v.fields.iter().map(|f| &f.ty)), &format!("enum `{}`", e.name))?;
                 }
                 Item::Interface(i) => {
+                    if !i.required.iter().chain(&i.defaults).all(|m| m.generics.is_empty()) {
+                        return Err(LumeError::new(i.line, i.col, format!("interface `{}` has a method with type parameters, which is not supported yet", i.name))
+                            .with_help("an interface method takes concrete types; a generic function can take the interface instead"));
+                    }
                     for m in i.required.iter().chain(&i.defaults) {
-                        self.check_sig_types(m)?;
+                        self.check_sig_types(m, &[])?;
                         if m.params.iter().any(|p| self.is_interface(&self.ct(&p.ty))) || m.ret.as_ref().map(|r| self.is_interface(&self.ct(r))).unwrap_or(false) {
                             return Err(LumeError::new(m.line, m.col, format!("interface method `{}` mentions an interface in its signature, which is not supported yet", m.name))
                                 .with_help("use concrete types in interface signatures for now"));
@@ -1658,7 +2029,7 @@ impl Gen {
                 }
                 Item::Extend(x) => {
                     for m in &x.methods {
-                        self.check_sig_types(m)?;
+                        self.check_sig_types(m, &[])?;
                     }
                 }
             }
@@ -1808,6 +2179,27 @@ impl Gen {
 
     fn check_type(&self, t: &Type, line: usize, col: usize) -> Result<()> {
         match t {
+            Type::Var(_) => Ok(()),
+            Type::Named(n) if self.type_param(n).is_some() => Ok(()),
+            Type::App(n, args) => {
+                let key = self.canon(n);
+                if !self.is_type(&key) {
+                    return self.check_type(&Type::Named(n.clone()), line, col);
+                }
+                let gs = self.generics_of(&key);
+                if gs.is_empty() {
+                    return Err(LumeError::new(line, col, format!("`{}` takes no type arguments", n))
+                        .with_help(format!("write it as `{}`; only a `struct` or `enum` declared `{}[T]` takes them", n, n)));
+                }
+                if gs.len() != args.len() {
+                    return Err(LumeError::new(line, col, format!("`{}` takes {} {}, but {} {} given", n, gs.len(), plural(gs.len(), "type argument", "type arguments"), args.len(), plural(args.len(), "was", "were")))
+                        .with_help(format!("it is declared `{}[{}]`", n, gs.iter().map(|p| p.name.clone()).collect::<Vec<_>>().join(", "))));
+                }
+                for a in args {
+                    self.check_type(a, line, col)?;
+                }
+                self.check_type_args(&gs, args, &format!("`{}`", n), line, col)
+            }
             Type::Named(n) if !self.is_type(&self.canon(n)) => {
                 let e = LumeError::new(line, col, format!("unknown type `{}`", n));
                 let cands = self
@@ -1839,12 +2231,57 @@ impl Gen {
         }
     }
 
-    fn check_sig_types(&self, f: &FnDef) -> Result<()> {
+    fn check_sig_types(&mut self, f: &FnDef, outer: &[TypeParam]) -> Result<()> {
+        let mut gs = outer.to_vec();
+        gs.extend(f.generics.iter().cloned());
+        let saved = self.push_generics(&gs);
+        let r = self.check_sig_types_inner(f, &gs);
+        self.pop_generics(saved);
+        r
+    }
+
+    fn check_sig_types_inner(&self, f: &FnDef, gs: &[TypeParam]) -> Result<()> {
+        self.check_generics(&f.generics, &format!("`{}`", f.name))?;
         for p in &f.params {
-            self.check_type(&p.ty, p.line, p.col)?;
+            self.check_type(&Self::as_vars(&p.ty, gs), p.line, p.col)?;
         }
         if let Some(r) = &f.ret {
-            self.check_type(r, f.line, f.col)?;
+            self.check_type(&Self::as_vars(r, gs), f.line, f.col)?;
+        }
+        Ok(())
+    }
+
+    /// A type a struct or enum never stores cannot be worked out from a
+    /// value, so Rust would refuse the definition outright.
+    fn check_generics_used<'a>(&self, gs: &[TypeParam], types: impl Iterator<Item = &'a Type>, what: &str) -> Result<()> {
+        let all: Vec<Type> = types.map(|t| Self::as_vars(t, gs)).collect();
+        for p in gs {
+            if !all.iter().any(|t| Self::mentions_var(t, &p.name)) {
+                return Err(LumeError::new(p.line, p.col, format!("{} never uses `{}`", what, p.name))
+                    .with_help(format!("give a field the type `{}`, or drop `{}` from the type parameters", p.name, p.name)));
+            }
+        }
+        Ok(())
+    }
+
+    /// A type parameter's bound must be a built-in one or a real interface.
+    fn check_generics(&self, gs: &[TypeParam], what: &str) -> Result<()> {
+        for p in gs {
+            let b = match &p.bound {
+                Some(b) => b,
+                None => continue,
+            };
+            if Self::is_builtin_bound(b) {
+                continue;
+            }
+            if !self.interfaces.contains_key(&self.canon(b)) {
+                let e = LumeError::new(p.line, p.col, format!("unknown bound `{}` on `{}` of {}", b, p.name, what));
+                let cands = self.interfaces.keys().cloned().chain(["Ordered", "Hashable"].iter().map(|s| s.to_string()));
+                return Err(match self.suggest_from(b, cands) {
+                    Some(s) => e.with_help(format!("did you mean `{}`?", s)),
+                    None => e.with_help("a bound is `Ordered`, `Hashable`, or the name of an `interface`"),
+                });
+            }
         }
         Ok(())
     }
@@ -1858,6 +2295,7 @@ impl Gen {
         self.push_scope();
         let saved = self.current_type.clone();
         let saved_self = self.current_self_ty.clone();
+        let saved_gs = self.push_generics(&self.scope_generics(f, owner));
         self.current_type = owner.cloned();
         self.current_self_ty = owner.and_then(|o| self.ext_targets.get(o).cloned());
         for p in &f.params {
@@ -1867,8 +2305,17 @@ impl Gen {
         let t = self.tail_type(&f.body);
         self.current_type = saved;
         self.current_self_ty = saved_self;
+        self.pop_generics(saved_gs);
         self.pop_scope();
         t
+    }
+
+    /// The type parameters in scope inside a function: the owning type's,
+    /// then its own.
+    fn scope_generics(&self, f: &FnDef, owner: Option<&String>) -> Vec<TypeParam> {
+        let mut gs = owner.map(|o| self.generics_of(&self.canon(o))).unwrap_or_default();
+        gs.extend(f.generics.iter().cloned());
+        gs
     }
 
     fn tail_type(&mut self, b: &Block) -> Type {
@@ -2154,7 +2601,7 @@ impl Gen {
                         Type::Unknown
                     }
                 } else if let Ok(Some(en)) = self.resolve_variant(n, e.line, e.col) {
-                    Type::Named(en)
+                    self.variant_type(&en, n, &[])
                 } else {
                     Type::Unknown
                 }
@@ -2190,18 +2637,20 @@ impl Gen {
                     }
                 }
             }
-            ExprKind::Call { name: raw_name, .. } => {
+            ExprKind::Call { name: raw_name, args } => {
                 let cname = self.canon(raw_name);
                 let name = &cname;
                 if let Some(m) = self.current_type.as_ref().and_then(|t| self.methods_of(t)).and_then(|m| m.get(name).cloned()) {
                     // inside a type, its own method wins over a free function
-                    if m.is_async { Type::Future(Box::new(m.ret)) } else { m.ret }
-                } else if let Some(s) = self.fns.get(name) {
-                    if s.is_async { Type::Future(Box::new(s.ret.clone())) } else { s.ret.clone() }
-                } else if self.structs.contains_key(name) {
-                    Type::Named(name.clone())
+                    let ret = self.call_ret(&m, args);
+                    if m.is_async { Type::Future(Box::new(ret)) } else { ret }
+                } else if let Some(s) = self.fns.get(name).cloned() {
+                    let ret = self.call_ret(&s, args);
+                    if s.is_async { Type::Future(Box::new(ret)) } else { ret }
+                } else if let Some(info) = self.structs.get(name).cloned() {
+                    self.ctor_type(name, &info, args)
                 } else if let Ok(Some(en)) = self.resolve_variant(name, e.line, e.col) {
-                    Type::Named(en)
+                    self.variant_type(&en, name, args)
                 } else {
                     Type::Unknown
                 }
@@ -2264,14 +2713,17 @@ impl Gen {
                         return t;
                     }
                 }
-                if let Type::Named(sn) = &rt {
+                if let Type::Named(_) | Type::App(..) | Type::Var(_) = &rt {
+                    let sn = &self.type_key(&rt);
+                    let sub = self.subst_for(&rt);
                     if let Some(info) = self.structs.get(sn) {
                         if let Some((_, ft)) = info.fields.iter().find(|(n, _)| n == name) {
-                            return ft.clone();
+                            return Self::subst(ft, &sub);
                         }
                     }
                     if let Some(m) = self.methods_of(sn).and_then(|m| m.get(name).cloned()) {
-                        return if m.is_async { Type::Future(Box::new(m.ret)) } else { m.ret };
+                        let ret = Self::subst(&self.call_ret(&m, args), &sub);
+                        return if m.is_async { Type::Future(Box::new(ret)) } else { ret };
                     }
                     if let Some(m) = self.iface_default(&rt, name) {
                         return m.ret;
@@ -2419,12 +2871,20 @@ impl Gen {
             "and" | "or" => *lt == Type::Bool && rt == Type::Bool,
             "+" => (numeric(lt) && same) || (*lt == Type::Str && rt == Type::Str) || (matches!(lt, Type::List(_) | Type::Iter(..)) && self.assignable(lt, &rt)) || text_like(lt) && text_like(&rt),
             "-" | "*" | "/" | "%" | "**" => numeric(lt) && same,
-            "<" | "<=" | ">" | ">=" => (same && (numeric(lt) || *lt == Type::Str)) || (text_like(lt) && text_like(&rt)),
+            // a type parameter compares when its bound says it is `Ordered`
+            "<" | "<=" | ">" | ">=" => (same && (numeric(lt) || *lt == Type::Str || (matches!(lt, Type::Var(_)) && self.meets_bound(lt, "Ordered")))) || (text_like(lt) && text_like(&rt)),
             "==" | "!=" => same || (text_like(lt) && text_like(&rt)),
             _ => true,
         };
         if ok {
             return Ok(());
+        }
+        // a type parameter with no bound: say what the bound would have to be
+        if let (Type::Var(a), Type::Var(b)) = (lt, &rt) {
+            if a == b && matches!(op, "<" | "<=" | ">" | ">=") {
+                return Err(LumeError::new(line, col, format!("`{}` could be any type, so `{}` has nothing to compare", a, op))
+                    .with_help(format!("declare it `[{}: Ordered]`, which promises every type it is given can be compared", a)));
+            }
         }
         let mut err = LumeError::new(line, col, format!("`{}` cannot combine a `{}` and a `{}`", op, type_name(lt), type_name(&rt)));
         let help = match (op, lt, &rt) {
@@ -2586,7 +3046,7 @@ impl Gen {
 
     /// A variant field whose type is the enum itself lives behind a `Box`.
     fn boxed_field(&self, en: &str, fty: &Type) -> bool {
-        matches!(fty, Type::Named(n) if self.canon(n) == self.canon(en))
+        matches!(fty, Type::Named(n) | Type::App(n, _) if self.canon(n) == self.canon(en))
     }
 
     /// Can a value of type `have` be used where `want` is expected?
@@ -2616,6 +3076,9 @@ impl Gen {
             (Type::Map(k, v), Type::Set(_)) if **k == Type::Unknown && **v == Type::Unknown => true,
             (Type::Tuple(xs), Type::Tuple(ys)) => xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| self.assign_ok_n(x, y)),
             (Type::Named(a), Type::Named(b)) if self.canon(a) == self.canon(b) => true,
+            (Type::Var(a), Type::Var(b)) => a == b,
+            (Type::App(a, xs), Type::App(b, ys)) => self.canon(a) == self.canon(b) && xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| self.assign_ok_n(x, y)),
+            (Type::Var(_), _) | (_, Type::Var(_)) | (Type::App(..), _) | (_, Type::App(..)) => false,
             (_, Type::Named(iface)) if self.is_interface(want) => {
                 // a value where an interface is wanted: it must have the methods
                 matches!(self.conformance(have, &self.canon(iface)), Conformance::Yes)
@@ -2679,7 +3142,9 @@ impl Gen {
         if *want == Type::Char && char_literal(e).is_some() {
             return Ok(());
         }
+        self.want.push(want.clone());
         let have = self.ty_of(e);
+        self.want.pop();
         if let Type::Named(iface) = want {
             // an interface slot: the detailed conformance error says what is missing
             if self.is_interface(want) && have != Type::Unknown && !self.is_interface(&have.materialized()) {
@@ -2700,6 +3165,17 @@ impl Gen {
     }
 
     /// `expr_arg` with the type check and the message naming the parameter.
+    /// The type a generic parameter was *declared* with decides how the
+    /// value is passed (a `T` is always lent), while the type this call
+    /// filled in decides what is allowed.
+    fn expr_arg_named_as(&mut self, a: &Expr, check: &Type, decl: &Type, callee: &str, pname: &str) -> Result<String> {
+        if check == decl {
+            return self.expr_arg_named(a, check, callee, pname);
+        }
+        self.check_assign(a, check, &format!("`{}` takes `{}: {}`", callee, pname, type_name(check)))?;
+        self.expr_arg(a, decl)
+    }
+
     fn expr_arg_named(&mut self, a: &Expr, t: &Type, callee: &str, pname: &str) -> Result<String> {
         self.check_assign(a, t, &format!("`{}` takes `{}: {}`", callee, pname, type_name(t)))?;
         let have = self.ty_of(a);
@@ -3227,14 +3703,14 @@ impl Gen {
 
     /// `def ==` becomes `PartialEq`, `def <` becomes `PartialOrd`, so the
     /// type works with `contains?`, `sort`, `max`, `min` and `==` on lists.
-    fn op_impls(&mut self, name: &str, methods: &[FnDef]) {
+    fn op_impls(&mut self, name: &str, methods: &[FnDef], gen: &str, args: &str) {
         if methods.iter().any(|m| m.name == "==") {
-            self.line(&format!("impl PartialEq for {} {{ fn eq(&self, o: &Self) -> bool {{ self.op_eq(o) }} }}", name));
+            self.line(&format!("impl{} PartialEq for {}{} {{ fn eq(&self, o: &Self) -> bool {{ self.op_eq(o) }} }}", gen, name, args));
         }
         if methods.iter().any(|m| m.name == "<") {
             self.line(&format!(
-                "impl PartialOrd for {} {{ fn partial_cmp(&self, o: &Self) -> Option<std::cmp::Ordering> {{ Some(if self.op_lt(o) {{ std::cmp::Ordering::Less }} else if o.op_lt(self) {{ std::cmp::Ordering::Greater }} else {{ std::cmp::Ordering::Equal }}) }} }}",
-                name
+                "impl{} PartialOrd for {}{} {{ fn partial_cmp(&self, o: &Self) -> Option<std::cmp::Ordering> {{ Some(if self.op_lt(o) {{ std::cmp::Ordering::Less }} else if o.op_lt(self) {{ std::cmp::Ordering::Greater }} else {{ std::cmp::Ordering::Equal }}) }} }}",
+                gen, name, args
             ));
         }
     }
@@ -3271,6 +3747,9 @@ impl Gen {
     }
 
     fn struct_def(&mut self, s: &StructDef) -> Result<()> {
+        let saved_gs = self.push_generics(&s.generics);
+        let gen = self.rust_generics(&s.generics);
+        let gargs = Self::rust_generic_args(&s.generics);
         let shared_fields: Vec<&Param> = s.fields.iter().filter(|f| matches!(self.ct(&f.ty), Type::Shared(_, true))).collect();
         // a crate type in a field: it must be storable (Clone, no borrowed lifetime)
         let mut foreign_no_eq = false;
@@ -3295,15 +3774,15 @@ impl Gen {
         } else {
             self.derive_line(&s.name, &s.methods);
         }
-        self.line(&format!("pub struct {} {{", s.name));
+        self.line(&format!("pub struct {}{} {{", s.name, gen));
         self.indent += 1;
         for f in &s.fields {
-            let ft = self.rt(&f.ty);
+            let ft = self.rt(&self.ct(&f.ty));
             self.line(&format!("pub {}: {},", rust_name(&f.name), ft));
         }
         self.indent -= 1;
         self.line("}");
-        self.line(&format!("impl LumeShow for {} {{", s.name));
+        self.line(&format!("impl{} LumeShow for {}{} {{", gen, s.name, gargs));
         self.indent += 1;
         let fmt: Vec<String> = s.fields.iter().map(|f| format!("{}: {{}}", f.name)).collect();
         let args: Vec<String> = s.fields.iter().map(|f| format!("self.{}.lume_str()", rust_name(&f.name))).collect();
@@ -3327,11 +3806,11 @@ impl Gen {
                     }
                 })
                 .collect();
-            self.line(&format!("impl PartialEq for {} {{ fn eq(&self, o: &Self) -> bool {{ {} }} }}", s.name, parts.join(" && ")));
+            self.line(&format!("impl{} PartialEq for {}{} {{ fn eq(&self, o: &Self) -> bool {{ {} }} }}", gen, s.name, gargs, parts.join(" && ")));
         }
-        self.op_impls(&s.name, &s.methods);
+        self.op_impls(&s.name, &s.methods, &gen, &gargs);
         if !s.methods.is_empty() {
-            self.line(&format!("impl {} {{", s.name));
+            self.line(&format!("impl{} {}{} {{", gen, s.name, gargs));
             self.indent += 1;
             for m in &s.methods {
                 self.fn_def(m, Some(&s.name))?;
@@ -3339,12 +3818,16 @@ impl Gen {
             self.indent -= 1;
             self.line("}");
         }
+        self.pop_generics(saved_gs);
         Ok(())
     }
 
     fn enum_def(&mut self, e: &EnumDef) -> Result<()> {
+        let saved_gs = self.push_generics(&e.generics);
+        let gen = self.rust_generics(&e.generics);
+        let gargs = Self::rust_generic_args(&e.generics);
         self.derive_line(&e.name, &e.methods);
-        self.line(&format!("pub enum {} {{", e.name));
+        self.line(&format!("pub enum {}{} {{", e.name, gen));
         self.indent += 1;
         for v in &e.variants {
             if v.fields.is_empty() {
@@ -3354,7 +3837,7 @@ impl Gen {
                     .fields
                     .iter()
                     .map(|f| {
-                        let t = self.rt(&f.ty);
+                        let t = self.rt(&self.ct(&f.ty));
                         // a variant that holds its own enum: `Node(left: Tree, ...)` — boxed for Rust, invisible in Lume
                         if self.boxed_field(&e.name, &self.ct(&f.ty)) { format!("{}: Box<{}>", rust_name(&f.name), t) } else { format!("{}: {}", rust_name(&f.name), t) }
                     })
@@ -3364,7 +3847,7 @@ impl Gen {
         }
         self.indent -= 1;
         self.line("}");
-        self.line(&format!("impl LumeShow for {} {{", e.name));
+        self.line(&format!("impl{} LumeShow for {}{} {{", gen, e.name, gargs));
         self.indent += 1;
         self.line("fn lume_str(&self) -> String {");
         self.indent += 1;
@@ -3394,9 +3877,9 @@ impl Gen {
         self.line("}");
         self.indent -= 1;
         self.line("}");
-        self.op_impls(&e.name, &e.methods);
+        self.op_impls(&e.name, &e.methods, &gen, &gargs);
         if !e.methods.is_empty() {
-            self.line(&format!("impl {} {{", e.name));
+            self.line(&format!("impl{} {}{} {{", gen, e.name, gargs));
             self.indent += 1;
             for m in &e.methods {
                 self.fn_def(m, Some(&e.name))?;
@@ -3404,6 +3887,7 @@ impl Gen {
             self.indent -= 1;
             self.line("}");
         }
+        self.pop_generics(saved_gs);
         Ok(())
     }
 
@@ -3428,6 +3912,10 @@ impl Gen {
                 return Err(LumeError::new(f.line, f.col, "`main` takes no parameters and returns nothing, or `() or Error`")
                     .with_help("write `def main:` or `def main -> () or Error:`"));
             }
+            if !f.generics.is_empty() {
+                return Err(LumeError::new(f.line, f.col, "`main` cannot take type parameters")
+                    .with_help("nothing calls `main`, so there is nowhere for them to come from"));
+            }
         }
         let fn_name = if is_main && self.test_mode {
             "lume_program_main".to_string()
@@ -3439,8 +3927,11 @@ impl Gen {
         if is_main && self.test_mode {
             self.line("#[allow(dead_code)]");
         }
+        let own_generics = self.scope_generics(f, owner);
+        let saved_gs = self.push_generics(&own_generics);
+        // the owning type's parameters belong to the `impl` block, not here
+        let mut generics: Vec<String> = f.generics.iter().map(|p| self.rust_bounds(p)).collect();
         let mut parts: Vec<String> = Vec::new();
-        let mut generics: Vec<String> = Vec::new();
         if owner.is_some() {
             parts.push(match f.self_kind {
                 SelfKind::Read => "&self".into(),
@@ -3455,7 +3946,7 @@ impl Gen {
             let pty = self.ct(&p.ty);
             if self.is_interface(&pty) && !self.in_trait_impl {
                 // `s: Shape` — one generic parameter per interface-typed parameter (static dispatch)
-                let g = format!("T{}", generics.len());
+                let g = format!("Iface{}", generics.len());
                 let iface = match &pty { Type::Named(n) => self.path_of(n), _ => unreachable!() };
                 generics.push(format!("{}: {}", g, iface));
                 parts.push(format!("{}: &{}", rust_name(&p.name), g));
@@ -3506,6 +3997,7 @@ impl Gen {
         self.tail_of_fn = false;
         self.in_async = saved_async;
         self.pop_scope();
+        self.pop_generics(saved_gs);
         self.current_type = None;
         self.current_self_ty = None;
         self.indent -= 1;
@@ -3675,7 +4167,7 @@ impl Gen {
         match s {
             Stmt::Shared { name, mutable, ty, value, line, col } => {
                 if let Some(t) = ty {
-                    self.check_type(t, *line, *col)?;
+                    self.check_type(&self.ct(t), *line, *col)?;
                 }
                 let vt0 = self.ty_of(value).materialized();
                 self.no_future(&vt0, value)?;
@@ -3710,7 +4202,7 @@ impl Gen {
             }
             Stmt::Var { name, ty, value, line, col } => {
                 if let Some(t) = ty {
-                    self.check_type(t, *line, *col)?;
+                    self.check_type(&self.ct(t), *line, *col)?;
                     let ct = self.ct(t);
                     self.check_assign(value, &ct, &format!("`{}` is declared `{}`", name, type_name(&ct)))?;
                 }
@@ -3781,6 +4273,7 @@ impl Gen {
                 self.no_future(&vt0, value)?;
                 if let Some(t) = ty {
                     let ct = self.ct(t);
+                    self.check_type(&ct, *line, *col)?;
                     self.check_assign(value, &ct, &format!("`{}` is declared `{}`", name, type_name(&ct)))?;
                 } else if let Some(b) = self.lookup(name).cloned() {
                     if b.mutable && leftmost_ident(value) != Some(name.as_str()) {
@@ -3794,7 +4287,7 @@ impl Gen {
                         .with_help(format!("declare it `shared var {}` before the `spawn:` if tasks are meant to change it, or bind a new name here", name)));
                 }
                 if let Some(t) = ty {
-                    self.check_type(t, *line, *col)?;
+                    self.check_type(&self.ct(t), *line, *col)?;
                     if self.lookup(name).is_some() {
                         return Err(LumeError::new(*line, *col, format!("`{}` already exists; a type goes only on a new binding", name)));
                     }
@@ -5380,7 +5873,7 @@ impl Gen {
                 } else {
                     let en = match (enum_name, t) {
                         (Some(en), _) => self.canon(en),
-                        (None, Type::Named(en)) if self.enums.contains_key(en) => en.clone(),
+                        (None, Type::Named(en) | Type::App(en, _)) if self.enums.contains_key(&self.canon(en)) => self.canon(en),
                         (None, _) => match self.resolve_variant(name, p.line, p.col)? {
                             Some(en) => en,
                             None => {
@@ -5389,9 +5882,10 @@ impl Gen {
                             }
                         },
                     };
-                    if let Type::Named(actual) = t {
-                        if actual != &en {
-                            return Err(LumeError::new(p.line, p.col, format!("`{}` is a variant of `{}`, but the value is a `{}`", name, en, actual)));
+                    if let Type::Named(a0) | Type::App(a0, _) = t {
+                        let actual = &self.canon(a0);
+                        if *actual != en {
+                            return Err(LumeError::new(p.line, p.col, format!("`{}` is a variant of `{}`, but the value is a `{}`", name, en, type_name(t))));
                         }
                         // A bare name that is not a variant of this enum but is one of another
                         if enum_name.is_none() && !self.enums[actual].variants.iter().any(|(n, _)| n == name) {
@@ -5405,8 +5899,9 @@ impl Gen {
                         return Err(LumeError::new(p.line, p.col, format!("`{}` is a variant of `{}`, but the value is a `{}`", name, en, type_name(t))));
                     }
                     let info = self.enums[&en].clone();
+                    let vsub = self.subst_for(t);
                     let (_, fields) = match info.variants.iter().find(|(n, _)| n == name) {
-                        Some(v) => v.clone(),
+                        Some((vn, fs)) => (vn.clone(), fs.iter().map(|(fname, ft)| (fname.clone(), Self::subst(ft, &vsub))).collect::<Vec<_>>()),
                         None => {
                             let e = LumeError::new(p.line, p.col, format!("`{}` has no variant `{}`", en, name));
                             let names: Vec<String> = info.variants.iter().map(|(n, _)| n.clone()).collect();
@@ -5583,6 +6078,13 @@ impl Gen {
     /// Map keys and set items are compared by hashing, so a `Float` (which
     /// has no total equality) and types that hold one are not allowed.
     fn check_key_type(&self, t: &Type, what: &str, line: usize, col: usize) -> Result<()> {
+        if let Type::Var(n) = t {
+            if self.type_param(n).and_then(|p| p.bound.clone()).as_deref() == Some("Hashable") {
+                return Ok(());
+            }
+            return Err(LumeError::new(line, col, format!("`{}` could be any type, so it cannot be {} of a {}", n, if what == "map" { "the key" } else { "an item" }, what))
+                .with_help(format!("declare it `[{}: Hashable]`, which promises every type it is given can be a key", n)));
+        }
         if self.key_ok(t, &mut Vec::new()) {
             Ok(())
         } else {
@@ -5630,9 +6132,10 @@ impl Gen {
     /// there are too many to enumerate (numbers, strings, unknown types).
     fn ctors(&self, t: &Type) -> Option<Vec<(String, Vec<Type>)>> {
         Some(match t {
-            Type::Named(en) => {
-                let info = self.enums.get(en)?;
-                info.variants.iter().map(|(n, fs)| (n.clone(), fs.iter().map(|(_, ft)| ft.clone()).collect())).collect()
+            Type::Named(en) | Type::App(en, _) => {
+                let info = self.enums.get(&self.canon(en))?;
+                let sub = self.subst_for(t);
+                info.variants.iter().map(|(n, fs)| (n.clone(), fs.iter().map(|(_, ft)| Self::subst(ft, &sub)).collect())).collect()
             }
             Type::Option(i) => vec![("Some".into(), vec![(**i).clone()]), ("None".into(), vec![])],
             Type::Result(o, e) => vec![("Ok".into(), vec![(**o).clone()]), ("Error".into(), vec![(**e).clone()])],
@@ -5859,6 +6362,16 @@ impl Gen {
                     None => err.with_help(format!("the variants are: {}", names.join(", "))),
                 });
             }
+        };
+        let fields = if info.generics.is_empty() {
+            fields
+        } else {
+            let whole = Type::App(en.to_string(), info.generics.iter().map(|p| Type::Var(p.name.clone())).collect());
+            let what = format!("`{}.{}`", en, vname);
+            let m = self.infer_call(&info.generics, &fields, args, &whole);
+            let targs = self.all_bound(&info.generics, &m, &what, e.line, e.col)?;
+            self.check_type_args(&info.generics, &targs, &what, e.line, e.col)?;
+            fields.iter().map(|(n, t)| (n.clone(), Self::subst(t, &m))).collect()
         };
         let epath = self.path_of(en);
         if fields.is_empty() {
@@ -6310,7 +6823,8 @@ impl Gen {
                         return self.expr(&call);
                     }
                 }
-                if let Some(sig) = self.fns.get(name).cloned() {
+                if let Some(decl) = self.fns.get(name).cloned() {
+                    let sig = self.instantiate(&decl, args, &format!("`{}`", name), e.line, e.col)?;
                     let bound = self.bind_args(&format!("`{}`", name), &sig.params, args, e.line, e.col)?;
                     let mut parts = Vec::new();
                     for (i, (a, (pname, t))) in bound.iter().zip(&sig.params).enumerate() {
@@ -6318,12 +6832,13 @@ impl Gen {
                             self.check_assign(a, t, &format!("`{}` takes `var {}: {}`", name, pname, type_name(t)))?;
                             parts.push(self.expr_var_arg(a, pname, name)?);
                         } else {
-                            parts.push(self.expr_arg_named(a, t, name, pname)?);
+                            parts.push(self.expr_arg_named_as(a, t, &decl.params[i].1, name, pname)?);
                         }
                     }
                     let callee = if self.paths.contains_key(name) { self.path_of(name) } else { rust_name(name) };
                     format!("{}({})", callee, parts.join(", "))
                 } else if let Some(info) = self.structs.get(name).cloned() {
+                    let info = self.instantiate_struct(name, &info, args, e.line, e.col)?;
                     let bound = self.bind_args(&format!("`{}`", name), &info.fields, args, e.line, e.col)?;
                     let mut parts = Vec::new();
                     for (a, (fname, fty)) in bound.iter().zip(&info.fields) {
@@ -6560,7 +7075,9 @@ impl Gen {
                         r = format!("(*{})", r);
                     }
                 }
-                if let Type::Named(tname) = &rt {
+                if let Type::Named(_) | Type::App(..) | Type::Var(_) = &rt {
+                    let tname = &self.type_key(&rt);
+                    let sub = self.subst_for(&rt);
                     if let Some(info) = self.structs.get(tname).cloned() {
                         if info.fields.iter().any(|(n, _)| n == name) {
                             if !args.is_empty() {
@@ -6573,7 +7090,14 @@ impl Gen {
                     if (name == "to_s" || name == "to_str") && args.is_empty() && self.methods_of(tname).map(|m| !m.contains_key(name)).unwrap_or(true) {
                         return Ok(format!("({}).lume_str()", r));
                     }
-                    if let Some(m) = self.methods_of(tname).and_then(|m| m.get(name).cloned()) {
+                    if let Some(decl) = self.methods_of(tname).and_then(|m| m.get(name).cloned()) {
+                        // a method of a generic type: its `T` is whatever the receiver's is
+                        let m = Sig {
+                            params: decl.params.iter().map(|(n, t)| (n.clone(), Self::subst(t, &sub))).collect(),
+                            ret: Self::subst(&decl.ret, &sub),
+                            ..decl.clone()
+                        };
+                        let m = self.instantiate(&m, args, &format!("`{}.{}`", tname, name), e.line, e.col)?;
                         let bound = self.bind_args(&format!("`{}.{}`", tname, name), &m.params, args, e.line, e.col)?;
                         let mut parts = Vec::new();
                         let callee = format!("{}.{}", tname, name);
@@ -6582,7 +7106,7 @@ impl Gen {
                                 self.check_assign(a, t, &format!("`{}` takes `var {}: {}`", callee, pname, type_name(t)))?;
                                 parts.push(self.expr_var_arg(a, pname, name)?);
                             } else {
-                                parts.push(self.expr_arg_named(a, t, &callee, pname)?);
+                                parts.push(self.expr_arg_named_as(a, t, &decl.params[i].1, &callee, pname)?);
                             }
                         }
                         if m.self_kind == SelfKind::Mutate {

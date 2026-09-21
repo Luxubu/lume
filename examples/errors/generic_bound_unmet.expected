@@ -1,0 +1,6 @@
+error: `largest` needs `T: Ordered`, and `Point` is not Ordered
+  --> examples/errors/generic_bound_unmet.lume:10:8
+   |
+10 |   puts largest([Point(x: 1, y: 2)])
+   |        ^
+  help: `Ordered` means `<` works: `Int`, `Float`, `Str`, `Char`, or a type with its own `def <`

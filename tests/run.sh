@@ -32,7 +32,8 @@ pass=0; fail=0; failed=()
 check() {  # name, expected-file, actual-text
   local name=$1 exp=$2 actual=$3
   if [ $UPDATE = 1 ]; then
-    printf '%s' "$actual" > "$exp"
+    # a text file ends with a newline, so re-running --update changes nothing
+    printf '%s\n' "$actual" > "$exp"
     echo "  updated $exp"
     return
   fi

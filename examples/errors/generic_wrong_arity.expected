@@ -1,0 +1,6 @@
+error: `Pair` takes 2 type arguments, but 1 was given
+  --> examples/errors/generic_wrong_arity.lume:7:3
+  |
+7 |   p: Pair[Int] = Pair(left: 1, right: 2)
+  |   ^
+  help: it is declared `Pair[A, B]`

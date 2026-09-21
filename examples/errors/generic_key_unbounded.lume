@@ -1,0 +1,9 @@
+# A map key must be hashable, and a bare `T` may be anything.
+def tally[T](xs: [T]) -> {T: Int}:
+  var counts: {T: Int} = {}
+  for x in xs:
+    counts[x] = counts[x].or(0) + 1
+  counts
+
+def main:
+  puts tally([1, 2, 1])

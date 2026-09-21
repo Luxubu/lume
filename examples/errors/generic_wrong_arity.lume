@@ -1,0 +1,8 @@
+# `Pair` takes two type arguments, not one.
+struct Pair[A, B]:
+  left: A
+  right: B
+
+def main:
+  p: Pair[Int] = Pair(left: 1, right: 2)
+  puts p.left

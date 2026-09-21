@@ -1,0 +1,10 @@
+# `Ordered` means `<` works; a struct without `def <` does not qualify.
+def largest[T: Ordered](xs: [T]) -> T?:
+  xs[0]
+
+struct Point:
+  x: Int
+  y: Int
+
+def main:
+  puts largest([Point(x: 1, y: 2)])

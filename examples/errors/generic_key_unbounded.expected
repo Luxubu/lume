@@ -1,0 +1,6 @@
+error: `T` could be any type, so it cannot be the key of a map
+  --> examples/errors/generic_key_unbounded.lume:2:1
+  |
+2 | def tally[T](xs: [T]) -> {T: Int}:
+  | ^
+  help: declare it `[T: Hashable]`, which promises every type it is given can be a key
