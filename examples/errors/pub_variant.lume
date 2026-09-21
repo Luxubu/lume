@@ -1,0 +1,7 @@
+# The same for an enum: its variants are public with it.
+pub enum Status:
+  pub Draft
+  Done(at: Int)
+
+def main:
+  puts 1

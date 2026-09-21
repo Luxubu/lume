@@ -1,0 +1,6 @@
+error: a variant is public with its enum, so it takes no `pub`
+  --> examples/errors/pub_variant.lume:3:3
+  |
+3 |   pub Draft
+  |   ^
+  help: write it without `pub`; `pub enum Name:` is what decides

@@ -1,0 +1,113 @@
+# report.lume — a program that uses the library, the way anyone else would.
+#
+#   lume run examples/lib/report.lume
+#   lume run examples/lib/report.lume -- hours.csv
+#
+# Reads a CSV of logged hours and prints a report: totals per team, the
+# busiest people, and anything that looks wrong.
+
+import seq
+import table
+import table.Table
+
+BUILT_IN = """
+  name, team, hours, rate
+  Ada, infra, 32, 95
+  Bo, infra, 18, 80
+  Cy, apps, 40, 70
+  Dee, apps, 12, 110
+  Eli, infra, 27, 85
+  Fay, apps, 36, 90
+  Gus, data, 22, 100
+  Hal, data, 30, 75
+  """
+
+struct Person:
+  name: Str
+  team: Str
+  hours: Float
+  rate: Float
+
+  def cost -> Float:
+    hours * rate
+
+def people_of(t: Table) -> [Person] or Error:
+  var out: [Person] = []
+  for i in 0...t.len:
+    out.push(Person(
+      name: t.text(i, "name")?,
+      team: t.text(i, "team")?,
+      hours: t.number(i, "hours")?,
+      rate: t.number(i, "rate")?,
+    ))
+  out
+
+def money(f: Float) -> Str:
+  "$#{f.decimals(2)}"
+
+def hours_line(label: Str, hours: Float, cost: Float) -> Str:
+  "#{label.pad_right(8)} #{hours.to_s.pad(7)}  #{money(cost).pad(10)}"
+
+def main -> () or Error:
+  args = Env.args
+  text = match args[0]:
+    Some(path) -> File.read(path)?
+    None       -> BUILT_IN
+
+  t = table.parse(text)?
+  people = people_of(t)?
+  puts "#{people.len} people, #{t.columns.len} columns"
+  puts ""
+
+  puts "By team"
+  by_team = seq.group_with(people) { |p| p.team }
+  teams = seq.sort_with(by_team.keys.to_list) { |a, b| a < b }
+  for team in teams:
+    members = by_team[team].or([])
+    hours = seq.fold(members, 0.0) { |sum, p| sum + p.hours }
+    cost = seq.fold(members, 0.0) { |sum, p| sum + p.cost }
+    puts hours_line(team, hours, cost)
+  puts ""
+
+  puts "Busiest"
+  busiest = seq.sort_with(people) { |a, b| a.hours > b.hours }
+  for p in seq.take_while_ok(busiest) { |p| p.hours >= 30.0 }:
+    puts "  #{p.name.pad_right(5)} #{p.hours} hours on #{p.team}"
+  puts ""
+
+  puts "Checks"
+  over = seq.keep(people) { |p| p.hours > 38.0 }
+  if over.empty?:
+    puts "  nobody over 38 hours"
+  else:
+    puts "  over 38 hours: #{seq.map(over) { |p| p.name }.join(", ")}"
+  expensive = seq.max_with(people) { |a, b| a.rate > b.rate }
+  match expensive:
+    Some(p) -> puts "  highest rate: #{p.name} at #{money(p.rate)}"
+    None    -> puts "  no people"
+  puts ""
+
+  puts "Top three by cost"
+  costly = seq.sort_with(people) { |a, b| a.cost > b.cost }
+  rows = seq.map(seq.chunks(costly, 3).at(0)) do |p|
+    [p.name, p.team, money(p.cost)]
+  puts Table(columns: ["name", "team", "cost"], rows: rows).render
+
+test "the report reads its own sample":
+  t = table.parse(BUILT_IN)!
+  people = people_of(t)!
+  assert people.len == 8
+  assert seq.count_where(people) { |p| p.team == "infra" } == 3
+  total = seq.fold(people, 0.0) { |s, p| s + p.hours }
+  assert total == 217.0
+
+test "a bad row is an error, not a wrong total":
+  t = table.parse("name, team, hours, rate\nAda, infra, lots, 95")!
+  match people_of(t):
+    Ok(_)    -> assert false
+    Error(e) -> assert e.message == "row 0, column `hours`: `lots` is not a number"
+
+test "money rounds to the cent":
+  assert money(1234.5) == "$1234.50"
+  assert money(0.125) == "$0.13"
+  assert money(7360.0) == "$7360.00"

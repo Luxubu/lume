@@ -1,0 +1,6 @@
+error: a field is public with its struct, so it takes no `pub`
+  --> examples/errors/pub_field.lume:3:3
+  |
+3 |   pub x: Int
+  |   ^
+  help: write it without `pub`; `pub struct Name:` is what decides

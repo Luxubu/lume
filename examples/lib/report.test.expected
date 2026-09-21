@@ -1,0 +1,17 @@
+test seq: shaping ... ok
+test seq: searching ... ok
+test seq: ordering ... ok
+test seq: grouping ... ok
+test seq: slicing ... ok
+test table: parsing ... ok
+test table: a missing column says so ... ok
+test table: a cell that is not a number says so ... ok
+test table: ragged lines are refused ... ok
+test table: where and sorted_by take blocks ... ok
+test table: rendering lines the columns up ... ok
+test the report reads its own sample ... ok
+test a bad row is an error, not a wrong total ... ok
+test money rounds to the cent ... ok
+
+14 tests: 14 passed, 0 failed
+exit: 0

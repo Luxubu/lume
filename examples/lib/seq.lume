@@ -1,0 +1,190 @@
+# seq.lume — sequence helpers, written the way a library author would.
+#
+# Everything here is generic over the item type and takes behaviour where
+# behaviour belongs. Nothing in this file knows what it is holding.
+
+# ---- shaping ---------------------------------------------------------------
+
+pub def map[T, U](xs: [T], f: (T) -> U) -> [U]:
+  var out: [U] = []
+  for x in xs:
+    out.push(f(x))
+  out
+
+pub def keep[T](xs: [T], ok: (T) -> Bool) -> [T]:
+  var out: [T] = []
+  for x in xs:
+    if ok(x):
+      out.push(x)
+  out
+
+pub def drop_where[T](xs: [T], bad: (T) -> Bool) -> [T]:
+  var out: [T] = []
+  for x in xs:
+    if not bad(x):
+      out.push(x)
+  out
+
+pub def fold[T, A](xs: [T], start: A, f: (A, T) -> A) -> A:
+  var acc = start
+  for x in xs:
+    acc = f(acc, x)
+  acc
+
+pub def flat_map[T, U](xs: [T], f: (T) -> [U]) -> [U]:
+  var out: [U] = []
+  for x in xs:
+    for y in f(x):
+      out.push(y)
+  out
+
+# ---- searching -------------------------------------------------------------
+
+pub def find[T](xs: [T], ok: (T) -> Bool) -> T?:
+  for x in xs:
+    if ok(x):
+      return Some(x)
+  None
+
+pub def position[T](xs: [T], ok: (T) -> Bool) -> Int?:
+  for i, x in xs.enumerate:
+    if ok(x):
+      return Some(i)
+  None
+
+pub def all?[T](xs: [T], ok: (T) -> Bool) -> Bool:
+  for x in xs:
+    if not ok(x):
+      return false
+  true
+
+pub def any?[T](xs: [T], ok: (T) -> Bool) -> Bool:
+  for x in xs:
+    if ok(x):
+      return true
+  false
+
+pub def count_where[T](xs: [T], ok: (T) -> Bool) -> Int:
+  var n = 0
+  for x in xs:
+    if ok(x):
+      n += 1
+  n
+
+# ---- ordering --------------------------------------------------------------
+
+# Insertion sort on a copy: stable, and the comparison is the caller's.
+pub def sort_with[T](xs: [T], before?: (T, T) -> Bool) -> [T]:
+  var out: [T] = []
+  for x in xs:
+    var at = out.len
+    var i = 0
+    while i < out.len:
+      if before?(x, out.at(i)):
+        at = i
+        i = out.len
+      else:
+        i += 1
+    out.insert(at, x)
+  out
+
+pub def max_with[T](xs: [T], better: (T, T) -> Bool) -> T?:
+  var best = xs[0]?
+  for x in xs:
+    if better(x, best):
+      best = x
+  Some(best)
+
+# ---- grouping --------------------------------------------------------------
+
+pub def group_with[T, K: Hashable](xs: [T], key: (T) -> K) -> {K: [T]}:
+  var out: {K: [T]} = {}
+  for x in xs:
+    out[key(x)].push(x)
+  out
+
+pub def tally_with[T, K: Hashable](xs: [T], key: (T) -> K) -> {K: Int}:
+  var out: {K: Int} = {}
+  for x in xs:
+    k = key(x)
+    out[k] = out[k].or(0) + 1
+  out
+
+pub def unique_by[T, K: Hashable](xs: [T], key: (T) -> K) -> [T]:
+  var seen: {K} = {}
+  var out: [T] = []
+  for x in xs:
+    if seen.add(key(x)):
+      out.push(x)
+  out
+
+# ---- slicing ---------------------------------------------------------------
+
+pub def chunks[T](xs: [T], size: Int) -> [[T]]:
+  if size < 1:
+    return []
+  var out: [[T]] = []
+  var i = 0
+  while i < xs.len:
+    stop = (i + size).min(xs.len)
+    out.push(xs[i...stop])
+    i += size
+  out
+
+pub def windows[T](xs: [T], size: Int) -> [[T]]:
+  var out: [[T]] = []
+  if size < 1 or size > xs.len:
+    return out
+  var i = 0
+  while i + size <= xs.len:
+    out.push(xs[i...i + size])
+    i += 1
+  out
+
+pub def take_while_ok[T](xs: [T], ok: (T) -> Bool) -> [T]:
+  var out: [T] = []
+  for x in xs:
+    if not ok(x):
+      return out
+    out.push(x)
+  out
+
+pub def zip_with[A, B, C](xs: [A], ys: [B], f: (A, B) -> C) -> [C]:
+  var out: [C] = []
+  var i = 0
+  while i < xs.len.min(ys.len):
+    out.push(f(xs.at(i), ys.at(i)))
+    i += 1
+  out
+
+test "shaping":
+  assert map([1, 2, 3]) { |n| n * 2 } == [2, 4, 6]
+  assert keep([1, 2, 3, 4]) { |n| n % 2 == 0 } == [2, 4]
+  assert drop_where([1, 2, 3, 4]) { |n| n % 2 == 0 } == [1, 3]
+  assert fold([1, 2, 3], 0) { |a, n| a + n } == 6
+  assert flat_map([1, 2]) { |n| [n, n] } == [1, 1, 2, 2]
+
+test "searching":
+  assert find([1, 5, 9]) { |n| n > 4 } == Some(5)
+  assert position(["a", "b"]) { |s| s == "b" } == Some(1)
+  assert all?([2, 4]) { |n| n % 2 == 0 }
+  assert any?([1, 4]) { |n| n % 2 == 0 }
+  assert count_where([1, 2, 3, 4]) { |n| n > 2 } == 2
+
+test "ordering":
+  assert sort_with([3, 1, 2]) { |a, b| a < b } == [1, 2, 3]
+  assert sort_with(["bb", "a", "ccc"]) { |a, b| a.len < b.len } == ["a", "bb", "ccc"]
+  assert max_with([1, 9, 4]) { |a, b| a > b } == Some(9)
+
+test "grouping":
+  by_len = group_with(["a", "bb", "cc"]) { |s| s.len }
+  assert by_len[1] == Some(["a"])
+  assert by_len[2] == Some(["bb", "cc"])
+  assert tally_with(["a", "bb", "cc"]) { |s| s.len } == {1: 1, 2: 2}
+  assert unique_by(["a", "ab", "b"]) { |s| s[0].or("?") } == ["a", "b"]
+
+test "slicing":
+  assert chunks([1, 2, 3, 4, 5], 2) == [[1, 2], [3, 4], [5]]
+  assert windows([1, 2, 3], 2) == [[1, 2], [2, 3]]
+  assert take_while_ok([1, 2, 9, 3]) { |n| n < 5 } == [1, 2]
+  assert zip_with([1, 2], [10, 20]) { |a, b| a * b } == [10, 40]

@@ -354,6 +354,22 @@ fn lume_clamp<T: PartialOrd + LumeShow + Copy>(x: T, lo: T, hi: T) -> T {
     if lo > hi { panic!("clamp: the low bound {} is above the high bound {}", lo.lume_str(), hi.lume_str()); }
     if x < lo { lo } else if x > hi { hi } else { x }
 }
+/// `xs.at(i)`: the item, when the caller has already checked the bound.
+fn lume_at<T: Clone>(xs: &[T], i: i64) -> T {
+    match usize::try_from(i).ok().and_then(|u| xs.get(u)) {
+        Some(x) => x.clone(),
+        None => panic!("no item at {} — the list has {}", i, xs.len()),
+    }
+}
+/// `x.decimals(n)`: the number as text, to that many places.
+fn lume_decimals(x: f64, n: i64) -> String {
+    if n < 0 { panic!("decimals: {} is not a number of places", n); }
+    // half goes away from zero, as people expect of money
+    let f = 10f64.powi(n as i32);
+    let scaled = x * f;
+    let r = if scaled.is_finite() { scaled.round() / f } else { x };
+    format!("{:.*}", n as usize, r)
+}
 /// Run-time failures speak Lume: no Rust file paths, no "attempt to".
 #[allow(dead_code)]
 fn lume_install_panic_hook() {
@@ -6832,9 +6848,21 @@ impl Gen {
                     other => return Err(LumeError::new(e.line, e.col, format!("`!` unwraps an optional or a `T or E`, but this is a `{}`", type_name(&other)))),
                 }
                 if !self.in_test {
+                    // `xs[i]!` after the bound was checked: `at` says that, and says it better
+                    let indexed = match &x.kind {
+                        ExprKind::Index { recv, index } => Some((recv.clone(), index.clone())),
+                        ExprKind::Method { recv, name, .. } if name == "or_error" => match &recv.kind {
+                            ExprKind::Index { recv, index } => Some((recv.clone(), index.clone())),
+                            _ => None,
+                        },
+                        _ => None,
+                    };
+                    let list_index = matches!(&indexed, Some((r, i)) if matches!(self.ty_of(r).materialized(), Type::List(_)) && !matches!(i.kind, ExprKind::Range { .. }));
                     self.warnings.push(
-                        LumeError::new(e.line, e.col, "`!` stops the program if the value is missing or an error")
-                            .with_help("fine in tests and quick scripts; elsewhere use `match`, `?` or `.or(default)`"),
+                        LumeError::new(e.line, e.col, "`!` stops the program if the value is missing or an error").with_help(match &indexed {
+                            Some((r, i)) if list_index => format!("when the position is already known to be good, write `{}.at({})`", snippet(r), snippet(i)),
+                            _ => "fine in tests and quick scripts; elsewhere use `match`, `?` or `.or(default)`".to_string(),
+                        }),
                     );
                 }
                 let inner = self.expr(x)?;
@@ -7691,6 +7719,12 @@ impl Gen {
             "upcase" => { need(0)?; format!("({}).to_uppercase()", recv) }
             "downcase" => { need(0)?; format!("({}).to_lowercase()", recv) }
             "trim" => { need(0)?; format!("({}).trim().to_string()", recv) }
+            "trim_left" => { need(0)?; format!("({}).trim_start().to_string()", recv) }
+            "trim_right" => { need(0)?; format!("({}).trim_end().to_string()", recv) }
+            // `price.decimals(2)` — the number as text, to that many places
+            "decimals" => { need(1)?; format!("lume_decimals(({}) as f64, {})", recv, args[0]) }
+            // `xs.at(i)` — the item, stopping the program when there is none
+            "at" => { need(1)?; format!("lume_at(&{}, {})", recv, args[0]) }
             "sqrt" | "abs" | "floor" | "ceil" | "round" => { need(0)?; format!("({}).{}()", recv, name) }
             "sum" => { need(0)?; format!("({}).lume_sum()", recv) }
             "push" => { need(1)?; format!("({}).push({})", recv, args[0]) }
@@ -7824,12 +7858,13 @@ fn builtins_for(recv: &Type) -> Vec<&'static str> {
         Type::Str => vec![
             "len", "empty?", "to_int", "to_float", "upcase", "downcase", "trim", "lines", "split", "chars", "contains?", "starts_with?",
             "ends_with?", "pad", "pad_right", "reverse", "slice", "replace", "repeat", "capitalize", "index_of", "digit?", "alpha?", "space?",
+            "trim_left", "trim_right",
         ],
         Type::Char => vec!["digit?", "alpha?", "space?", "alnum?", "upper?", "lower?", "upcase", "downcase", "code", "pad"],
         Type::List(_) => vec![
             "len", "empty?", "any?", "all?", "first", "last", "max", "min", "sum", "sort", "sort_by", "reverse", "push", "pop", "contains?",
             "join", "map", "filter", "reject", "each", "count", "find", "take", "skip", "take_while", "fold", "min_by", "max_by", "enumerate",
-            "to_list", "zip", "flatten", "uniq", "index_of", "insert", "remove_at", "avg", "group_by", "partition", "flat_map", "to_set",
+            "to_list", "zip", "flatten", "uniq", "index_of", "insert", "remove_at", "avg", "group_by", "partition", "flat_map", "to_set", "at",
         ],
         Type::Iter(..) => vec![
             "len", "empty?", "any?", "all?", "first", "last", "max", "min", "sum", "sort", "sort_by", "reverse", "contains?", "join", "map",
@@ -7843,8 +7878,8 @@ fn builtins_for(recv: &Type) -> Vec<&'static str> {
         ],
         Type::Option(_) => vec!["or", "some?", "none?", "or_error", "map"],
         Type::Result(..) => vec!["or", "ok?", "error?", "error", "ok", "map"],
-        Type::Int => vec!["to_float", "to_int", "abs", "pad", "max", "min", "clamp", "pow", "even?", "odd?", "to_char"],
-        Type::Float => vec!["to_int", "to_float", "sqrt", "floor", "ceil", "round", "abs", "pad", "max", "min", "clamp", "pow"],
+        Type::Int => vec!["to_float", "to_int", "abs", "pad", "max", "min", "clamp", "pow", "even?", "odd?", "to_char", "decimals"],
+        Type::Float => vec!["to_int", "to_float", "sqrt", "floor", "ceil", "round", "abs", "pad", "max", "min", "clamp", "pow", "decimals"],
         Type::Bool => vec!["pad"],
         _ => vec![],
     };
@@ -7873,6 +7908,7 @@ fn is_builtin_name(name: &str) -> bool {
             | "remove_at" | "avg" | "merge" | "clamp" | "pow" | "even?" | "odd?" | "ok"
             | "to_set" | "add" | "union" | "intersect" | "diff" | "subset?" | "superset?"
             | "alnum?" | "upper?" | "lower?" | "code" | "to_char"
+            | "trim_left" | "trim_right" | "decimals" | "at"
     )
 }
 
@@ -7978,11 +8014,14 @@ fn builtin_method_type(recv: &Type, name: &str) -> Type {
             _ => Type::Unknown,
         },
         "to_str" | "to_s" | "upcase" | "downcase" | "trim" | "join" | "slice" | "replace" | "repeat" => Type::Str,
+        "trim_left" | "trim_right" | "decimals" => Type::Str,
         "to_float" => if *recv == Type::Str { Type::Result(Box::new(Type::Float), Box::new(Type::Named("Error".into()))) } else { Type::Float },
         "sqrt" | "floor" | "ceil" | "round" => Type::Float,
         "abs" => recv.clone(),
         "sum" => elem.unwrap_or(Type::Unknown),
         "first" | "last" | "max" | "min" | "pop" => elem.map(|e| Type::Option(Box::new(e))).unwrap_or(Type::Unknown),
+        // `xs.at(i)` is the item itself: the bound was already checked
+        "at" => elem.unwrap_or(Type::Unknown),
         "sort" | "reverse" => recv.materialized(),
         "push" => Type::Unit,
         "lines" | "split" => Type::Iter(Box::new(Type::Str), true),

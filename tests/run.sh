@@ -5,6 +5,7 @@
 #   tests/run.sh --update   regenerate the .expected files from current output
 #
 # examples/*.lume         must compile and run; stdout is compared
+# examples/lib/           a library (seq, table) and a program that uses it
 # examples/errors/*.lume  must fail `lume check`; stderr is compared
 # examples/tests/*.lume   `lume test` output and exit code are compared
 # examples/fmt/*.lume     `lume fmt --stdout` is compared; every example
@@ -50,7 +51,7 @@ check() {  # name, expected-file, actual-text
   fi
 }
 
-for f in examples/*.lume examples/port/*.lume examples/modules/*.lume examples/json/json.lume examples/mini/main.lume; do
+for f in examples/*.lume examples/port/*.lume examples/modules/*.lume examples/json/json.lume examples/mini/main.lume examples/lib/report.lume; do
   name=$(basename "$(dirname "$f")")/$(basename "$f" .lume); name=${name#examples/}
   [ "$(dirname "$f")" = "examples" ] && name=$(basename "$f" .lume)
   out=$("$LUME" run "$f" 2>&1); code=$?
@@ -91,6 +92,9 @@ check "mini tests" "examples/mini/main.test.expected" "$out
 exit: $code"
 out=$("$LUME" test examples/site/main.lume 2>&1); code=$?
 check "site tests" "examples/site/main.test.expected" "$out
+exit: $code"
+out=$("$LUME" test examples/lib/report.lume 2>&1); code=$?
+check "lib tests" "examples/lib/report.test.expected" "$out
 exit: $code"
 
 # the site generator writes files: build the sample site from scratch
@@ -137,7 +141,7 @@ rm -rf corpus/.lume corpus/edge/.lume corpus/m17/.lume corpus/m18/.lume corpus/m
 
 # The formatter must be idempotent and must not change what a program means.
 tmp=$(mktemp -d)
-for f in examples/*.lume examples/port/*.lume examples/modules/*.lume examples/modules/users/*.lume examples/tests/*.lume examples/json/*.lume examples/mini/*.lume examples/site/*.lume; do
+for f in examples/*.lume examples/port/*.lume examples/modules/*.lume examples/modules/users/*.lume examples/tests/*.lume examples/json/*.lume examples/mini/*.lume examples/site/*.lume examples/lib/*.lume; do
   name="fmt-roundtrip/${f#examples/}"
   mkdir -p "$tmp/$(dirname "$f")"
   cp -r examples/modules "$tmp/examples/" 2>/dev/null
@@ -145,6 +149,7 @@ for f in examples/*.lume examples/port/*.lume examples/modules/*.lume examples/m
   cp examples/json/json.lume "$tmp/examples/json/" 2>/dev/null
   mkdir -p "$tmp/examples/mini" && cp examples/mini/*.lume "$tmp/examples/mini/" 2>/dev/null
   mkdir -p "$tmp/examples/site" && cp examples/site/*.lume "$tmp/examples/site/" 2>/dev/null
+  mkdir -p "$tmp/examples/lib" && cp examples/lib/*.lume "$tmp/examples/lib/" 2>/dev/null
   if ! "$LUME" fmt "$f" --stdout > "$tmp/$f" 2>"$tmp/err"; then
     echo "FAIL $name: fmt failed"; head -5 "$tmp/err" | sed 's/^/    /'
     fail=$((fail+1)); failed+=("$name"); continue
@@ -165,7 +170,7 @@ for f in examples/*.lume examples/port/*.lume examples/modules/*.lume examples/m
 done
 rm -rf "$tmp"
 
-rm -rf examples/.lume examples/errors/.lume examples/port/.lume examples/modules/.lume examples/tests/.lume examples/json/.lume examples/mini/.lume examples/site/.lume
+rm -rf examples/.lume examples/errors/.lume examples/port/.lume examples/modules/.lume examples/tests/.lume examples/json/.lume examples/mini/.lume examples/site/.lume examples/lib/.lume
 if [ $UPDATE = 1 ]; then echo "expected files updated"; exit 0; fi
 echo "$pass passed, $fail failed"
 [ $fail -eq 0 ] || { printf '  %s\n' "${failed[@]}"; exit 1; }

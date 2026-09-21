@@ -20,7 +20,7 @@ program takes about 1 s in Python and 1.4 s in Ruby.
 The language design lives in the [Lume Language Design](https://claude.ai/code/artifact/1872fe63-1816-4b1e-9983-dec2774382fb)
 document. This repository is the compiler and the examples.
 
-## Status: milestones 1–23 done
+## Status: milestones 1–24 done
 
 | # | Milestone | Status |
 | --- | --- | --- |
@@ -42,6 +42,7 @@ document. This repository is the compiler and the examples.
 | 16 | Ownership by analysis: liveness-based copy or move, recursive enums boxed, `.or` on optional fields, string comparisons in blocks, `for var a in xs`, `xs[i].method` | done: review corpus leaks 6 → 0 |
 | 17 | Pattern completeness: a real exhaustiveness checker with nested witnesses, `A \| B` alternatives; the everyday standard methods; statements in inline blocks | done: 37 new methods, corpus 40 ok / 26 Lume errors / 0 leaks |
 | 18 | `{T}` sets with literals, algebra and iteration; `s[i]` / `s[a..b]` / `xs[a..b]` by character and position; structs and enums as map keys | done |
+| 24 | Dogfood a library: `seq` (24 generic helpers), `table` (a typed CSV table) and a program using both, then fix the six things writing it exposed | done: generics and blocks needed no workaround; `pub def`, keywords as method names, `at`, `trim_left`/`trim_right`, `decimals` |
 | 23 | Blocks of your own: a parameter typed `(A) -> B` takes a `{ \|x\| ... }` block, a `do \|x\|` body, the `_` shorthand, or a function's name | done: `map`, `retry`, `time_it` and friends are writeable in Lume; a block is inlined at the call, not boxed |
 | 22 | User-defined generics: `def first[T]`, `struct Stack[T]`, `enum Tree[T]`, two parameters, interface bounds and the built-in `Ordered` and `Hashable` | done: real Rust generics, no boxing; type arguments read off the call |
 | 21 | Dogfood a program that talks to the world: a static site generator, and the I/O it needed — `warn`, `Env.exit`/`stdin`, `Dir`, `Path`, more `File`, raw strings | done: builds a 3-page site, skips unchanged pages, exits 2 when the input is missing |
@@ -147,6 +148,10 @@ has `digit?`, `alpha?`, `space?`, `alnum?`, `upper?`, `lower?`, `upcase`,
 `.to_s` or wherever a `Str` is wanted; `Int.to_char` goes back),
 multi-line strings (a `"""` block, with the leading line break and the common
 indentation removed; escapes and `#{}` work as usual), `1e15` and `2.5e-3`,
+`xs.at(i)` (the item when the position is already known to be good — the
+read generic code needs, since it has no default to fall back on),
+`trim_left`/`trim_right`, `x.decimals(n)` (the number as text to that
+many places, halves away from zero, for money and reports),
 top-level constants (`MAX = 100`, `KEYWORDS = {"let", "if"}` — computed once,
 `pub` to share them with other files), raw strings (`r"#{not interpolated}"`
 and `r"""blocks"""`, for templates, regexes and code),
@@ -377,6 +382,8 @@ examples/modules/        a three-file program: app.lume imports users/model and 
 examples/interfaces.lume interfaces, extend, operator methods
 examples/generics.lume   generic functions, structs and enums; Ordered, Hashable, interface bounds
 examples/blocks_of_your_own.lume  functions that take behaviour: each, map, keep, fold, retry, time_it
+examples/lib/            a library written in Lume: seq (generic helpers), table (typed CSV),
+                         a report program that uses both, and what writing it exposed
 examples/tests/          files with `test` blocks; expected `lume test` output
 examples/fmt/            badly spaced input; expected `lume fmt` output
 examples/errors/         programs that must keep failing, with good messages

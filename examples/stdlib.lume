@@ -12,6 +12,13 @@ def main:
   puts "[#{"ab".pad_right(5)}]"
   puts "[#{"ab".pad(5)}]"
   puts "a  b   c".split.to_list
+  # milestone 24: the pieces a library asked for
+  puts "[#{"  hi  ".trim_left}]"
+  puts "[#{"  hi  ".trim_right}]"
+  puts 1234.5.decimals(2)
+  puts 0.125.decimals(2)
+  puts 7.decimals(1)
+  puts [10, 20, 30].at(1)
   # numbers
   puts 3.max(7)
   puts 3.min(7)

@@ -1,0 +1,7 @@
+# A field is public with its struct, so `pub` on one is a mistake.
+pub struct Point:
+  pub x: Int
+  y: Int
+
+def main:
+  puts Point(x: 1, y: 2).x

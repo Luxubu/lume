@@ -168,6 +168,23 @@ impl Parser {
         }
     }
 
+    /// `pub` inside a `struct` or `enum` body: on a method it is redundant
+    /// (a method travels with its type), on a field it is wrong.
+    fn redundant_pub(&mut self, owner: &str) -> Result<()> {
+        if !self.at_kw("pub") {
+            return Ok(());
+        }
+        let is_method = matches!(self.peek_at(1), Tok::Ident(ref k) if k == "def" || k == "async");
+        if is_method {
+            self.advance();
+            return Ok(());
+        }
+        let part = if owner == "enum" { "variant" } else { "field" };
+        Err(self
+            .err(format!("a {} is public with its {}, so it takes no `pub`", part, owner))
+            .with_help(format!("write it without `pub`; `pub {} Name:` is what decides", owner)))
+    }
+
     /// A field or method name: like `ident`, but a few keywords are allowed
     /// because they are natural member names (`next`, `match`, `in`) and are
     /// never ambiguous after a `.` or in a field list. Bare use inside a
@@ -314,6 +331,7 @@ impl Parser {
         let mut fields = Vec::new();
         let mut methods = Vec::new();
         while !matches!(self.peek(), Tok::Dedent | Tok::Eof) {
+            self.redundant_pub("struct")?;
             if self.at_kw("def") || self.at_kw("async") {
                 methods.push(self.fn_def(true)?);
             } else if let Tok::Ident(fname) = self.peek().clone() {
@@ -581,6 +599,7 @@ impl Parser {
         let mut variants: Vec<Variant> = Vec::new();
         let mut methods = Vec::new();
         while !matches!(self.peek(), Tok::Dedent | Tok::Eof) {
+            self.redundant_pub("enum")?;
             if self.at_kw("def") || self.at_kw("async") {
                 methods.push(self.fn_def(true)?);
             } else if let Tok::Ident(vname) = self.peek().clone() {
@@ -647,6 +666,7 @@ impl Parser {
                 self.advance();
                 op.to_string()
             }
+            _ if in_struct => self.member_name("a function name")?.0,
             _ => self.ident("a function name")?.0,
         };
         let generics = self.generic_params("def name")?;

@@ -1,0 +1,23 @@
+8 people, 4 columns
+
+By team
+apps        88.0    $7360.00
+data        52.0    $4450.00
+infra       77.0    $6775.00
+
+Busiest
+  Cy    40.0 hours on apps
+  Fay   36.0 hours on apps
+  Ada   32.0 hours on infra
+  Hal   30.0 hours on data
+
+Checks
+  over 38 hours: Cy
+  highest rate: Dee at $110.00
+
+Top three by cost
+name  team   cost
+----  -----  --------
+Fay   apps   $3240.00
+Ada   infra  $3040.00
+Cy    apps   $2800.00

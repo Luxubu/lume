@@ -1,0 +1,154 @@
+# table.lume — a small typed table over CSV, built on `seq`.
+#
+# A table is a header and rows of strings; a column is read as the type
+# the caller asks for, and a bad cell is an error naming the row and the
+# column, not a silent zero.
+
+import seq
+
+pub struct Table:
+  columns: [Str]
+  rows: [[Str]]
+
+  pub def len -> Int:
+    rows.len
+
+  pub def empty? -> Bool:
+    rows.empty?
+
+  # Which position a column name sits at.
+  pub def index_of(column: Str) -> Int or Error:
+    for i, c in columns.enumerate:
+      if c == column:
+        return i
+    Error("no column `#{column}`; the table has #{columns.join(", ")}")
+
+  pub def text(row: Int, column: Str) -> Str or Error:
+    at = index_of(column)?
+    r = rows[row].or_error("row #{row} is past the end of the table")?
+    r[at].or_error("row #{row} has #{r.len} cells, not #{columns.len}")?
+
+  pub def number(row: Int, column: Str) -> Float or Error:
+    cell = text(row, column)?
+    if not number?(cell):
+      return Error("row #{row}, column `#{column}`: `#{cell}` is not a number")
+    cell.to_float
+
+  pub def column_text(column: Str) -> [Str] or Error:
+    at = index_of(column)?
+    var out: [Str] = []
+    for i, r in rows.enumerate:
+      out.push(r[at].or_error("row #{i} has #{r.len} cells, not #{columns.len}")?)
+    out
+
+  pub def column_numbers(column: Str) -> [Float] or Error:
+    var out: [Float] = []
+    for i in 0...rows.len:
+      out.push(number(i, column)?)
+    out
+
+  # Rows the block says yes to, as a table of their own.
+  pub def where(ok: ([Str]) -> Bool) -> Table:
+    Table(columns: columns, rows: seq.keep(rows, ok))
+
+  pub def sorted_by(before?: ([Str], [Str]) -> Bool) -> Table:
+    Table(columns: columns, rows: seq.sort_with(rows, before?))
+
+  pub def first(n: Int) -> Table:
+    Table(columns: columns, rows: rows[0...n.min(rows.len)])
+
+  # An aligned block of text, the way a table wants to be read.
+  pub def render -> Str:
+    widths = column_widths
+    var out: [Str] = []
+    out.push(line_of(columns, widths))
+    out.push(seq.map(widths) { |w| "-".repeat(w) }.join("  "))
+    for r in rows:
+      out.push(line_of(r, widths))
+    out.join("\n")
+
+  pub def column_widths -> [Int]:
+    var widths = seq.map(columns) { |c| c.len }
+    for r in rows:
+      for i, cell in r.enumerate:
+        if i < widths.len and cell.len > widths[i].or(0):
+          widths[i] = cell.len
+    widths
+
+  pub def line_of(cells: [Str], widths: [Int]) -> Str:
+    var parts: [Str] = []
+    for i, c in cells.enumerate:
+      parts.push(c.pad_right(widths[i].or(c.len)))
+    parts.join("  ").trim_right
+
+pub def parse(text: Str) -> Table or Error:
+  lines = seq.drop_where(text.lines.to_list) { |l| l.trim.empty? }
+  header = lines[0].or_error("the table has no header line")?
+  columns = seq.map(header.split(",")) { |c| c.trim }
+  var rows: [[Str]] = []
+  for i in 1...lines.len:
+    line = lines.at(i)
+    cells = seq.map(line.split(",")) { |c| c.trim }
+    if cells.len != columns.len:
+      return Error("line #{i + 1} has #{cells.len} cells, but the header has #{columns.len}")
+    rows.push(cells)
+  Table(columns: columns, rows: rows)
+
+# Is this cell a number? `to_float` says 0.0 for anything it cannot read,
+# so the table checks first rather than reporting a wrong total.
+def number?(s: Str) -> Bool:
+  t = s.trim
+  if t.empty?:
+    return false
+  var digits = 0
+  for i, c in t.chars.enumerate:
+    if c.digit?:
+      digits += 1
+      next
+    if c == "." or ((c == "-" or c == "+") and i == 0):
+      next
+    return false
+  digits > 0
+
+SAMPLE = """
+  name, team, hours, rate
+  Ada, infra, 32, 95
+  Bo, infra, 18, 80
+  Cy, apps, 40, 70
+  Dee, apps, 12, 110
+  """
+
+test "parsing":
+  t = parse(SAMPLE)!
+  assert t.columns == ["name", "team", "hours", "rate"]
+  assert t.len == 4
+  assert t.text(0, "name")! == "Ada"
+  assert t.number(2, "hours")! == 40.0
+
+test "a missing column says so":
+  t = parse(SAMPLE)!
+  match t.text(0, "nope"):
+    Ok(_)    -> assert false
+    Error(e) -> assert e.message.starts_with?("no column `nope`")
+
+test "a cell that is not a number says so":
+  t = parse("a, b\nx, 1")!
+  match t.number(0, "a"):
+    Ok(_)    -> assert false
+    Error(e) -> assert e.message == "row 0, column `a`: `x` is not a number"
+
+test "ragged lines are refused":
+  match parse("a, b\n1"):
+    Ok(_)    -> assert false
+    Error(e) -> assert e.message == "line 2 has 1 cells, but the header has 2"
+
+test "where and sorted_by take blocks":
+  t = parse(SAMPLE)!
+  infra = t.where { |r| r[1].or("") == "infra" }
+  assert infra.len == 2
+  by_name = t.sorted_by { |a, b| a[0].or("") < b[0].or("") }
+  assert by_name.text(0, "name")! == "Ada"
+
+test "rendering lines the columns up":
+  t = parse("a, bbb\n1, 2")!
+  assert t.render == "a  bbb\n-  ---\n1  2"
