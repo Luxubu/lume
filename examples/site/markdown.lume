@@ -1,0 +1,186 @@
+# markdown.lume — the subset of Markdown this site needs: front matter,
+# headings, paragraphs, lists, code blocks, links, bold and italic.
+
+pub struct Page:
+  title: Str
+  date: Str
+  tags: [Str]
+  body: Str
+
+# `---` … `---` at the top of a file: `key: value` lines.
+pub def split_front_matter(text: Str) -> ({Str: Str}, Str):
+  lines = text.lines.to_list
+  if lines[0].or("") != "---":
+    return ({}, text)
+  var meta: {Str: Str} = {}
+  var i = 1
+  while i < lines.len and lines[i].or("---") != "---":
+    line = lines[i].or("")
+    match line.index_of(":"):
+      Some(at) -> meta[line[0...at].trim] = line[at + 1...line.len].trim
+      None     -> ()
+    i += 1
+  (meta, lines[i + 1...lines.len].join("\n"))
+
+pub def render(text: Str) -> Page:
+  (meta, body) = split_front_matter(text)
+  tags = meta["tags"].or("").split(",").map(_.trim).reject(_.empty?).to_list
+  Page(
+    title: meta["title"].or("Untitled"),
+    date: meta["date"].or(""),
+    tags: tags,
+    body: to_html(body),
+  )
+
+# Block level: one pass over the lines, each block closed before the next.
+pub def to_html(md: Str) -> Str:
+  var out: [Str] = []
+  var para: [Str] = []
+  var list: [Str] = []
+  var code: [Str] = []
+  for line in md.lines:
+    if line.starts_with?("    ") and para.empty? and list.empty?:
+      code.push(line[4...line.len])
+      next
+    if not code.empty? and line.trim.empty?:
+      out.push("<pre><code>" + code.join("\n").to_s + "</code></pre>")
+      code = []
+      next
+    if line.trim.empty?:
+      close_paragraph(out, para)
+      close_list(out, list)
+      para = []
+      list = []
+      next
+    if line.starts_with?("#"):
+      close_paragraph(out, para)
+      close_list(out, list)
+      para = []
+      list = []
+      level = line.chars.take_while { |c| c == "#" }.count { |c| true }
+      text = line[level...line.len].trim
+      out.push("<h#{level}>#{inline(text)}</h#{level}>")
+      next
+    if line.starts_with?("- "):
+      close_paragraph(out, para)
+      para = []
+      list.push("<li>#{inline(line[2...line.len])}</li>")
+      next
+    close_list(out, list)
+    list = []
+    para.push(inline(line.trim))
+  close_paragraph(out, para)
+  close_list(out, list)
+  if not code.empty?:
+    out.push("<pre><code>" + code.join("\n") + "</code></pre>")
+  out.join("\n")
+
+def close_paragraph(var out: [Str], para: [Str]):
+  if not para.empty?:
+    out.push("<p>#{para.join(" ")}</p>")
+
+def close_list(var out: [Str], list: [Str]):
+  if not list.empty?:
+    out.push("<ul>\n" + list.join("\n") + "\n</ul>")
+
+# Inline level: links, bold, italic and code spans, left to right.
+pub def inline(text: Str) -> Str:
+  var out = ""
+  cs = text.chars
+  var i = 0
+  while i < cs.len:
+    c = cs[i].or("\u{0}")
+    match c:
+      "[" ->
+        close = find(cs, i, "]")
+        open_paren = if close + 1 < cs.len and cs[close + 1].or(" ") == "(": close + 1 else: -1
+        end = if open_paren < 0: -1 else: find(cs, open_paren, ")")
+        if end < 0:
+          out += escape(c.to_s)
+          i += 1
+          next
+        label = cs[i + 1...close].join("")
+        href = cs[open_paren + 1...end].join("")
+        out += "<a href=\"#{escape(href)}\">#{escape(label)}</a>"
+        i = end + 1
+      "*" ->
+        double = cs[i + 1].or(" ") == "*"
+        mark = if double: "**" else: "*"
+        close = find_text(cs, i + mark.len, mark)
+        if close < 0:
+          out += "*"
+          i += 1
+          next
+        inner = cs[i + mark.len...close].join("")
+        tag = if double: "strong" else: "em"
+        out += "<#{tag}>#{escape(inner)}</#{tag}>"
+        i = close + mark.len
+      "`" ->
+        close = find(cs, i, "`")
+        if close < 0:
+          out += "`"
+          i += 1
+          next
+        out += "<code>#{escape(cs[i + 1...close].join(""))}</code>"
+        i = close + 1
+      _ ->
+        out += escape(c.to_s)
+        i += 1
+  out
+
+# The next `what` after `from`, or -1.
+def find(cs: [Char], from: Int, what: Char) -> Int:
+  var i = from + 1
+  while i < cs.len:
+    if cs[i].or("\u{0}") == what:
+      return i
+    i += 1
+  -1
+
+def find_text(cs: [Char], from: Int, what: Str) -> Int:
+  var i = from
+  while i + what.len <= cs.len:
+    if cs[i...i + what.len].join("") == what:
+      return i
+    i += 1
+  -1
+
+pub def escape(s: Str) -> Str:
+  var out = ""
+  for c in s.chars:
+    out += match c:
+      "&"  -> "&amp;"
+      "<"  -> "&lt;"
+      ">"  -> "&gt;"
+      "\"" -> "&quot;"
+      _    -> c.to_s
+  out
+
+test "front matter":
+  (meta, body) = split_front_matter("---\ntitle: Hi\ntags: a, b\n---\n\n# Hi\n")
+  assert meta["title"] == Some("Hi")
+  assert body.trim == "# Hi"
+  (none, same) = split_front_matter("# Plain\n")
+  assert none.empty?
+  assert same == "# Plain\n"
+
+test "blocks":
+  assert to_html("# Title") == "<h1>Title</h1>"
+  assert to_html("## Two") == "<h2>Two</h2>"
+  assert to_html("one\ntwo") == "<p>one two</p>"
+  assert to_html("- a\n- b") == "<ul>\n<li>a</li>\n<li>b</li>\n</ul>"
+  assert to_html("    code()\n") == "<pre><code>code()</code></pre>"
+
+test "inline":
+  assert inline("a **b** c") == "a <strong>b</strong> c"
+  assert inline("a *b* c") == "a <em>b</em> c"
+  assert inline("see [docs](a.html)") == "see <a href=\"a.html\">docs</a>"
+  assert inline("`x < y`") == "<code>x &lt; y</code>"
+  assert inline("5 < 6 & 7") == "5 &lt; 6 &amp; 7"
+  assert inline("unclosed [link") == "unclosed [link"
+
+test "a whole page":
+  page = render("---\ntitle: T\ndate: 2026-01-01\ntags: x, y\n---\n\n# H\n\ntext\n")
+  assert page.title == "T"
+  assert page.tags == ["x", "y"]
+  assert page.body == "<h1>H</h1>\n<p>text</p>"

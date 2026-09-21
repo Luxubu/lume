@@ -305,6 +305,8 @@ pub enum ExprKind {
     Method { recv: Box<Expr>, name: String, args: Vec<Arg> },
     If { branches: Vec<(Expr, Block)>, else_block: Option<Block> },
     Puts(Box<Expr>),
+    /// `warn x`: like `puts`, but to the error stream.
+    Warn(Box<Expr>),
     /// `_` inside a method argument; the parser turns the argument into a
     /// one-parameter `Lambda` whose parameter is named `_`.
     Placeholder,

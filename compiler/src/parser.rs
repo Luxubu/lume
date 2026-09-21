@@ -1556,11 +1556,14 @@ impl Parser {
             return self.postfix_from(lhs);
         }
         match self.peek().clone() {
-            Tok::Ident(name) if !lexer::is_keyword(&name) || name == "puts" => {
+            Tok::Ident(name) if !lexer::is_keyword(&name) || name == "puts" || name == "warn" => {
                 let (sl, sc) = self.here();
                 self.advance();
                 if name == "puts" {
                     return Ok(Expr::new(ExprKind::Puts(Box::new(lhs)), sl, sc));
+                }
+                if name == "warn" {
+                    return Ok(Expr::new(ExprKind::Warn(Box::new(lhs)), sl, sc));
                 }
                 self.reject_spaced_paren(&name)?;
                 let mut args = if self.at_sym("(") { self.call_args()? } else { Vec::new() };
@@ -1892,13 +1895,15 @@ impl Parser {
                     self.advance();
                     Ok(Expr::new(ExprKind::Bool(false), line, col))
                 }
-                "puts" => {
+                "puts" | "warn" => {
+                    let to_err = s == "warn";
+                    let kw = if to_err { "warn" } else { "puts" };
                     self.advance();
-                    self.reject_spaced_paren("puts")?;
+                    self.reject_spaced_paren(kw)?;
                     let arg = if self.at_sym("(") {
                         let mut a = self.call_args()?;
                         if a.len() != 1 || a[0].name.is_some() {
-                            return Err(LumeError::new(line, col, "`puts` takes exactly one value"));
+                            return Err(LumeError::new(line, col, format!("`{}` takes exactly one value", kw)));
                         }
                         a.remove(0).value
                     } else if matches!(self.peek(), Tok::Newline | Tok::Dedent | Tok::Eof) {
@@ -1906,7 +1911,7 @@ impl Parser {
                     } else {
                         self.expr()?
                     };
-                    Ok(Expr::new(ExprKind::Puts(Box::new(arg)), line, col))
+                Ok(if to_err { Expr::new(ExprKind::Warn(Box::new(arg)), line, col) } else { Expr::new(ExprKind::Puts(Box::new(arg)), line, col) })
                 }
                 "if" => self.if_expr(),
                 "nil" | "null" => Err(LumeError::new(line, col, format!("there is no `{}` in Lume", s))
@@ -2066,7 +2071,7 @@ fn count_placeholders(e: &Expr) -> usize {
             branches.iter().map(|(c, b)| count_placeholders(c) + walk_block(b)).sum::<usize>()
                 + else_block.as_ref().map(walk_block).unwrap_or(0)
         }
-        ExprKind::Puts(e) => count_placeholders(e),
+        ExprKind::Puts(e) | ExprKind::Warn(e) => count_placeholders(e),
         ExprKind::Some(e) | ExprKind::Ok(e) | ExprKind::Try(e) | ExprKind::Unwrap(e) | ExprKind::TupleIndex { recv: e, .. } => count_placeholders(e),
         ExprKind::Tuple(items) => items.iter().map(count_placeholders).sum(),
         ExprKind::None | ExprKind::Rust(_) => 0,
@@ -2129,7 +2134,7 @@ fn replace_placeholders(e: &mut Expr) {
                 walk_block(b);
             }
         }
-        ExprKind::Puts(x) => replace_placeholders(x),
+        ExprKind::Puts(x) | ExprKind::Warn(x) => replace_placeholders(x),
         ExprKind::Some(x) | ExprKind::Ok(x) | ExprKind::Try(x) | ExprKind::Unwrap(x) | ExprKind::TupleIndex { recv: x, .. } => replace_placeholders(x),
         ExprKind::Tuple(items) => items.iter_mut().for_each(replace_placeholders),
         ExprKind::Index { recv, index } => {

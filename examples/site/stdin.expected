@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>A short guide</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<nav><a href="index.html">home</a></nav>
+<main>
+<h1>A short guide</h1>
+<p>Lume reads like Python and runs like Rust. Start with <code>def main:</code>.</p>
+<h2>Values</h2>
+<p>Everything is a value: <code>1</code>, <code>&quot;text&quot;</code>, <code>[1, 2]</code>, <code>{&quot;a&quot;: 1}</code>, <code>{1, 2}</code>. A value that may be absent has type <code>T?</code>, and one that may fail is <code>T or Error</code>.</p>
+<h2>Blocks</h2>
+<pre><code>xs.map { |x| x * 2 }
+xs.each do |x|
+  puts x</code></pre>
+<p>That is the whole of it. See the <a href="index.html">front page</a>.</p>
+</main>
+<footer>2026-09-18</footer>
+</body>
+</html>
+exit: 0

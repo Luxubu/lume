@@ -1,0 +1,6 @@
+error: `Dir` has no `listing`
+  --> examples/errors/no_such_namespace_item.lume:2:11
+  |
+2 |   puts Dir.listing("/tmp")?
+  |           ^
+  help: Dir has exists?, make, list, walk and remove

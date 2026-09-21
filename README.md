@@ -20,7 +20,7 @@ program takes about 1 s in Python and 1.4 s in Ruby.
 The language design lives in the [Lume Language Design](https://claude.ai/code/artifact/1872fe63-1816-4b1e-9983-dec2774382fb)
 document. This repository is the compiler and the examples.
 
-## Status: milestones 1–20 done
+## Status: milestones 1–21 done
 
 | # | Milestone | Status |
 | --- | --- | --- |
@@ -42,6 +42,7 @@ document. This repository is the compiler and the examples.
 | 16 | Ownership by analysis: liveness-based copy or move, recursive enums boxed, `.or` on optional fields, string comparisons in blocks, `for var a in xs`, `xs[i].method` | done: review corpus leaks 6 → 0 |
 | 17 | Pattern completeness: a real exhaustiveness checker with nested witnesses, `A \| B` alternatives; the everyday standard methods; statements in inline blocks | done: 37 new methods, corpus 40 ok / 26 Lume errors / 0 leaks |
 | 18 | `{T}` sets with literals, algebra and iteration; `s[i]` / `s[a..b]` / `xs[a..b]` by character and position; structs and enums as map keys | done |
+| 21 | Dogfood a program that talks to the world: a static site generator, and the I/O it needed — `warn`, `Env.exit`/`stdin`, `Dir`, `Path`, more `File`, raw strings | done: builds a 3-page site, skips unchanged pages, exits 2 when the input is missing |
 | 20 | Dogfood again, across modules: a lexer/parser/evaluator for a small language, and what it exposed — nested patterns through recursive enums, top-level constants, `Variant(..)`, method-before-function resolution, `return` as a tail | done: Mini's `fib(21)` in 34 ms, 7× the same interpreter in Python |
 | 19 | Dogfood: a real JSON parser/printer/query tool written in Lume, and everything it exposed — `Char`, triple-quoted strings, `\r` and `1e15` literals, `Str +=`, `Time.now_ms`, six formatter defects | done: 13 ms vs hand-written Rust's 10 ms on 867 KB (was 100 ms) |
 | 18r | Third review round (`corpus/m18/`, 30 programs by a third reviewer): two block `if`s in a row, `{}` outside a typed binding, block parameters bound one reference too deep, mutations landing on temporaries, unchecked built-in arguments | done: 10 ranked problems fixed, 0 leaks |
@@ -77,7 +78,11 @@ error up, a bare value in a `T or E` function is `Ok` and an `Error(...)` is
 `.error?`, `.or_error("msg")` to turn a `T?` into a `T or Error`, `!` to
 unwrap-or-stop with a warning, `Str.to_int`/`to_float` return `T or Error`),
 typed bindings (`var xs: [User] = []`), `def main -> () or Error`,
-`File.read`/`File.write`/`File.exists?`, `Env.args`/`Env.get`, the pipe
+talking to the world (`puts` and its twin `warn`, which writes to the error
+stream; `File.read`/`write`/`append`/`exists?`/`remove`/`size`/`modified`;
+`Dir.exists?`/`make`/`list`/`walk`/`remove`; `Path.join`/`dir`/`base`/`ext`/
+`stem`; `Env.args`/`get`/`stdin`/`exit(code)`; a user type of the same name
+wins over any of these namespaces), the pipe
 (`x |> .method`, `x |> f(y)` is `f(x, y)`, `x |> puts`; lines starting with
 `|>` continue the expression), function names as blocks (`xs.map(parse)`),
 the Rust bridge (`import rust.regex = "1"` adds a cargo dependency and reads
@@ -125,7 +130,8 @@ has `digit?`, `alpha?`, `space?`, `alnum?`, `upper?`, `lower?`, `upcase`,
 multi-line strings (a `"""` block, with the leading line break and the common
 indentation removed; escapes and `#{}` work as usual), `1e15` and `2.5e-3`,
 top-level constants (`MAX = 100`, `KEYWORDS = {"let", "if"}` — computed once,
-`pub` to share them with other files),
+`pub` to share them with other files), raw strings (`r"#{not interpolated}"`
+and `r"""blocks"""`, for templates, regexes and code),
 `and`/`or`/`not`, `**`, calls, `()` for an arm or block that does nothing,
 `xs + ys` to join two lists, `\u{1F600}` and `\r` escapes, one statement in an
 inline block (`xs.each { |x| total += x }`), and the everyday built-in
@@ -345,6 +351,7 @@ examples/json/           a JSON parser, printer and query tool (350 lines) with 
                          plus the same algorithm in Rust and Python and a benchmark script
 examples/mini/           a small language in four modules: lexer, parser, evaluator, driver,
                          with the same interpreter in Python beside it
+examples/site/           a static site generator: Markdown in, an HTML tree out, incremental
 examples/stdlib.lume     the built-in methods, one line each
 examples/crate.lume      regex through the bridge: types, iterators, errors, a rust: block
 examples/crates.lume     hex and urlencoding, with nothing written for them

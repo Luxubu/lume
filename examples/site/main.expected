@@ -1,0 +1,5 @@
+  examples/site/content/guide.md -> examples/site/out/guide.html
+  examples/site/content/index.md -> examples/site/out/index.html
+  examples/site/content/notes/release.md -> examples/site/out/notes/release.html
+3 built, 0 unchanged, 172 words, 0 failed
+exit: 0

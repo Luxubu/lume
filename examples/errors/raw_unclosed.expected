@@ -1,0 +1,6 @@
+error: this raw string is never closed
+  --> examples/errors/raw_unclosed.lume:2:7
+  |
+2 |   s = r"never closed
+  |       ^
+  help: end it with `"` on the same line, or use `r"""..."""`

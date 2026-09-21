@@ -42,7 +42,7 @@ pub struct Token {
 
 pub const KEYWORDS: &[&str] = &[
     "def", "var", "const", "if", "elif", "else", "unless", "while", "for", "in", "where",
-    "return", "break", "next", "true", "false", "and", "or", "not", "puts", "struct", "enum",
+    "return", "break", "next", "true", "false", "and", "or", "not", "puts", "warn", "struct", "enum",
     "match", "interface", "extend", "import", "pub", "test", "assert", "rust",
     "async", "await", "spawn", "shared",
 ];
@@ -309,6 +309,41 @@ pub fn lex_full(src: &str) -> Result<(Vec<Token>, LexInfo)> {
                     })?)
                 };
                 push(&mut toks, tok, line, start_col, &mut space_before);
+            }
+            'r' if i + 1 < n && chars[i + 1] == '"' => {
+                // a raw string: what is between the quotes, exactly
+                let start_col = col;
+                let start_line = line;
+                let triple = i + 3 < n && chars[i + 2] == '"' && chars[i + 3] == '"';
+                let quote_len = if triple { 3 } else { 1 };
+                let mut j = i + 1 + quote_len;
+                let mut raw = String::new();
+                loop {
+                    if j >= n {
+                        return Err(LumeError::new(start_line, start_col, "this raw string is never closed")
+                            .with_help(if triple { "end it with `\"\"\"`" } else { "end it with `\"`" }));
+                    }
+                    let closes = if triple { j + 2 < n && chars[j] == '"' && chars[j + 1] == '"' && chars[j + 2] == '"' } else { chars[j] == '"' };
+                    if closes {
+                        break;
+                    }
+                    if !triple && chars[j] == '\n' {
+                        return Err(LumeError::new(start_line, start_col, "this raw string is never closed").with_help("end it with `\"` on the same line, or use `r\"\"\"...\"\"\"`"));
+                    }
+                    raw.push(chars[j]);
+                    j += 1;
+                }
+                for c in chars[i..j + quote_len].iter() {
+                    if *c == '\n' {
+                        line += 1;
+                        col = 1;
+                    } else {
+                        col += 1;
+                    }
+                }
+                i = j + quote_len;
+                let text = if triple { dedent_block(&raw) } else { raw };
+                push(&mut toks, Tok::Str(vec![StrPart::Lit(text)]), start_line, start_col, &mut space_before);
             }
             '"' if i + 2 < n && chars[i + 1] == '"' && chars[i + 2] == '"' => {
                 // A `"""` block: the text between the quotes, with the first

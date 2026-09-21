@@ -1,0 +1,150 @@
+# main.lume — the site generator: read `content/`, write `out/`.
+#
+#   lume run examples/site/main.lume
+#   lume run examples/site/main.lume -- content out
+#
+# Every page becomes an .html file in the same place under `out/`, plus an
+# index of everything, newest first.
+
+import markdown
+import markdown.Page
+
+TEMPLATE = """
+  <!doctype html>
+  <html lang="en">
+  <head>
+  <meta charset="utf-8">
+  <title>{{TITLE}}</title>
+  <link rel="stylesheet" href="{{ROOT}}style.css">
+  </head>
+  <body>
+  <nav><a href="{{ROOT}}index.html">home</a></nav>
+  <main>
+  {{BODY}}
+  </main>
+  <footer>{{DATE}}{{TAGS}}</footer>
+  </body>
+  </html>
+  """
+
+STYLE = """
+  body { font: 16px/1.6 system-ui, sans-serif; max-width: 42rem; margin: 3rem auto; padding: 0 1rem; }
+  code, pre { background: #f4f4f5; border-radius: 4px; }
+  pre { padding: .75rem; overflow-x: auto; }
+  nav a { color: #555; text-decoration: none; }
+  footer { color: #777; margin-top: 3rem; font-size: .9rem; }
+  """
+
+struct Built:
+  source: Str
+  target: Str
+  page: Page
+  written: Bool
+
+def fill(template: Str, values: {Str: Str}) -> Str:
+  var out = template
+  for key, value in values:
+    out = out.replace("{{" + key + "}}", value)
+  out
+
+# `content/notes/release.md` -> `out/notes/release.html`
+def target_for(source: Str, content_dir: Str, out_dir: Str) -> Str:
+  rest = source[content_dir.len + 1...source.len]
+  Path.join(out_dir, rest.replace(".md", ".html"))
+
+# How far back to the site root from a page: `notes/release.html` -> `../`
+def root_from(target: Str, out_dir: Str) -> Str:
+  rest = target[out_dir.len + 1...target.len]
+  depth = rest.chars.count { |c| c == "/" }
+  "../".repeat(depth)
+
+# A page is rebuilt when its source is newer than its output.
+def stale?(source: Str, target: Str) -> Bool:
+  if not File.exists?(target):
+    return true
+  match (File.modified(source), File.modified(target)):
+    (Ok(a), Ok(b)) -> a >= b
+    _              -> true
+
+def build_one(source: Str, content_dir: Str, out_dir: Str, force: Bool) -> Built or Error:
+  text = File.read(source)?
+  page = markdown.render(text)
+  target = target_for(source, content_dir, out_dir)
+  # an unchanged page is still listed in the index, just not written again
+  if not force and not stale?(source, target):
+    return Built(source: source, target: target, page: page, written: false)
+  tags = if page.tags.empty?: "" else: " · " + page.tags.join(", ")
+  html = fill(TEMPLATE, {
+    "TITLE": markdown.escape(page.title),
+    "BODY": page.body,
+    "DATE": page.date,
+    "TAGS": tags,
+    "ROOT": root_from(target, out_dir),
+  })
+  Dir.make(Path.dir(target))?
+  File.write(target, html)?
+  Built(source: source, target: target, page: page, written: true)
+
+def index_page(built: [Built], out_dir: Str) -> Str:
+  newest = built.sort_by { |b| b.page.date }.reverse
+  var items: [Str] = []
+  for b in newest:
+    href = b.target[out_dir.len + 1...b.target.len]
+    items.push("<li><a href=\"#{href}\">#{markdown.escape(b.page.title)}</a> <small>#{b.page.date}</small></li>")
+  body = "<h1>All pages</h1>\n<ul>\n" + items.join("\n") + "\n</ul>"
+  fill(TEMPLATE, {"TITLE": "All pages", "BODY": body, "DATE": "", "TAGS": "", "ROOT": ""})
+
+def sources(dir: Str) -> [Str] or Error:
+  var out: [Str] = []
+  for entry in Dir.walk(dir)?:
+    if entry.ends_with?(".md"):
+      out.push(entry)
+  out.sort
+
+def main -> () or Error:
+  args = Env.args
+  force = args.contains?("--force")
+  rest = args.reject { |a| a.starts_with?("--") }.to_list
+  content_dir = rest[0].or("examples/site/content")
+  out_dir = rest[1].or("examples/site/out")
+  if args.contains?("--stdin"):
+    page = markdown.render(Env.stdin?)
+    puts fill(TEMPLATE, {"TITLE": markdown.escape(page.title), "BODY": page.body, "DATE": page.date, "TAGS": "", "ROOT": ""})
+    return ()
+
+  if not Dir.exists?(content_dir):
+    warn "no such directory: #{content_dir}"
+    Env.exit(2)
+  Dir.make(out_dir)?
+  File.write(Path.join(out_dir, "style.css"), STYLE)?
+
+  var built: [Built] = []
+  var failed = 0
+  var skipped = 0
+  for source in sources(content_dir)?:
+    match build_one(source, content_dir, out_dir, force):
+      Ok(b) ->
+        if b.written:
+          puts "  #{source} -> #{b.target}"
+        else:
+          skipped += 1
+        built.push(b)
+      Error(e) ->
+        warn "  #{source}: #{e.message}"
+        failed += 1
+  File.write(Path.join(out_dir, "all.html"), index_page(built, out_dir))?
+
+  words = built.map { |b| b.page.body.split.count { |w| true } }.sum
+  puts "#{built.len - skipped} built, #{skipped} unchanged, #{words} words, #{failed} failed"
+  if failed > 0:
+    Env.exit(1)
+
+test "paths":
+  assert target_for("content/a.md", "content", "out") == "out/a.html"
+  assert target_for("content/n/b.md", "content", "out") == "out/n/b.html"
+  assert root_from("out/n/b.html", "out") == "../"
+  assert root_from("out/a.html", "out") == ""
+
+test "the template is filled in":
+  html = fill("<title>{{TITLE}}</title>{{BODY}}", {"TITLE": "T", "BODY": "<p>b</p>"})
+  assert html == "<title>T</title><p>b</p>"

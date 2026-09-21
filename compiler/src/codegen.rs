@@ -101,6 +101,83 @@ fn lume_write_file(path: &str, text: &str) -> Result<(), Error> {
     std::fs::write(path, text).map_err(|e| Error { message: format!("cannot write `{}`: {}", path, e) })
 }
 fn lume_args() -> Vec<String> { std::env::args().skip(1).collect() }
+/// Everything on standard input, to the end.
+fn lume_stdin() -> Result<String, Error> {
+    use std::io::Read;
+    let mut s = String::new();
+    std::io::stdin().read_to_string(&mut s).map_err(|e| Error { message: format!("cannot read input: {}", e) })?;
+    Ok(s)
+}
+fn lume_append_file(path: &str, text: &str) -> Result<(), Error> {
+    use std::io::Write;
+    std::fs::OpenOptions::new().create(true).append(true).open(path)
+        .and_then(|mut f| f.write_all(text.as_bytes()))
+        .map_err(|e| Error { message: format!("cannot append to `{}`: {}", path, e) })
+}
+fn lume_remove_file(path: &str) -> Result<(), Error> {
+    std::fs::remove_file(path).map_err(|e| Error { message: format!("cannot remove `{}`: {}", path, e) })
+}
+fn lume_file_size(path: &str) -> Result<i64, Error> {
+    std::fs::metadata(path).map(|m| m.len() as i64).map_err(|e| Error { message: format!("cannot read `{}`: {}", path, e) })
+}
+/// Seconds since the epoch, as `File.modified` reports them.
+fn lume_file_modified(path: &str) -> Result<i64, Error> {
+    std::fs::metadata(path)
+        .and_then(|m| m.modified())
+        .map_err(|e| Error { message: format!("cannot read `{}`: {}", path, e) })
+        .map(|t| t.duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0))
+}
+fn lume_dir_make(path: &str) -> Result<(), Error> {
+    std::fs::create_dir_all(path).map_err(|e| Error { message: format!("cannot make `{}`: {}", path, e) })
+}
+/// The names inside a directory, sorted, without `.` and `..`.
+fn lume_dir_list(path: &str) -> Result<Vec<String>, Error> {
+    let mut out = Vec::new();
+    let entries = std::fs::read_dir(path).map_err(|e| Error { message: format!("cannot list `{}`: {}", path, e) })?;
+    for e in entries {
+        let e = e.map_err(|e| Error { message: format!("cannot list `{}`: {}", path, e) })?;
+        out.push(e.file_name().to_string_lossy().into_owned());
+    }
+    out.sort();
+    Ok(out)
+}
+/// Every file under a directory, sorted, directories walked in order.
+fn lume_dir_walk(path: &str) -> Result<Vec<String>, Error> {
+    let mut out = Vec::new();
+    let mut stack = vec![path.to_string()];
+    while let Some(dir) = stack.pop() {
+        for name in lume_dir_list(&dir)? {
+            let full = lume_path_join(&dir, &name);
+            if std::path::Path::new(&full).is_dir() { stack.push(full); } else { out.push(full); }
+        }
+    }
+    out.sort();
+    Ok(out)
+}
+fn lume_dir_remove(path: &str) -> Result<(), Error> {
+    std::fs::remove_dir_all(path).map_err(|e| Error { message: format!("cannot remove `{}`: {}", path, e) })
+}
+fn lume_path_join(a: &str, b: &str) -> String {
+    if a.is_empty() { return b.to_string(); }
+    if b.starts_with('/') || a.ends_with('/') { format!("{}{}", a, b) } else { format!("{}/{}", a, b) }
+}
+/// The directory part of a path, "" when there is none.
+fn lume_path_dir(p: &str) -> String {
+    match p.rfind('/') { Some(0) => "/".into(), Some(i) => p[..i].to_string(), None => String::new() }
+}
+fn lume_path_base(p: &str) -> String {
+    match p.rfind('/') { Some(i) => p[i + 1..].to_string(), None => p.to_string() }
+}
+/// The extension without the dot, "" when there is none.
+fn lume_path_ext(p: &str) -> String {
+    let base = lume_path_base(p);
+    match base.rfind('.') { Some(i) if i > 0 => base[i + 1..].to_string(), _ => String::new() }
+}
+/// The file name without its extension.
+fn lume_path_stem(p: &str) -> String {
+    let base = lume_path_base(p);
+    match base.rfind('.') { Some(i) if i > 0 => base[..i].to_string(), _ => base }
+}
 /// Lume's map: insertion-ordered (as in Ruby), hash lookups, one copy of each key.
 /// Entries live in a Vec; a hash -> positions index finds them. Removal leaves a
 /// tombstone; the Vec is compacted when tombstones outnumber live entries.
@@ -2019,7 +2096,7 @@ impl Gen {
         let base = &name[..name.len() - 1];
         // built-in namespaces: File.read?
         if let ExprKind::Ident(tn) = &recv.kind {
-            if self.lookup(tn).is_none() && builtin_namespace_type(tn, name).is_none() && builtin_namespace_type(tn, base).is_some() {
+            if self.lookup(tn).is_none() && !self.is_type(&self.canon(tn)) && builtin_namespace_type(tn, name).is_none() && builtin_namespace_type(tn, base).is_some() {
                 let inner = Expr::new(ExprKind::Method { recv: recv.clone(), name: base.to_string(), args: args.clone() }, e.line, e.col);
                 return Some(Expr::new(ExprKind::Try(Box::new(inner)), e.line, e.col));
             }
@@ -2136,7 +2213,7 @@ impl Gen {
                     if self.lookup(tn).is_none() && self.enums.contains_key(&ctn) {
                         return Type::Named(ctn);
                     }
-                    if self.lookup(tn).is_none() {
+                    if self.lookup(tn).is_none() && !self.is_type(&ctn) {
                         if let Some(t) = builtin_namespace_type(tn, name) {
                             if tn == "Time" && name == "sleep" && self.in_async {
                                 return Type::Future(Box::new(Type::Unit));
@@ -2237,7 +2314,7 @@ impl Gen {
                 }
                 Type::Unknown
             }
-            ExprKind::Puts(_) => Type::Unit,
+            ExprKind::Puts(_) | ExprKind::Warn(_) => Type::Unit,
             ExprKind::Placeholder | ExprKind::Lambda { .. } => Type::Unknown,
             ExprKind::Match { scrutinee, arms } => self.match_type(scrutinee, arms),
             ExprKind::Tuple(items) if items.is_empty() => Type::Unit,
@@ -3190,11 +3267,6 @@ impl Gen {
         let rt = self.rt(&t);
         let vis = if c.public { "pub " } else { "" };
         self.line(&format!("{}static {}: std::sync::LazyLock<{}> = std::sync::LazyLock::new(|| {});", vis, rust_name(&c.name), rt, v));
-        // visible to every function in the file
-        if self.scopes.is_empty() {
-            self.scopes.push(HashMap::new());
-        }
-        self.scopes[0].insert(c.name.clone(), Binding { mutable: false, borrowed: true, ty: t, line: c.line });
         Ok(())
     }
 
@@ -4382,19 +4454,8 @@ impl Gen {
 
     fn is_borrowed_ident(&self, e: &Expr) -> bool {
         match &e.kind {
-            ExprKind::Ident(n) => match self.lookup(n) {
-                Some(b) => b.borrowed,
-                // a constant is a static: every use reads it in place
-                None => self.consts.contains_key(&self.canon(n)),
-            },
+            ExprKind::Ident(n) => self.lookup(n).map(|b| b.borrowed).unwrap_or(false),
             ExprKind::SelfRef => true,
-            // `mod.NAME` of another module
-            ExprKind::Method { recv, name, args } if args.is_empty() => match &recv.kind {
-                ExprKind::Ident(alias) => {
-                    self.lookup(alias).is_none() && self.module_aliases.contains_key(alias) && self.consts.contains_key(&self.canon(&format!("{}.{}", alias, name)))
-                }
-                _ => false,
-            },
             _ => false,
         }
     }
@@ -5868,7 +5929,8 @@ impl Gen {
                     rust_name(name)
                 } else if self.consts.contains_key(&self.canon(name)) {
                     let key = self.canon(name);
-                    if self.paths.contains_key(&key) { self.path_of(&key) } else { rust_name(&key) }
+                    let path = if self.paths.contains_key(&key) { self.path_of(&key) } else { rust_name(&key) };
+                    format!("(*{})", path)
                 } else if self.field_type(name).is_some() {
                     format!("self.{}", rust_name(name))
                 } else if let Some(m) = self.bare_method(name) {
@@ -6371,7 +6433,7 @@ impl Gen {
                     if self.lookup(tn).is_none() && self.enums.contains_key(&ctn) {
                         return self.variant_ctor(&ctn, name, args, e);
                     }
-                    if self.lookup(tn).is_none() && builtin_namespace_type(tn, name).is_some() {
+                    if self.lookup(tn).is_none() && !self.is_type(&self.canon(tn)) && builtin_namespace_type(tn, name).is_some() {
                         let mut parts = Vec::new();
                         for a in args {
                             parts.push(self.expr_val(&a.value)?);
@@ -6387,6 +6449,22 @@ impl Gen {
                             ("File", "read") => { need(1)?; format!("lume_read_file(&{})", parts[0]) }
                             ("File", "write") => { need(2)?; format!("lume_write_file(&{}, &{})", parts[0], parts[1]) }
                             ("File", "exists?") => { need(1)?; format!("std::path::Path::new(&*{}).exists()", parts[0]) }
+                            ("File", "append") => { need(2)?; format!("lume_append_file(&{}, &{})", parts[0], parts[1]) }
+                            ("File", "remove") => { need(1)?; format!("lume_remove_file(&{})", parts[0]) }
+                            ("File", "size") => { need(1)?; format!("lume_file_size(&{})", parts[0]) }
+                            ("File", "modified") => { need(1)?; format!("lume_file_modified(&{})", parts[0]) }
+                            ("Dir", "exists?") => { need(1)?; format!("std::path::Path::new(&*{}).is_dir()", parts[0]) }
+                            ("Dir", "make") => { need(1)?; format!("lume_dir_make(&{})", parts[0]) }
+                            ("Dir", "list") => { need(1)?; format!("lume_dir_list(&{})", parts[0]) }
+                            ("Dir", "walk") => { need(1)?; format!("lume_dir_walk(&{})", parts[0]) }
+                            ("Dir", "remove") => { need(1)?; format!("lume_dir_remove(&{})", parts[0]) }
+                            ("Path", "join") => { need(2)?; format!("lume_path_join(&{}, &{})", parts[0], parts[1]) }
+                            ("Path", "dir") => { need(1)?; format!("lume_path_dir(&{})", parts[0]) }
+                            ("Path", "base") => { need(1)?; format!("lume_path_base(&{})", parts[0]) }
+                            ("Path", "ext") => { need(1)?; format!("lume_path_ext(&{})", parts[0]) }
+                            ("Path", "stem") => { need(1)?; format!("lume_path_stem(&{})", parts[0]) }
+                            ("Env", "exit") => { need(1)?; format!("std::process::exit(({}) as i32)", parts[0]) }
+                            ("Env", "stdin") => { need(0)?; "lume_stdin()".to_string() }
                             ("Env", "args") => { need(0)?; "lume_args()".to_string() }
                             ("Env", "get") => { need(1)?; format!("std::env::var(&*{}).ok()", parts[0]) }
                             ("Time", "now") => { need(0)?; "lume_now()".to_string() }
@@ -6403,9 +6481,15 @@ impl Gen {
                             _ => unreachable!(),
                         });
                     }
-                    if self.lookup(tn).is_none() && (tn == "File" || tn == "Env" || tn == "Time") {
+                    if self.lookup(tn).is_none() && !self.is_type(&self.canon(tn)) && matches!(tn.as_str(), "File" | "Env" | "Time" | "Dir" | "Path") {
                         return Err(LumeError::new(e.line, e.col, format!("`{}` has no `{}`", tn, name))
-                            .with_help(match tn.as_str() { "File" => "File has read(path), write(path, text) and exists?(path)", "Env" => "Env has args and get(name)", _ => "Time has now (seconds), now_ms and sleep(ms)" }));
+                            .with_help(match tn.as_str() {
+                                "File" => "File has read, write, append, exists?, remove, size and modified",
+                                "Env" => "Env has args, get(name), stdin and exit(code)",
+                                "Dir" => "Dir has exists?, make, list, walk and remove",
+                                "Path" => "Path has join(a, b), dir, base, ext and stem",
+                                _ => "Time has now (seconds), now_ms and sleep(ms)",
+                            }));
                     }
                     if self.lookup(tn).is_none() && self.structs.contains_key(tn) {
                         return Err(LumeError::new(e.line, e.col, format!("`{}.{}` — static methods on a type are not supported yet", tn, name))
@@ -6658,6 +6742,11 @@ impl Gen {
                 self.check_printable(arg)?;
                 let a = self.expr_val(arg)?;
                 format!("println!(\"{{}}\", ({}).lume_str())", a)
+            }
+            ExprKind::Warn(arg) => {
+                self.check_printable(arg)?;
+                let a = self.expr_val(arg)?;
+                format!("eprintln!(\"{{}}\", ({}).lume_str())", a)
             }
             ExprKind::Placeholder => {
                 return Err(LumeError::new(e.line, e.col, "`_` can only be used inside a method argument").with_help("write `xs.map(_.name)`; elsewhere give the value a name"));
@@ -6973,6 +7062,14 @@ fn builtin_namespace_type(ns: &str, name: &str) -> Option<Type> {
         ("File", "read") => Type::Result(Box::new(Type::Str), err()),
         ("File", "write") => Type::Result(Box::new(Type::Unit), err()),
         ("File", "exists?") => Type::Bool,
+        ("File", "append") | ("File", "remove") => Type::Result(Box::new(Type::Unit), err()),
+        ("File", "size") | ("File", "modified") => Type::Result(Box::new(Type::Int), err()),
+        ("Dir", "exists?") => Type::Bool,
+        ("Dir", "make") | ("Dir", "remove") => Type::Result(Box::new(Type::Unit), err()),
+        ("Dir", "list") | ("Dir", "walk") => Type::Result(Box::new(Type::List(Box::new(Type::Str))), err()),
+        ("Path", "join") | ("Path", "dir") | ("Path", "base") | ("Path", "ext") | ("Path", "stem") => Type::Str,
+        ("Env", "exit") => Type::Unit,
+        ("Env", "stdin") => Type::Result(Box::new(Type::Str), err()),
         ("Env", "args") => Type::List(Box::new(Type::Str)),
         ("Env", "get") => Type::Option(Box::new(Type::Str)),
         ("Time", "now") => Type::Int,
@@ -7252,7 +7349,7 @@ fn expr_mentions(e: &Expr, name: &str) -> bool {
         ExprKind::Await(x) => expr_mentions(x, name),
         ExprKind::Spawn(b) => blk(b),
         ExprKind::Range { lo, hi, .. } => expr_mentions(lo, name) || expr_mentions(hi, name),
-        ExprKind::Unary { expr, .. } | ExprKind::Some(expr) | ExprKind::Ok(expr) | ExprKind::Try(expr) | ExprKind::Unwrap(expr) | ExprKind::Puts(expr) => expr_mentions(expr, name),
+        ExprKind::Unary { expr, .. } | ExprKind::Some(expr) | ExprKind::Ok(expr) | ExprKind::Try(expr) | ExprKind::Unwrap(expr) | ExprKind::Puts(expr) | ExprKind::Warn(expr) => expr_mentions(expr, name),
         ExprKind::TupleIndex { recv, .. } => expr_mentions(recv, name),
         ExprKind::Index { recv, index } => expr_mentions(recv, name) || expr_mentions(index, name),
         ExprKind::Binary { lhs, rhs, .. } => expr_mentions(lhs, name) || expr_mentions(rhs, name),

@@ -226,6 +226,21 @@ impl Fmt {
     fn raw_string(&self, line: usize, col: usize) -> Option<String> {
         let l = self.src_lines.get(line.checked_sub(1)?)?;
         let mut i = col.checked_sub(1)?;
+        // `r"..."` and `r"""..."""`: copied through as written
+        if i < l.len() && l[i] == 'r' && i + 1 < l.len() && l[i + 1] == '"' {
+            let triple = i + 3 < l.len() && l[i + 2] == '"' && l[i + 3] == '"';
+            let quote: &str = if triple { "\"\"\"" } else { "\"" };
+            let mut out: String = l[i..].iter().collect();
+            let mut ln = line - 1;
+            while out[1 + quote.len()..].find(quote).is_none() {
+                ln += 1;
+                let next = self.src_lines.get(ln)?;
+                out.push('\n');
+                out.push_str(&next.iter().collect::<String>());
+            }
+            let end = out[1 + quote.len()..].find(quote)? + 1 + 2 * quote.len();
+            return Some(out[..end].to_string());
+        }
         if i >= l.len() || l[i] != '"' {
             return None;
         }
@@ -662,7 +677,7 @@ impl Fmt {
                     8
                 }
             }
-            ExprKind::If { .. } | ExprKind::Match { .. } | ExprKind::Puts(_) | ExprKind::Spawn(_) => 0,
+            ExprKind::If { .. } | ExprKind::Match { .. } | ExprKind::Puts(_) | ExprKind::Warn(_) | ExprKind::Spawn(_) => 0,
             ExprKind::Await(_) => 8,
             _ => 10,
         }
@@ -881,6 +896,10 @@ impl Fmt {
                     format!("{}.{}", self.expr_p(recv, 10), name)
                 };
                 format!("{}{}", head, self.args_text(args))
+            }
+            ExprKind::Warn(x) => {
+                let v = self.expr(x);
+                if v.starts_with('(') { format!("warn({})", v) } else { format!("warn {}", v) }
             }
             ExprKind::Puts(x) => {
                 if self.is_pipe(e) {

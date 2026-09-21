@@ -1,0 +1,9 @@
+test markdown: front matter ... ok
+test markdown: blocks ... ok
+test markdown: inline ... ok
+test markdown: a whole page ... ok
+test paths ... ok
+test the template is filled in ... ok
+
+6 tests: 6 passed, 0 failed
+exit: 0
