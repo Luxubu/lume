@@ -764,6 +764,7 @@ pub fn rust_type(t: &Type) -> String {
         Type::Shared(inner, true) => format!("std::sync::Arc<std::sync::Mutex<{}>>", rust_type(inner)),
         Type::Shared(inner, false) => format!("std::sync::Arc<{}>", rust_type(inner)),
         Type::App(n, args) => format!("{}<{}>", n, args.iter().map(rust_type).collect::<Vec<_>>().join(", ")),
+        Type::Fn(ps, r) => format!("impl FnMut({}) -> {}", ps.iter().map(rust_type).collect::<Vec<_>>().join(", "), rust_type(r)),
         Type::Var(n) => n.clone(),
         Type::Unknown => "_".into(),
     }
@@ -790,6 +791,7 @@ pub fn type_name(t: &Type) -> String {
         Type::Shared(i, true) => format!("shared var {}", type_name(i)),
         Type::Shared(i, false) => format!("shared {}", type_name(i)),
         Type::App(n, args) => format!("{}[{}]", n, args.iter().map(type_name).collect::<Vec<_>>().join(", ")),
+        Type::Fn(ps, r) => format!("({}) -> {}", ps.iter().map(type_name).collect::<Vec<_>>().join(", "), type_name(r)),
         Type::Var(n) => n.clone(),
         Type::Unknown => "?".into(),
     }
@@ -874,6 +876,7 @@ impl Gen {
             Type::Task(i) => Type::Task(Box::new(self.ct(i))),
             Type::Future(i) => Type::Future(Box::new(self.ct(i))),
             Type::Shared(i, m) => Type::Shared(Box::new(self.ct(i)), *m),
+            Type::Fn(ps, r) => Type::Fn(ps.iter().map(|x| self.ct(x)).collect(), Box::new(self.ct(r))),
             other => other.clone(),
         }
     }
@@ -898,6 +901,7 @@ impl Gen {
             Type::Tuple(ts) => Type::Tuple(ts.iter().map(|x| Self::as_vars(x, gs)).collect()),
             Type::Result(a, b) => Type::Result(go(a), go(b)),
             Type::Map(a, b) => Type::Map(go(a), go(b)),
+            Type::Fn(ps, r) => Type::Fn(ps.iter().map(|x| Self::as_vars(x, gs)).collect(), Box::new(Self::as_vars(r, gs))),
             other => other.clone(),
         }
     }
@@ -976,6 +980,7 @@ impl Gen {
             Type::Tuple(ts) => Type::Tuple(ts.iter().map(|x| Self::subst(x, m)).collect()),
             Type::Result(a, b) => Type::Result(go(a), go(b)),
             Type::Map(a, b) => Type::Map(go(a), go(b)),
+            Type::Fn(ps, r) => Type::Fn(ps.iter().map(|x| Self::subst(x, m)).collect(), Box::new(Self::subst(r, m))),
             other => other.clone(),
         }
     }
@@ -1010,6 +1015,12 @@ impl Gen {
                     Self::unify(d, a, m);
                 }
             }
+            (Type::Fn(ds, dr), Type::Fn(as_, ar)) if ds.len() == as_.len() => {
+                for (d, a) in ds.iter().zip(as_) {
+                    Self::unify(d, a, m);
+                }
+                Self::unify(dr, ar, m);
+            }
             // `xs: [T]` given an empty list says nothing about `T`
             _ => {}
         }
@@ -1021,6 +1032,7 @@ impl Gen {
             Type::App(_, args) | Type::Tuple(args) => args.iter().any(|a| Self::mentions_var(a, name)),
             Type::List(i) | Type::Option(i) | Type::Set(i) | Type::Task(i) | Type::Future(i) | Type::Iter(i, _) | Type::Shared(i, _) => Self::mentions_var(i, name),
             Type::Result(a, b) | Type::Map(a, b) => Self::mentions_var(a, name) || Self::mentions_var(b, name),
+            Type::Fn(ps, r) => ps.iter().any(|x| Self::mentions_var(x, name)) || Self::mentions_var(r, name),
             _ => false,
         }
     }
@@ -1065,6 +1077,26 @@ impl Gen {
             None => {}
         }
         format!("{}: {}", p.name, parts.join(" + "))
+    }
+
+    /// How a block is spelled in Rust. Its parameters follow the same rule
+    /// as a function's: copied types by value, everything else lent.
+    fn rust_fn_bound(&self, ins: &[Type], out: &Type) -> String {
+        let ps: Vec<String> = ins.iter().map(|t| self.rust_block_param(t)).collect();
+        let ret = if *out == Type::Unit { String::new() } else { format!(" -> {}", self.rt(out)) };
+        format!("FnMut({}){}", ps.join(", "), ret)
+    }
+
+    /// The Rust type one of a block's parameters arrives as.
+    fn rust_block_param(&self, t: &Type) -> String {
+        let rt = self.rt(t);
+        if t.is_copy() {
+            rt
+        } else if *t == Type::Str {
+            "&str".to_string()
+        } else {
+            format!("&{}", rt)
+        }
     }
 
     /// `<T: ...>` for a definition's header, empty when it has none.
@@ -1117,7 +1149,15 @@ impl Gen {
         if let Ok(bound) = self.bind_args("", params, args, 0, 0) {
             for (a, (_, pty)) in bound.iter().zip(params) {
                 if gs.iter().any(|p| Self::mentions_var(pty, &p.name)) {
-                    let at = self.ty_of(a);
+                    // a block says what its result is only once its own
+                    // arguments are known, so fill those in first
+                    let at = match pty {
+                        Type::Fn(ins, _) => {
+                            let ins: Vec<Type> = ins.iter().map(|t| Self::subst(t, &m)).collect();
+                            self.block_type(a, &ins)
+                        }
+                        _ => self.ty_of(a),
+                    };
                     Self::unify(pty, &at, &mut m);
                 }
             }
@@ -1128,6 +1168,32 @@ impl Gen {
             }
         }
         m
+    }
+
+    /// What a block given as an argument turns out to be, once its own
+    /// argument types are settled: `{ |n| n * 2 }` over an `Int` is
+    /// `(Int) -> Int`.
+    fn block_type(&mut self, e: &Expr, ins: &[Type]) -> Type {
+        match &e.kind {
+            ExprKind::Lambda { params, body } if params.len() == ins.len() => {
+                self.push_scope();
+                for (p, t) in params.iter().zip(ins) {
+                    self.declare(p, false, !t.is_copy(), t.clone(), e.line);
+                }
+                let r = self.tail_type(body).materialized();
+                self.pop_scope();
+                Type::Fn(ins.to_vec(), Box::new(r))
+            }
+            // the name of a function used as behaviour
+            ExprKind::Ident(n) if self.lookup(n).is_none() => {
+                let sg = self.fns.get(&self.canon(n)).cloned().or_else(|| self.bare_method(n));
+                match sg {
+                    Some(s) => Type::Fn(s.params.iter().map(|(_, t)| t.clone()).collect(), Box::new(s.ret)),
+                    None => Type::Unknown,
+                }
+            }
+            _ => Type::Unknown,
+        }
     }
 
     /// What a call to `sig` gives back, with its type parameters filled in.
@@ -1162,6 +1228,30 @@ impl Gen {
         let whole = Type::App(en.to_string(), info.generics.iter().map(|p| Type::Var(p.name.clone())).collect());
         let m = self.infer_call(&info.generics, &fields, args, &whole);
         Self::subst(&whole, &m)
+    }
+
+    /// `f(x)` where `f` names a block the caller handed in.
+    fn call_block(&mut self, name: &str, ins: &[Type], args: &[Arg], e: &Expr) -> Result<String> {
+        if let Some(a) = args.iter().find(|a| a.name.is_some()) {
+            return Err(LumeError::new(e.line, e.col, format!("a block's arguments have no names, so `{}:` does not fit here", a.name.clone().unwrap()))
+                .with_help(format!("`{}` takes {} by position", name, plural(ins.len(), "one value", "its values"))));
+        }
+        if args.len() != ins.len() {
+            return Err(LumeError::new(e.line, e.col, format!(
+                "`{}` takes {} {}, but {} {} given",
+                name,
+                ins.len(),
+                plural(ins.len(), "value", "values"),
+                args.len(),
+                plural(args.len(), "was", "were")
+            )));
+        }
+        let mut parts = Vec::new();
+        for (a, t) in args.iter().zip(ins) {
+            self.check_assign(&a.value, t, &format!("`{}` takes a `{}`", name, type_name(t)))?;
+            parts.push(self.expr_arg(&a.value, t)?);
+        }
+        Ok(format!("{}({})", rust_name(name), parts.join(", ")))
     }
 
     /// A generic signature with this call's type arguments put in, after
@@ -1993,6 +2083,7 @@ impl Gen {
                     let saved = self.push_generics(&s.generics);
                     for fld in &s.fields {
                         self.check_type(&Self::as_vars(&fld.ty, &s.generics), fld.line, fld.col)?;
+                        Self::no_fn_outside_params(&Self::as_vars(&fld.ty, &s.generics), "a field", fld.line, fld.col)?;
                     }
                     self.pop_generics(saved);
                     for m in &s.methods {
@@ -2006,6 +2097,7 @@ impl Gen {
                     for v in &e.variants {
                         for fld in &v.fields {
                             self.check_type(&Self::as_vars(&fld.ty, &e.generics), fld.line, fld.col)?;
+                            Self::no_fn_outside_params(&Self::as_vars(&fld.ty, &e.generics), "a field", fld.line, fld.col)?;
                         }
                     }
                     self.pop_generics(saved);
@@ -2214,6 +2306,16 @@ impl Gen {
                     None => e.with_help("built-in types are Int, Float, Bool, Str, [T], T? and tuples; others must be a `struct` or `enum`"),
                 })
             }
+            Type::Fn(ps, r) => {
+                for p in ps {
+                    self.check_type(p, line, col)?;
+                    if matches!(p, Type::Fn(..)) {
+                        return Err(LumeError::new(line, col, "a block cannot take another block as an argument")
+                            .with_help("pass the values it needs instead, and call the second block yourself"));
+                    }
+                }
+                self.check_type(r, line, col)
+            }
             Type::List(inner) | Type::Option(inner) | Type::Task(inner) | Type::Shared(inner, _) => self.check_type(inner, line, col),
             Type::Set(inner) => {
                 self.check_type(inner, line, col)?;
@@ -2244,9 +2346,32 @@ impl Gen {
         self.check_generics(&f.generics, &format!("`{}`", f.name))?;
         for p in &f.params {
             self.check_type(&Self::as_vars(&p.ty, gs), p.line, p.col)?;
+            if matches!(p.ty, Type::Fn(..)) && p.mutable {
+                return Err(LumeError::new(p.line, p.col, format!("`{}` is behaviour, so it cannot be a `var` parameter", p.name))
+                    .with_help("a block is run, not changed; drop the `var`"));
+            }
         }
         if let Some(r) = &f.ret {
             self.check_type(&Self::as_vars(r, gs), f.line, f.col)?;
+            Self::no_fn_outside_params(&Self::as_vars(r, gs), "a result", f.line, f.col)?;
+        }
+        Ok(())
+    }
+
+    /// A function value is a parameter and nothing else: it is run during the
+    /// call it was handed to, so there is nowhere else for it to live yet.
+    fn no_fn_outside_params(t: &Type, what: &str, line: usize, col: usize) -> Result<()> {
+        let holds = match t {
+            Type::Fn(..) => true,
+            Type::List(i) | Type::Option(i) | Type::Set(i) | Type::Task(i) | Type::Shared(i, _) | Type::Iter(i, _) => matches!(**i, Type::Fn(..)),
+            Type::Tuple(ts) => ts.iter().any(|x| matches!(x, Type::Fn(..))),
+            Type::Result(a, b) | Type::Map(a, b) => matches!(**a, Type::Fn(..)) || matches!(**b, Type::Fn(..)),
+            Type::App(_, args) => args.iter().any(|x| matches!(x, Type::Fn(..))),
+            _ => false,
+        };
+        if holds {
+            return Err(LumeError::new(line, col, format!("a block cannot be {}", what))
+                .with_help("behaviour is passed to a function and run there; it cannot be stored or handed back yet"));
         }
         Ok(())
     }
@@ -2640,6 +2765,10 @@ impl Gen {
             ExprKind::Call { name: raw_name, args } => {
                 let cname = self.canon(raw_name);
                 let name = &cname;
+                // `f(x)` where `f` is a block this function was handed
+                if let Some(Type::Fn(_, out)) = self.lookup(raw_name).map(|b| b.ty.clone()) {
+                    return *out;
+                }
                 if let Some(m) = self.current_type.as_ref().and_then(|t| self.methods_of(t)).and_then(|m| m.get(name).cloned()) {
                     // inside a type, its own method wins over a free function
                     let ret = self.call_ret(&m, args);
@@ -2701,7 +2830,9 @@ impl Gen {
                     return ft.methods.get(name).map(|f| f.ret.clone()).unwrap_or(Type::Unknown);
                 }
                 if let Some(Arg { value: lam, .. }) = args.last() {
-                    if let ExprKind::Lambda { params, body } = &lam.kind {
+                    if matches!(lam.kind, ExprKind::Lambda { .. }) && self.user_block_method(&rt, name) {
+                        // the receiver's own type declares this one
+                    } else if let ExprKind::Lambda { params, body } = &lam.kind {
                         let init = if args.len() > 1 { Some(self.ty_of(&args[0].value)) } else { None };
                         let t = self.block_method_type(&rt, name, params, body, init);
                         // a chain that starts at a `shared var` is materialised inside the lock
@@ -3077,6 +3208,8 @@ impl Gen {
             (Type::Tuple(xs), Type::Tuple(ys)) => xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| self.assign_ok_n(x, y)),
             (Type::Named(a), Type::Named(b)) if self.canon(a) == self.canon(b) => true,
             (Type::Var(a), Type::Var(b)) => a == b,
+            (Type::Fn(ps, r), Type::Fn(qs, s)) => ps.len() == qs.len() && ps.iter().zip(qs).all(|(x, y)| self.assign_ok_n(x, y)) && self.assign_ok_n(r, s),
+            (Type::Fn(..), _) | (_, Type::Fn(..)) => false,
             (Type::App(a, xs), Type::App(b, ys)) => self.canon(a) == self.canon(b) && xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| self.assign_ok_n(x, y)),
             (Type::Var(_), _) | (_, Type::Var(_)) | (Type::App(..), _) | (_, Type::App(..)) => false,
             (_, Type::Named(iface)) if self.is_interface(want) => {
@@ -3169,6 +3302,12 @@ impl Gen {
     /// value is passed (a `T` is always lent), while the type this call
     /// filled in decides what is allowed.
     fn expr_arg_named_as(&mut self, a: &Expr, check: &Type, decl: &Type, callee: &str, pname: &str) -> Result<String> {
+        // a block: the declared types set the Rust shape, this call's set
+        // what the body is allowed to do
+        if let (Type::Fn(dins, _), Type::Fn(cins, cout)) = (decl, check) {
+            let (dins, cins, cout) = (dins.clone(), cins.clone(), cout.clone());
+            return self.block_arg(a, &cins, &dins, &cout);
+        }
         if check == decl {
             return self.expr_arg_named(a, check, callee, pname);
         }
@@ -3952,6 +4091,14 @@ impl Gen {
                 parts.push(format!("{}: &{}", rust_name(&p.name), g));
                 continue;
             }
+            if let Type::Fn(ins, out) = &pty {
+                // `f: (T) -> U` — the block is its own generic parameter, so
+                // the caller's closure is compiled straight into this function
+                let g = format!("Blk{}", generics.len());
+                generics.push(format!("{}: {}", g, self.rust_fn_bound(ins, out)));
+                parts.push(format!("mut {}: {}", rust_name(&p.name), g));
+                continue;
+            }
             let rt = self.rt(&pty);
             let rt = if p.mutable { format!("&mut {}", rt) } else if pty.is_copy() { rt } else if pty == Type::Str { "&str".to_string() } else { format!("&{}", rt) };
             parts.push(format!("{}: {}", rust_name(&p.name), rt));
@@ -4168,6 +4315,7 @@ impl Gen {
             Stmt::Shared { name, mutable, ty, value, line, col } => {
                 if let Some(t) = ty {
                     self.check_type(&self.ct(t), *line, *col)?;
+                    Self::no_fn_outside_params(&self.ct(t), "a binding", *line, *col)?;
                 }
                 let vt0 = self.ty_of(value).materialized();
                 self.no_future(&vt0, value)?;
@@ -4203,6 +4351,7 @@ impl Gen {
             Stmt::Var { name, ty, value, line, col } => {
                 if let Some(t) = ty {
                     self.check_type(&self.ct(t), *line, *col)?;
+                    Self::no_fn_outside_params(&self.ct(t), "a binding", *line, *col)?;
                     let ct = self.ct(t);
                     self.check_assign(value, &ct, &format!("`{}` is declared `{}`", name, type_name(&ct)))?;
                 }
@@ -4288,6 +4437,7 @@ impl Gen {
                 }
                 if let Some(t) = ty {
                     self.check_type(&self.ct(t), *line, *col)?;
+                    Self::no_fn_outside_params(&self.ct(t), "a binding", *line, *col)?;
                     if self.lookup(name).is_some() {
                         return Err(LumeError::new(*line, *col, format!("`{}` already exists; a type goes only on a new binding", name)));
                     }
@@ -4765,15 +4915,23 @@ impl Gen {
                 // a comparison prints both sides
                 let sides = match &cond.kind {
                     ExprKind::Binary { op, lhs, rhs } if matches!(*op, "==" | "!=" | "<" | "<=" | ">" | ">=") => {
+                        // the two sides tell each other what they hold, so an
+                        // empty list or map still has a type to print
+                        let lt = self.ty_of(lhs).materialized();
+                        let rt = self.ty_of(rhs).materialized();
+                        let other = |mine: &Type, theirs: &Type| if type_is_known(mine) { mine.clone() } else { theirs.clone() };
                         // a bare `None` has no type of its own to print: use its text
-                        let side = |g: &mut Self, x: &Expr| -> Result<String> {
+                        let side = |g: &mut Self, x: &Expr, t: Type| -> Result<String> {
+                            let empty = matches!(&x.kind, ExprKind::List(i) if i.is_empty()) || matches!(&x.kind, ExprKind::MapLit(p) if p.is_empty());
                             Ok(match &x.kind {
                                 ExprKind::None => "String::from(\"None\")".to_string(),
+                                // `xs == []`: the other side says what the empty one holds
+                                _ if empty && type_is_known(&t) => format!("(<{}>::new()).lume_str()", g.rt(&t)),
                                 _ => format!("({}).lume_str()", g.expr_val(x)?),
                             })
                         };
-                        let l = side(self, lhs)?;
-                        let r = side(self, rhs)?;
+                        let l = side(self, lhs, other(&lt, &rt))?;
+                        let r = side(self, rhs, other(&rt, &lt))?;
                         format!("Some(({}, {}))", l, r)
                     }
                     _ => "None".to_string(),
@@ -5063,6 +5221,10 @@ impl Gen {
     }
 
     fn expr_arg_inner(&mut self, e: &Expr, t: &Type) -> Result<String> {
+        if let Type::Fn(ins, out) = t {
+            let (ins, out) = (ins.clone(), out.clone());
+            return self.block_arg(e, &ins, &ins, &out);
+        }
         if let Type::Shared(..) = t {
             // the callee gets its own handle to the same value
             let at = self.ty_of(e);
@@ -5204,6 +5366,10 @@ impl Gen {
     fn gen_lambda_ex(&mut self, params: &[String], body: &Block, elem: &Type, by_ref: bool, pattern_ref: bool, want_value: bool, acc: Option<&Type>, negate: bool, at: &Expr) -> Result<String> {
         let expected = if acc.is_some() { 2 } else if matches!(elem, Type::Tuple(ts) if ts.len() == 2) && params.len() == 2 { 2 } else { 1 };
         if params.len() != expected {
+            if params.is_empty() {
+                return Err(LumeError::new(at.line, at.col, format!("this block names no arguments, but it is given {}", plural(expected, "one", "two")))
+                    .with_help("write `{ |x| ... }` or `do |x|`; use `_` only in a bare argument like `.map(_.name)`"));
+            }
             let msg = if acc.is_some() {
                 "`fold` takes a block with two arguments: the accumulator and the item".to_string()
             } else if params.len() == 2 {
@@ -5281,6 +5447,130 @@ impl Gen {
         self.loop_depth = saved_loop;
         self.in_block = saved_in_block;
         self.tail_of_fn = saved_tail;
+        self.pop_scope();
+        Ok(text)
+    }
+
+    /// Does the receiver's own type declare `name` with a block parameter?
+    /// Then the block belongs to that method, not to the built-in of the
+    /// same name.
+    fn user_block_method(&self, rt: &Type, name: &str) -> bool {
+        if !matches!(rt, Type::Named(_) | Type::App(..) | Type::Var(_)) {
+            return false;
+        }
+        self.methods_of(&self.type_key(rt))
+            .and_then(|m| m.get(name).cloned())
+            .map(|s| s.params.iter().any(|(_, t)| matches!(t, Type::Fn(..))))
+            .unwrap_or(false)
+    }
+
+    /// The argument for a `(A, B) -> C` parameter: a block, a `_`
+    /// shorthand, or the name of a function that fits.
+    fn block_arg(&mut self, e: &Expr, ins: &[Type], decl: &[Type], out: &Type) -> Result<String> {
+        let want = format!("({}) -> {}", ins.iter().map(type_name).collect::<Vec<_>>().join(", "), type_name(out));
+        // a block this function was handed, passed straight on
+        if let ExprKind::Ident(n) = &e.kind {
+            if let Some(have) = self.lookup(n).map(|b| b.ty.clone()) {
+                if let Type::Fn(..) = have {
+                    if !self.assignable(&have, &Type::Fn(ins.to_vec(), Box::new(out.clone()))) {
+                        return Err(LumeError::new(e.line, e.col, format!("`{}` is `{}`, but this parameter takes `{}`", n, type_name(&have), want)));
+                    }
+                    // lent, not moved, so the same block can be passed on twice
+                    return Ok(format!("&mut {}", rust_name(n)));
+                }
+            }
+        }
+        // a function named where behaviour is wanted: `map_all(xs, double)`
+        let named = match &e.kind {
+            ExprKind::Ident(n) if self.lookup(n).is_none() && (self.fns.contains_key(&self.canon(n)) || self.bare_method(n).is_some()) => Some(n.clone()),
+            _ => None,
+        };
+        if let Some(n) = named {
+            let names: Vec<String> = (0..ins.len()).map(|i| format!("lume_a{}", i)).collect();
+            let args: Vec<Arg> = names.iter().map(|a| Arg { name: None, value: Expr::new(ExprKind::Ident(a.clone()), e.line, e.col) }).collect();
+            let call = Expr::new(ExprKind::Call { name: n, args }, e.line, e.col);
+            let body = Block { stmts: vec![Stmt::Expr(call)] };
+            return self.gen_block_closure(&names, &body, ins, decl, out, e);
+        }
+        let (params, body) = match &e.kind {
+            ExprKind::Lambda { params, body } => (params.clone(), body.clone()),
+            _ => {
+                let have = self.ty_of(e).materialized();
+                let err = LumeError::new(e.line, e.col, format!("this parameter takes behaviour, `{}`, but `{}` is a value", want, snippet(e)));
+                return Err(if have == Type::Unknown {
+                    err.with_help("pass a block — `{ |x| x * 2 }` after the call, or `do |x|` and an indented body — or the name of a function that fits")
+                } else {
+                    err.with_help(format!("`{}` is a `{}`; a block is written `{{ |x| ... }}` after the call, or `do |x|` with an indented body", snippet(e), type_name(&have)))
+                });
+            }
+        };
+        if params.len() != ins.len() {
+            return Err(LumeError::new(e.line, e.col, format!(
+                "this parameter takes a block of {} {}, but the block names {}",
+                ins.len(),
+                plural(ins.len(), "argument", "arguments"),
+                params.len()
+            ))
+            .with_help(format!("it is declared `{}`", want)));
+        }
+        self.gen_block_closure(&params, &body, ins, decl, out, e)
+    }
+
+    /// A Rust closure for a block whose argument types the definition fixed.
+    /// `decl` is how the definition spelled them: where it said `T` and this
+    /// call filled in a copied type, the closure takes a reference, so the
+    /// pattern unwraps it and the name binds a value either way.
+    fn gen_block_closure(&mut self, params: &[String], body: &Block, ins: &[Type], decl: &[Type], out: &Type, at: &Expr) -> Result<String> {
+        let mut pattern: Vec<String> = Vec::new();
+        self.push_scope();
+        for (i, (p, t)) in params.iter().zip(ins).enumerate() {
+            let lent = decl.get(i).map(|d| !d.is_copy()).unwrap_or(!t.is_copy());
+            let unwrap = lent && t.is_copy();
+            pattern.push(if unwrap { format!("&{}", rust_name(p)) } else { rust_name(p) });
+            self.declare(p, false, lent && !unwrap, t.clone(), at.line);
+        }
+        let saved_loop = self.loop_depth;
+        let saved_in_block = self.in_block;
+        let saved_tail = self.tail_of_fn;
+        let saved_ret = self.current_ret.clone();
+        self.loop_depth = 0;
+        self.in_block = true;
+        self.tail_of_fn = false;
+        self.current_ret = out.clone();
+        self.barriers.push(self.scopes.len() - 1);
+        let want_value = *out != Type::Unit;
+        if want_value {
+            let have = self.tail_type(body).materialized();
+            if have != Type::Unknown && !self.assignable(&have, out) && !matches!(out, Type::Result(..) | Type::Option(_)) {
+                self.pop_scope();
+                return Err(LumeError::new(at.line, at.col, format!("this block gives back a `{}`, but the parameter asks for a `{}`", type_name(&have), type_name(out)))
+                    .with_help(format!("the block's last line must be a `{}`", type_name(out))));
+            }
+        }
+        let saved_out = std::mem::take(&mut self.out);
+        let base = self.indent;
+        let inline = body.stmts.len() == 1 && matches!(body.stmts[0], Stmt::Expr(ref x) if !matches!(x.kind, ExprKind::If { .. } | ExprKind::Match { .. }));
+        let text = if inline {
+            match &body.stmts[0] {
+                Stmt::Expr(x) => {
+                    let v = if want_value { self.expr_owned_as(x, out)? } else { format!("{{ {}; }}", self.expr_stmt(x)?) };
+                    format!("|{}| {}", pattern.join(", "), v)
+                }
+                _ => unreachable!(),
+            }
+        } else {
+            self.out.push_str(&format!("|{}| {{\n", pattern.join(", ")));
+            self.nested_block(body, want_value)?;
+            self.out.push_str(&"    ".repeat(base));
+            self.out.push('}');
+            std::mem::take(&mut self.out)
+        };
+        self.out = saved_out;
+        self.barriers.pop();
+        self.loop_depth = saved_loop;
+        self.in_block = saved_in_block;
+        self.tail_of_fn = saved_tail;
+        self.current_ret = saved_ret;
         self.pop_scope();
         Ok(text)
     }
@@ -6811,6 +7101,10 @@ impl Gen {
             ExprKind::Call { name: raw_name, args } => {
                 let cname = self.canon(raw_name);
                 let name = &cname;
+                // `f(x)` where `f` is a block this function was handed: run it
+                if let Some(Type::Fn(ins, _)) = self.lookup(raw_name).map(|b| b.ty.clone()) {
+                    return self.call_block(raw_name, &ins, args, e);
+                }
                 // inside a type, a bare call is its own method before any
                 // free function of the same name
                 if let Some(tn) = self.current_type.clone() {
@@ -7013,7 +7307,10 @@ impl Gen {
                 }
                 if let Some(last) = args.last() {
                     if matches!(last.value.kind, ExprKind::Lambda { .. }) {
-                        return self.block_method(recv, name, &args[..args.len() - 1], &last.value, e);
+                        let rt = self.ty_of(recv).materialized();
+                        if !self.user_block_method(&rt, name) {
+                            return self.block_method(recv, name, &args[..args.len() - 1], &last.value, e);
+                        }
                     }
                 }
                 let rt = self.ty_of(recv);
@@ -7737,6 +8034,7 @@ fn type_is_known(t: &Type) -> bool {
         Type::List(i) | Type::Option(i) | Type::Iter(i, _) | Type::Task(i) | Type::Future(i) | Type::Shared(i, _) | Type::Set(i) => type_is_known(i),
         Type::Tuple(ts) => ts.iter().all(type_is_known),
         Type::Result(a, b) | Type::Map(a, b) => type_is_known(a) && type_is_known(b),
+        Type::Fn(ps, r) => ps.iter().all(type_is_known) && type_is_known(r),
         _ => true,
     }
 }

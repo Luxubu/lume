@@ -1,0 +1,10 @@
+test the block decides the result type ... ok
+test a block that keeps or drops ... ok
+test folding with the accumulator first ... ok
+test a block closes over what is around it ... ok
+test retry stops at the first success ... ok
+test a block can end the search early ... ok
+test a function's name fits a block parameter ... ok
+
+7 tests: 7 passed, 0 failed
+exit: 0

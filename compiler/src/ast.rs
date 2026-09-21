@@ -28,6 +28,9 @@ pub enum Type {
     App(String, Vec<Type>),
     /// `T` inside a definition that declares it: a type parameter.
     Var(String),
+    /// `(A, B) -> C` — behaviour a caller hands in: a block, a `_`
+    /// shorthand, or the name of a function.
+    Fn(Vec<Type>, Box<Type>),
     /// A lazy chain (`xs.filter(...).map(...)`) not yet collected. The bool
     /// says whether items are references into the source list. Internal:
     /// becomes `[T]` wherever a value is needed, never reaches a signature.
@@ -50,6 +53,8 @@ impl Type {
             Type::Int | Type::Float | Type::Bool | Type::Char | Type::Unit => true,
             // a type parameter stands for anything, so it is always borrowed
             Type::Var(_) => false,
+            // behaviour is moved into the call, never lent
+            Type::Fn(..) => true,
             Type::Option(t) => t.is_copy(),
             // a handle is cheap to clone, and cloning is how it is shared
             Type::Shared(..) => true,

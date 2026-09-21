@@ -1,0 +1,8 @@
+# The block takes one value, so calling it with two is a mistake in the
+# function itself, not in the caller's block.
+def each[T](xs: [T], f: (T) -> ()):
+  for x in xs:
+    f(x, x)
+
+def main:
+  each([1, 2]) { |n| puts n }

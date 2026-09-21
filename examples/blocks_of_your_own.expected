@@ -1,0 +1,32 @@
+1
+2
+3
+Ada
+  3 letters
+Bob
+  3 letters
+[1, 4, 9]
+[1, 2, 3]
+[1, 3, 5]
+10
+abc
+[10, 20, 30]
+[2, 4, 6]
+[4, 8, 12]
+[100, 200]
+30
+[run 0, run 1, run 2]
+true
+false
+nothing much: 0 ms or less
+tick
+tick
+Ok([1, 2, 3])
+Error(`x` is not an integer)
+bag holds 1
+bag holds 2
+bag holds 3
+bag holds 4
+[1, 4, 9, 16]
+[3, 4]
+[PEAR, FIG]

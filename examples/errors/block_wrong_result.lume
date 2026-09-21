@@ -1,0 +1,10 @@
+# `keep` asks for a block that answers yes or no.
+def keep[T](xs: [T], ok: (T) -> Bool) -> [T]:
+  var out: [T] = []
+  for x in xs:
+    if ok(x):
+      out.push(x)
+  out
+
+def main:
+  puts keep([1, 2, 3]) { |n| n * 2 }

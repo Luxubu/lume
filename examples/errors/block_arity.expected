@@ -1,0 +1,6 @@
+error: this parameter takes a block of 2 arguments, but the block names 1
+  --> examples/errors/block_arity.lume:7:23
+  |
+7 |   each_pair({"a": 1}) { |k| puts k }
+  |                       ^
+  help: it is declared `(Str, Int) -> ()`

@@ -1,0 +1,47 @@
+# A function type is laid out like a signature: no space inside the
+# brackets, one after each comma, one on each side of the arrow.
+def each[T](xs: [T], f: (T) -> ()):
+  for x in xs:
+    f(x)
+
+def fold_all[T, A](xs: [T], start: A, f: (A, T) -> A) -> A:
+  var acc = start
+  for x in xs:
+    acc = f(acc, x)
+  acc
+
+def times(n: Int, f: (Int) -> ()):
+  var i = 0
+  while i < n:
+    f(i)
+    i += 1
+
+def time_it(label: Str, work: () -> ()):
+  start = Time.now_ms
+  work()
+  puts "#{label}: #{Time.now_ms - start} ms or less"
+
+struct Bag[T]:
+  items: [T]
+
+  def each(f: (T) -> ()):
+    for x in items:
+      f(x)
+
+  def map_to[U](f: (T) -> U) -> [U] = items.map { |x| f(x) }.to_list
+
+def repeat(f: () -> ()):
+  f()
+
+def main:
+  each([1, 2, 3]) { |n| puts n }
+  each(["a", "b"]) do |s|
+    puts s
+    puts s.len
+  puts fold_all([1, 2, 3], 0) { |a, x| a + x }
+  times(2) { |i| puts i }
+  time_it("nothing") do
+    puts "work"
+  Bag(items: [1, 2]).each { |n| puts n }
+  repeat do
+    puts "no parentheses needed"

@@ -1,0 +1,7 @@
+# A function cannot hand behaviour back yet: a block is run where it is
+# passed in, so there is nowhere for a returned one to live.
+def adder(n: Int) -> (Int) -> Int:
+  puts n
+
+def main:
+  puts 1

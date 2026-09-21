@@ -1,0 +1,7 @@
+# A parameter that takes behaviour needs behaviour, not a value.
+def each[T](xs: [T], f: (T) -> ()):
+  for x in xs:
+    f(x)
+
+def main:
+  each([1, 2, 3], 7)

@@ -1,0 +1,7 @@
+# The definition fixes how many arguments the block gets.
+def each_pair[K: Hashable, V](m: {K: V}, f: (K, V) -> ()):
+  for k, v in m:
+    f(k, v)
+
+def main:
+  each_pair({"a": 1}) { |k| puts k }

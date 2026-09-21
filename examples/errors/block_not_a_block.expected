@@ -1,0 +1,6 @@
+error: this parameter takes behaviour, `(Int) -> ()`, but `7` is a value
+  --> examples/errors/block_not_a_block.lume:7:19
+  |
+7 |   each([1, 2, 3], 7)
+  |                   ^
+  help: `7` is a `Int`; a block is written `{ |x| ... }` after the call, or `do |x|` with an indented body

@@ -841,6 +841,11 @@ impl Parser {
         }
         if self.eat_sym("(") {
             if self.eat_sym(")") {
+                // `() -> T` is behaviour that takes nothing
+                if self.eat_sym("->") {
+                    let ret = self.parse_type()?;
+                    return Ok(Type::Fn(Vec::new(), Box::new(ret)));
+                }
                 return Ok(Type::Unit);
             }
             let mut parts = vec![self.parse_type()?];
@@ -848,8 +853,15 @@ impl Parser {
                 parts.push(self.parse_type()?);
             }
             self.expect_sym(")", "to close the tuple type")?;
+            // `(A, B) -> C` — a block, a `_` shorthand or a function's name
+            if self.eat_sym("->") {
+                let ret = self.parse_type()?;
+                return Ok(Type::Fn(parts, Box::new(ret)));
+            }
             if parts.len() == 1 {
-                return Err(self.err("a tuple type needs at least two parts, like `(Int, Str)`"));
+                return Err(self
+                    .err("a tuple type needs at least two parts, like `(Int, Str)`")
+                    .with_help("one type in brackets is a function type only with a result: `(Int) -> Bool`"));
             }
             return Ok(self.type_suffix(Type::Tuple(parts)));
         }
@@ -1802,10 +1814,9 @@ impl Parser {
     }
 
     fn block_params(&mut self) -> Result<Vec<String>> {
+        // no `|...|` at all: a block that takes nothing, as `() -> ()` wants
         if !self.eat_sym("|") {
-            return Err(self
-                .err(format!("expected `|x|` naming the block's argument, found {}", self.describe()))
-                .with_help("write `{ |x| ... }` or `do |x|`; use `_` only in a bare argument like `.map(_.name)`"));
+            return Ok(Vec::new());
         }
         let mut params = Vec::new();
         loop {
@@ -2058,8 +2069,21 @@ impl Parser {
                     self.advance();
                     self.reject_spaced_paren(&s)?;
                     if self.at_sym("(") {
-                        let args = self.call_args()?;
+                        let mut args = self.call_args()?;
+                        // `each(xs) { |x| ... }` — behaviour handed to a plain call
+                        if let Some(block) = self.trailing_block()? {
+                            if args.iter().any(|a| matches!(a.value.kind, ExprKind::Lambda { .. })) {
+                                return Err(LumeError::new(block.line, block.col, format!("`{}` is given two blocks", s))
+                                    .with_help("use either `_` in the argument or a `{ |x| }` / `do |x|` block, not both"));
+                            }
+                            args.push(Arg { name: None, value: block });
+                        }
                         Ok(Expr::new(ExprKind::Call { name: s, args }, line, col))
+                    } else if self.at_kw("do") || (self.at_sym("{") && matches!(self.peek_at(1), Tok::Sym("|"))) {
+                        // `repeat do |i|` / `retry { |i| ... }` — the block is
+                        // the only argument, so the parentheses can go
+                        let block = self.trailing_block()?.unwrap();
+                        Ok(Expr::new(ExprKind::Call { name: s, args: vec![Arg { name: None, value: block }] }, line, col))
                     } else {
                         Ok(Expr::new(ExprKind::Ident(s), line, col))
                     }

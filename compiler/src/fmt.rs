@@ -768,14 +768,16 @@ impl Fmt {
                     return self.expr(x);
                 }
             }
+            // a block that takes nothing has no `|...|` at all
+            let pipes = if params.is_empty() { String::new() } else { format!("|{}| ", params.join(", ")) };
             if self.is_inline(body) {
                 if let Some(st) = body.stmts.first() {
                     // `stmt_text` keeps a trailing `if`/`unless` on one line
                     let text = self.stmt_text(st);
-                    return format!("{{ |{}| {} }}", params.join(", "), text);
+                    return format!("{{ {}{} }}", pipes, text);
                 }
             }
-            let mut out = format!("do |{}|", params.join(", "));
+            let mut out = if params.is_empty() { "do".to_string() } else { format!("do |{}|", params.join(", ")) };
             self.indent += 1;
             out.push_str(&self.block_text(body));
             self.indent -= 1;
@@ -1110,6 +1112,7 @@ pub fn type_str(t: &Type) -> String {
         Type::Task(e) => format!("Task[{}]", type_str(e)),
         Type::Future(e) => format!("async {}", type_str(e)),
         Type::App(n, args) => format!("{}[{}]", n, args.iter().map(type_str).collect::<Vec<_>>().join(", ")),
+        Type::Fn(ps, r) => format!("({}) -> {}", ps.iter().map(type_str).collect::<Vec<_>>().join(", "), type_str(r)),
         Type::Var(n) => n.clone(),
         Type::Shared(e, true) => format!("shared var {}", type_str(e)),
         Type::Shared(e, false) => format!("shared {}", type_str(e)),

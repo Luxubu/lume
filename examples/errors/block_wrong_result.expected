@@ -1,0 +1,6 @@
+error: this block gives back a `Int`, but the parameter asks for a `Bool`
+  --> examples/errors/block_wrong_result.lume:10:24
+   |
+10 |   puts keep([1, 2, 3]) { |n| n * 2 }
+   |                        ^
+  help: the block's last line must be a `Bool`

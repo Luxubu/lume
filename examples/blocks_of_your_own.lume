@@ -1,0 +1,151 @@
+# Milestone 23: blocks of your own — a function that takes behaviour.
+#
+# Until now only the built-in methods took a `{ |x| ... }` block. A
+# parameter typed `(A) -> B` takes one too, so `map`, `retry`, `time_it`
+# and friends can be written in Lume instead of waited for.
+#
+# The block is compiled into the function at the call, not boxed and
+# looked up: `each(xs) { |x| puts x }` runs at the speed of the loop.
+
+# `()` as the result means the block is run for what it does, not for a
+# value it gives back.
+def each[T](xs: [T], f: (T) -> ()):
+  for x in xs:
+    f(x)
+
+def map_all[T, U](xs: [T], f: (T) -> U) -> [U]:
+  var out: [U] = []
+  for x in xs:
+    out.push(f(x))
+  out
+
+def keep[T](xs: [T], ok: (T) -> Bool) -> [T]:
+  var out: [T] = []
+  for x in xs:
+    if ok(x):
+      out.push(x)
+  out
+
+# Two arguments: the accumulator and the item.
+def fold_all[T, A](xs: [T], start: A, f: (A, T) -> A) -> A:
+  var acc = start
+  for x in xs:
+    acc = f(acc, x)
+  acc
+
+# Behaviour is not always about a collection. These three are the reason
+# the feature earns its place: none of them could be written before.
+def times(n: Int, f: (Int) -> ()):
+  var i = 0
+  while i < n:
+    f(i)
+    i += 1
+
+def retry(attempts: Int, work: (Int) -> Bool) -> Bool:
+  var i = 0
+  while i < attempts:
+    if work(i):
+      return true
+    i += 1
+  false
+
+# When the block is the only argument, the parentheses can go: write
+# `find_first { |i| ... }` or `repeat do` with an indented body.
+def repeat(f: () -> ()):
+  f()
+  f()
+
+def time_it(label: Str, work: () -> ()):
+  start = Time.now_ms
+  work()
+  puts "#{label}: #{Time.now_ms - start} ms or less"
+
+# A block that may fail: `?` inside it passes the error up, as anywhere.
+def parse_all(xs: [Str], parse: (Str) -> Int or Error) -> [Int] or Error:
+  var out: [Int] = []
+  for x in xs:
+    out.push(parse(x)?)
+  out
+
+# A block parameter can be handed straight on to another function.
+def map_twice[T](xs: [T], f: (T) -> T) -> [T]:
+  map_all(map_all(xs, f), f)
+
+# Methods take blocks too, and a method of your own wins over the
+# built-in of the same name: `bag.each` is this one, not the list's.
+struct Bag[T]:
+  items: [T]
+
+  def each(f: (T) -> ()):
+    for x in items:
+      f(x)
+
+  def map_to[U](f: (T) -> U) -> [U]:
+    var out: [U] = []
+    for x in items:
+      out.push(f(x))
+    out
+
+  def keep(f: (T) -> Bool) -> Bag[T]:
+    var out: [T] = []
+    for x in items:
+      if f(x):
+        out.push(x)
+    Bag(items: out)
+
+def double(n: Int) -> Int:
+  n * 2
+
+def main:
+  # a block after the call, on one line
+  each([1, 2, 3]) { |n| puts n }
+
+  # or `do |x|` with an indented body, for more than one statement
+  each(["ada", "bob"]) do |name|
+    puts name.capitalize
+    puts "  #{name.len} letters"
+
+  puts map_all([1, 2, 3]) { |n| n * n }
+  puts map_all(["a", "bb", "ccc"]) { |s| s.len }
+  puts keep([1, 2, 3, 4, 5]) { |n| n % 2 == 1 }
+  puts fold_all([1, 2, 3, 4], 0) { |total, n| total + n }
+  puts fold_all(["a", "b", "c"], "") { |acc, s| acc + s }
+
+  # the `_` shorthand and a function's name both fit a block parameter
+  puts map_all([1, 2, 3], _ * 10)
+  puts map_all([1, 2, 3], double)
+  puts map_twice([1, 2, 3], double)
+
+  # a block closes over what is around it, and may change it
+  factor = 100
+  puts map_all([1, 2], _ * factor)
+
+  var total = 0
+  each([5, 10, 15]) { |n| total += n }
+  puts total
+
+  var seen: [Str] = []
+  times(3) { |i| seen.push("run #{i}") }
+  puts seen
+
+  puts retry(5) { |attempt| attempt == 3 }
+  puts retry(2) { |attempt| attempt == 3 }
+
+  time_it("nothing much") do
+    var sum = 0
+    for i in 1..1000:
+      sum += i
+
+  repeat do
+    puts "tick"
+
+  puts parse_all(["1", "2", "3"]) { |s| s.to_int }
+  puts parse_all(["1", "x"]) { |s| s.to_int }
+
+  b = Bag(items: [1, 2, 3, 4])
+  b.each { |n| puts "bag holds #{n}" }
+  puts b.map_to { |n| n * n }
+  puts b.keep { |n| n > 2 }.items
+
+  words = Bag(items: ["pear", "fig"])
+  puts words.map_to { |w| w.upcase }

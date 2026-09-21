@@ -1,0 +1,83 @@
+# Tests for functions that take behaviour. A block is ordinary code, so a
+# test can pass one that counts, one that fails, or one that closes over
+# a `var` and check what happened to it afterwards.
+
+pub def map_all[T, U](xs: [T], f: (T) -> U) -> [U]:
+  var out: [U] = []
+  for x in xs:
+    out.push(f(x))
+  out
+
+pub def keep[T](xs: [T], ok: (T) -> Bool) -> [T]:
+  var out: [T] = []
+  for x in xs:
+    if ok(x):
+      out.push(x)
+  out
+
+pub def fold_all[T, A](xs: [T], start: A, f: (A, T) -> A) -> A:
+  var acc = start
+  for x in xs:
+    acc = f(acc, x)
+  acc
+
+pub def retry(attempts: Int, work: (Int) -> Bool) -> Bool:
+  var i = 0
+  while i < attempts:
+    if work(i):
+      return true
+    i += 1
+  false
+
+pub def first_where[T](xs: [T], ok: (T) -> Bool) -> T?:
+  for x in xs:
+    if ok(x):
+      return Some(x)
+  None
+
+def main:
+  puts map_all([1], _ + 1)
+
+test "the block decides the result type":
+  assert map_all([1, 2, 3]) { |n| n * 2 } == [2, 4, 6]
+  assert map_all([1, 2, 3]) { |n| n.to_s } == ["1", "2", "3"]
+  assert map_all(["a", "bb"]) { |s| s.len } == [1, 2]
+
+test "a block that keeps or drops":
+  assert keep([1, 2, 3, 4]) { |n| n % 2 == 0 } == [2, 4]
+  assert keep([1, 2, 3]) { |n| false } == []
+  none: [Int] = []
+  assert keep(none) { |n| true } == []
+
+test "folding with the accumulator first":
+  assert fold_all([1, 2, 3], 0) { |a, n| a + n } == 6
+  assert fold_all(["a", "b"], "x") { |a, s| a + s } == "xab"
+  assert fold_all([1, 2, 3], 1) { |a, n| a * n } == 6
+
+test "a block closes over what is around it":
+  var calls = 0
+  result = map_all([1, 2, 3]) do |n|
+    calls += 1
+    n
+  assert result == [1, 2, 3]
+  assert calls == 3
+
+test "retry stops at the first success":
+  var tried = 0
+  ok = retry(5) do |i|
+    tried += 1
+    i == 2
+  assert ok
+  assert tried == 3
+  assert not retry(2) { |i| false }
+
+test "a block can end the search early":
+  assert first_where([1, 5, 9]) { |n| n > 4 } == Some(5)
+  assert first_where([1, 2]) { |n| n > 4 } == None
+
+test "a function's name fits a block parameter":
+  assert map_all([1, 2], double) == [2, 4]
+  assert map_all([1, 2], _ * 3) == [3, 6]
+
+pub def double(n: Int) -> Int:
+  n * 2

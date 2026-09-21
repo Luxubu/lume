@@ -1,0 +1,5 @@
+error: `f` takes 1 value, but 2 were given
+  --> examples/errors/block_call_arity.lume:5:5
+  |
+5 |     f(x, x)
+  |     ^

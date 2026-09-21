@@ -1,0 +1,6 @@
+# Behaviour is run where it is handed in; it cannot be kept for later.
+struct Later:
+  work: () -> ()
+
+def main:
+  puts 1

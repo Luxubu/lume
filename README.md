@@ -20,7 +20,7 @@ program takes about 1 s in Python and 1.4 s in Ruby.
 The language design lives in the [Lume Language Design](https://claude.ai/code/artifact/1872fe63-1816-4b1e-9983-dec2774382fb)
 document. This repository is the compiler and the examples.
 
-## Status: milestones 1–22 done
+## Status: milestones 1–23 done
 
 | # | Milestone | Status |
 | --- | --- | --- |
@@ -42,6 +42,7 @@ document. This repository is the compiler and the examples.
 | 16 | Ownership by analysis: liveness-based copy or move, recursive enums boxed, `.or` on optional fields, string comparisons in blocks, `for var a in xs`, `xs[i].method` | done: review corpus leaks 6 → 0 |
 | 17 | Pattern completeness: a real exhaustiveness checker with nested witnesses, `A \| B` alternatives; the everyday standard methods; statements in inline blocks | done: 37 new methods, corpus 40 ok / 26 Lume errors / 0 leaks |
 | 18 | `{T}` sets with literals, algebra and iteration; `s[i]` / `s[a..b]` / `xs[a..b]` by character and position; structs and enums as map keys | done |
+| 23 | Blocks of your own: a parameter typed `(A) -> B` takes a `{ \|x\| ... }` block, a `do \|x\|` body, the `_` shorthand, or a function's name | done: `map`, `retry`, `time_it` and friends are writeable in Lume; a block is inlined at the call, not boxed |
 | 22 | User-defined generics: `def first[T]`, `struct Stack[T]`, `enum Tree[T]`, two parameters, interface bounds and the built-in `Ordered` and `Hashable` | done: real Rust generics, no boxing; type arguments read off the call |
 | 21 | Dogfood a program that talks to the world: a static site generator, and the I/O it needed — `warn`, `Env.exit`/`stdin`, `Dir`, `Path`, more `File`, raw strings | done: builds a 3-page site, skips unchanged pages, exits 2 when the input is missing |
 | 20 | Dogfood again, across modules: a lexer/parser/evaluator for a small language, and what it exposed — nested patterns through recursive enums, top-level constants, `Variant(..)`, method-before-function resolution, `return` as a tail | done: Mini's `fib(21)` in 34 ms, 7× the same interpreter in Python |
@@ -104,7 +105,16 @@ with bodies; a type conforms by having the methods, with nothing to declare,
 and then has the defaults as its own methods (`q.describe`);
 `def describe(s: Shape)` is a generic function, `[Shape]` holds mixed types
 behind a pointer and says so once; `extend Str with Shape:` adds the methods
-to a type you do not own; `pub interface` crosses modules), generics
+to a type you do not own; `pub interface` crosses modules), blocks of
+your own (a parameter typed `(A) -> B` takes behaviour: `def each[T](xs: [T],
+f: (T) -> ())` is called `each(xs) { |x| puts x }`, or with `do |x|` and an
+indented body, or `each(xs, _ * 2)`, or `each(xs, double)` naming a function;
+`() -> ()` takes a block with no arguments, and when the block is the only
+argument the parentheses go (`repeat do`); a block closes over what is around
+it and may change it; a method of your own wins over the built-in of the same
+name; a block parameter can be handed on to another function; the block is
+compiled into the call, so there is no boxing and no lookup at run time;
+behaviour cannot be stored in a field or returned yet), generics
 (`def first[T](xs: [T]) -> T?`, `struct Stack[T]:`, `enum Tree[T]:`,
 `struct Pair[A, B]:` — the type arguments are read off the call, or off the
 type the result is going into (`var s: Stack[Int] = Stack(items: [])`), and
@@ -366,6 +376,7 @@ examples/crates.lume     hex and urlencoding, with nothing written for them
 examples/modules/        a three-file program: app.lume imports users/model and users/store
 examples/interfaces.lume interfaces, extend, operator methods
 examples/generics.lume   generic functions, structs and enums; Ordered, Hashable, interface bounds
+examples/blocks_of_your_own.lume  functions that take behaviour: each, map, keep, fold, retry, time_it
 examples/tests/          files with `test` blocks; expected `lume test` output
 examples/fmt/            badly spaced input; expected `lume fmt` output
 examples/errors/         programs that must keep failing, with good messages
