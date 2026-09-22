@@ -1,0 +1,59 @@
+# a01 — word-frequency report over a short text
+#
+# Probes: triple-quoted text and `.lines`, bare `split`, `chars.filter(_.alpha?)
+#   .join("")` to strip punctuation, a map tally with `.or(0)`, insertion
+#   order of map keys, `map.to_list` + `sort_by` with a two-name block over
+#   (Str, Int) tuples, stable sort for tie-breaking, `for a, b in` over a lazy
+#   `take`, `pad`/`pad_right` on Str and Int, `repeat`, `max_by` on `.keys`,
+#   interpolating an optional and a whole map.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:  (a line that is just `#` is a blank output line)
+# 19 words, 10 distinct
+#
+# top five:
+#   the     4  ****
+#   a       3  ***
+#   cat     2  **
+#   dog     2  **
+#   on      2  **
+#
+# seen once: mat, log, and, frog
+# in order of first use: the cat sat on
+# longest: Some("frog")
+# the tally itself: {"the": 4, "cat": 2, "sat": 2, "on": 2, "mat": 1, "dog": 2, "log": 1, "a": 3, "and": 1, "frog": 1}
+
+def clean(word: Str) -> Str:
+  word.downcase.chars.filter(_.alpha?).join("")
+
+def main:
+  text = """
+    The cat sat on the mat.
+    The dog sat on the log!
+    A cat, a dog, and a frog.
+    """
+  var counts: {Str: Int} = {}
+  var total = 0
+  for line in text.lines:
+    for token in line.split:
+      w = clean(token)
+      next if w.empty?
+      counts[w] = counts[w].or(0) + 1
+      total += 1
+
+  puts "#{total} words, #{counts.len} distinct"
+  puts ""
+
+  # alphabetical first, then by count: sort is stable, so ties stay alphabetical
+  ranked = counts.to_list.sort_by { |w, n| w }.sort_by { |w, n| 0 - n }
+  puts "top five:"
+  for w, n in ranked.take(5):
+    puts "  #{w.pad_right(6)}#{n.pad(3)}  #{"*".repeat(n)}"
+  puts ""
+
+  once = counts.to_list.filter { |w, n| n == 1 }.map { |w, n| w }
+  puts "seen once: #{once.join(", ")}"
+  puts "in order of first use: #{counts.keys.take(4).join(" ")}"
+  puts "longest: #{counts.keys.max_by { |w| w.len }}"
+  puts "the tally itself: #{counts}"

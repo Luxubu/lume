@@ -164,6 +164,26 @@ def main:
 #! `c` is immutable, but `bump` changes it
 ```
 
+## Calling another method of the same type
+
+**Inside a method, another method of the same type is called by its bare
+name**, like a field — no `self.` needed, and no `()` when it takes nothing:
+
+```lume
+struct Counter:
+  n: Int
+  def bump(var self):
+    n += 1
+  def twice(var self):
+    bump
+    bump
+
+def main:
+  var c = Counter(n: 0)
+  c.twice
+  puts c.n    #=> 2
+```
+
 ## `==`, printing and hashing come free
 
 You never write `==` for a struct or an enum unless you want it to mean

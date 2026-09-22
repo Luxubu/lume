@@ -1,0 +1,61 @@
+# c05 — a simulated crawler: each level of the site is fetched in parallel
+#
+# Probes: `async def` with `await Time.sleep`; `spawn:` with a two-line body
+#   that captures a loop variable; `[Task[T]]` built in a loop and awaited as
+#   a list (results in spawn order); `shared var` counter bumped from tasks
+#   and read after; a `while` whose body spawns and awaits every time round.
+#
+# Meant to RUN. (The compiler's `shared var` lock warning goes to stderr and
+# is not part of the output below.)
+#
+# EXPECTED OUTPUT:
+# level 0: /
+# level 1: /about /blog /shop
+# level 2: /blog/1 /blog/2 /shop/cart
+# fetched 7 pages, 7 urls, 1110 bytes in 3 levels
+
+struct Page:
+  url: Str
+  links: [Str]
+  bytes: Int
+
+def links_of(url: Str) -> [Str]:
+  match url:
+    "/"     -> ["/about", "/blog", "/shop"]
+    "/blog" -> ["/blog/1", "/blog/2", "/"]
+    "/shop" -> ["/shop/cart", "/about"]
+    _       -> []
+
+# Longer urls take longer, so tasks finish out of the order they started.
+async def fetch(url: Str) -> Page:
+  await Time.sleep(40 - url.len * 3)
+  Page(url: url, links: links_of(url), bytes: 100 + url.len * 10)
+
+async def main:
+  shared var fetched = 0
+  var seen: {Str} = {"/"}
+  var frontier = ["/"]
+  var level = 0
+  var total_bytes = 0
+
+  while not frontier.empty?:
+    var tasks: [Task[Page]] = []
+    for url in frontier:
+      t = spawn:
+        fetched += 1
+        await fetch(url)
+      tasks.push(t)
+    pages = await tasks
+
+    var found: [Str] = []
+    for p in pages:
+      total_bytes += p.bytes
+      for link in p.links:
+        if not seen.contains?(link):
+          seen.add(link)
+          found.push(link)
+    puts "level #{level}: #{pages.map(_.url).sort.join(" ")}"
+    frontier = found
+    level += 1
+
+  puts "fetched #{fetched} pages, #{seen.len} urls, #{total_bytes} bytes in #{level} levels"

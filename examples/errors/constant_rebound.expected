@@ -1,0 +1,6 @@
+error: `K` is a constant, so it cannot be bound again
+  --> examples/errors/constant_rebound.lume:5:3
+  |
+5 |   K = 4
+  |   ^
+  help: pick another name for the local

@@ -1,0 +1,90 @@
+# b09 — generic containers and helpers with bounds
+#
+# Probes: a struct that meets `Ordered` by defining only `<`; a generic
+#   struct with a bounded parameter (`SortedList[T: Ordered]`) using `<`
+#   inside a `var self` method; `for i, y in xs.enumerate` with `break`;
+#   `.insert(at, x)` on a list field; a generic builder with a typed empty
+#   binding; an optional tuple result `(T, T)?` built with `?` on `min`
+#   and `max`; `[T: Hashable]` with a struct as a map key; a function with
+#   two type parameters, one bounded, taking a block `(T) -> K`.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# SortedList(items: [1, 2, 4, 5])
+# v0.9 < v1.0 < v1.2
+# Some(Version(major: 1, minor: 2))
+# Some(("apple", "pear"))
+# None
+# Some((Version(major: 1, minor: 5), Version(major: 2, minor: 0)))
+# {"b": 3, "a": 1, "c": 1}
+# {Version(major: 1, minor: 0): 2}
+# Some("banana")
+# Some(Version(major: 0, minor: 9))
+
+struct Version:
+  major: Int
+  minor: Int
+
+  def <(o: Version) -> Bool =
+    if major != o.major: major < o.major else: minor < o.minor
+
+  def label -> Str = "v#{major}.#{minor}"
+
+struct SortedList[T: Ordered]:
+  items: [T]
+
+  def insert(var self, x: T):
+    var at = items.len
+    for i, y in items.enumerate:
+      if x < y:
+        at = i
+        break
+    items.insert(at, x)
+
+  def smallest -> T? = items.first
+  def largest -> T? = items.last
+
+def sorted_of[T: Ordered](xs: [T]) -> SortedList[T]:
+  var s: SortedList[T] = SortedList(items: [])
+  for x in xs:
+    s.insert(x)
+  s
+
+def min_max[T: Ordered](xs: [T]) -> (T, T)?:
+  lo = xs.min?
+  hi = xs.max?
+  Some((lo, hi))
+
+def count_each[T: Hashable](xs: [T]) -> {T: Int}:
+  var m: {T: Int} = {}
+  for x in xs:
+    m[x] = m[x].or(0) + 1
+  m
+
+def best_by[T, K: Ordered](xs: [T], key: (T) -> K) -> T?:
+  var best = xs.first?
+  for x in xs:
+    if key(best) < key(x):
+      best = x
+  Some(best)
+
+def main:
+  s = sorted_of([5, 1, 4, 2])
+  puts s
+
+  var v = sorted_of([Version(1, 2), Version(0, 9)])
+  v.insert(Version(1, 0))
+  puts v.items.map(_.label).join(" < ")
+  puts v.largest
+
+  puts min_max(["pear", "apple", "fig"])
+  empty: [Int] = []
+  puts min_max(empty)
+  puts min_max([Version(2, 0), Version(1, 5)])
+
+  puts count_each(["b", "a", "b", "c", "b"])
+  puts count_each([Version(1, 0), Version(1, 0)])
+
+  puts best_by(["kiwi", "banana", "fig"]) { |w| w.len }
+  puts v.smallest

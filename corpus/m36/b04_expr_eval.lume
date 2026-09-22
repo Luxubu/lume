@@ -1,0 +1,91 @@
+# b04 — an arithmetic expression evaluator over a recursive enum
+#
+# Probes: recursive enum with no boxing written; methods on an enum that
+#   `match self`; an evaluator returning `Int or Error` with `?` on
+#   recursive calls inside arithmetic (`l.eval(env)? + r.eval(env)?`);
+#   match arms that mix a bare `Int` (implied Ok), a `T or Error` that
+#   passes through, and an early `return Error(...)`; `.or_error` on a map
+#   lookup; using `self` again after matching on it; nested patterns with
+#   literals through the recursive fields (`Add(Num(0), e)`); a catch-all
+#   arm that binds a name (`other -> other`); printing a recursive value.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# (2 + x * 3)
+# Ok(17)
+# Error("division by zero in 10 / y")
+# Error("unknown variable z")
+# --(0 + 1 * x)
+# x
+# Var(name: "x")
+# 5
+# (2 + x * 3) = 17
+# 10 / y fails: division by zero in 10 / y
+# (z + 1) fails: unknown variable z
+
+enum Expr:
+  Num(value: Int)
+  Var(name: Str)
+  Add(left: Expr, right: Expr)
+  Mul(left: Expr, right: Expr)
+  Div(left: Expr, right: Expr)
+  Neg(inner: Expr)
+
+  def show -> Str:
+    match self:
+      Num(v)    -> "#{v}"
+      Var(n)    -> n
+      Add(l, r) -> "(#{l.show} + #{r.show})"
+      Mul(l, r) -> "#{l.show} * #{r.show}"
+      Div(l, r) -> "#{l.show} / #{r.show}"
+      Neg(i)    -> "-#{i.show}"
+
+  def eval(env: {Str: Int}) -> Int or Error:
+    match self:
+      Num(v)    -> v
+      Var(n)    -> env[n].or_error("unknown variable #{n}")
+      Add(l, r) -> l.eval(env)? + r.eval(env)?
+      Mul(l, r) -> l.eval(env)? * r.eval(env)?
+      Div(l, r) ->
+        d = r.eval(env)?
+        if d == 0:
+          return Error("division by zero in #{self.show}")
+        l.eval(env)? / d
+      Neg(i)    -> 0 - i.eval(env)?
+
+  # Remove the no-op parts: 0 + e, e + 0, 1 * e, e * 1, --e.
+  def simplify -> Expr:
+    match self:
+      Add(Num(0), e) -> e.simplify
+      Add(e, Num(0)) -> e.simplify
+      Mul(Num(1), e) -> e.simplify
+      Mul(e, Num(1)) -> e.simplify
+      Neg(Neg(e))    -> e.simplify
+      Add(l, r)      -> Add(l.simplify, r.simplify)
+      Mul(l, r)      -> Mul(l.simplify, r.simplify)
+      Div(l, r)      -> Div(l.simplify, r.simplify)
+      Neg(e)         -> Neg(e.simplify)
+      other          -> other
+
+def main:
+  env = {"x": 5, "y": 0}
+  e1 = Add(Num(2), Mul(Var("x"), Num(3)))
+  puts e1.show
+  puts e1.eval(env)
+  e2 = Div(Num(10), Var("y"))
+  puts e2.eval(env)
+  e3 = Add(Var("z"), Num(1))
+  puts e3.eval(env)
+
+  e4 = Neg(Neg(Add(Num(0), Mul(Num(1), Var("x")))))
+  puts e4.show
+  s = e4.simplify
+  puts s.show
+  puts s
+  puts e4.eval(env).or(0)
+
+  for e in [e1, e2, e3]:
+    match e.eval(env):
+      Ok(v)      -> puts "#{e.show} = #{v}"
+      Error(err) -> puts "#{e.show} fails: #{err.message}"

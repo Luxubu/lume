@@ -1,0 +1,76 @@
+# a02 — CSV sales summariser: parse rows, report bad ones, total by region
+#
+# Probes: `split(",").map(_.trim).to_list`, `.at(i)`, `to_int?` / `to_float?`
+#   inside a `-> T or Error` function, implied `Ok` on the last line,
+#   `lines.skip(1)`, `enumerate`, `match` on Ok/Error with `e.message`,
+#   a `{Str: Float}` tally in insertion order, `sum` with a block over
+#   Floats, `decimals(2)` then `pad`, `Str + Str` layout, `max_by`.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:  (a line that is just `#` is a blank output line)
+# region       total
+# ------------------
+# north        30.00
+# south        10.00
+# east         25.00
+# ------------------
+# all          65.00
+#
+# 4 sales, 2 problems:
+#   line 6: `oops` is not an integer
+#   line 7: expected 4 fields, got 3: east, gizmo, 3
+# biggest sale: 10 x widget in east
+
+struct Sale:
+  region: Str
+  item: Str
+  qty: Int
+  price: Float
+
+  def total -> Float = qty.to_float * price
+
+def parse_sale(line: Str) -> Sale or Error:
+  parts = line.split(",").map(_.trim).to_list
+  if parts.len != 4:
+    return Error("expected 4 fields, got #{parts.len}: #{line}")
+  qty = parts.at(2).to_int?
+  price = parts.at(3).to_float?
+  Sale(region: parts.at(0), item: parts.at(1), qty: qty, price: price)
+
+def main:
+  data = """
+    region, item, qty, price
+    north, widget, 4, 2.50
+    south, gadget, 1, 10.00
+    north, gadget, 2, 10.00
+    east, widget, 10, 2.50
+    south, widget, oops, 2.50
+    east, gizmo, 3
+    """
+  rows = data.lines.skip(1).to_list
+  var sales: [Sale] = []
+  var problems: [Str] = []
+  for i, line in rows.enumerate:
+    match parse_sale(line):
+      Ok(s) -> sales.push(s)
+      Error(e) -> problems.push("line #{i + 2}: #{e.message}")
+
+  var by_region: {Str: Float} = {}
+  for s in sales:
+    by_region[s.region] = by_region[s.region].or(0.0) + s.total
+
+  puts "region".pad_right(8) + "total".pad(10)
+  puts "-".repeat(18)
+  for region, amount in by_region:
+    puts region.pad_right(8) + amount.decimals(2).pad(10)
+  puts "-".repeat(18)
+  puts "all".pad_right(8) + sales.sum(_.total).decimals(2).pad(10)
+  puts ""
+
+  puts "#{sales.len} sales, #{problems.len} problems:"
+  for p in problems:
+    puts "  #{p}"
+  match sales.max_by(_.total):
+    Some(best) -> puts "biggest sale: #{best.qty} x #{best.item} in #{best.region}"
+    None -> puts "no sales"

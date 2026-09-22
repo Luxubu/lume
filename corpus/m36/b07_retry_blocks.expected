@@ -1,0 +1,11 @@
+Ok(30)
+calls: 3
+Error("gave up after 2 attempts: attempt 2 timed out")
+Ok(20)
+Error("gave up after 1 attempts: `x1` is not an integer")
+[sum] begin
+total 6
+[sum] end
+3
+2
+exit: 0

@@ -1,0 +1,12 @@
+stock value: 1470
+bolts left: 90
+refused: only 40 nut left, wanted 50
+refused: no such item: screw
+took 3 gear, 0 left
+refused: nut is priced 3, not 4
+refused: cannot add 0 of washer
+low: ["gear"]
+Some(Item(name: "gear", qty: 0, price: 250))
+bolt,nut,gear
+stock value: 570
+exit: 0

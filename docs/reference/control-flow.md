@@ -240,6 +240,38 @@ for i in (1..10).step(2):    # does not build
   puts i
 ```
 
+## `for var`: changing the items
+
+**`for var x in xs` walks the list's own items, so changing `x` changes the
+list.** It is for items with fields or methods that change them:
+
+```lume
+struct Counter:
+  n: Int
+  def bump(var self):
+    n += 1
+
+def main:
+  var cs = [Counter(n: 1), Counter(n: 5)]
+  for var c in cs:
+    c.bump
+  puts cs.map(_.n)    #=> [2, 6]
+```
+
+Over numbers it is refused, because what would change is a copy of each
+number, not the list:
+
+```lume-bad
+def main:
+  var xs = [3, 4]
+  for var x in xs:
+    x += 1
+#! would change copies
+```
+
+To change numbers in a list, build the new list: `xs = xs.map { |x| x + 1 }`
+on a `var xs`, or assign by position, `xs[i] = ...`.
+
 ## `for x in xs where cond`
 
 A `where` clause on a `for` skips the items that do not match. It reads as a

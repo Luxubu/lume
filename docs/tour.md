@@ -212,7 +212,19 @@ def main:
 
 ## Going further
 
+Three things this tour leaves out, each with its own page:
+
+- **Several files.** `import shop.items` reads `shop/items.lume`; `pub` marks
+  what another file may use. See [Modules](reference/modules.md).
+- **Constants.** `LIMIT = 10` at the top level of a file, no keyword. See
+  [Names](reference/names.md) and [Modules](reference/modules.md).
+- **Doing things at once.** `async def main`, `spawn:`, `await` and
+  `shared var`. See [Concurrency](reference/concurrency.md).
+
+And then:
+
 - [The reference](README.md#reference) answers the specific questions:
-  how a value prints, what `pad` fills, which methods a list has.
+  how a value prints, what `pad` fills, [every method of every
+  type](reference/methods.md).
 - [The examples](examples.md), in a reading order.
 - `lume --help` lists the commands.

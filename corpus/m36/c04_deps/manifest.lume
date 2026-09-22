@@ -1,0 +1,21 @@
+# manifest.lume — `name: dep, dep` lines into packages.
+
+pub struct Package:
+  name: Str
+  deps: [Str]
+
+pub def parse_line(line: Str) -> Package or Error:
+  match line.split(":"):
+    [name, rest] ->
+      n = name.trim
+      if n.empty?:
+        return Error("a package needs a name: `#{line.trim}`")
+      deps = rest.split(",").map(_.trim).reject(_.empty?).to_list
+      Package(name: n, deps: deps)
+    _ -> Error("expected `name: deps`, got `#{line.trim}`")
+
+pub def parse(text: Str) -> [Package] or Error:
+  var out: [Package] = []
+  for line in text.lines where not line.trim.empty?:
+    out.push(parse_line(line)?)
+  out

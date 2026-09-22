@@ -1,0 +1,18 @@
+# stats.lume — numbers in, numbers out. Imports nothing.
+
+pub def mean(xs: [Int]) -> Float?:
+  if xs.empty?:
+    return None
+  Some(xs.sum.to_float / xs.len.to_float)
+
+pub def median(xs: [Int]) -> Float?:
+  if xs.empty?:
+    return None
+  s = xs.sort
+  n = s.len
+  if n % 2 == 1:
+    Some(s.at(n / 2).to_float)
+  else:
+    Some((s.at(n / 2 - 1) + s.at(n / 2)).to_float / 2.0)
+
+pub def spread(xs: [Int]) -> Int = xs.max.or(0) - xs.min.or(0)

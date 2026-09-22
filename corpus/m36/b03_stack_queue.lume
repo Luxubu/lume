@@ -1,0 +1,95 @@
+# b03 — a generic stack and a two-list queue
+#
+# Probes: generic structs `Stack[T]` and `Queue[T]`; `var self` methods on a
+#   generic type; methods returning `T?` (pop, peek, dequeue); assigning an
+#   empty list to a field inside a `var self` method (`back = []`); a
+#   `var self` method that also takes a block `(T) -> ()`; calling other
+#   methods of the same type bare (`empty?`, `pop`) from inside a method;
+#   a generic helper that builds a `Stack[T]` with a typed empty binding;
+#   printing generic structs, including ones holding empty lists.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# Some(4)
+# Some(4)
+# 3
+# Stack(items: [1, 2, 3])
+# drained 3
+# drained 2
+# drained 1
+# true
+# None
+# Some("y")
+# Some("a")
+# 3
+# Some("b")
+# Some("c")
+# Some("d")
+# None
+# Queue(front: [], back: [])
+
+struct Stack[T]:
+  items: [T]
+
+  def push(var self, x: T):
+    items.push(x)
+
+  def pop(var self) -> T? = items.pop
+  def peek -> T? = items.last
+  def size -> Int = items.len
+  def empty? -> Bool = items.empty?
+
+  def drain(var self, f: (T) -> ()):
+    while not empty?:
+      match pop:
+        Some(x) -> f(x)
+        None    -> ()
+
+struct Queue[T]:
+  front: [T]
+  back: [T]
+
+  def enqueue(var self, x: T):
+    back.push(x)
+
+  # `front` holds the oldest items at its end, so pop takes the oldest.
+  def dequeue(var self) -> T?:
+    if front.empty?:
+      for x in back.reverse:
+        front.push(x)
+      back = []
+    front.pop
+
+  def size -> Int = front.len + back.len
+
+def stack_of[T](xs: [T]) -> Stack[T]:
+  var s: Stack[T] = Stack(items: [])
+  for x in xs:
+    s.push(x)
+  s
+
+def main:
+  var s = stack_of([1, 2, 3])
+  s.push(4)
+  puts s.peek
+  puts s.pop
+  puts s.size
+  puts s
+  s.drain { |n| puts "drained #{n}" }
+  puts s.empty?
+  puts s.pop
+  puts stack_of(["x", "y"]).peek
+
+  var q: Queue[Str] = Queue(front: [], back: [])
+  q.enqueue("a")
+  q.enqueue("b")
+  q.enqueue("c")
+  puts q.dequeue
+  q.enqueue("d")
+  puts q.size
+  puts q.dequeue
+  puts q.dequeue
+  puts q.dequeue
+  puts q.dequeue
+  puts q

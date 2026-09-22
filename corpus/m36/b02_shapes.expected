@@ -1,0 +1,18 @@
+warning: `shapes` holds values of different types behind `Shape`, so calls on its items go through a pointer
+  --> corpus/m36/b02_shapes.lume:79:3
+   |
+79 |   shapes: [Shape] = [Circle(1.0), Rect(2.0, 3.0), Rect(2.0, 2.0), Triangle(6.0, 8.0, 10.0)]
+   |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+circle: area 3.0, perimeter 6.0
+rect: area 6.0, perimeter 10.0
+square: area 4.0, perimeter 8.0
+shape: area 24.0, perimeter 24.0
+total 37.0
+largest: shape
+big ones: rect,shape
+circle: area 12.0, perimeter 12.0
+square
+square
+3.0
+exit: 0

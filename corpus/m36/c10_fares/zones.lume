@@ -1,0 +1,14 @@
+# zones.lume — which zone a station is in.
+
+pub enum Zone:
+  Central
+  Inner
+  Outer(ring: Int)
+
+pub def zone_of(station: Str) -> Zone?:
+  match station:
+    "Bank" | "Temple" -> Some(Central)
+    "Angel" | "Oval"  -> Some(Inner)
+    "Morden"          -> Some(Outer(4))
+    "Epping"          -> Some(Outer(6))
+    _                 -> None

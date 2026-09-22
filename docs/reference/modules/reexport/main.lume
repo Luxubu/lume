@@ -1,0 +1,14 @@
+# main.lume — imports `report` and nothing else.
+
+import report
+
+def main:
+  xs = [4, 8, 9]
+  puts report.line(xs)
+
+  # passed on by `report`, under the names it chose
+  puts stats.mean([10, 20])
+  puts tx.shout("done")
+
+  # the extend in sizes.lume came along through report.lume
+  puts xs.size

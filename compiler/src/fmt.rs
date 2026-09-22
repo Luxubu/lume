@@ -401,7 +401,9 @@ impl Fmt {
                 out
             }
             Item::Import(imp) => {
-                let mut out = String::from("import ");
+                // `pub import` passes a module on to importers: dropping the
+                // `pub` changes what the program means, not how it looks.
+                let mut out = String::from(if imp.public { "pub import " } else { "import " });
                 if imp.is_rust {
                     out.push_str("rust.");
                 }

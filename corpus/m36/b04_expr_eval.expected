@@ -1,0 +1,12 @@
+(2 + x * 3)
+Ok(17)
+Error("division by zero in 10 / y")
+Error("unknown variable z")
+--(0 + 1 * x)
+x
+Var(name: "x")
+5
+(2 + x * 3) = 17
+10 / y fails: division by zero in 10 / y
+(z + 1) fails: unknown variable z
+exit: 0

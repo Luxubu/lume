@@ -1,0 +1,19 @@
+# fares.lume — what a trip costs. Only `quote` is meant for callers; the
+# rate table and the peak rule are this file's own business.
+
+import zones
+import zones.Zone
+
+pub def quote(src: Str, dst: Str, peak: Bool) -> Int or Error:
+  a = zones.zone_of(src).or_error("unknown station `#{src}`")?
+  b = zones.zone_of(dst).or_error("unknown station `#{dst}`")?
+  base = rate(a).max(rate(b))
+  base * peak_multiplier(peak) / 100
+
+def rate(z: Zone) -> Int:
+  match z:
+    Central  -> 280
+    Inner    -> 250
+    Outer(r) -> 250 + r * 40
+
+def peak_multiplier(peak: Bool) -> Int = if peak: 150 else: 100

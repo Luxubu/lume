@@ -1,0 +1,18 @@
+Some(4)
+Some(4)
+3
+Stack(items: [1, 2, 3])
+drained 3
+drained 2
+drained 1
+true
+None
+Some("y")
+Some("a")
+3
+Some("b")
+Some("c")
+Some("d")
+None
+Queue(front: [], back: [])
+exit: 0

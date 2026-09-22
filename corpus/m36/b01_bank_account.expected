@@ -1,0 +1,9 @@
+Ada has 70 after withdrawing
+refused: Ada has 70, cannot take 500
+refused: deposit must be positive, got -5
+Ada: 20 [+100, -30, -50]
+Bob: 68 [+20, +50, fee 2]
+[Deposit(amount: 20), Deposit(amount: 50), Fee(amount: 2)]
+transfer failed: Bob has 68, cannot take 100
+88
+exit: 0

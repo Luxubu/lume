@@ -1,0 +1,24 @@
+# report.lume — a series and its summary block. Anyone who imports this
+# gets `stats` (as `stats`) and `textutil` (as `tx`) passed on to them.
+
+pub import stats
+pub import textutil as tx
+
+pub struct Series:
+  name: Str
+  values: [Int]
+
+  def lines -> [Str]:
+    var out: [Str] = []
+    out.push(name)
+    out.push(tx.rule(16))
+    out.push(tx.row("count", "#{values.len}"))
+    out.push(tx.row("mean", one_place(stats.mean(values))))
+    out.push(tx.row("median", one_place(stats.median(values))))
+    out.push(tx.row("spread", "#{stats.spread(values)}"))
+    out
+
+def one_place(x: Float?) -> Str:
+  match x:
+    Some(v) -> v.decimals(1)
+    None    -> "n/a"

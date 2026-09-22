@@ -1,0 +1,13 @@
+as written: ["eggs", "Milk", "bread", "apples", "milk", "Butter"]
+sorted: ["Butter", "Milk", "apples", "bread", "eggs", "milk"]
+sorted for people: apples, bread, Butter, eggs, Milk, milk
+requested: {"eggs": 2, "milk": 2, "bread": 1, "apples": 1, "butter": 1}
+asked for twice: eggs and milk
+need 5, have 2, buy 3: {"eggs", "milk", "apples"}
+pantry has Butter? false
+pantry has butter? true
+{"produce": ["apples"], "dairy": ["eggs", "milk"]}
+Produce apples
+Dairy   eggs, milk
+no aisle for: {"salt"}
+exit: 0

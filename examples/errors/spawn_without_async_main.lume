@@ -1,0 +1,4 @@
+# Tasks run on the runtime `async def main` starts; without one this used
+# to compile and then stop at run time with a message about Tokio.
+def main:
+  t = spawn: 1 + 1

@@ -1,0 +1,24 @@
+# main.lume — the file you run. Every import path starts from this folder.
+
+import shop.items
+import shop.items.Kind
+import shop.stock as st
+
+def main:
+  var stock = st.empty
+  stock.add(items.Item(sku: "P1", cents: 250, kind: Food))
+  stock.add(items.Item("H2", 1200, Kind.Tool(grams: 450)))
+  stock.add(items.Item(sku: "S3", cents: 800, kind: Tool(90)))
+  puts "#{stock.count} items, tax #{items.TAX_PERCENT}%"
+
+  match stock.find("H2"):
+    Some(i) -> puts "#{i.sku}: #{i.kind.label}, #{i.with_tax} with tax"
+    None    -> puts "no H2"
+
+  for i in stock.known:
+    match i.kind:
+      Food    -> puts "#{i.sku} is food"
+      Tool(g) -> puts "#{i.sku} weighs #{g}g"
+
+  fresh: st.Stock = st.empty()   # the same call; `lume fmt` drops the ()
+  puts fresh.count

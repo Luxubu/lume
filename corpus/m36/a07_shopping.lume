@@ -1,0 +1,59 @@
+# a07 — shopping list: dedupe, sort for people, check the pantry, group by aisle
+#
+# Probes: `uniq` (keeps first occurrences, in order), `sort` by code point
+#   (capitals first), `sort_by(_.downcase)` stability, a case-folded tally,
+#   map `filter` with a two-name block then `.keys`, list `.to_set`, set
+#   `diff`/`intersect` (and the order a result set keeps), `contains?` on a
+#   set is case-sensitive, a map of lists built by `m[k].push(x)` from
+#   nothing, printing a `{Str: [Str]}`, `capitalize`, set `filter` printing
+#   as a set.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# as written: ["eggs", "Milk", "bread", "apples", "milk", "Butter"]
+# sorted: ["Butter", "Milk", "apples", "bread", "eggs", "milk"]
+# sorted for people: apples, bread, Butter, eggs, Milk, milk
+# requested: {"eggs": 2, "milk": 2, "bread": 1, "apples": 1, "butter": 1}
+# asked for twice: eggs and milk
+# need 5, have 2, buy 3: {"eggs", "milk", "apples"}
+# pantry has Butter? false
+# pantry has butter? true
+# {"produce": ["apples"], "dairy": ["eggs", "milk"]}
+# Produce apples
+# Dairy   eggs, milk
+# no aisle for: {"salt"}
+
+def main:
+  wanted = ["eggs", "Milk", "bread", "apples", "milk", "Butter", "eggs"]
+  pantry = {"bread", "butter", "salt"}
+  aisles = {"eggs": "dairy", "milk": "dairy", "butter": "dairy", "bread": "bakery", "apples": "produce"}
+
+  distinct = wanted.uniq
+  puts "as written: #{distinct}"
+  puts "sorted: #{distinct.sort}"
+  puts "sorted for people: #{distinct.sort_by(_.downcase).join(", ")}"
+
+  var counts: {Str: Int} = {}
+  for w in wanted:
+    key = w.downcase
+    counts[key] = counts[key].or(0) + 1
+  puts "requested: #{counts}"
+  doubled = counts.filter { |k, n| n > 1 }.keys.join(" and ")
+  puts "asked for twice: #{doubled}"
+
+  needed = wanted.map(_.downcase).to_set
+  to_buy = needed.diff(pantry)
+  puts "need #{needed.len}, have #{needed.intersect(pantry).len}, buy #{to_buy.len}: #{to_buy}"
+  puts "pantry has Butter? #{pantry.contains?("Butter")}"
+  puts "pantry has butter? #{pantry.contains?("butter")}"
+
+  var by_aisle: {Str: [Str]} = {}
+  for item in to_buy.sort:
+    by_aisle[aisles[item].or("other")].push(item)
+  puts by_aisle
+  for aisle, items in by_aisle:
+    puts "#{aisle.capitalize.pad_right(8)}#{items.join(", ")}"
+
+  missing_aisle = pantry.filter { |p| not aisles.contains?(p) }
+  puts "no aisle for: #{missing_aisle}"

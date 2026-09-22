@@ -1,0 +1,3 @@
+# stats.lume — imports nothing.
+
+pub def mean(xs: [Int]) -> Int = xs.sum / xs.len

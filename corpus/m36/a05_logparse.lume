@@ -1,0 +1,84 @@
+# a05 — log-line parser: levels, errors, per-hour and per-component counts
+#
+# Probes: bare `split` on lines with extra words, `words.skip(4).join(" ")`,
+#   `replace`, `match` on strings with `|` alternatives as a value, trailing
+#   `if`/`unless` on `return`, implied `Some` from a `-> T?` function's last
+#   expression, `s[0..1]` range slice, a blank line inside `"""`, `for ... where`,
+#   `.to_list.to_set`, printing a list/map/set/`Some((Str, Int))` inside
+#   interpolation, `max_by` with a two-name block over map tuples,
+#   `first.map(_.time).or(...)`.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:  (a line that is just `#` is a blank output line)
+# 6 entries, skipped: ["garbage line"]
+# ERROR   2
+# WARN    1
+# INFO    2
+# DEBUG   1
+#
+# errors:
+#   09:02:11 db: connection refused
+#   09:30:00 auth: token expired for user 42
+#
+# per hour: {"08": 2, "09": 3, "10": 1}
+# components: {"web", "db", "auth"}
+# busiest: Some(("web", 3))
+# first error at 09:02:11
+
+struct Entry:
+  time: Str
+  level: Str
+  component: Str
+  message: Str
+
+def parse(line: Str) -> Entry?:
+  words = line.split
+  return None if words.len < 5
+  level = words.at(2)
+  known = match level:
+    "INFO" | "WARN" | "ERROR" | "DEBUG" -> true
+    _ -> false
+  return None unless known
+  Entry(time: words.at(1), level: level, component: words.at(3).replace(":", ""), message: words.skip(4).join(" "))
+
+def main:
+  log = """
+    2026-09-01 08:15:02 INFO web: started on port 8080
+    2026-09-01 08:17:40 WARN db: slow query (812 ms)
+    2026-09-01 09:02:11 ERROR db: connection refused
+    2026-09-01 09:02:12 INFO web: retrying
+
+    garbage line
+    2026-09-01 09:30:00 ERROR auth: token expired for user 42
+    2026-09-01 10:01:05 DEBUG web: cache hit ratio 0.93
+    """
+  var entries: [Entry] = []
+  var skipped: [Str] = []
+  for line in log.lines:
+    next if line.trim.empty?
+    match parse(line):
+      Some(e) -> entries.push(e)
+      None -> skipped.push(line.trim)
+  puts "#{entries.len} entries, skipped: #{skipped}"
+
+  var by_level: {Str: Int} = {}
+  var by_hour: {Str: Int} = {}
+  var by_component: {Str: Int} = {}
+  for e in entries:
+    by_level[e.level] = by_level[e.level].or(0) + 1
+    hour = e.time[0..1]
+    by_hour[hour] = by_hour[hour].or(0) + 1
+    by_component[e.component] = by_component[e.component].or(0) + 1
+
+  for level in ["ERROR", "WARN", "INFO", "DEBUG"]:
+    puts "#{level.pad_right(6)}#{by_level[level].or(0).pad(3)}"
+  puts ""
+  puts "errors:"
+  for e in entries where e.level == "ERROR":
+    puts "  #{e.time} #{e.component}: #{e.message}"
+  puts ""
+  puts "per hour: #{by_hour}"
+  puts "components: #{entries.map(_.component).to_list.to_set}"
+  puts "busiest: #{by_component.to_list.max_by { |c, n| n }}"
+  puts "first error at #{entries.filter(_.level == "ERROR").first.map(_.time).or("never")}"

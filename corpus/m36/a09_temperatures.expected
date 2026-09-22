@@ -1,0 +1,18 @@
+skipping: cannot read `Holiday`
+7 days: [12.5, 15.0, -2.5, 8.0, 21.5, 18.0, 9.5]
+sorted: [-2.5, 8.0, 9.5, 12.5, 15.0, 18.0, 21.5]
+mean 11.7, median 12.5
+high 21.5, low -2.5, range 24.0
+
+Mon  12.5 |######
+Tue  15.0 |########
+Wed  -2.5 |
+Thu   8.0 |####
+Fri  21.5 |###########
+Sat  18.0 |#########
+Sun   9.5 |#####
+
+above the mean: Mon, Tue, Fri, Sat
+days below freezing: 1
+hottest: Fri at 21.5 C, 70.7 F
+exit: 0

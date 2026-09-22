@@ -1,0 +1,4 @@
+# A tuple has parts, not methods.
+def main:
+  t = (1, 2)
+  puts t.len

@@ -1,0 +1,29 @@
+# catalog/stock.lume — how many of each item are on the shelf.
+# It names only the one thing it needs from its sibling module.
+
+import catalog.items.Item
+
+pub struct Shelf:
+  counts: {Str: Int}
+  known: {Str: Item}
+
+  def receive(var self, it: Item, n: Int):
+    known[it.sku] = it
+    counts[it.sku] = counts[it.sku].or(0) + n
+
+  def take(var self, sku: Str, n: Int) -> Int or Error:
+    if not known.contains?(sku):
+      return Error("no such item #{sku}")
+    have = counts[sku].or(0)
+    if n > have:
+      return Error("only #{have} of #{sku} left")
+    counts[sku] = have - n
+    have - n
+
+  def value_cents -> Int:
+    var total = 0
+    for sku, n in counts:
+      total += known[sku].map(_.cents).or(0) * n
+    total
+
+pub def empty() -> Shelf = Shelf(counts: {}, known: {})

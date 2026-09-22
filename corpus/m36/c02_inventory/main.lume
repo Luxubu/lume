@@ -1,0 +1,57 @@
+# c02 — a shop's shelf, with its modules in a subdirectory `catalog/`
+#
+# Probes: `import dir.module`, `import dir.module as alias` and
+#   `import dir.module.Type` together; a sibling module importing only one
+#   item (`import catalog.items.Item`) with a root-relative path; a `pub
+#   interface` with a default used as a type from another file
+#   (`[items.Priced]`); structs built by keyword through a module prefix; a
+#   no-argument module function called with `()`.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# pen @ 1.50
+# notepad @ 4.25
+# ink @ 9.99
+# desk kit (3 items) @ 13.00
+# pens left: 25
+# refused: only 3 of I3 left
+# refused: no such item ZZ
+# stock value: 109.97
+# fresh shelf holds 0 kinds
+# cheapest: pen
+
+import catalog.items
+import catalog.stock as st
+import catalog.stock.Shelf
+
+def main -> () or Error:
+  pen = items.Item(sku: "P1", name: "pen", cents: 150)
+  note = items.Item(sku: "N2", name: "notepad", cents: 425)
+  ink = items.Item(sku: "I3", name: "ink", cents: 999)
+  kit = items.Bundle(name: "desk kit", parts: [pen, note, ink], discount: 274)
+
+  priced: [items.Priced] = [pen, note, ink, kit]
+  for p in priced:
+    puts p.price_tag
+
+  var shelf = st.empty()
+  shelf.receive(pen, 40)
+  shelf.receive(note, 10)
+  shelf.receive(ink, 3)
+
+  left = shelf.take("P1", 15)?
+  puts "pens left: #{left}"
+  for sku, n in [("I3", 5), ("ZZ", 1)]:
+    match shelf.take(sku, n):
+      Ok(rest) -> puts "#{sku} left: #{rest}"
+      Error(e) -> puts "refused: #{e.message}"
+
+  puts "stock value: #{(shelf.value_cents.to_float / 100.0).decimals(2)}"
+
+  fresh: Shelf = st.empty()
+  puts "fresh shelf holds #{fresh.counts.len} kinds"
+
+  match priced.min_by { |p| p.unit_cents }:
+    Some(p) -> puts "cheapest: #{p.label}"
+    None    -> puts "nothing priced"

@@ -96,8 +96,9 @@ pub def parse(text: Str) -> Table or Error:
     rows.push(cells)
   Table(columns: columns, rows: rows)
 
-# Is this cell a number? `to_float` says 0.0 for anything it cannot read,
-# so the table checks first rather than reporting a wrong total.
+# Is this cell a number? `to_float` gives a `Float or Error`, and a column
+# should be all numbers or all text, so the table checks every cell first
+# rather than failing halfway through a total.
 def number?(s: Str) -> Bool:
   t = s.trim
   if t.empty?:

@@ -32,7 +32,7 @@ lume run examples/fib.lume
 | `pipes.lume` | `\|>` |
 | `errors_and_results.lume` | `T or Error`, `?`, and what fails |
 | `patterns.lume` | `\|` alternatives and what exhaustiveness catches |
-| `shadow.lume` | why rebinding in a nested block is an error |
+| `shadow.lume` | rebinding a name to a new value of itself — `name = name.trim` — which is allowed at the same level, and is the only rebinding that is |
 | `ownership.lume` | copy or move by analysis, recursive enums |
 
 ## Building your own abstractions

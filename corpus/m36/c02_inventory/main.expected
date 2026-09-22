@@ -1,0 +1,17 @@
+warning: `priced` holds values of different types behind `catalog.items.Priced`, so calls on its items go through a pointer
+  --> corpus/m36/c02_inventory/main.lume:34:3
+   |
+34 |   priced: [items.Priced] = [pen, note, ink, kit]
+   |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+pen @ 1.50
+notepad @ 4.25
+ink @ 9.99
+desk kit (3 items) @ 13.00
+pens left: 25
+refused: only 3 of I3 left
+refused: no such item ZZ
+stock value: 109.97
+fresh shelf holds 0 kinds
+cheapest: pen
+exit: 0

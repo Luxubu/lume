@@ -1,0 +1,69 @@
+# c07 — a job runner: specs are parsed and run on tasks; failures come home
+#
+# Probes: an `async def` returning `T or Error` that uses `?` and an early
+#   `return Error(...)`; `Task[Str or Error]`; a spawn body that awaits, bumps
+#   a `shared var` and then yields a value; awaiting a list and pairing the
+#   results back up with `zip` (relying on spawn order); list patterns with
+#   string literals in them; an enum payload that is a list.
+#
+# Meant to RUN. (The lock warning for `finished` goes to stderr.)
+#
+# EXPECTED OUTPUT:
+# ok    resize x4 -> 256px
+# ok    hash abc -> 354
+# fail  boom: unknown job `boom`
+# ok    sum of 3 -> 6
+# fail  resize:0: scale must be positive, got 0
+# fail  sum:4,x: `x` is not an integer
+# 3 ok, 3 failed, 6 finished
+
+enum Job:
+  Resize(scale: Int)
+  Hash(text: Str)
+  Sum(nums: [Int])
+
+def parse(spec: Str) -> Job or Error:
+  match spec.split(":"):
+    ["resize", n] -> Resize(n.to_int?)
+    ["hash", t]   -> Hash(t)
+    ["sum", list] ->
+      var nums: [Int] = []
+      for piece in list.split(","):
+        nums.push(piece.trim.to_int?)
+      Sum(nums)
+    _ -> Error("unknown job `#{spec}`")
+
+def checksum(t: Str) -> Int = t.chars.fold(0) { |acc, c| (acc * 31 + c.code) % 1000 }
+
+async def run(spec: Str) -> Str or Error:
+  job = parse(spec)?
+  await Time.sleep(20 - spec.len)
+  match job:
+    Resize(s) ->
+      if s <= 0:
+        return Error("scale must be positive, got #{s}")
+      "resize x#{s} -> #{64 * s}px"
+    Hash(t) -> "hash #{t} -> #{checksum(t)}"
+    Sum(ns) -> "sum of #{ns.len} -> #{ns.sum}"
+
+async def main:
+  specs = ["resize:4", "hash:abc", "boom", "sum:1, 2, 3", "resize:0", "sum:4,x"]
+  shared var finished = 0
+
+  var tasks: [Task[Str or Error]] = []
+  for spec in specs:
+    t = spawn:
+      r = await run(spec)
+      finished += 1
+      r
+    tasks.push(t)
+  results = await tasks
+
+  var passed = 0
+  for spec, r in specs.zip(results):
+    match r:
+      Ok(line) ->
+        passed += 1
+        puts "ok    #{line}"
+      Error(e) -> puts "fail  #{spec}: #{e.message}"
+  puts "#{passed} ok, #{specs.len - passed} failed, #{finished} finished"

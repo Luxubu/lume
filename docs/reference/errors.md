@@ -18,6 +18,32 @@ puts "42".to_int     #=> Ok(42)
 puts "x".to_int      #=> Error("`x` is not an integer")
 ```
 
+## A bare value is the implied `Some` and the implied `Ok`
+
+**In a function that returns `T?`, a plain `T` means `Some(it)`; in one that
+returns `T or Error`, it means `Ok(it)`.** You write the good case as a plain
+value and only the bad case by name:
+
+```lume
+def first_even(xs: [Int]) -> Int?:
+  for x in xs:
+    if x % 2 == 0:
+      return x
+  None
+
+def half(n: Int) -> Int or Error:
+  if n % 2 == 1:
+    return Error("odd")
+  n / 2
+
+def main:
+  puts first_even([3, 4, 5])    #=> Some(4)
+  puts half(8)                  #=> Ok(4)
+```
+
+A `() or Error` function that reaches its end without failing has succeeded;
+nothing needs writing at the end.
+
 ## `.or(default)`
 
 The shortest way past either one. It takes the value or the default, and gives

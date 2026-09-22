@@ -1,0 +1,15 @@
+6 entries, skipped: ["garbage line"]
+ERROR   2
+WARN    1
+INFO    2
+DEBUG   1
+
+errors:
+  09:02:11 db: connection refused
+  09:30:00 auth: token expired for user 42
+
+per hour: {"08": 2, "09": 3, "10": 1}
+components: {"web", "db", "auth"}
+busiest: Some(("web", 3))
+first error at 09:02:11
+exit: 0

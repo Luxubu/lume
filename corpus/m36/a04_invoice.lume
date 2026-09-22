@@ -1,0 +1,72 @@
+# a04 — invoice formatter: aligned columns, money to the cent, discount and tax
+#
+# Probes: `pad` on an Int (no conversion), `decimals(2)` on Floats that are
+#   not exact in binary (50.230000000000004, 45.207 * 0.08), a negative value
+#   through `decimals`, `"$" + Str`, `%` and `$` as plain characters in a
+#   string, `if` as a one-line value, trailing `if` on a `puts`, the
+#   `= expr` function body broken after `=`, `sum` with a block over Floats,
+#   `map(_.qty).sum`.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+#                   INVOICE
+# Bill to: Harbour Books Ltd
+# ============================================
+# Item               Qty       Price    Amount
+# --------------------------------------------
+# Notebook             3       $4.25    $12.75
+# Pen (blue)          10       $0.80     $8.00
+# Stapler              1      $15.50    $15.50
+# Paper, A4 ream       2       $6.99    $13.98
+# --------------------------------------------
+#                           Subtotal    $50.23
+#            Discount (10% over $50)    $-5.02
+#                             Tax 8%     $3.62
+#                              TOTAL    $48.82
+# ============================================
+# 4 lines, 16 units
+
+struct Item:
+  name: Str
+  qty: Int
+  price: Float
+
+  def amount -> Float = qty.to_float * price
+
+def money(x: Float) -> Str = "$" + x.decimals(2)
+
+def total_line(label: Str, value: Float) -> Str =
+  label.pad(34) + money(value).pad(10)
+
+def main:
+  customer = "Harbour Books Ltd"
+  items = [
+    Item("Notebook", 3, 4.25),
+    Item("Pen (blue)", 10, 0.80),
+    Item("Stapler", 1, 15.5),
+    Item("Paper, A4 ream", 2, 6.99),
+  ]
+  width = 44
+
+  puts "INVOICE".pad(width / 2 + 3)
+  puts "Bill to: #{customer}"
+  puts "=".repeat(width)
+  puts "Item".pad_right(18) + "Qty".pad(4) + "Price".pad(12) + "Amount".pad(10)
+  puts "-".repeat(width)
+  for item in items:
+    puts item.name.pad_right(18) + item.qty.pad(4) + money(item.price).pad(12) + money(item.amount).pad(10)
+  puts "-".repeat(width)
+
+  subtotal = items.sum(_.amount)
+  discount = if subtotal > 50.0: subtotal * 0.10 else: 0.0
+  taxed = subtotal - discount
+  tax = taxed * 0.08
+  puts total_line("Subtotal", subtotal)
+  puts total_line("Discount (10% over $50)", 0.0 - discount) if discount > 0.0
+  puts total_line("Tax 8%", tax)
+  puts total_line("TOTAL", taxed + tax)
+  puts "=".repeat(width)
+
+  units = items.map(_.qty).sum
+  puts "#{items.len} lines, #{units} units"

@@ -58,11 +58,11 @@ def main:
     puts "#{zip}: #{people.map(_.name).join(", ")}"
 ```
 
-It is sound in a way that is meant to be load-bearing: 253 programs written by
-eighteen independent reviewers who had never seen the compiler, and not one of
+It is sound in a way that is meant to be load-bearing: 283 programs written by
+twenty-one independent reviewers who had never seen the compiler, and not one of
 them produced a wrong answer or failed to compile after type-checking. What it
 refuses, it refuses with a message that names the fix — `examples/errors/` is
-106 programs kept around to prove it.
+115 programs kept around to prove it.
 
 **Where it is.** Version 0.1. The language is settled enough to write real
 programs in, and there is no editor support, no package manager, and no way to
@@ -119,7 +119,7 @@ Two things worth knowing when you measure your own program:
 ```sh
 tests/run.sh      # every example's output and every error message, diffed
 tests/docs.sh     # every example in docs/, run and checked against its claims
-tests/corpus.sh   # the 253 independently-written review programs
+tests/corpus.sh   # the 283 independently-written review programs
 tests/bench.sh    # the benchmarks, against their budget
 ```
 
@@ -127,14 +127,15 @@ The suite also runs `lume test` on `examples/tests/`, `lume fmt` on
 `examples/fmt/`, checks that formatting every example is idempotent and leaves
 the generated Rust unchanged, and runs the review corpora (programs written by
 independent reviewers who did not know the compiler).
-`tests/corpus.sh` classifies the corpus (253 programs from six review
+`tests/corpus.sh` classifies the corpus (283 programs from seven review
 rounds: `corpus/` and `corpus/edge/` after milestone 14, `corpus/m17/` on the
 pattern and standard-method surface, `corpus/m18/` on sets and slicing,
 `corpus/m26/` on generics, parameterised interfaces and blocks, `corpus/m28/`
 on generic `extend`, the seams between features, and whole programs, and
 `corpus/m30/` on modules — thirty multi-file programs, each a directory with
-its own `main.lume`): 190
-run, 63 stop with a Lume error (each a deliberate rule or a deliberate error
+its own `main.lume` — and `corpus/m36/` on the documentation, thirty programs
+written from `docs/` alone): 217
+run, 66 stop with a Lume error (each a deliberate rule or a deliberate error
 test: no shadowing, no `Float / Int`, an unbounded `T` as a map key, ...),
 none leaks a rustc error. Each round has a `REPORT.md` beside its programs.
 

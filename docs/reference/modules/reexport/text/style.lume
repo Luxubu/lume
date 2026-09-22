@@ -1,0 +1,3 @@
+# text/style.lume — imports nothing.
+
+pub def shout(s: Str) -> Str = s.upcase + "!"

@@ -6,6 +6,7 @@ documentation cannot quietly stop being true.
 """
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -87,6 +88,31 @@ def run(kind, src, want, wants_err):
         return None
 
 
+def run_dir(main_lume):
+    """A multi-file example: docs/**/main.lume beside a main.expected.
+
+    The folder is copied somewhere temporary so that building it leaves
+    nothing behind in docs/, and stdout is compared with main.expected.
+    """
+    src_dir = os.path.dirname(main_lume)
+    with open(os.path.join(src_dir, "main.expected")) as f:
+        want = f.read().rstrip("\n").split("\n")
+    with tempfile.TemporaryDirectory() as d:
+        work = os.path.join(d, "example")
+        shutil.copytree(src_dir, work, ignore=shutil.ignore_patterns(".lume"))
+        try:
+            p = subprocess.run([LUME, "run", os.path.join(work, "main.lume")],
+                               capture_output=True, text=True, timeout=180, cwd=work)
+        except subprocess.TimeoutExpired:
+            return "timed out"
+    if p.returncode != 0:
+        return "did not run:\n%s" % (p.stdout + p.stderr).strip()[:600]
+    got = p.stdout.rstrip("\n").split("\n")
+    if got != want:
+        return "output does not match main.expected\n  expected: %r\n  it says:  %r" % (want, got)
+    return None
+
+
 def main():
     if not os.path.exists(LUME):
         print("build the compiler first: cd compiler && cargo build --release")
@@ -110,6 +136,19 @@ def main():
             src = program([ln for ln in body if "#!" not in ln]) if kind == "lume-bad" else program(body)
             why = run(kind, src, expected_out(body), wants_err)
             where = "%s:%d" % (rel, line)
+            if why is None:
+                ok += 1
+                if verbose:
+                    print("ok   %s" % where)
+            else:
+                fails.append((where, why))
+                print("FAIL %s\n    %s" % (where, why.replace("\n", "\n    ")))
+
+    # multi-file examples: a folder under docs/ with main.lume and main.expected
+    for dirpath, _, names in sorted(os.walk(os.path.join(ROOT, "docs"))):
+        if "main.lume" in names and "main.expected" in names:
+            where = os.path.relpath(os.path.join(dirpath, "main.lume"), ROOT)
+            why = run_dir(os.path.join(dirpath, "main.lume"))
             if why is None:
                 ok += 1
                 if verbose:

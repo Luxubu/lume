@@ -1,0 +1,21 @@
+# shop/items.lume — the data. Only `pub` items can be reached from outside.
+
+pub TAX_PERCENT = 20
+
+pub enum Kind:
+  Food
+  Tool(grams: Int)
+
+  def label -> Str = match self:
+    Food    -> "food"
+    Tool(g) -> "tool, #{g}g"
+
+pub struct Item:
+  sku: Str
+  cents: Int
+  kind: Kind
+
+  def with_tax -> Int = cents + tax_on(cents)
+
+# Not `pub`: the methods above may use it, an importer may not.
+def tax_on(cents: Int) -> Int = cents * TAX_PERCENT / 100

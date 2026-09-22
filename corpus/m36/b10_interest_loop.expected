@@ -1,0 +1,7 @@
+error: `a` is immutable, but `add_interest` changes it
+  --> corpus/m36/b10_interest_loop.lume:27:6
+   |
+27 |     a.add_interest(5)
+   |      ^
+  help: declare it with `var a = ...` on line 26
+exit: 1

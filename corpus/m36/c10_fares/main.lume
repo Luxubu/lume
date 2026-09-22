@@ -1,0 +1,35 @@
+# c10 — a fare table that reaches into a module for a helper it does not export
+#
+# Probes: calling a function that exists in an imported module but is not
+#   `pub`. Everything above the last line is fine; the last line of `main`
+#   is the mistake, and the whole program is refused before anything runs.
+#   Also leans on: `T?` to `T or Error` with `.or_error(...)?` in a module,
+#   a module importing another module's enum by name, `|` in string arms.
+#
+# Meant to FAIL with: `peak_multiplier` exists in module `fares` but is not `pub`
+#
+# (If it were accepted it would print:
+#   Bank -> Angel       280    420
+#   Oval -> Morden      410    615
+#   Temple -> Epping    490    735
+#   Bank -> Nowhere: unknown station `Nowhere`
+#   peak costs 150%
+# — but it must not get that far, so the EXPECTED OUTPUT is only the error.)
+#
+# EXPECTED OUTPUT:
+# error: `peak_multiplier` exists in module `fares` but is not `pub`
+
+import fares
+
+def line_for(src: Str, dst: Str) -> Str or Error:
+  off = fares.quote(src, dst, false)?
+  on = fares.quote(src, dst, true)?
+  "#{"#{src} -> #{dst}".pad_right(18)}#{off.pad(5)}#{on.pad(7)}"
+
+def main:
+  trips = [("Bank", "Angel"), ("Oval", "Morden"), ("Temple", "Epping"), ("Bank", "Nowhere")]
+  for src, dst in trips:
+    match line_for(src, dst):
+      Ok(text) -> puts text
+      Error(e) -> puts "#{src} -> #{dst}: #{e.message}"
+  puts "peak costs #{fares.peak_multiplier(true)}%"

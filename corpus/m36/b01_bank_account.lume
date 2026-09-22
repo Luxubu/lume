@@ -1,0 +1,89 @@
+# b01 — a bank account with validated deposits, withdrawals, fees and transfers
+#
+# Probes: struct with `var self` methods that change fields; methods that
+#   return `() or Error` and `Int or Error`; implied Ok at the tail of a
+#   `() or Error` method whose last line is a push; an enum with data and a
+#   method that matches on `self`; `var` parameters on a free function
+#   (transfer); `?` on a `var self` call; `main -> () or Error`; matching
+#   `Ok(_)` on a `() or Error`; printing a list of enum values.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# Ada has 70 after withdrawing
+# refused: Ada has 70, cannot take 500
+# refused: deposit must be positive, got -5
+# Ada: 20 [+100, -30, -50]
+# Bob: 68 [+20, +50, fee 2]
+# [Deposit(amount: 20), Deposit(amount: 50), Fee(amount: 2)]
+# transfer failed: Bob has 68, cannot take 100
+# 88
+
+enum Txn:
+  Deposit(amount: Int)
+  Withdrawal(amount: Int)
+  Fee(amount: Int)
+
+  def label -> Str:
+    match self:
+      Deposit(a)    -> "+#{a}"
+      Withdrawal(a) -> "-#{a}"
+      Fee(a)        -> "fee #{a}"
+
+struct Account:
+  owner: Str
+  balance: Int
+  history: [Txn]
+
+  def deposit(var self, amount: Int) -> () or Error:
+    if amount <= 0:
+      return Error("deposit must be positive, got #{amount}")
+    balance += amount
+    history.push(Deposit(amount))
+
+  def withdraw(var self, amount: Int) -> Int or Error:
+    if amount <= 0:
+      return Error("withdrawal must be positive, got #{amount}")
+    if amount > balance:
+      return Error("#{owner} has #{balance}, cannot take #{amount}")
+    balance -= amount
+    history.push(Withdrawal(amount))
+    balance
+
+  def charge(var self, fee: Int):
+    balance -= fee
+    history.push(Fee(fee))
+
+  def statement -> Str = "#{owner}: #{balance} [#{history.map(_.label).join(", ")}]"
+
+def open_account(owner: Str) -> Account = Account(owner: owner, balance: 0, history: [])
+
+def transfer(var src: Account, var dst: Account, amount: Int) -> () or Error:
+  src.withdraw(amount)?
+  dst.deposit(amount)?
+
+def main -> () or Error:
+  var ada = open_account("Ada")
+  var bob = open_account("Bob")
+  ada.deposit(100)?
+  bob.deposit(20)?
+  left = ada.withdraw(30)?
+  puts "Ada has #{left} after withdrawing"
+
+  match ada.withdraw(500):
+    Ok(n)    -> puts "unexpected #{n}"
+    Error(e) -> puts "refused: #{e.message}"
+  match bob.deposit(-5):
+    Ok(_)    -> puts "unexpected"
+    Error(e) -> puts "refused: #{e.message}"
+
+  transfer(ada, bob, 50)?
+  bob.charge(2)
+  puts ada.statement
+  puts bob.statement
+  puts bob.history
+
+  match transfer(bob, ada, 100):
+    Ok(_)    -> puts "moved"
+    Error(e) -> puts "transfer failed: #{e.message}"
+  puts ada.balance + bob.balance

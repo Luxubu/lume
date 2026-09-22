@@ -1,0 +1,5 @@
+# Changing a constant through a method used to reach rustc.
+K = [1]
+
+def main:
+  K.push(2)

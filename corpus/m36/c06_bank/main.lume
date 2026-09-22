@@ -1,0 +1,62 @@
+# c06 — three batches of bank transfers applied concurrently to one book
+#
+# Probes: a `pub struct` from another module held in a `shared var` and
+#   changed through its `var self` method from inside tasks; two shared vars
+#   used by the same task; a module-level constant read inside `spawn:`;
+#   `match` on a cross-module `T or Error` inside a task; a task-local `var`;
+#   walking a map field of a `shared var` struct after the tasks finish.
+#   No transfer can overdraw whatever order the tasks run in, so the output
+#   is fixed; the failures are sorted before printing.
+#
+# Meant to RUN. (Lock warnings go to stderr, not shown.)
+#
+# NOTE (round seven, after running): the author's hand-worked output had
+# bo 1550 / cy 1025 -- the last transfer, `bo -> cy 25`, applied backwards.
+# Worked again by hand it is bo 1500 / cy 1075, which is what the program
+# prints. The compiler was right; the concurrency was never in question.
+#
+# EXPECTED OUTPUT:
+# applied 7 of 9 transfers; per batch [3, 2, 2]
+#   batch 1: no account `zed`
+#   batch 2: `nine` is not an integer
+# ana    425
+# bo    1500
+# cy    1075
+# total 3000
+
+import ledger
+import ledger.Book
+
+BATCHES = [
+  ["ana -> bo 500", "bo -> cy 200", "cy -> ana 100"],
+  ["ana -> cy 250", "zed -> ana 50", "bo -> ana 75"],
+  ["cy -> bo 300", "ana -> bo nine", "bo -> cy 25"],
+]
+
+async def main:
+  shared var book = Book(balances: {"ana": 1000, "bo": 1000, "cy": 1000})
+  shared var failures: [Str] = []
+
+  var tasks: [Task[Int]] = []
+  for i, batch in BATCHES.enumerate:
+    t = spawn:
+      var done = 0
+      for line in batch:
+        match ledger.parse(line):
+          Ok(tr) ->
+            match book.apply(tr):
+              Ok(_) ->
+                done += 1
+              Error(e) -> failures.push("batch #{i}: #{e.message}")
+          Error(e) -> failures.push("batch #{i}: #{e.message}")
+      done
+    tasks.push(t)
+  counts = await tasks
+
+  planned = BATCHES.map(_.len).sum
+  puts "applied #{counts.sum} of #{planned} transfers; per batch #{counts}"
+  for f in failures.sort:
+    puts "  #{f}"
+  for name, cents in book.balances:
+    puts "#{name.pad_right(4)}#{cents.pad(6)}"
+  puts "total #{book.total}"

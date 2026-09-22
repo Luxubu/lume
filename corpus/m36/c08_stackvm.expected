@@ -1,0 +1,6 @@
+countdown: out [3, 2, 1, 42] stack [0, 42] in 23 steps
+underflow: runtime error after 2 steps: stack is empty
+typo: parse error: line 2: cannot read `frob`
+badnum: parse error: `x` is not an integer
+spin: runtime error after 1001 steps: too many steps
+exit: 0

@@ -119,6 +119,24 @@ def main:
 #! `greet` is a function; call it with `greet()`
 ```
 
+## Changing an argument: `var` parameters
+
+**A parameter marked `var` is the caller's own value, and the function may
+change it.** Nothing is marked at the call — the declaration says it:
+
+```lume
+def add_one(var xs: [Int]):
+  xs.push(1)
+
+def main:
+  var nums = [5]
+  add_one(nums)
+  puts nums    #=> [5, 1]
+```
+
+The caller's binding must itself be a `var`. Every other parameter is read
+only, which is why most functions need no marking at all.
+
 ## The three block forms
 
 A block is behaviour handed to a call. There are three spellings: an inline
@@ -254,7 +272,9 @@ def main:
 
 There is one, written `() -> ()`. **It needs either the empty `()` on the
 call or the `do` form** — a bare `name { ... }` with nothing before the brace
-is not a call the parser will take:
+and nothing inside the bars is not a call the parser will take. (A block that
+*does* take parameters is fine after a bare name: `find_first { |i| i > 3 }`
+works, because the `|` says it is a block.)
 
 ```lume
 def twice(f: () -> ()):

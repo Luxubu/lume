@@ -1,0 +1,20 @@
+warning: `book` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/m36/c06_bank/main.lume:37:3
+   |
+37 |   shared var book = Book(balances: {"ana": 1000, "bo": 1000, "cy": 1000})
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+warning: `failures` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/m36/c06_bank/main.lume:38:3
+   |
+38 |   shared var failures: [Str] = []
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+applied 7 of 9 transfers; per batch [3, 2, 2]
+  batch 1: no account `zed`
+  batch 2: `nine` is not an integer
+ana    425
+bo    1500
+cy    1075
+total 3000
+exit: 0

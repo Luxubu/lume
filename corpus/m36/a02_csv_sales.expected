@@ -1,0 +1,13 @@
+region       total
+------------------
+north        30.00
+south        10.00
+east         25.00
+------------------
+all          65.00
+
+4 sales, 2 problems:
+  line 6: `oops` is not an integer
+  line 7: expected 4 fields, got 3: east, gizmo, 3
+biggest sale: 10 x widget in east
+exit: 0

@@ -1,0 +1,9 @@
+# `P(a, b)` reads like a variant; a struct is not a pattern. This used to
+# crash the compiler inside the exhaustiveness checker.
+struct P:
+  x: Int
+  y: Int
+
+def main:
+  match P(x: 1, y: 2):
+    P(a, b) -> puts a

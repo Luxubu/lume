@@ -787,6 +787,25 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, deps: &[Dep], t
     // The built-in Error type: a struct with one field, defined in the prelude.
     g.structs.insert("Error".into(), StructInfo { generics: Vec::new(), fields: vec![("message".into(), Type::Str)], methods: HashMap::new() });
     g.is_entry = rust_mod.is_none();
+    // `import lib.one` and a `def one` in the same file: one name, two
+    // things. The import used to win without a word, so the file's own
+    // definition was silently never called.
+    for d in deps {
+        if let Dep::Single { local, id, line, col, .. } = d {
+            let here = program.iter().find_map(|it| match it {
+                Item::Fn(f) if f.name == *local => Some(("function", f.line)),
+                Item::Struct(s) if s.name == *local => Some(("struct", s.line)),
+                Item::Enum(e) if e.name == *local => Some(("enum", e.line)),
+                Item::Interface(i) if i.name == *local => Some(("interface", i.line)),
+                Item::Const(c) if c.name == *local => Some(("constant", c.line)),
+                _ => None,
+            });
+            if let Some((what, dl)) = here {
+                return Err(LumeError::new(*line, *col, format!("`{}` is imported from `{}` and also defined in this file, as a {} on line {}", local, id, what, dl))
+                    .with_help(format!("rename one of them, or import the module and write `{}.{}` for the other", id.rsplit('.').next().unwrap_or(id), local)));
+            }
+        }
+    }
     g.register_deps(deps)?;
     g.program(program)?;
     let mut rust_deps = Vec::new();
@@ -885,7 +904,9 @@ fn rust_name(name: &str) -> String {
     }
     let base = name.replace('?', "_q");
     if RUST_RESERVED.contains(&base.as_str()) {
-        if base == "self" || base == "Self" || base == "crate" || base == "super" {
+        // `r#` only helps with keywords. The prelude's variants are ordinary
+        // names that a `let` would read as a pattern, so they are renamed.
+        if matches!(base.as_str(), "self" | "Self" | "crate" | "super" | "Err" | "Ok" | "Some" | "None") {
             format!("lume_{}", base)
         } else {
             format!("r#{}", base)
@@ -1738,6 +1759,16 @@ impl Gen {
             return None;
         }
         None
+    }
+
+    /// `Some = 1` was accepted, and then `Some` could never be read again,
+    /// because everywhere else it starts a constructor.
+    fn not_a_constructor_name(name: &str, line: usize, col: usize) -> Result<()> {
+        if matches!(name, "Some" | "None" | "Ok" | "Error") {
+            return Err(LumeError::new(line, col, format!("`{}` builds a value, so it cannot also be a name", name))
+                .with_help("names of values start with a lowercase letter"));
+        }
+        Ok(())
     }
 
     /// A statement whose value is dropped on the floor. Most values may be:
@@ -3864,8 +3895,14 @@ impl Gen {
         if rt == Type::Unknown {
             return Ok(());
         }
-        let op = op.trim_end_matches('=').to_string();
-        let op = if op.is_empty() { "=".to_string() } else { op };
+        // `+=` is checked as `+`. The comparisons end in `=` too and are not
+        // compound assignments: trimming them turned `==` into `=` and `!=`
+        // into `!`, which matched nothing below, so equality was never checked.
+        let op = match op {
+            "==" | "!=" | "<=" | ">=" => op.to_string(),
+            o if o.len() > 1 && o.ends_with('=') => o.trim_end_matches('=').to_string(),
+            o => o.to_string(),
+        };
         let op = op.as_str();
         let numeric = |t: &Type| matches!(t, Type::Int | Type::Float);
         let same = self.assignable(&rt, lt) && self.assignable(lt, &rt);
@@ -3875,7 +3912,8 @@ impl Gen {
             "-" | "*" | "/" | "%" | "**" => numeric(lt) && same,
             // a type parameter compares when its bound says it is `Ordered`
             "<" | "<=" | ">" | ">=" => (same && (numeric(lt) || *lt == Type::Str || (matches!(lt, Type::Var(_)) && self.meets_bound(lt, &Type::Named("Ordered".into()))))) || (text_like(lt) && text_like(&rt)),
-            "==" | "!=" => same || (text_like(lt) && text_like(&rt)),
+            // `1 == 1.0` is an Int against a Float, which never mixes silently
+            "==" | "!=" => (same && !(numeric(lt) && numeric(&rt) && *lt != rt)) || (text_like(lt) && text_like(&rt)),
             _ => true,
         };
         if ok {
@@ -4358,6 +4396,17 @@ impl Gen {
         if self.current_type.is_some() && (block_mentions_self(body) || self.field_names().iter().any(|f| body.stmts.iter().any(|st| stmt_mentions(st, f)))) {
             return Err(LumeError::new(e.line, e.col, "a `spawn:` block inside a method cannot use `self` or its fields")
                 .with_help("bind the fields the task needs to names before `spawn:`; a `shared var` field can be bound and passed in"));
+        }
+        // Tasks run on the runtime `async def main` starts. Without one the
+        // program compiled and then stopped at its first `spawn:` with a
+        // message about Tokio. Say so here instead, in the file that has `main`.
+        if !self.current_fn.starts_with("test ") {
+            if let Some(m) = self.fns.get("main") {
+                if !m.is_async {
+                    return Err(LumeError::new(e.line, e.col, "`spawn:` needs the program to start with `async def main`")
+                        .with_help("tasks run on the runtime an async `main` starts: write `async def main:`"));
+                }
+            }
         }
         let ret = self.spawn_body_type(body);
         // captured locals
@@ -5423,6 +5472,17 @@ impl Gen {
                 }
             }
             Stmt::Var { name, ty, value, line, col } => {
+                Self::not_a_constructor_name(name, *line, *col)?;
+                // The no-shadowing rule covered `x = ...` in a nested block
+                // and not `var x = ...`, which hid the outer `x` for the rest
+                // of the block and left it untouched after.
+                if let Some(b) = self.lookup(name).cloned() {
+                    let same_scope = self.scopes.last().map(|s| s.contains_key(name)).unwrap_or(false);
+                    if !same_scope && self.field_type(name).is_none() {
+                        return Err(LumeError::new(*line, *col, format!("`{}` is declared on line {}, outside this block; a new `var {}` here would hide it and be lost when the block ends", name, b.line, name))
+                            .with_help(format!("to change it from here, declare it `var {}` on line {}; to make a separate value, give it another name", name, b.line)));
+                    }
+                }
                 if let Some(t) = ty {
                     self.check_type(&self.ct(t), *line, *col)?;
                     Self::no_fn_outside_params(&self.ct(t), "a binding", *line, *col)?;
@@ -5492,6 +5552,7 @@ impl Gen {
                 }
             }
             Stmt::Bind { name, ty, value, line, col } => {
+                Self::not_a_constructor_name(name, *line, *col)?;
                 let vt0 = self.ty_of(value);
                 self.no_future(&vt0, value)?;
                 if let Some(t) = ty {
@@ -5505,7 +5566,16 @@ impl Gen {
                         self.check_assign(value, &b.ty, &format!("`{}` is a `{}`", name, type_name(&b.ty)))?;
                     }
                 }
-                if self.spawn_captured.contains(name) && self.lookup(name).map(|b| !b.mutable).unwrap_or(false) {
+                // A top-level constant is not a local, so the no-shadowing
+                // rule never saw it; rebinding it reached rustc.
+                if self.lookup(name).is_none() && self.consts.contains_key(&self.canon(name)) {
+                    return Err(LumeError::new(*line, *col, format!("`{}` is a constant, so it cannot be bound again", name))
+                        .with_help("pick another name for the local"));
+                }
+                // A `shared var` is the one thing a task may change, and `=`
+                // is a change like `+=` is: it goes through the lock.
+                let shared_var = matches!(self.lookup(name).map(|b| &b.ty), Some(Type::Shared(_, true)));
+                if self.spawn_captured.contains(name) && !shared_var && self.lookup(name).map(|b| !b.mutable).unwrap_or(false) {
                     return Err(LumeError::new(*line, *col, format!("`{}` inside `spawn:` is a copy, so changing it here would not be seen outside", name))
                         .with_help(format!("declare it `shared var {}` before the `spawn:` if tasks are meant to change it, or bind a new name here", name)));
                 }
@@ -5977,6 +6047,22 @@ impl Gen {
                 };
                 self.line(&format!("for {} in {} {{", pattern, it));
                 self.indent += 1;
+                // A number, flag or character in a pair is declared as a
+                // value, but what arrives depends on where the pairs come
+                // from: a map or a chain hands out `&i64`, a list of owned
+                // pairs `i64`, `enumerate` a mix. `Borrow` takes either to the
+                // value, so the declaration is true whatever the source was.
+                if vars.len() > 1 {
+                    if let Type::Tuple(ts) = &elem_ty {
+                        for (v, t) in vars.iter().zip(ts) {
+                            if t.is_copy() && *t != Type::Unknown && v != "_" {
+                                let rn = rust_name(v);
+                                let rt = self.rt(t);
+                                self.line(&format!("let {rn}: {rt} = *::std::borrow::Borrow::<{rt}>::borrow(&{rn});"));
+                            }
+                        }
+                    }
+                }
                 self.push_scope();
                 if vars.len() == 1 {
                     self.declare(&vars[0], false, borrowed, elem_ty.clone(), *line);
@@ -6816,6 +6902,10 @@ impl Gen {
         }
         Ok(match name {
             "group_by" => {
+                // the key becomes a map key, so it has to be one
+                if let Type::Map(kt, _) = self.ty_of(e).materialized() {
+                    self.check_key_type(&kt, "map", lam.line, lam.col)?;
+                }
                 // the key function is called with `&item` of an owned copy
                 let f = self.gen_lambda(params, body, &elem, false, true, true, None, lam)?;
                 let owned = self.collect_iter_t(&it, by_ref, &elem);
@@ -6876,7 +6966,10 @@ impl Gen {
                 match name {
                     "sort_by" => format!("{{ let mut v = {}; let key = {}; v.sort_by(|a, b| key(a).partial_cmp(&key(b)).unwrap()); v }}", owned, key),
                     "min_by" => format!("{{ let key = {}; {}.into_iter().min_by(|a, b| key(a).partial_cmp(&key(b)).unwrap()) }}", key, owned),
-                    _ => format!("{{ let key = {}; {}.into_iter().max_by(|a, b| key(a).partial_cmp(&key(b)).unwrap()) }}", key, owned),
+                    // Rust's `max_by` keeps the *last* of a tie and `min_by`
+                    // the first. Lume gives the first for both, as Ruby and
+                    // Python do: walking backwards makes Rust's last our first.
+                    _ => format!("{{ let key = {}; {}.into_iter().rev().max_by(|a, b| key(a).partial_cmp(&key(b)).unwrap()) }}", key, owned),
                 }
             }
             "fold" => {
@@ -6938,6 +7031,10 @@ impl Gen {
                 Type::Result(ok, _) if matches!(**ok, Type::Var(_) | Type::Unknown) => ret.clone(),
                 Type::Result(ok, err) if g.assignable(&t, ok) || g.assignable(&t, err) || g.assignable(&t, &ret) => ret.clone(),
                 Type::Option(inner) if g.assignable(&t, inner) || g.assignable(&t, &ret) => ret.clone(),
+                // `-> Shape` with a `Rect` in one branch and a `Circle` in
+                // the other: each is a `Shape`, which is the whole point of
+                // returning one.
+                _ if g.is_interface(&ret) && g.assignable(&t, &ret) => ret.clone(),
                 _ => t,
             }
         };
@@ -7494,6 +7591,15 @@ impl Gen {
     }
 
     fn check_exhaustive(&mut self, t: &Type, arms: &[MatchArm], e: &Expr) -> Result<()> {
+        // `P(a, b)` where `P` is a struct reads like a variant, and the
+        // checker below would take it for one with no known shape. Refuse it
+        // here, in words, rather than let the checker index past the end.
+        for a in arms {
+            if let Some((name, line, col)) = self.struct_in_pattern(&a.pat) {
+                return Err(LumeError::new(line, col, format!("`{}` is a struct, and a struct is not a pattern", name))
+                    .with_help(format!("bind it and use its fields — `p -> p.x` — or test them with a guard: `p if p.x == 1 -> ...`")));
+            }
+        }
         // Rows of the pattern matrix: the unguarded arms, `|` expanded. An arm
         // that adds nothing to the rows above it can never run.
         let mut rows: Vec<Vec<Pat>> = Vec::new();
@@ -7680,6 +7786,26 @@ impl Gen {
                 }
                 product(subs).into_iter().map(|args| Pat::Ctor(name.clone(), args)).collect()
             }
+        }
+    }
+
+    /// The first struct name used as if it were a variant, anywhere in `p`.
+    fn struct_in_pattern(&self, p: &Pattern) -> Option<(String, usize, usize)> {
+        match &p.kind {
+            PatKind::Variant { enum_name: None, name, args, .. } => {
+                let c = self.canon(name);
+                // `Error(e)` is the failure arm of a `T or Error`, though
+                // `Error` is also a struct; the same for the other built-ins
+                let builtin = matches!(name.as_str(), "Error" | "Ok" | "Some" | "None");
+                if !builtin && self.structs.contains_key(&c) && !self.enums.values().any(|en| en.variants.iter().any(|v| v.0 == *name)) {
+                    return Some((name.clone(), p.line, p.col));
+                }
+                args.iter().find_map(|a| self.struct_in_pattern(a))
+            }
+            PatKind::Variant { args, .. } => args.iter().find_map(|a| self.struct_in_pattern(a)),
+            PatKind::Tuple(ps) | PatKind::Or(ps) => ps.iter().find_map(|a| self.struct_in_pattern(a)),
+            PatKind::List { items, .. } => items.iter().find_map(|a| self.struct_in_pattern(a)),
+            _ => None,
         }
     }
 
@@ -8146,6 +8272,10 @@ impl Gen {
                     // an empty map or an empty set: Rust takes the kind from where it goes
                     "Default::default()".to_string()
                 } else {
+                    // the typed form checks its key type; an inferred one must too
+                    if let Type::Map(kt, _) = self.ty_of(e).materialized() {
+                        self.check_key_type(&kt, "map", e.line, e.col)?;
+                    }
                     let mut parts = Vec::new();
                     for (k, v) in pairs {
                         parts.push(format!("({}, {})", self.expr_owned(k)?, self.expr_owned(v)?));
@@ -8517,6 +8647,14 @@ impl Gen {
                         return self.variant_ctor(&ctn, name, args, e);
                     }
                     if self.lookup(tn).is_none() && !self.is_type(&self.canon(tn)) && builtin_namespace_type(tn, name).is_some() {
+                        // The arguments were never checked, so `File.read(42)`
+                        // reached rustc and `Time.sleep(0 - 5)` compiled into
+                        // a sleep of eighteen quintillion milliseconds.
+                        if let Some(want) = builtin_namespace_params(tn, name) {
+                            for (a, w) in args.iter().zip(want.iter()) {
+                                self.check_assign(&a.value, w, &format!("`{}.{}` takes {}", tn, name, a_type(w)))?;
+                            }
+                        }
                         let mut parts = Vec::new();
                         for a in args {
                             parts.push(self.expr_val(&a.value)?);
@@ -8556,9 +8694,9 @@ impl Gen {
                                 need(1)?;
                                 if self.in_async {
                                     self.uses_async = true;
-                                    format!("tokio::time::sleep(std::time::Duration::from_millis(({}) as u64))", parts[0])
+                                    format!("tokio::time::sleep(std::time::Duration::from_millis(({}).max(0) as u64))", parts[0])
                                 } else {
-                                    format!("std::thread::sleep(std::time::Duration::from_millis(({}) as u64))", parts[0])
+                                    format!("std::thread::sleep(std::time::Duration::from_millis(({}).max(0) as u64))", parts[0])
                                 }
                             }
                             _ => unreachable!(),
@@ -8769,6 +8907,28 @@ impl Gen {
                     return Err(LumeError::new(recv.line, recv.col, format!("cannot tell what this empty list holds, so `.{}` has no type", name))
                         .with_help("bind it with a type first: `xs: [Int] = []`"));
                 }
+                // Three names that exist on the type but mean something else
+                // than a reader coming from Ruby or Python expects, and that
+                // used to reach rustc.
+                if let Type::List(el) | Type::Iter(el, _) | Type::Set(el) = &rt {
+                    if name == "count" && args.is_empty() {
+                        return Err(LumeError::new(e.line, e.col, "`count` counts the items a block accepts, so it needs one")
+                            .with_help("for how many items there are, use `.len`; to count some of them, `.count { |x| ... }`"));
+                    }
+                    if name == "sum" && args.is_empty() && !matches!(**el, Type::Int | Type::Float | Type::Unknown | Type::Var(_) | Type::Named(_)) {
+                        return Err(LumeError::new(e.line, e.col, format!("`sum` adds numbers, and these are `{}`", type_name(el)))
+                            .with_help(if **el == Type::Str { "to put text together, use `.join(\"\")`" } else { "`sum` works on a list of `Int` or `Float`, or of a type with its own `+`" }));
+                    }
+                }
+                // A tuple has parts, `.0` and `.1`, and no built-in methods;
+                // an `extend` on a tuple shape still supplies its own.
+                if let Type::Tuple(_) = &rt {
+                    let own = self.methods_for(&rt).map(|m| m.contains_key(name.as_str())).unwrap_or(false);
+                    if !own && is_builtin_name(name) && !matches!(name.as_str(), "to_s" | "to_str") {
+                        return Err(LumeError::new(e.line, e.col, format!("a tuple has no method `{}`", name))
+                            .with_help("a tuple's parts are `.0`, `.1` and so on; for a list of items, use `[...]`"));
+                    }
+                }
                 if rt != Type::Unknown && !builtin_applies(&rt, name) {
                     let err = LumeError::new(e.line, e.col, format!("`{}` values have no method `{}`", type_name(&rt), name));
                     let names = builtins_for(&rt);
@@ -8881,6 +9041,8 @@ impl Gen {
                 Some(b) => Err(LumeError::new(line, col, format!("`{}` is immutable, but `{}` changes it", n, method))
                     .with_help(format!("declare it with `var {} = ...` on line {}", n, b.line))),
                 None if self.field_type(n).is_some() => self.require_var_self(n, line, col),
+                None if self.consts.contains_key(&self.canon(n)) => Err(LumeError::new(line, col, format!("`{}` is a constant, but `{}` changes it", n, method))
+                    .with_help(format!("copy it into a variable first: `var xs = {}`", n))),
                 None => Ok(()),
             },
             ExprKind::SelfRef => self.require_var_self(method, line, col),
@@ -8965,7 +9127,13 @@ impl Gen {
             "zip" => { need(1)?; format!("({}).iter().cloned().zip(({}).iter().cloned()).collect::<Vec<_>>()", recv, args[0]) }
             "insert" => { need(2)?; format!("({}).insert(({}) as usize, {})", recv, args[0], args[1]) }
             "remove_at" => { need(1)?; format!("({}).remove(({}) as usize)", recv, args[0]) }
-            "to_set" => { need(0)?; format!("({}).iter().cloned().collect::<LumeSet<_>>()", recv) }
+            "to_set" => {
+                need(0)?;
+                if let Type::List(el) | Type::Iter(el, _) = rt {
+                    self.check_key_type(el, "set", e.line, e.col)?;
+                }
+                format!("({}).iter().cloned().collect::<LumeSet<_>>()", recv)
+            }
             "add" if matches!(rt, Type::Set(_)) => { need(1)?; format!("({}).insert({})", recv, args[0]) }
             "remove" if matches!(rt, Type::Set(_)) => { need(1)?; format!("({}).remove({})", recv, set_key(rt, &args[0])) }
             "contains?" if matches!(rt, Type::Set(_)) => { need(1)?; format!("({}).contains({})", recv, set_key(rt, &args[0])) }
@@ -9051,7 +9219,9 @@ impl Gen {
                             true
                         }
                         Type::App(..) => true,
-                        other => *other == Type::Float,
+                        // a tuple or optional holding a Float has only a
+                        // partial order, the same as a bare Float
+                        other => holds_float(other),
                     },
                     _ => false,
                 };
@@ -9216,6 +9386,28 @@ fn is_builtin_name(name: &str) -> bool {
             | "alnum?" | "upper?" | "lower?" | "code" | "to_char"
             | "trim_left" | "trim_right" | "decimals" | "at"
     )
+}
+
+/// Does `t` have a `Float` anywhere a comparison would reach?
+fn holds_float(t: &Type) -> bool {
+    match t {
+        Type::Float => true,
+        Type::Tuple(ts) => ts.iter().any(holds_float),
+        Type::Option(i) | Type::List(i) => holds_float(i),
+        _ => false,
+    }
+}
+
+/// What the built-in namespaces' functions take. Paths and names are text;
+/// an exit code and a sleep in milliseconds are whole numbers.
+fn builtin_namespace_params(ns: &str, name: &str) -> Option<Vec<Type>> {
+    let s = || Type::Str;
+    Some(match (ns, name) {
+        ("File", "write") | ("File", "append") | ("Path", "join") => vec![s(), s()],
+        ("File", _) | ("Dir", _) | ("Path", _) | ("Env", "get") => vec![s()],
+        ("Env", "exit") | ("Time", "sleep") => vec![Type::Int],
+        _ => return None,
+    })
 }
 
 /// Types of the built-in `File` and `Env` namespaces.
@@ -9667,10 +9859,15 @@ fn reserved_type_name(name: &str, line: usize, col: usize) -> Result<()> {
     const RESERVED: &[&str] = &[
         "Int", "Float", "Str", "Char", "Bool", "List", "Map", "Set", "Option", "Vec", "String", "Task", "Time", "File", "Math", "Rc", "Arc", "Mutex", "Some",
         "None", "Ok", "Err", "Clone", "Copy", "Iterator", "Ordering", "Self",
+        // traits the generated Rust derives or calls by name
+        "Default", "Debug", "Display", "Eq", "PartialEq", "Ord", "PartialOrd", "Hash", "IntoIterator", "ToOwned", "ToString", "From", "Into",
+        "LumeMap", "LumeSet", "LumeShow",
     ];
     if RESERVED.contains(&name) {
         let why = match name {
-            "Vec" | "String" | "Rc" | "Arc" | "Mutex" | "Clone" | "Copy" | "Iterator" | "Ordering" | "Self" => "the compiler keeps this name for itself",
+            "Vec" | "String" | "Rc" | "Arc" | "Mutex" | "Clone" | "Copy" | "Iterator" | "Ordering" | "Self" | "Default" | "Debug" | "Display"
+            | "Eq" | "PartialEq" | "Ord" | "PartialOrd" | "Hash" | "IntoIterator" | "ToOwned" | "ToString" | "From" | "Into" | "LumeMap" | "LumeSet"
+            | "LumeShow" => "the compiler keeps this name for itself",
             _ => "this is a built-in Lume name",
         };
         return Err(LumeError::new(line, col, format!("`{}` cannot be a type name: {}", name, why))

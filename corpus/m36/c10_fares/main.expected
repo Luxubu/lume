@@ -1,0 +1,7 @@
+error: `peak_multiplier` exists in module `fares` but is not `pub`
+  --> corpus/m36/c10_fares/main.lume:35:27
+   |
+35 |   puts "peak costs #{fares.peak_multiplier(true)}%"
+   |                           ^
+  help: add `pub` in front of its definition in fares.lume
+exit: 1

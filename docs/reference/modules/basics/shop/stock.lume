@@ -1,0 +1,16 @@
+# shop/stock.lume — imports one item from its neighbour, not the module.
+# The path starts from the folder that holds main.lume, not from shop/.
+
+import shop.items.Item
+
+pub struct Stock:
+  known: [Item]
+
+  def add(var self, item: Item):
+    known.push(item)
+
+  def count -> Int = known.len
+
+  def find(sku: Str) -> Item? = known.find(_.sku == sku)
+
+pub def empty -> Stock = Stock([])

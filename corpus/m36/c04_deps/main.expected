@@ -1,0 +1,6 @@
+good: fmt -> log -> cli -> net -> http -> web
+cycle: error: cycle among: a, b, c
+missing: error: `app` needs `db`, which is not in the manifest
+broken: error: expected `name: deps`, got `oops`
+4 manifests, 1 installable
+exit: 0

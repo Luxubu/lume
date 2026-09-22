@@ -1,0 +1,7 @@
+error: `/` cannot combine a `Float` and a `Int`
+  --> corpus/m36/a10_basket_average.lume:35:19
+   |
+35 |   average = total / prices.len
+   |                   ^
+  help: write `prices.len.to_float`, or a float literal like `2.0`
+exit: 1

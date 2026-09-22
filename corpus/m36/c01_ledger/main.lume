@@ -1,0 +1,50 @@
+# c01 — a two-account ledger split across three files: money, accounts, main
+#
+# Probes: `import m` + `import m.Type` side by side; `pub def`, `pub struct`,
+#   `pub enum`, a `pub` top-level constant read as `money.CENTS`; a qualified
+#   variant `Entry.Deposit(...)` after importing the enum by name; a `var self`
+#   method returning `() or Error` and falling off its end; `?` on a failure
+#   that crossed a module boundary; list patterns on `split`.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# refused: Bo: cannot withdraw $40.00 from $15.05
+# Ana    $99.25  (3 entries)
+# Bo     $15.05  (1 entries)
+# `3.5` needs two digits after the point
+# total $114.30
+# fees paid by Ana: 1
+# -$0.05
+# one dollar is 100 cents
+
+import money
+import accounts
+import accounts.Account
+import accounts.Entry
+
+def main -> () or Error:
+  var ana = Account(owner: "Ana", balance: 0, history: [])
+  var bo = Account(owner: "Bo", balance: 0, history: [])
+
+  ana.apply(Entry.Deposit(money.parse("120.50")?))?
+  ana.apply(Entry.Withdraw(money.parse("20")?))?
+  ana.apply(Entry.Fee("card", money.parse("1.25")?))?
+  bo.apply(Entry.Deposit(money.parse("15.05")?))?
+
+  match bo.apply(Entry.Withdraw(money.parse("40")?)):
+    Ok(_)    -> puts "unexpected"
+    Error(e) -> puts "refused: #{e.message}"
+
+  for a in [ana, bo]:
+    puts "#{a.owner.pad_right(4)}#{money.show(a.balance).pad(9)}  (#{a.history.len} entries)"
+
+  match money.parse("3.5"):
+    Ok(c)    -> puts c
+    Error(e) -> puts e.message
+
+  total = [ana, bo].map(_.balance).sum
+  puts "total #{money.show(total)}"
+  puts "fees paid by Ana: #{ana.history.filter { |e| e.fee? }.len}"
+  puts money.show(0 - 5)
+  puts "one dollar is #{money.CENTS} cents"

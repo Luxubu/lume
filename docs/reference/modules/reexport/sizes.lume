@@ -1,0 +1,8 @@
+# sizes.lume — an interface and an `extend`. The extend has no name and no
+# `pub`: it reaches every file that imports this one, directly or not.
+
+pub interface Sized:
+  def size -> Int
+
+extend [T] with Sized:
+  def size -> Int = self.len

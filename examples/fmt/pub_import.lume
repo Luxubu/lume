@@ -1,0 +1,6 @@
+# `pub import` passes a module on; formatting must keep the `pub`.
+pub import units
+import   units.Metre
+
+def main:
+  puts 1

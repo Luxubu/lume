@@ -1,0 +1,18 @@
++------------------------------+
+|        WRAPPED AT 28         |
++------------------------------+
+| Lume is a small language     |  1
+| that compiles to Rust.       |  2
+| Programs are short, the      |  3
+| types are checked, and a     |  4
+| native binary comes out of   |  5
+| the other end.               |  6
+| Pneumonoultramicroscopicsilicovolcanoconiosis |  7
+| still overflows.             |  8
++------------------------------+
+8 lines; longest is 45 characters
+right-aligned:
+    Lume is a small language
+      that compiles to Rust.
+     Programs are short, the
+exit: 0

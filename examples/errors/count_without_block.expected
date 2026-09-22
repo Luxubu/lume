@@ -1,0 +1,6 @@
+error: `count` counts the items a block accepts, so it needs one
+  --> examples/errors/count_without_block.lume:3:14
+  |
+3 |   puts [1, 2].count
+  |              ^
+  help: for how many items there are, use `.len`; to count some of them, `.count { |x| ... }`

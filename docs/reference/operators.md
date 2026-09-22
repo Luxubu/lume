@@ -8,9 +8,9 @@
 
 | | operators | groups |
 |---|---|---|
-| 1 | `.` `[]` `()` | left |
+| 1 | `.` `[]` `()`, and postfix `?` `!` | left |
 | 2 | `**` | **right** |
-| 3 | `-x` `not x` | right |
+| 3 | `-x` `not x` `await x` | right |
 | 4 | `*` `/` `%` | left |
 | 5 | `+` `-` | left |
 | 6 | `<` `<=` `>` `>=` | left |
@@ -19,7 +19,10 @@
 | 9 | `or` | left |
 | 10 | `\|>` | left |
 
-So `not` binds tighter than `and`, and `**` groups to the right:
+So `not` binds tighter than `and`, and `**` groups to the right. `?` and
+`!` belong to the call they follow, and `await` to the call it precedes, so
+none of them needs brackets inside arithmetic — `parse(s)? + 1`,
+`await fetch(2) + 1`.
 
 ```lume
 a = false
@@ -31,6 +34,16 @@ puts 2 ** 3 ** 2        #=> 512
 
 `not a and not b` is `(not a) and (not b)`. `2 ** 3 ** 2` is `2 ** (3 ** 2)`,
 which is 512 rather than 64.
+
+```lume
+def parse(s: Str) -> Int or Error = s.to_int
+
+async def get(n: Int) -> Int = n * 10
+
+async def main -> () or Error:
+  puts parse("7")? + 1       #=> 8
+  puts await get(2) + 1      #=> 21
+```
 
 **`and` and `or` short-circuit**, so a guard before a lookup is safe:
 

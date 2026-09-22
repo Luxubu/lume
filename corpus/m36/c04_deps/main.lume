@@ -1,0 +1,54 @@
+# c04 — a dependency resolver: manifest text in, install order out
+#
+# Probes: a module importing one struct from another (`import
+#   manifest.Package`) with main importing both modules whole; top-level
+#   triple-quoted constants; `for a, b in` over a list of tuples; a helper
+#   returning `() or Error` whose failure is matched by the caller; failures
+#   raised two modules down arriving intact through `?`.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# good: fmt -> log -> cli -> net -> http -> web
+# cycle: error: cycle among: a, b, c
+# missing: error: `app` needs `db`, which is not in the manifest
+# broken: error: expected `name: deps`, got `oops`
+# 4 manifests, 1 installable
+
+import manifest
+import graph
+
+GOOD = """
+  web: http, log
+  http: net, log
+  net:
+  log: fmt
+  fmt:
+  cli: log
+  """
+
+CYCLE = """
+  a: b
+  b: c
+  c: a
+  d:
+  """
+
+MISSING = """
+  app: db
+  """
+
+def install(label: Str, text: Str) -> () or Error:
+  pkgs = manifest.parse(text)?
+  steps = graph.order(pkgs)?
+  puts "#{label}: #{steps.join(" -> ")}"
+
+def main:
+  runs = [("good", GOOD), ("cycle", CYCLE), ("missing", MISSING), ("broken", "oops")]
+  var fine = 0
+  for label, text in runs:
+    match install(label, text):
+      Ok(_) ->
+        fine += 1
+      Error(e) -> puts "#{label}: error: #{e.message}"
+  puts "#{runs.len} manifests, #{fine} installable"

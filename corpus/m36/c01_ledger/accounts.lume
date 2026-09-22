@@ -1,0 +1,31 @@
+# accounts.lume — an account and the entries that change it.
+
+import money
+
+pub enum Entry:
+  Deposit(amount: Int)
+  Withdraw(amount: Int)
+  Fee(what: Str, amount: Int)
+
+  def fee? -> Bool:
+    match self:
+      Fee(_, _) -> true
+      _         -> false
+
+pub struct Account:
+  owner: Str
+  balance: Int
+  history: [Entry]
+
+  # A refused entry leaves the account exactly as it was.
+  def apply(var self, e: Entry) -> () or Error:
+    match e:
+      Deposit(a) ->
+        balance += a
+      Withdraw(a) ->
+        if a > balance:
+          return Error("#{owner}: cannot withdraw #{money.show(a)} from #{money.show(balance)}")
+        balance -= a
+      Fee(_, a) ->
+        balance -= a
+    history.push(e)

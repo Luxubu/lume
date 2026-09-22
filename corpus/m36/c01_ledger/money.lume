@@ -1,0 +1,25 @@
+# money.lume — amounts are whole cents; this is the only file that knows
+# how to read and write them as text.
+
+pub CENTS = 100
+
+pub def show(cents: Int) -> Str:
+  sign = if cents < 0: "-" else: ""
+  n = cents.abs
+  "#{sign}$#{n / CENTS}.#{two_digits(n % CENTS)}"
+
+# `pad` fills with spaces, never zeros, so the leading zero is by hand.
+def two_digits(n: Int) -> Str = if n < 10: "0#{n}" else: "#{n}"
+
+pub def parse(text: Str) -> Int or Error:
+  match text.split("."):
+    [whole] ->
+      w = whole.to_int?
+      w * CENTS
+    [whole, frac] ->
+      if frac.len != 2:
+        return Error("`#{text}` needs two digits after the point")
+      w = whole.to_int?
+      f = frac.to_int?
+      w * CENTS + f
+    _ -> Error("`#{text}` is not an amount")

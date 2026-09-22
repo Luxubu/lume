@@ -1,0 +1,64 @@
+# a06 — greedy text wrapper that draws the result in a box
+#
+# Probes: bare `split`, `Str.len` in characters, building lines in a
+#   `var [Str]`, `if`/`elif`/`else` as statements, trailing `unless` on a
+#   method call, `repeat`, `pad_right` never cutting an over-wide word,
+#   integer division for centring, `(i + 1).pad(2)`, `enumerate`,
+#   `map(_.len).max.or(0)`, `for` over a lazy `take`, `pad` to right-align.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# +------------------------------+
+# |        WRAPPED AT 28         |
+# +------------------------------+
+# | Lume is a small language     |  1
+# | that compiles to Rust.       |  2
+# | Programs are short, the      |  3
+# | types are checked, and a     |  4
+# | native binary comes out of   |  5
+# | the other end.               |  6
+# | Pneumonoultramicroscopicsilicovolcanoconiosis |  7
+# | still overflows.             |  8
+# +------------------------------+
+# 8 lines; longest is 45 characters
+# right-aligned:
+#     Lume is a small language
+#       that compiles to Rust.
+#      Programs are short, the
+
+def wrap(text: Str, width: Int) -> [Str]:
+  var lines: [Str] = []
+  var current = ""
+  for word in text.split:
+    if current.empty?:
+      current = word
+    elif current.len + 1 + word.len <= width:
+      current = current + " " + word
+    else:
+      lines.push(current)
+      current = word
+  lines.push(current) unless current.empty?
+  lines
+
+def center(s: Str, width: Int) -> Str:
+  left = (width - s.len) / 2
+  (" ".repeat(left) + s).pad_right(width)
+
+def main:
+  text = "Lume is a small language that compiles to Rust. Programs are short, the types are checked, and a native binary comes out of the other end. Pneumonoultramicroscopicsilicovolcanoconiosis still overflows."
+  width = 28
+  wrapped = wrap(text, width)
+  border = "+" + "-".repeat(width + 2) + "+"
+
+  puts border
+  puts "| " + center("WRAPPED AT #{width}", width) + " |"
+  puts border
+  for i, line in wrapped.enumerate:
+    puts "| " + line.pad_right(width) + " | " + (i + 1).pad(2)
+  puts border
+
+  puts "#{wrapped.len} lines; longest is #{wrapped.map(_.len).max.or(0)} characters"
+  puts "right-aligned:"
+  for line in wrapped.take(3):
+    puts line.pad(width)

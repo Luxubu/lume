@@ -1,0 +1,3 @@
+# `sum` adds numbers; text is joined.
+def main:
+  puts ["a", "b"].sum

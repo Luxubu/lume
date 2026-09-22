@@ -1,0 +1,5 @@
+# `==` was never type-checked: the comparison operators lost their `=`
+# on the way to the check. An Int is never silently a Float.
+def main:
+  x = 1
+  puts x == 1.0

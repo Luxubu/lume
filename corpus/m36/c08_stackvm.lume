@@ -1,0 +1,120 @@
+# c08 — a tiny stack machine: parse a program of words, run it, report
+#
+# Probes: an enum with ten variants and an exhaustive `match` over it inside
+#   a `while` in a `var self` method; list patterns mixing string literals
+#   and bindings; `self.take()?` calling the type's own `var self` method
+#   that can fail; trailing `if` on an assignment; a `T or Error` method as
+#   a `match` scrutinee, the struct read afterwards; a top-level `"""` constant.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# countdown: out [3, 2, 1, 42] stack [0, 42] in 23 steps
+# underflow: runtime error after 2 steps: stack is empty
+# typo: parse error: line 2: cannot read `frob`
+# badnum: parse error: `x` is not an integer
+# spin: runtime error after 1001 steps: too many steps
+
+enum Op:
+  Push(n: Int)
+  Add
+  Sub
+  Mul
+  Dup
+  JumpIfZero(target: Int)
+  Jump(target: Int)
+  Print
+  Halt
+
+def parse_op(words: [Str], at: Int) -> Op or Error:
+  match words:
+    ["push", n] -> Push(n.to_int?)
+    ["add"]     -> Add
+    ["sub"]     -> Sub
+    ["mul"]     -> Mul
+    ["dup"]     -> Dup
+    ["jz", t]   -> JumpIfZero(t.to_int?)
+    ["jump", t] -> Jump(t.to_int?)
+    ["print"]   -> Print
+    ["halt"]    -> Halt
+    _           -> Error("line #{at}: cannot read `#{words.join(" ")}`")
+
+def parse(src: Str) -> [Op] or Error:
+  var ops: [Op] = []
+  for i, line in src.lines.enumerate:
+    words = line.split.to_list
+    next if words.empty?
+    ops.push(parse_op(words, i + 1)?)
+  ops
+
+struct Machine:
+  stack: [Int]
+  out: [Int]
+  steps: Int
+
+  def take(var self) -> Int or Error = stack.pop.or_error("stack is empty")
+
+  def run(var self, prog: [Op]) -> () or Error:
+    var pc = 0
+    while pc < prog.len:
+      steps += 1
+      if steps > 1000:
+        return Error("too many steps")
+      op = prog.at(pc)
+      pc += 1
+      match op:
+        Push(n) -> stack.push(n)
+        Add | Sub | Mul ->
+          b = self.take()?
+          a = self.take()?
+          r = match op:
+            Add -> a + b
+            Sub -> a - b
+            _   -> a * b
+          stack.push(r)
+        Dup ->
+          a = self.take()?
+          stack.push(a)
+          stack.push(a)
+        JumpIfZero(t) ->
+          a = self.take()?
+          pc = t if a == 0
+        Jump(t) ->
+          pc = t
+        Print ->
+          a = self.take()?
+          out.push(a)
+          stack.push(a)
+        Halt ->
+          pc = prog.len
+
+COUNTDOWN = """
+  push 3
+  print
+  push 1
+  sub
+  dup
+  jz 7
+  jump 1
+  push 6
+  push 7
+  mul
+  print
+  halt
+  """
+
+def execute(name: Str, src: Str):
+  match parse(src):
+    Error(e) -> puts "#{name}: parse error: #{e.message}"
+    Ok(prog) ->
+      var m = Machine(stack: [], out: [], steps: 0)
+      match m.run(prog):
+        Ok(_)    -> puts "#{name}: out #{m.out} stack #{m.stack} in #{m.steps} steps"
+        Error(e) -> puts "#{name}: runtime error after #{m.steps} steps: #{e.message}"
+
+def main:
+  execute("countdown", COUNTDOWN)
+  execute("underflow", "push 1\nadd")
+  execute("typo", "push 2\nfrob")
+  execute("badnum", "push x")
+  execute("spin", "jump 0")

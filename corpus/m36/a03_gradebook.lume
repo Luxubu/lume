@@ -1,0 +1,69 @@
+# a03 — grade book: averages, letter grades, a ranked table, a distribution
+#
+# Probes: struct methods with no `()`, `Int.to_float`, Float division,
+#   a multi-line `if`/`elif` as a function's value, `sort_by` with a Float
+#   key, `.reverse` after a stable sort (ties come out reversed),
+#   `decimals(1)` on repeating fractions, `flat_map`, `avg` on `[Int]`,
+#   `max_by` with a tie, `Option.map(_.name).or(...)`, printing a map and
+#   a list inside interpolation, a multi-line list literal with a trailing comma.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:  (a line that is just `#` is a blank output line)
+# Name     Avg  Grade  Best
+# Ada     91.7  A      95
+# Eve     88.0  B      91
+# Cy      88.0  B      91
+# Bo      72.3  C      80
+# Di      58.3  F      62
+#
+# grades: {"A": 1, "B": 2, "C": 1, "F": 1}
+# class average: 79.7 over 15 scores
+# B students: Cy and Eve
+# top B student: Cy
+# failing: ["Di"]
+
+struct Student:
+  name: Str
+  scores: [Int]
+
+  def average -> Float = scores.sum.to_float / scores.len.to_float
+  def best -> Int = scores.max.or(0)
+
+def letter(avg: Float) -> Str:
+  if avg >= 90.0: "A"
+  elif avg >= 80.0: "B"
+  elif avg >= 70.0: "C"
+  elif avg >= 60.0: "D"
+  else: "F"
+
+def main:
+  students = [
+    Student("Ada", [95, 88, 92]),
+    Student("Bo", [72, 65, 80]),
+    Student("Cy", [88, 91, 85]),
+    Student("Di", [55, 62, 58]),
+    Student("Eve", [91, 85, 88]),
+  ]
+
+  ranked = students.sort_by(_.average).reverse.to_list
+  puts "Name".pad_right(6) + "Avg".pad(6) + "  Grade  Best"
+  for s in ranked:
+    puts "#{s.name.pad_right(6)}#{s.average.decimals(1).pad(6)}  #{letter(s.average).pad_right(5)}  #{s.best}"
+
+  var dist: {Str: Int} = {}
+  for s in ranked:
+    g = letter(s.average)
+    dist[g] = dist[g].or(0) + 1
+  puts ""
+  puts "grades: #{dist}"
+
+  every_score = students.flat_map { |s| s.scores }.to_list
+  puts "class average: #{every_score.avg.decimals(1)} over #{every_score.len} scores"
+
+  b_students = students.filter { |s| letter(s.average) == "B" }.to_list
+  puts "B students: #{b_students.map(_.name).join(" and ")}"
+  top_b = b_students.max_by(_.average)
+  puts "top B student: #{top_b.map(_.name).or("none")}"
+  failing = students.filter { |s| letter(s.average) == "F" }.map(_.name).to_list
+  puts "failing: #{failing}"

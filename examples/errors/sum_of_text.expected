@@ -1,0 +1,6 @@
+error: `sum` adds numbers, and these are `Str`
+  --> examples/errors/sum_of_text.lume:3:18
+  |
+3 |   puts ["a", "b"].sum
+  |                  ^
+  help: to put text together, use `.join("")`

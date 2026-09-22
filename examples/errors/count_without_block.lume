@@ -1,0 +1,3 @@
+# `count` counts what a block accepts; the number of items is `len`.
+def main:
+  puts [1, 2].count

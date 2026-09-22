@@ -1,0 +1,78 @@
+# a08 — character games: Caesar cipher, palindromes, initials, a letter tally
+#
+# Probes: `Char.code`, `Int.to_char` giving `Char?`, `.or(c)` with a `Char`,
+#   `%` truncating toward zero with a negative key, `chars.map {...}.join("")`,
+#   `Char.lower?`/`upper?`/`alnum?`/`alpha?`/`digit?`, `s[0]` as `Char?`,
+#   `Char.upcase`, `capitalize` on each word, `match` on a `Char` with guard
+#   arms (`_ if ...`) and a one-character literal, a `{Char: Int}` tally,
+#   printing a `Char` inside a tuple inside `Some`, `Option.map(_.code)`,
+#   a function name ending in `?`, `not a and b` precedence.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# Khoor, Zruog!
+# Hello, World!
+# `ab
+# A man, a plan, a canal: Panama  true
+# Hello                           false
+# Was it a car or a cat I saw?    true
+# !!                              false
+# AKL
+# Ada King Lovelace
+# 16 chars: 10 letters, 2 digits, 2 spaces, 2 other
+# i=4 s=4 p=2 m=1
+# Some(("i", 4))
+# Some("A")
+# Some(233)
+
+def shift(c: Char, key: Int) -> Char:
+  if c.lower?:
+    ((c.code - 97 + key) % 26 + 97).to_char.or(c)
+  elif c.upper?:
+    ((c.code - 65 + key) % 26 + 65).to_char.or(c)
+  else:
+    c
+
+def caesar(s: Str, key: Int) -> Str = s.chars.map { |c| shift(c, key) }.join("")
+
+def normalize(s: Str) -> Str = s.downcase.chars.filter(_.alnum?).join("")
+
+def palindrome?(s: Str) -> Bool:
+  n = normalize(s)
+  not n.empty? and n == n.reverse
+
+def main:
+  secret = caesar("Hello, World!", 3)
+  puts secret
+  puts caesar(secret, 23)
+  puts caesar("abc", -1)
+
+  for p in ["A man, a plan, a canal: Panama", "Hello", "Was it a car or a cat I saw?", "!!"]:
+    puts "#{p.pad_right(32)}#{palindrome?(p)}"
+
+  name = "ada king lovelace"
+  puts name.split.map { |w| w[0].or("?").upcase }.join("")
+  puts name.split.map(_.capitalize).join(" ")
+
+  var letters = 0
+  var digits = 0
+  var spaces = 0
+  var other = 0
+  sample = "Hello, World! 42"
+  for c in sample.chars:
+    match c:
+      _ if c.alpha? -> letters += 1
+      _ if c.digit? -> digits += 1
+      " " -> spaces += 1
+      _ -> other += 1
+  puts "#{sample.len} chars: #{letters} letters, #{digits} digits, #{spaces} spaces, #{other} other"
+
+  var tally: {Char: Int} = {}
+  for c in "mississippi".chars:
+    tally[c] = tally[c].or(0) + 1
+  ranked = tally.to_list.sort_by { |c, n| 0 - n }
+  puts ranked.map { |c, n| "#{c}=#{n}" }.join(" ")
+  puts ranked.first
+  puts 65.to_char
+  puts "é".chars.first.map(_.code)

@@ -1,0 +1,6 @@
+error: `P` is a struct, and a struct is not a pattern
+  --> examples/errors/struct_as_pattern.lume:9:5
+  |
+9 |     P(a, b) -> puts a
+  |     ^
+  help: bind it and use its fields — `p -> p.x` — or test them with a guard: `p if p.x == 1 -> ...`

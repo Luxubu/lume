@@ -1,0 +1,86 @@
+# b06 — a stock room: a map of items with operations that can be refused
+#
+# Probes: a struct holding a `{Str: Item}` map; `var self` methods that
+#   return `() or Error` / `Int or Error`; `match` on a map lookup, then
+#   writing the same key from inside the arm; an `if` with an early
+#   `return Error` inside a match arm; a match as the last statement of a
+#   `() or Error` method; `.or_error(...)?` on a lookup; chains over
+#   `map.values`; `for k, v in map`; `?` on `() or Error` calls in a
+#   `main -> () or Error`; the order of a map's keys after a key is
+#   overwritten.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# stock value: 1470
+# bolts left: 90
+# refused: only 40 nut left, wanted 50
+# refused: no such item: screw
+# took 3 gear, 0 left
+# refused: nut is priced 3, not 4
+# refused: cannot add 0 of washer
+# low: ["gear"]
+# Some(Item(name: "gear", qty: 0, price: 250))
+# bolt,nut,gear
+# stock value: 570
+
+struct Item:
+  name: Str
+  qty: Int
+  price: Int
+
+  def value -> Int = qty * price
+
+struct Inventory:
+  items: {Str: Item}
+
+  def add(var self, name: Str, qty: Int, price: Int) -> () or Error:
+    if qty <= 0:
+      return Error("cannot add #{qty} of #{name}")
+    match items[name]:
+      Some(old) ->
+        if old.price != price:
+          return Error("#{name} is priced #{old.price}, not #{price}")
+        items[name] = Item(name, old.qty + qty, price)
+      None -> items[name] = Item(name, qty, price)
+
+  def take(var self, name: Str, qty: Int) -> Int or Error:
+    item = items[name].or_error("no such item: #{name}")?
+    if qty > item.qty:
+      return Error("only #{item.qty} #{name} left, wanted #{qty}")
+    items[name] = Item(name, item.qty - qty, item.price)
+    item.qty - qty
+
+  def total -> Int = items.values.map(_.value).sum
+
+  def low(limit: Int) -> [Str] =
+    items.values.filter { |i| i.qty < limit }.map(_.name).to_list
+
+def report(r: () or Error):
+  match r:
+    Ok(_)    -> puts "added"
+    Error(e) -> puts "refused: #{e.message}"
+
+def main -> () or Error:
+  var inv = Inventory(items: {})
+  inv.add("bolt", 100, 5)?
+  inv.add("nut", 40, 3)?
+  inv.add("gear", 3, 250)?
+  inv.add("bolt", 20, 5)?
+  puts "stock value: #{inv.total}"
+
+  left = inv.take("bolt", 30)?
+  puts "bolts left: #{left}"
+
+  orders = {"nut": 50, "screw": 1, "gear": 3}
+  for name, qty in orders:
+    match inv.take(name, qty):
+      Ok(n)    -> puts "took #{qty} #{name}, #{n} left"
+      Error(e) -> puts "refused: #{e.message}"
+
+  report(inv.add("nut", 10, 4))
+  report(inv.add("washer", 0, 1))
+  puts "low: #{inv.low(10)}"
+  puts inv.items["gear"]
+  puts inv.items.keys.join(",")
+  puts "stock value: #{inv.total}"

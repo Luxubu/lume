@@ -1812,7 +1812,11 @@ impl Parser {
             // keyword argument: `name: value`
             let mut name = None;
             if let (Tok::Ident(n), Tok::Sym(":")) = (self.peek().clone(), self.peek_at(1).clone()) {
-                if !lexer::is_keyword(&n) {
+                // `spawn:` and `rust:` open a block, so at the start of an
+                // argument they are the value. Any other keyword followed by
+                // `:` can only be a label — a field called `match` or `next`
+                // is readable, and has to be buildable by name too.
+                if !matches!(n.as_str(), "spawn" | "rust") {
                     let (l, c) = self.here();
                     if args.iter().any(|a| a.name.as_deref() == Some(n.as_str())) {
                         return Err(LumeError::new(l, c, format!("argument `{}` is given twice", n)));

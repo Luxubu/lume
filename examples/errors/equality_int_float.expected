@@ -1,0 +1,6 @@
+error: `==` cannot combine a `Int` and a `Float`
+  --> examples/errors/equality_int_float.lume:5:10
+  |
+5 |   puts x == 1.0
+  |          ^
+  help: convert one side: `.to_float` on the Int, or `.round`/`.floor` on the Float

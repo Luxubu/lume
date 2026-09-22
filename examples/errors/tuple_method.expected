@@ -1,0 +1,6 @@
+error: a tuple has no method `len`
+  --> examples/errors/tuple_method.lume:4:9
+  |
+4 |   puts t.len
+  |         ^
+  help: a tuple's parts are `.0`, `.1` and so on; for a list of items, use `[...]`

@@ -1,0 +1,24 @@
+latency
+----------------
+count          5
+mean        14.4
+median      12.0
+spread        23
+
+retries
+----------------
+count          4
+mean         1.0
+median       1.0
+spread         2
+
+empty
+----------------
+count          0
+mean         n/a
+median       n/a
+spread         0
+
+overall mean 8.44 over 9 values
+-----
+exit: 0

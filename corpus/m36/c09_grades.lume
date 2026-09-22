@@ -1,0 +1,90 @@
+# c09 — a grade report: parse scores, average per student, tally, rank
+#
+# Probes: `group_by` (order of first appearance) with a block and with `_`;
+#   `avg` straight on a lazy chain; an enum used as a map key and printed
+#   by interpolation; `pad`/`pad_right` on text and `decimals`; `max_by`;
+#   a map turned into a list of tuples, sorted and reversed; an inline block
+#   with a nested string literal inside an interpolation.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# student     avg  grade
+# ----------------------
+# ana        91.5  A
+# bo         68.0  C
+# cy         64.5  F
+# dee        95.0  A
+#
+# A: 2
+# B: 0
+# C: 1
+# F: 1
+#
+# best in math: ana (95)
+# best in art: dee (99)
+# ranking: dee=190, ana=183, bo=136, cy=129
+
+struct Score:
+  student: Str
+  subject: Str
+  points: Int
+
+enum Grade:
+  A
+  B
+  C
+  F
+
+def grade(avg: Float) -> Grade:
+  if avg >= 90.0: A
+  elif avg >= 80.0: B
+  elif avg >= 65.0: C
+  else: F
+
+RAW = """
+  ana  math 95
+  ana  art  88
+  bo   math 72
+  bo   art  64
+  cy   math 58
+  cy   art  71
+  dee  math 91
+  dee  art  99
+  """
+
+def parse(text: Str) -> [Score] or Error:
+  var out: [Score] = []
+  for line in text.lines:
+    match line.split.to_list:
+      [who, subject, pts] -> out.push(Score(who, subject, pts.to_int?))
+      _ ->
+        return Error("bad line: #{line}")
+  out
+
+def main -> () or Error:
+  scores = parse(RAW)?
+  by_student = scores.group_by { |s| s.student }
+
+  puts "#{"student".pad_right(9)}#{"avg".pad(6)}  grade"
+  puts "-".repeat(22)
+  var tally: {Grade: Int} = {}
+  for name, rows in by_student:
+    avg = rows.map(_.points).avg
+    g = grade(avg)
+    tally[g] = tally[g].or(0) + 1
+    puts "#{name.pad_right(9)}#{avg.decimals(1).pad(6)}  #{g}"
+
+  puts ""
+  for g in [A, B, C, F]:
+    puts "#{g}: #{tally[g].or(0)}"
+
+  puts ""
+  for subject, rows in scores.group_by(_.subject):
+    match rows.max_by { |s| s.points }:
+      Some(best) -> puts "best in #{subject}: #{best.student} (#{best.points})"
+      None       -> ()
+
+  totals = by_student.to_list.map { |pair| (pair.1.map(_.points).sum, pair.0) }.to_list
+  ranked = totals.sort.reverse
+  puts "ranking: #{ranked.map { |t| "#{t.1}=#{t.0}" }.join(", ")}"

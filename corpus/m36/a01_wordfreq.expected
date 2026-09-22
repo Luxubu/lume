@@ -1,0 +1,14 @@
+19 words, 10 distinct
+
+top five:
+  the     4  ****
+  a       3  ***
+  cat     2  **
+  dog     2  **
+  on      2  **
+
+seen once: mat, log, and, frog
+in order of first use: the cat sat on
+longest: Some("frog")
+the tally itself: {"the": 4, "cat": 2, "sat": 2, "on": 2, "mat": 1, "dog": 2, "log": 1, "a": 3, "and": 1, "frog": 1}
+exit: 0

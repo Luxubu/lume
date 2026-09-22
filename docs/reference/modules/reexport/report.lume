@@ -1,0 +1,7 @@
+# report.lume — uses three modules and passes two of them on.
+
+pub import stats
+pub import text.style as tx
+import sizes
+
+pub def line(xs: [Int]) -> Str = tx.shout("#{xs.size} values, mean #{stats.mean(xs)}")

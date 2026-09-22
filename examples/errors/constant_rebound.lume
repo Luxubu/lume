@@ -1,0 +1,6 @@
+# A top-level constant is not a local, so rebinding it used to reach rustc.
+K = 3
+
+def main:
+  K = 4
+  puts K

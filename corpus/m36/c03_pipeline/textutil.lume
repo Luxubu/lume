@@ -1,0 +1,5 @@
+# textutil.lume — the two ways the report lays out text.
+
+pub def rule(n: Int) -> Str = "-".repeat(n)
+
+pub def row(label: Str, value: Str) -> Str = "#{label.pad_right(8)}#{value.pad(8)}"

@@ -1,0 +1,23 @@
+# catalog/items.lume — the things a shop can stock, and what they cost.
+
+pub interface Priced:
+  def unit_cents -> Int
+  def label -> Str
+
+  def price_tag -> Str = "#{label} @ #{(unit_cents.to_float / 100.0).decimals(2)}"
+
+pub struct Item:
+  sku: Str
+  name: Str
+  cents: Int
+
+  def unit_cents -> Int = cents
+  def label -> Str = name
+
+pub struct Bundle:
+  name: Str
+  parts: [Item]
+  discount: Int
+
+  def unit_cents -> Int = parts.map(_.cents).sum - discount
+  def label -> Str = "#{name} (#{parts.len} items)"

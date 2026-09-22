@@ -1,0 +1,35 @@
+# graph.lume — an install order, dependencies first. Kahn's algorithm; when
+# several packages are ready at once the alphabetically first goes next, so
+# the answer never depends on the order of the manifest.
+
+import manifest.Package
+
+pub def order(pkgs: [Package]) -> [Str] or Error:
+  var known: {Str} = {}
+  for p in pkgs:
+    known.add(p.name)
+
+  var waiting: {Str: Int} = {}
+  var users: {Str: [Str]} = {}
+  for p in pkgs:
+    waiting[p.name] = p.deps.len
+    for d in p.deps:
+      if not known.contains?(d):
+        return Error("`#{p.name}` needs `#{d}`, which is not in the manifest")
+      users[d].push(p.name)
+
+  var ready = pkgs.filter { |p| p.deps.empty? }.map(_.name).to_list
+  var out: [Str] = []
+  while not ready.empty?:
+    ready = ready.sort
+    name = ready.remove_at(0)
+    out.push(name)
+    for u in users[name].or([]):
+      left = waiting[u].or(0) - 1
+      waiting[u] = left
+      ready.push(u) if left == 0
+
+  if out.len < pkgs.len:
+    stuck = pkgs.map(_.name).reject { |n| out.contains?(n) }.sort.join(", ")
+    return Error("cycle among: #{stuck}")
+  out

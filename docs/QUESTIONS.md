@@ -28,7 +28,7 @@ than once, which are the ones that shaped these pages.
 | 8 | May an interface be a struct *field* type? | [interfaces](reference/interfaces.md) |
 | 9 | Where may `{}` and `[]` appear without a type? *(4 rounds)* | [collections](reference/collections.md#where--and--need-a-type) |
 | 10 | Which indexing forms reach the item, and which give a `T?`? *(4 rounds)* | [collections](reference/collections.md#lists) |
-| 11 | Which names are reserved by the Rust backend? *(4 rounds, one program lost per round)* | [structs and enums](reference/structs-and-enums.md) |
+| 11 | Which names are reserved by the Rust backend? *(4 rounds, and all three reviewers in round seven)* | [names](reference/names.md) |
 | 12 | Does a method of your own shadow a built-in of the same name? | [interfaces](reference/interfaces.md) |
 | 13 | Can you destructure a tuple — `(a, b) = expr`? | [structs and enums](reference/structs-and-enums.md) |
 | 14 | Behaviour cannot be stored in a field or returned — what do you write instead? | [functions and blocks](reference/functions-and-blocks.md) |
@@ -56,8 +56,8 @@ than once, which are the ones that shaped these pages.
 | 31 | Do interface defaults shadow a container's built-ins? | [interfaces](reference/interfaces.md) |
 | 32 | Are two extends with different *bounds* one clash or two claims? | open |
 | 33 | Does a method on a `pub struct` need its own `pub`? | [interfaces](reference/interfaces.md) |
-| 34 | Are import paths program-absolute or relative to the file? | README, *Layout* |
-| 35–42 | Module questions: aliases, namespaces, name collisions, re-export, `pub` fields, where an `extend` may live, dotted bounds, what the clash error prints | milestones 29–31; the reference does not yet cover modules |
+| 34 | Are import paths program-absolute or relative to the file? | [modules](reference/modules.md) |
+| 35–42 | Module questions: aliases, namespaces, name collisions, re-export, `pub` fields, where an `extend` may live, dotted bounds, what the clash error prints | [modules](reference/modules.md) |
 | 43 | Does `?` inside a block leave the block or the function? | [functions and blocks](reference/functions-and-blocks.md) |
 | 44 | Can you chain onto a call that ends in a trailing block? | [functions and blocks](reference/functions-and-blocks.md) |
 | 45 | Can an interface method take a block? | [interfaces](reference/interfaces.md) |
@@ -78,10 +78,19 @@ decision rather than a fact:
 - Two `extend`s on one target with different bounds — one clash or two claims?
 - A specificity rule when `extend [T]` and `extend [[T]]` both match.
 - A module-qualified function name as a block (`xs.map(seq.shout)`).
-- A bare zero-argument call (`score(best_tag)` where `best_tag` is a function).
-- No reference page yet for **modules** or **concurrency** — the answers are
-  in `README.md` and in `examples/match/`, `examples/modules/`,
-  `examples/travel/` and `examples/shipping/`.
+
+## Round seven
+
+`corpus/m36/` measured these pages: three reviewers wrote thirty programs from
+`docs/` alone. They made **no** guesses about anything in the tables above
+that had a page, and 98 about what did not — chiefly the modules and
+concurrency pages, which did not exist yet, and a method table, a list of
+reserved words and the fate of an overwritten map key, which all three asked
+for. Those are now [modules](reference/modules.md),
+[concurrency](reference/concurrency.md), [methods](reference/methods.md),
+[names](reference/names.md), [numbers](reference/numbers.md),
+[patterns](reference/patterns.md) and [input and output](reference/io.md).
+See `corpus/m36/REPORT.md`.
 
 ## What writing the answers found
 

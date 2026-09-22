@@ -1,0 +1,16 @@
+student     avg  grade
+----------------------
+ana        91.5  A
+bo         68.0  C
+cy         64.5  F
+dee        95.0  A
+
+A: 2
+B: 0
+C: 1
+F: 1
+
+best in math: ana (95)
+best in art: dee (99)
+ranking: dee=190, ana=183, bo=136, cy=129
+exit: 0

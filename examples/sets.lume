@@ -1,5 +1,5 @@
 # Sets: `{a, b, c}` holds each value once and keeps insertion order.
-# Strings and lists slice by position: `s[i]` is a `Str?` (one character),
+# Strings and lists slice by position: `s[i]` is a `Char?` (one character),
 # `s[a..b]` / `xs[a..b]` are clamped slices.
 
 struct Point:

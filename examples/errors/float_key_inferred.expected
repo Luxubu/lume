@@ -1,0 +1,6 @@
+error: a `Float` cannot be the key of a map
+  --> examples/errors/float_key_inferred.lume:4:7
+  |
+4 |   m = {1.5: "a"}
+  |       ^
+  help: floats have no exact equality; use an `Int` (cents, thousandths) or a `Str`

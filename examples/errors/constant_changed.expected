@@ -1,0 +1,6 @@
+error: `K` is a constant, but `push` changes it
+  --> examples/errors/constant_changed.lume:5:4
+  |
+5 |   K.push(2)
+  |    ^
+  help: copy it into a variable first: `var xs = K`

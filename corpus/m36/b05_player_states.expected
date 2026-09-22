@@ -1,0 +1,16 @@
+Tick(seconds: 5) -> idle
+Play(track: "intro") -> playing intro at 0s
+Tick(seconds: 3) -> playing intro at 3s
+Tick(seconds: 4) -> playing intro at 7s
+Pause -> paused intro at 7s
+Tick(seconds: 10) -> paused intro at 7s
+Play(track: "outro") -> paused intro at 7s
+Resume -> playing intro at 7s
+Tick(seconds: 1) -> playing intro at 8s
+Stop -> stopped
+Resume -> stopped
+errors:
+  cannot Tick(seconds: 5) while Idle
+  cannot Play(track: "outro") while Paused(track: "intro", pos: 7)
+  the player is stopped
+exit: 0

@@ -1,0 +1,39 @@
+# a10 — basket summary with the classic first-week slip: Float / Int
+#
+# Probes: the rule that an `Int` and a `Float` never mix — `total / prices.len`
+#   where `total` is a `Float` sum and `len` is an `Int`. Everything before
+#   that line is meant to be valid: `zip` into `for a, b in`, `decimals`,
+#   `pad`, `sum` on `[Float]`, `filter`/`map` with two-name blocks over tuples.
+#
+# Meant to FAIL with: cannot combine
+#   (full text guessed: error: cannot combine `Float` and `Int` with `/`,
+#   pointing at the `/` on the `average = ...` line, with a help line
+#   suggesting `.to_float`. Only "cannot combine" is documented.)
+#
+# EXPECTED ERROR:
+# error: ... cannot combine ...
+#   --> a10_basket_average.lume:35:<column of the `/`>
+# and nothing on stdout (a compile error means nothing runs).
+
+def main:
+  names = ["Notebook", "Pen", "Stapler", "Paper"]
+  prices = [4.25, 0.80, 15.5, 6.99]
+
+  puts "Basket"
+  puts "-".repeat(18)
+  for name, price in names.zip(prices):
+    puts "#{name.pad_right(10)}#{price.decimals(2).pad(8)}"
+  puts "-".repeat(18)
+
+  total = prices.sum
+  puts "#{"total".pad_right(10)}#{total.decimals(2).pad(8)}"
+
+  dear = names.zip(prices).filter { |n, p| p > 5.0 }.map { |n, p| n }
+  puts "over 5.00: #{dear.join(", ")}"
+
+  # the slip: a Float divided by an Int
+  average = total / prices.len
+  puts "average #{average.decimals(2)}"
+
+  over = prices.filter { |p| p > average }.len
+  puts "#{over} items cost more than the average"

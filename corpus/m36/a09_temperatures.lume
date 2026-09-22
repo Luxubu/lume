@@ -1,0 +1,68 @@
+# a09 — a week of temperature readings: parse, summarise, draw a bar chart
+#
+# Probes: `match` on `line.split` with a list pattern `[a, b]`, `to_float?`
+#   on "15" (no point) and "-2.5", printing a `[Float]` (negative and whole
+#   values), `sum`/`max`/`min` on a `[Float]`, `.at(i)`, `decimals(1)`,
+#   `Float.round` on halves (7.5, -1.25), `.to_int` from a Float, `Int.max`,
+#   `pad` on a Float, `repeat(0)`, `count` with a `_` block, `max_by` on a
+#   Float field, Float arithmetic in interpolation.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:  (a line that is just `#` is a blank output line)
+# skipping: cannot read `Holiday`
+# 7 days: [12.5, 15.0, -2.5, 8.0, 21.5, 18.0, 9.5]
+# sorted: [-2.5, 8.0, 9.5, 12.5, 15.0, 18.0, 21.5]
+# mean 11.7, median 12.5
+# high 21.5, low -2.5, range 24.0
+#
+# Mon  12.5 |######
+# Tue  15.0 |########
+# Wed  -2.5 |
+# Thu   8.0 |####
+# Fri  21.5 |###########
+# Sat  18.0 |#########
+# Sun   9.5 |#####
+#
+# above the mean: Mon, Tue, Fri, Sat
+# days below freezing: 1
+# hottest: Fri at 21.5 C, 70.7 F
+
+struct Reading:
+  day: Str
+  temp: Float
+
+def parse(line: Str) -> Reading or Error:
+  match line.split:
+    [day, value] -> Reading(day, value.to_float?)
+    _ -> Error("cannot read `#{line}`")
+
+def main:
+  input = ["Mon 12.5", "Tue 15", "Wed -2.5", "Thu 8.0", "Fri 21.5", "Sat 18.0", "Sun 9.5", "Holiday"]
+  var readings: [Reading] = []
+  for line in input:
+    match parse(line):
+      Ok(r) -> readings.push(r)
+      Error(e) -> puts "skipping: #{e.message}"
+
+  temps = readings.map(_.temp).to_list
+  puts "#{temps.len} days: #{temps}"
+  puts "sorted: #{temps.sort}"
+  mean = temps.sum / temps.len.to_float
+  puts "mean #{mean.decimals(1)}, median #{temps.sort.at(temps.len / 2)}"
+  high = temps.max.or(0.0)
+  low = temps.min.or(0.0)
+  puts "high #{high}, low #{low}, range #{high - low}"
+  puts ""
+
+  for r in readings:
+    bar = "#".repeat((r.temp / 2.0).round.to_int.max(0))
+    puts "#{r.day} #{r.temp.pad(5)} |#{bar}"
+  puts ""
+
+  warm = readings.filter(_.temp > mean).map(_.day)
+  puts "above the mean: #{warm.join(", ")}"
+  puts "days below freezing: #{readings.count(_.temp < 0.0)}"
+  match readings.max_by(_.temp):
+    Some(r) -> puts "hottest: #{r.day} at #{r.temp} C, #{(r.temp * 9.0 / 5.0 + 32.0).decimals(1)} F"
+    None -> puts "no readings"

@@ -1,0 +1,78 @@
+# b08 — teaching the built-in types to describe themselves
+#
+# Probes: `extend Int/Str/Bool with I`; `self` inside an extend on a
+#   built-in; a one-line `if/elif/else` as a method body; an extend that
+#   overrides an interface default (`tagged` on Str) while others keep it;
+#   a generic `extend [T] with` a non-generic interface; a generic function
+#   bounded by the interface (`[T: Describe]`); a `[Describe]` list mixing
+#   Int, Str, Bool and a list; a second interface extended onto Int;
+#   `.decimals(2)` for money.
+#
+# Meant to RUN.
+# (stdout below; the mixed `[Describe]` list should also give the
+#  "go through a pointer" warning on stderr)
+#
+# EXPECTED OUTPUT:
+# 42
+# minus 3
+# <zero>
+# 'hi' (2 chars)
+# [hi]
+# yesyes
+# list of 3
+# <list of 1>
+# <5> <zero> <minus 2>
+# [a] [bc]
+# <7>
+# [x]
+# <no>
+# <list of 2>
+# $12.50
+# $0.05
+
+interface Describe:
+  def describe -> Str
+
+  def tagged -> Str = "<#{describe}>"
+  def twice -> Str = describe + describe
+
+extend Int with Describe:
+  def describe -> Str = if self < 0: "minus #{0 - self}" elif self == 0: "zero" else: "#{self}"
+
+extend Str with Describe:
+  def describe -> Str = "'#{self}' (#{self.len} chars)"
+  def tagged -> Str = "[#{self}]"
+
+extend Bool with Describe:
+  def describe -> Str = if self: "yes" else: "no"
+
+extend [T] with Describe:
+  def describe -> Str = "list of #{self.len}"
+
+interface Money:
+  def dollars -> Str
+
+extend Int with Money:
+  def dollars -> Str = "$#{(self.to_float / 100.0).decimals(2)}"
+
+def show_all[T: Describe](xs: [T]) -> Str = xs.map(_.tagged).join(" ")
+
+def main:
+  puts 42.describe
+  n = -3
+  puts n.describe
+  puts 0.tagged
+  puts "hi".describe
+  puts "hi".tagged
+  puts true.twice
+  puts [1, 2, 3].describe
+  puts ["a"].tagged
+  puts show_all([5, 0, -2])
+  puts show_all(["a", "bc"])
+
+  things: [Describe] = [7, "x", false, [1, 2]]
+  for t in things:
+    puts t.tagged
+
+  puts 1250.dollars
+  puts 5.dollars

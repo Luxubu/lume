@@ -1,0 +1,29 @@
+# ledger.lume — transfers between named accounts, and the book they change.
+
+pub struct Transfer:
+  src: Str
+  dst: Str
+  cents: Int
+
+# `ana -> bo 500`
+pub def parse(line: Str) -> Transfer or Error:
+  match line.split.to_list:
+    [src, "->", dst, amount] ->
+      cents = amount.to_int?
+      Transfer(src: src, dst: dst, cents: cents)
+    _ -> Error("cannot read `#{line}`")
+
+pub struct Book:
+  balances: {Str: Int}
+
+  # All or nothing: a refused transfer changes no balance.
+  def apply(var self, t: Transfer) -> () or Error:
+    have = balances[t.src].or_error("no account `#{t.src}`")?
+    if not balances.contains?(t.dst):
+      return Error("no account `#{t.dst}`")
+    if have < t.cents:
+      return Error("#{t.src} has #{have}, needs #{t.cents}")
+    balances[t.src] = have - t.cents
+    balances[t.dst] = balances[t.dst].or(0) + t.cents
+
+  def total -> Int = balances.values.sum

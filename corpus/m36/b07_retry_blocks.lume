@@ -1,0 +1,79 @@
+# b07 — behaviour as an argument: retry, logging, counting
+#
+# Probes: a generic function taking a block typed `(Int) -> T or Error`,
+#   with `T` read off the block's result; `return v` from inside a `match`
+#   arm inside a `for`; a `do |i|` block that changes a `var` around it and
+#   ends in a call giving `T or Error`; `?` inside a block whose type can
+#   carry it; a block whose tail is a multi-line `if`/`else` with an
+#   `Error(...)` in one branch (implied Ok in the other); a `() -> ()`
+#   block after a call that already has parentheses; `_` shorthand and an
+#   inline block as the last argument of a function of your own; a
+#   trailing `if` on `+=`.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# Ok(30)
+# calls: 3
+# Error("gave up after 2 attempts: attempt 2 timed out")
+# Ok(20)
+# Error("gave up after 1 attempts: `x1` is not an integer")
+# [sum] begin
+# total 6
+# [sum] end
+# 3
+# 2
+
+def retry[T](attempts: Int, work: (Int) -> T or Error) -> T or Error:
+  var last = "never tried"
+  for i in 1..attempts:
+    match work(i):
+      Ok(v)    -> return v
+      Error(e) -> last = e.message
+  Error("gave up after #{attempts} attempts: #{last}")
+
+def logged(label: Str, work: () -> ()):
+  puts "[#{label}] begin"
+  work()
+  puts "[#{label}] end"
+
+def count_where[T](xs: [T], ok: (T) -> Bool) -> Int:
+  var n = 0
+  for x in xs:
+    n += 1 if ok(x)
+  n
+
+# Fails until the attempt number reaches `succeed_on`.
+def flaky(attempt: Int, succeed_on: Int) -> Int or Error:
+  if attempt < succeed_on:
+    return Error("attempt #{attempt} timed out")
+  attempt * 10
+
+def main:
+  var calls = 0
+  r1 = retry(5) do |i|
+    calls += 1
+    flaky(i, 3)
+  puts r1
+  puts "calls: #{calls}"
+
+  r2 = retry(2) { |i| flaky(i, 4) }
+  puts r2
+
+  r3 = retry(3) do |i|
+    n = "#{i}0".to_int?
+    if n > 15:
+      n
+    else:
+      Error("#{n} is too small")
+  puts r3
+
+  puts retry(1) { |i| "x#{i}".to_int }
+
+  logged("sum") do
+    total = [1, 2, 3].fold(0) { |a, b| a + b }
+    puts "total #{total}"
+
+  words = ["pear", "fig", "banana", "kiwi"]
+  puts count_where(words) { |w| w.len > 3 }
+  puts count_where([1, 2, 3, 4, 5], _ % 2 == 0)

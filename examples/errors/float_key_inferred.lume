@@ -1,0 +1,5 @@
+# A Float has no exact equality, so it cannot be a map key -- inferred or
+# typed. The inferred forms used to reach rustc.
+def main:
+  m = {1.5: "a"}
+  puts m

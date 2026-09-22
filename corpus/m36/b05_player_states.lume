@@ -1,0 +1,78 @@
+# b05 — a media player as a state machine driven by events
+#
+# Probes: two enums with data; a transition function matching on a tuple
+#   of (State, Event) whose parts carry payloads, with a wildcard arm and a
+#   binding catch-all; arms that give a bare variant (implied Ok) or an
+#   `Error(...)`; a struct whose field is an enum and a `var self` method
+#   that replaces that field from inside a `match` arm; interpolating enum
+#   values (a Str inside a variant should print quoted); a list of events
+#   built from bare variant names, positionally.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# Tick(seconds: 5) -> idle
+# Play(track: "intro") -> playing intro at 0s
+# Tick(seconds: 3) -> playing intro at 3s
+# Tick(seconds: 4) -> playing intro at 7s
+# Pause -> paused intro at 7s
+# Tick(seconds: 10) -> paused intro at 7s
+# Play(track: "outro") -> paused intro at 7s
+# Resume -> playing intro at 7s
+# Tick(seconds: 1) -> playing intro at 8s
+# Stop -> stopped
+# Resume -> stopped
+# errors:
+#   cannot Tick(seconds: 5) while Idle
+#   cannot Play(track: "outro") while Paused(track: "intro", pos: 7)
+#   the player is stopped
+
+enum State:
+  Idle
+  Playing(track: Str, pos: Int)
+  Paused(track: Str, pos: Int)
+  Stopped
+
+enum Event:
+  Play(track: Str)
+  Tick(seconds: Int)
+  Pause
+  Resume
+  Stop
+
+def step(s: State, e: Event) -> State or Error:
+  match (s, e):
+    (Idle, Play(t))            -> Playing(t, 0)
+    (Playing(t, p), Tick(n))   -> Playing(t, p + n)
+    (Playing(t, p), Pause)     -> Paused(t, p)
+    (Paused(t, p), Resume)     -> Playing(t, p)
+    (Paused(t, p), Tick(_))    -> Paused(t, p)
+    (Stopped, _)               -> Error("the player is stopped")
+    (_, Stop)                  -> Stopped
+    (state, event)             -> Error("cannot #{event} while #{state}")
+
+struct Player:
+  state: State
+  log: [Str]
+
+  def fire(var self, e: Event):
+    match step(state, e):
+      Ok(ns)     -> state = ns
+      Error(err) -> log.push(err.message)
+
+  def status -> Str:
+    match state:
+      Idle           -> "idle"
+      Playing(t, p)  -> "playing #{t} at #{p}s"
+      Paused(t, p)   -> "paused #{t} at #{p}s"
+      Stopped        -> "stopped"
+
+def main:
+  var player = Player(state: Idle, log: [])
+  events = [Tick(5), Play("intro"), Tick(3), Tick(4), Pause, Tick(10), Play("outro"), Resume, Tick(1), Stop, Resume]
+  for e in events:
+    player.fire(e)
+    puts "#{e} -> #{player.status}"
+  puts "errors:"
+  for line in player.log:
+    puts "  #{line}"

@@ -1,0 +1,29 @@
+# b10 — paying interest on every account in a list (deliberate error)
+#
+# Probes: calling a `var self` method on the name a plain `for` binds. The
+#   docs say a `var self` method "needs a `var` binding to be called on",
+#   and a `for` name is not declared `var` — even though the list itself is.
+#   (`for var a in accounts` appears in examples/ownership.lume but on no
+#   docs page.)
+#
+# Meant to FAIL with: `a` is immutable, but `add_interest` changes it
+#
+# EXPECTED ERROR TEXT (the exact help line is a guess):
+# error: `a` is immutable, but `add_interest` changes it
+#   help: something pointing at `for var a in accounts`
+
+struct Account:
+  owner: Str
+  balance: Int
+
+  def add_interest(var self, pct: Int):
+    balance += balance * pct / 100
+
+  def show -> Str = "#{owner}: #{balance}"
+
+def main:
+  var accounts = [Account("Ada", 1000), Account("Bob", 250)]
+  for a in accounts:
+    a.add_interest(5)
+  for a in accounts:
+    puts a.show

@@ -1,0 +1,23 @@
+warning: `things` holds values of different types behind `Describe`, so calls on its items go through a pointer
+  --> corpus/m36/b08_extend_builtins.lume:73:3
+   |
+73 |   things: [Describe] = [7, "x", false, [1, 2]]
+   |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+42
+minus 3
+<zero>
+'hi' (2 chars)
+[hi]
+yesyes
+list of 3
+<list of 1>
+<5> <zero> <minus 2>
+[a] [bc]
+<7>
+[x]
+<no>
+<list of 2>
+$12.50
+$0.05
+exit: 0
