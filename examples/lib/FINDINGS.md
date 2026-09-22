@@ -131,6 +131,13 @@ expected to: `1234.5.decimals(2)` is `"1234.50"`, `0.125.decimals(2)` is
   bounded helper now reaches every container. `examples/generic_extend.lume`
   is the worked version of exactly what this note asked for.*
 
+  *Milestone 29 finished the job for a library rather than a single file:
+  an `extend` travels with the import, so `seq` now ships `Walkable[T]`
+  and the three conformances with it. `report.lume` calls
+  `by_team.how_many` on a map and never extends anything itself — which is
+  what "a library whose only job is to be imported" was always supposed to
+  mean.*
+
 ---
 
 ## What the fixes came to

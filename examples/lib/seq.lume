@@ -188,3 +188,27 @@ test "slicing":
   assert windows([1, 2, 3], 2) == [[1, 2], [2, 3]]
   assert take_while_ok([1, 2, 9, 3]) { |n| n < 5 } == [1, 2]
   assert zip_with([1, 2], [10, 20]) { |a, b| a * b } == [10, 40]
+
+# ---- one interface over anything you can walk ------------------------------
+#
+# The gap milestone 24 wrote down: every helper above takes a `[T]`, so a
+# `{T}` or a `{K: V}` had to be converted first. An interface with a type
+# parameter says what they have in common, and an `extend` travels with the
+# import — so a consumer of this file gets the conformances without writing
+# a line of its own.
+
+pub interface Walkable[T]:
+  def each_item -> [T]
+
+  def how_many -> Int = each_item.len
+  def nothing? -> Bool = how_many == 0
+  def shown -> Str = map(each_item) { |x| "#{x}" }.join(", ")
+
+extend [T] with Walkable[T]:
+  def each_item -> [T] = self
+
+extend {T} with Walkable[T]:
+  def each_item -> [T] = self.to_list
+
+extend {K: V} with Walkable[V]:
+  def each_item -> [V] = self.values.to_list

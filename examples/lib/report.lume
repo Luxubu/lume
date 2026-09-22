@@ -61,6 +61,10 @@ def main -> () or Error:
 
   puts "By team"
   by_team = seq.group_with(people) { |p| p.team }
+  # `how_many` is `seq`'s, and this file never extended anything: an
+  # `extend` travels with the import, so the map conforms on arrival.
+  puts "  #{by_team.how_many} teams"
+
   teams = seq.sort_with(by_team.keys.to_list) { |a, b| a < b }
   for team in teams:
     members = by_team[team].or([])

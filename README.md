@@ -20,7 +20,7 @@ program takes about 1 s in Python and 1.4 s in Ruby.
 The language design lives in the [Lume Language Design](https://claude.ai/code/artifact/1872fe63-1816-4b1e-9983-dec2774382fb)
 document. This repository is the compiler and the examples.
 
-## Status: milestones 1–28 done
+## Status: milestones 1–29 done
 
 | # | Milestone | Status |
 | --- | --- | --- |
@@ -42,6 +42,7 @@ document. This repository is the compiler and the examples.
 | 16 | Ownership by analysis: liveness-based copy or move, recursive enums boxed, `.or` on optional fields, string comparisons in blocks, `for var a in xs`, `xs[i].method` | done: review corpus leaks 6 → 0 |
 | 17 | Pattern completeness: a real exhaustiveness checker with nested witnesses, `A \| B` alternatives; the everyday standard methods; statements in inline blocks | done: 37 new methods, corpus 40 ok / 26 Lume errors / 0 leaks |
 | 18 | `{T}` sets with literals, algebra and iteration; `s[i]` / `s[a..b]` / `xs[a..b]` by character and position; structs and enums as map keys | done |
+| 29 | An `extend` travels with the import: a library ships its conformances, and two claiming the same type and interface is one error naming both files | done: `seq` ships `Walkable[T]`, and its consumer extends nothing; no `pub extend` — there is no name to export |
 | 28 | Fifth review round (`corpus/m28/`, 36 programs by three reviewers): generic `extend`, the seams where features meet, and whole programs | done: 12 ranked problems fixed, 27 ok / 9 Lume errors / 0 leaks; `Result` is a name you can use again |
 | 27 | Generic `extend`: an `extend` introduces a type parameter by using one, so `[T]`, `{T}`, `{K: V}` and a user's own `Stack[T]` all conform to the same interface | done: the second half of the gap milestone 24 found; one bounded helper now reaches every container |
 | 26 | Fourth review round (`corpus/m26/`, 36 programs by a fourth reviewer): how a block travels — reused, forwarded, handed to a built-in, carrying a failure — plus conformance at an argument other than `Self` and a generic enum's boxed field | done: 11 ranked problems fixed, 30 ok / 6 Lume errors / 0 leaks; `Box` is a name you can use again |
@@ -127,7 +128,11 @@ parameter by using one, so the built-in containers conform too —
 `extend {K: V} with Bag[V]:` and `extend Stack[T] with Bag[T]:` — and so do
 a tuple and an optional, `extend (A, B) with Pairish[A, B]:` and
 `extend T? with Holder[T]:` — after
-which one `def describe[B: Bag[Str]](b: B)` reaches all of them. A name
+which one `def describe[B: Bag[Str]](b: B)` reaches all of them. An `extend` travels
+with the import, so a library ships its conformances and a consumer that
+imports it writes none of its own; it has no name, so there is no
+`pub extend`, and two `extend`s claiming the same type and the same
+interface anywhere in one program is an error naming both files. A name
 inside the target that is no type of yours is a parameter; a bare target
 must still be a real type, so `extend Poimt with Named` is an unknown
 type rather than a silent parameter. A bound goes where every other
@@ -420,6 +425,7 @@ examples/generics.lume   generic functions, structs and enums; Ordered, Hashable
 examples/blocks_of_your_own.lume  functions that take behaviour: each, map, keep, fold, retry, time_it
 examples/generic_interfaces.lume  interfaces with type parameters: bounds, defaults, values, extend
 examples/generic_extend.lume      generic `extend`: lists, sets, maps and your own generic type under one interface
+examples/travel/                  a library that ships its conformances, and a consumer that writes no `extend`
 examples/lib/            a library written in Lume: seq (generic helpers), table (typed CSV),
                          a report program that uses both, and what writing it exposed
 examples/tests/          files with `test` blocks; expected `lume test` output

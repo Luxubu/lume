@@ -1,0 +1,7 @@
+# The clash: an `extend` travels with the import, so two of them claiming
+# the same type and interface would be two answers to one question.
+
+import one
+
+extend [T] with one.Bag[T]:
+  def items -> [T] = self.reverse

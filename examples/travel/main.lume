@@ -1,0 +1,23 @@
+# main.lume — the consumer. It never writes an `extend` of its own.
+
+import shapes
+
+def main:
+  xs = [3, 1, 2]
+  puts xs.total
+  puts xs.spelled
+
+  s = {10, 20}
+  puts s.total
+  puts s.bare?
+
+  m = {"a": 1, "b": 2, "c": 3}
+  puts m.total
+  puts m.spelled
+
+  none: [Int] = []
+  puts none.bare?
+
+  # the library's own helper, over two different containers
+  puts shapes.biggest(xs, [9])
+  puts shapes.biggest([1], {4, 5, 6})

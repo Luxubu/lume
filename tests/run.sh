@@ -51,7 +51,7 @@ check() {  # name, expected-file, actual-text
   fi
 }
 
-for f in examples/*.lume examples/port/*.lume examples/modules/*.lume examples/json/json.lume examples/mini/main.lume examples/lib/report.lume; do
+for f in examples/*.lume examples/port/*.lume examples/modules/*.lume examples/json/json.lume examples/mini/main.lume examples/lib/report.lume examples/travel/main.lume; do
   name=$(basename "$(dirname "$f")")/$(basename "$f" .lume); name=${name#examples/}
   [ "$(dirname "$f")" = "examples" ] && name=$(basename "$f" .lume)
   out=$("$LUME" run "$f" 2>&1); code=$?
@@ -62,8 +62,9 @@ for f in examples/*.lume examples/port/*.lume examples/modules/*.lume examples/j
   check "$name" "${f%.lume}.expected" "$out"
 done
 
-for f in examples/errors/*.lume; do
+for f in examples/errors/*.lume examples/errors/travel/main.lume; do
   name="errors/$(basename "$f" .lume)"
+  case "$f" in examples/errors/travel/*) name="errors/travel" ;; esac
   out=$("$LUME" check "$f" 2>&1); code=$?
   if [ $code -eq 0 ]; then
     echo "FAIL $name: expected a compile error, but it compiled"
@@ -73,7 +74,9 @@ for f in examples/errors/*.lume; do
     echo "FAIL $name: rustc error leaked instead of a Lume error"
     fail=$((fail+1)); failed+=("$name"); continue
   fi
-  check "$name" "examples/errors/$(basename "$f" .lume).expected" "$out"
+  exp="examples/errors/$(basename "$f" .lume).expected"
+  case "$f" in examples/errors/travel/*) exp="examples/errors/travel/main.expected" ;; esac
+  check "$name" "$exp" "$out"
 done
 
 for f in examples/tests/*.lume; do
@@ -141,7 +144,7 @@ rm -rf corpus/.lume corpus/edge/.lume corpus/m17/.lume corpus/m18/.lume corpus/m
 
 # The formatter must be idempotent and must not change what a program means.
 tmp=$(mktemp -d)
-for f in examples/*.lume examples/port/*.lume examples/modules/*.lume examples/modules/users/*.lume examples/tests/*.lume examples/json/*.lume examples/mini/*.lume examples/site/*.lume examples/lib/*.lume; do
+for f in examples/*.lume examples/port/*.lume examples/modules/*.lume examples/modules/users/*.lume examples/tests/*.lume examples/json/*.lume examples/mini/*.lume examples/site/*.lume examples/lib/*.lume examples/travel/*.lume; do
   name="fmt-roundtrip/${f#examples/}"
   mkdir -p "$tmp/$(dirname "$f")"
   cp -r examples/modules "$tmp/examples/" 2>/dev/null
@@ -150,6 +153,7 @@ for f in examples/*.lume examples/port/*.lume examples/modules/*.lume examples/m
   mkdir -p "$tmp/examples/mini" && cp examples/mini/*.lume "$tmp/examples/mini/" 2>/dev/null
   mkdir -p "$tmp/examples/site" && cp examples/site/*.lume "$tmp/examples/site/" 2>/dev/null
   mkdir -p "$tmp/examples/lib" && cp examples/lib/*.lume "$tmp/examples/lib/" 2>/dev/null
+  mkdir -p "$tmp/examples/travel" && cp examples/travel/*.lume "$tmp/examples/travel/" 2>/dev/null
   if ! "$LUME" fmt "$f" --stdout > "$tmp/$f" 2>"$tmp/err"; then
     echo "FAIL $name: fmt failed"; head -5 "$tmp/err" | sed 's/^/    /'
     fail=$((fail+1)); failed+=("$name"); continue

@@ -1,0 +1,5 @@
+import one
+import two
+
+def main:
+  puts [1, 2, 3].size

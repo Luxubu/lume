@@ -1,0 +1,6 @@
+error: `[T]` is already a `one.Bag[T]`
+  --> examples/errors/travel/two.lume:6:1
+  |
+6 | extend [T] with one.Bag[T]:
+  | ^
+  help: examples/errors/travel/one.lume:7 extends it too, and an `extend` travels with the import, so only one of them can hold: remove one, or give one of them an interface of its own

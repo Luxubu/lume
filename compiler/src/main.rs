@@ -119,7 +119,7 @@ fn compile_to_rust(path: &Path, test_mode: bool) -> Result<Compiled, String> {
             }
         }
         let rust_mod = if is_entry { None } else { Some(m.rust_mod()) };
-        let (out, ex) = codegen::generate_module(&m.items, rust_mod.as_deref(), &dep_list, test_mode, &m.src).map_err(|e| e.render(&file, &m.src))?;
+        let (out, ex) = codegen::generate_module(&m.items, rust_mod.as_deref(), &dep_list, test_mode, &m.src, &file).map_err(|e| e.render(&file, &m.src))?;
         for w in out.warnings {
             eprint!("{}", w.render(&file, &m.src).replacen("error:", "warning:", 1));
         }

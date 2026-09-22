@@ -1,0 +1,8 @@
+# One of two files that both claim `[T]` is a `Bag`. See two.lume.
+
+pub interface Bag[T]:
+  def items -> [T]
+  def size -> Int = items.len
+
+extend [T] with Bag[T]:
+  def items -> [T] = self

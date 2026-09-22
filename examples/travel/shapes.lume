@@ -1,0 +1,33 @@
+# shapes.lume — a library that ships its conformances.
+#
+# An `extend` has no name, so there is nothing to mark `pub`. It travels
+# with the import instead: a file that says `import shapes` gets these
+# three extends, and its lists, sets and maps are `Countable` on arrival
+# without writing a line.
+#
+# The rule that keeps that honest: two `extend`s claiming the same type
+# and the same interface anywhere in one program is an error, and the
+# message names both files.
+
+pub interface Countable[T]:
+  def entries -> [T]
+
+  def total -> Int = entries.len
+  def bare? -> Bool = total == 0
+  def spelled -> Str = entries.map { |x| "#{x}" }.to_list.join(" + ")
+
+extend [T] with Countable[T]:
+  def entries -> [T] = self
+
+extend {T} with Countable[T]:
+  def entries -> [T] = self.to_list
+
+extend {K: V} with Countable[V]:
+  def entries -> [V] = self.values.to_list
+
+# A helper the consumer can use on any of them.
+pub def biggest[A: Countable[Int], B: Countable[Int]](a: A, b: B) -> Str:
+  if a.total >= b.total:
+    "first, #{a.spelled}"
+  else:
+    "second, #{b.spelled}"

@@ -521,6 +521,16 @@ pub struct Exports {
     interfaces: HashMap<String, IfaceInfo>,
     /// Methods types gained through `extend` in that module: type key -> methods.
     ext_methods: HashMap<String, HashMap<String, Sig>>,
+    /// What makes those methods findable from another file: an `extend`
+    /// travels with the import, so everything that says where it applies
+    /// travels with it.
+    ext_targets: HashMap<String, Type>,
+    ext_generics: HashMap<String, Vec<TypeParam>>,
+    ext_method_target: HashMap<(String, String), Type>,
+    ext_impl_generics: HashMap<(String, String), Vec<TypeParam>>,
+    /// Where each `extend` was written, for the message when two of them
+    /// claim the same type and interface.
+    ext_where: HashMap<(String, String), (String, usize)>,
     private: Vec<String>,
 }
 
@@ -578,6 +588,15 @@ pub struct Gen {
     /// bounds of `extend [T: Ordered] with Ranked[T]` belong to that impl
     /// alone, not to every impl for a list.
     ext_impl_generics: HashMap<(String, String), Vec<TypeParam>>,
+    /// Which file and line each `extend` was written on, so two that claim
+    /// the same type and interface can name each other.
+    ext_where: HashMap<(String, String), (String, usize)>,
+    /// This module's own file, as a program would name it.
+    this_file: String,
+    /// Traits an imported module owns. Rust only offers a trait's methods
+    /// where the trait is in scope, and an `extend` that travels with the
+    /// import has to be callable here.
+    trait_uses: Vec<String>,
     /// Local types (struct/enum names) — interfaces are emitted for these.
     local_types: HashSet<String>,
     /// The struct or enum whose method is being generated, if any.
@@ -661,7 +680,7 @@ pub struct Gen {
 
 /// Compiles one module. `rust_mod` is `Some(name)` for an imported file,
 /// which is emitted as `mod name { ... }`; `None` for the entry file.
-pub fn generate_module(program: &[Item], rust_mod: Option<&str>, deps: &[Dep], test_mode: bool, src: &str) -> Result<(Output, Exports)> {
+pub fn generate_module(program: &[Item], rust_mod: Option<&str>, deps: &[Dep], test_mode: bool, src: &str, file: &str) -> Result<(Output, Exports)> {
     let mut g = Gen {
         out: String::new(),
         indent: 0,
@@ -679,6 +698,9 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, deps: &[Dep], t
         ext_generics: HashMap::new(),
         ext_method_target: HashMap::new(),
         ext_impl_generics: HashMap::new(),
+        ext_where: HashMap::new(),
+        this_file: file.to_string(),
+        trait_uses: Vec::new(),
         local_types: HashSet::new(),
         current_type: None,
         current_self_ty: None,
@@ -731,24 +753,57 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, deps: &[Dep], t
         rust_deps.push(("tokio".to_string(), "{ version = \"1\", features = [\"rt-multi-thread\", \"macros\", \"time\", \"sync\"] }".to_string()));
     }
     let exports = g.exports(program, rust_mod.unwrap_or("main"));
+    let uses = if g.trait_uses.is_empty() {
+        String::new()
+    } else {
+        let mut u = g.trait_uses.clone();
+        u.sort();
+        format!("#[allow(unused_imports)]\n{}\n", u.join("\n"))
+    };
     let rust = match rust_mod {
         Some(m) => {
-            let body = g.out.lines().map(|l| if l.is_empty() { String::new() } else { format!("    {}", l) }).collect::<Vec<_>>().join("\n");
+            let body = format!("{}{}", uses, g.out);
+            let body = body.lines().map(|l| if l.is_empty() { String::new() } else { format!("    {}", l) }).collect::<Vec<_>>().join("\n");
             format!("pub mod {} {{\n    use super::*;\n{}\n}}\n", m, body)
         }
-        None => g.out,
+        None => {
+            // inner attributes must come first in a file, so the uses go
+            // just after them
+            let mut head = String::new();
+            let mut rest = g.out.as_str();
+            while let Some(nl) = rest.find('\n') {
+                let line = &rest[..nl];
+                if line.starts_with("#!") || line.is_empty() {
+                    head.push_str(&rest[..=nl]);
+                    rest = &rest[nl + 1..];
+                } else {
+                    break;
+                }
+            }
+            format!("{}{}{}", head, uses, rest)
+        }
     };
     Ok((Output { rust, warnings: g.warnings, deps: rust_deps, has_rust_blocks: g.has_rust_blocks }, exports))
 }
 
 /// Rewrites a type from module `id` so its named types are keyed the way the
 /// importing module sees them (`User` -> `users.model.User`).
+/// A type parameter whose bound names a type of the module it came from.
+fn qualify_param(p: &TypeParam, id: &str, ex: &Exports) -> TypeParam {
+    TypeParam { name: p.name.clone(), bound: p.bound.as_ref().map(|b| qualify_type(b, id, ex)), line: p.line, col: p.col }
+}
+
 fn qualify_type(t: &Type, id: &str, ex: &Exports) -> Type {
     match t {
-        Type::Named(n) if n != "Error" && (ex.structs.contains_key(n) || ex.enums.contains_key(n)) => Type::Named(format!("{}.{}", id, n)),
+        // an interface too: a bound or a parameter may name one
+        Type::Named(n) if n != "Error" && (ex.structs.contains_key(n) || ex.enums.contains_key(n) || ex.interfaces.contains_key(n)) => Type::Named(format!("{}.{}", id, n)),
         Type::App(n, args) => {
             let args = args.iter().map(|x| qualify_type(x, id, ex)).collect();
-            if ex.structs.contains_key(n) || ex.enums.contains_key(n) { Type::App(format!("{}.{}", id, n), args) } else { Type::App(n.clone(), args) }
+            if ex.structs.contains_key(n) || ex.enums.contains_key(n) || ex.interfaces.contains_key(n) {
+                Type::App(format!("{}.{}", id, n), args)
+            } else {
+                Type::App(n.clone(), args)
+            }
         }
         Type::List(i) => Type::List(Box::new(qualify_type(i, id, ex))),
         Type::Option(i) => Type::Option(Box::new(qualify_type(i, id, ex))),
@@ -768,7 +823,8 @@ fn qualify_sig(sig: &Sig, id: &str, ex: &Exports) -> Sig {
         ret: qualify_type(&sig.ret, id, ex),
         self_kind: sig.self_kind,
         is_async: sig.is_async,
-        generics: sig.generics.clone(),
+        // a bound names an interface of the module it came from
+        generics: sig.generics.iter().map(|g| qualify_param(g, id, ex)).collect(),
     }
 }
 
@@ -1795,6 +1851,18 @@ impl Gen {
             (false, Some(shape)) => shape,
             _ => self.type_key(&target),
         };
+        // An `extend` travels with the import, so two of them claiming the
+        // same type and interface would be two answers to one question.
+        if let Some((other_file, other_line)) = self.ext_where.get(&(key.clone(), iface.clone())) {
+            let here = format!("{}:{}", self.this_file, x.line);
+            let there = format!("{}:{}", other_file, other_line);
+            if here != there {
+                let _ = here;
+                return Err(LumeError::new(x.line, x.col, format!("`{}` is already a `{}`", type_name(&target), type_name(&x.iface)))
+                    .with_help(format!("{} extends it too, and an `extend` travels with the import, so only one of them can hold: remove one, or give one of them an interface of its own", there)));
+            }
+        }
+        self.ext_where.insert((key.clone(), iface.clone()), (self.this_file.clone(), x.line));
         if !gens.is_empty() {
             let all = self.ext_generics.entry(key.clone()).or_default();
             for g in gens {
@@ -2303,13 +2371,49 @@ impl Gen {
             };
             self.interfaces.insert(key.clone(), qualified);
             self.paths.insert(key, format!("{}::{}", ex.rust_mod, n));
+            let u = format!("use crate::{}::{};", ex.rust_mod, n);
+            if !self.trait_uses.contains(&u) {
+                self.trait_uses.push(u);
+            }
         }
+        let requalify = |tkey: &String| -> String {
+            if ex.structs.contains_key(tkey) || ex.enums.contains_key(tkey) {
+                format!("{}.{}", key_prefix, tkey)
+            } else {
+                tkey.clone()
+            }
+        };
         for (tkey, ms) in &ex.ext_methods {
-            let tkey = if ex.structs.contains_key(tkey) || ex.enums.contains_key(tkey) { format!("{}.{}", key_prefix, tkey) } else { tkey.clone() };
+            let tkey = requalify(tkey);
             let entry = self.ext_methods.entry(tkey).or_default();
             for (m, sg) in ms {
                 entry.insert(m.clone(), qualify_sig(sg, id, ex));
             }
+        }
+        // An `extend` travels with the import: what it applies to, what its
+        // names stand for and where it was written all come across, or the
+        // methods above could never be found.
+        for (tkey, t) in &ex.ext_targets {
+            self.ext_targets.insert(requalify(tkey), qualify_type(t, id, ex));
+        }
+        for (tkey, gs) in &ex.ext_generics {
+            let entry = self.ext_generics.entry(requalify(tkey)).or_default();
+            for g in gs {
+                if !entry.iter().any(|p| p.name == g.name) {
+                    entry.push(qualify_param(g, id, ex));
+                }
+            }
+        }
+        for ((tkey, m), t) in &ex.ext_method_target {
+            self.ext_method_target.insert((requalify(tkey), m.clone()), qualify_type(t, id, ex));
+        }
+        for ((tkey, iname), gs) in &ex.ext_impl_generics {
+            let ik = if ex.interfaces.contains_key(iname) { format!("{}.{}", key_prefix, iname) } else { iname.clone() };
+            self.ext_impl_generics.insert((requalify(tkey), ik), gs.iter().map(|g| qualify_param(g, id, ex)).collect());
+        }
+        for ((tkey, iname), w) in &ex.ext_where {
+            let ik = if ex.interfaces.contains_key(iname) { format!("{}.{}", key_prefix, iname) } else { iname.clone() };
+            self.ext_where.insert((requalify(tkey), ik), w.clone());
         }
     }
 
@@ -2390,6 +2494,11 @@ impl Gen {
             }
         }
         ex.ext_methods = self.ext_methods.clone();
+        ex.ext_targets = self.ext_targets.clone();
+        ex.ext_generics = self.ext_generics.clone();
+        ex.ext_method_target = self.ext_method_target.clone();
+        ex.ext_impl_generics = self.ext_impl_generics.clone();
+        ex.ext_where = self.ext_where.clone();
         ex
     }
 
@@ -4358,6 +4467,13 @@ impl Gen {
                 let type_local = self.local_types.contains(tkey) || self.ext_targets.contains_key(tkey);
                 let owns = info.local || (type_local && !tkey.contains('.'));
                 let has_extend = ext_bodies.contains_key(&(tkey.clone(), iname.clone()));
+                // An `extend` travels with the import, but its impl is
+                // written once, in the file that wrote the `extend`.
+                if let Some((f, _)) = self.ext_where.get(&(tkey.clone(), iname.clone())) {
+                    if *f != self.this_file {
+                        continue;
+                    }
+                }
                 if !(owns || has_extend) {
                     continue;
                 }
