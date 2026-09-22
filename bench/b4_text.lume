@@ -1,0 +1,21 @@
+# Building text: interpolation, `+`, and `join` over a big list. This is the
+# machinery milestone 32 reworked, so it wants a number on it.
+
+struct Row:
+  name: Str
+  hits: Int
+
+def main:
+  var rows: [Row] = []
+  for i in 0..200000:
+    rows.push(Row(name: "row#{i % 1000}", hits: i % 97))
+
+  t0 = Time.now_ms
+  var parts: [Str] = []
+  for r in rows:
+    parts.push("#{r.name}: #{r.hits}")
+  body = parts.join("\n")
+  t1 = Time.now_ms
+
+  puts "#{body.len} chars"
+  puts "#{t1 - t0} ms"

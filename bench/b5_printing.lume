@@ -1,0 +1,11 @@
+# Printing a lot of lines, which is what a report or a log does all day.
+
+def main:
+  t0 = Time.now_ms
+  var checksum = 0
+  for i in 1..200000:
+    puts "row #{i} of 200000, hits #{i % 97}"
+    checksum += i % 97
+  t1 = Time.now_ms
+  warn "#{checksum} checksum"
+  warn "#{t1 - t0} ms"

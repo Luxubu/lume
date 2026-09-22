@@ -1,0 +1,36 @@
+# A list of interface values, dispatched in a loop. Milestone 10, with the
+# pointer machinery milestone 28 added.
+
+interface Shape:
+  def area -> Int
+  def name -> Str
+
+struct Sq:
+  side: Int
+
+  def area -> Int = side * side
+  def name -> Str = "sq"
+
+struct Rect:
+  w: Int
+  h: Int
+
+  def area -> Int = w * h
+  def name -> Str = "rect"
+
+def main:
+  var shapes: [Shape] = []
+  for i in 0..4000000:
+    if i % 2 == 0:
+      shapes.push(Sq(side: i % 100))
+    else:
+      shapes.push(Rect(w: i % 50, h: 3))
+
+  t0 = Time.now_ms
+  var total = 0
+  for s in shapes:
+    total += s.area
+  t1 = Time.now_ms
+
+  puts "#{total}"
+  puts "#{t1 - t0} ms"

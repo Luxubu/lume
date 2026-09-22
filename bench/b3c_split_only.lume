@@ -1,0 +1,13 @@
+# The same loop as b3 without the map, so the map's share can be told apart.
+
+def main:
+  text = File.read("bench/words.txt")!
+  t0 = Time.now_ms
+  var n = 0
+  for line in text.lines:
+    for w in line.split(" "):
+      if not w.empty?:
+        n += 1
+  t1 = Time.now_ms
+  puts "#{n}"
+  puts "#{t1 - t0} ms"

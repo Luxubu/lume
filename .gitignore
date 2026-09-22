@@ -1,3 +1,5 @@
 compiler/target/
 .lume/
 examples/site/out/
+bench/words.txt
+bench/.build/

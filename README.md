@@ -20,7 +20,7 @@ program takes about 1 s in Python and 1.4 s in Ruby.
 The language design lives in the [Lume Language Design](https://claude.ai/code/artifact/1872fe63-1816-4b1e-9983-dec2774382fb)
 document. This repository is the compiler and the examples.
 
-## Status: milestones 1–32 done
+## Status: milestones 1–33 done
 
 | # | Milestone | Status |
 | --- | --- | --- |
@@ -42,6 +42,7 @@ document. This repository is the compiler and the examples.
 | 16 | Ownership by analysis: liveness-based copy or move, recursive enums boxed, `.or` on optional fields, string comparisons in blocks, `for var a in xs`, `xs[i].method` | done: review corpus leaks 6 → 0 |
 | 17 | Pattern completeness: a real exhaustiveness checker with nested witnesses, `A \| B` alternatives; the everyday standard methods; statements in inline blocks | done: 37 new methods, corpus 40 ok / 26 Lume errors / 0 leaks |
 | 18 | `{T}` sets with literals, algebra and iteration; `s[i]` / `s[a..b]` / `xs[a..b]` by character and position; structs and enums as map keys | done |
+| 33 | Speed, measured: five benchmarks against the Rust a person would have written, with the ratio checked in and guarded by `tests/bench.sh` | done: four of five at parity, word count at 113%; interpolation no longer builds a string to copy and throw away |
 | 32 | How a value prints: a value on its own prints as itself, a value inside another as you would write it — plus `pad`/`pad_right` on every scalar and the rules written down | done: the question every one of six review rounds asked first; `examples/printing.lume` is the reference |
 | 31 | Re-export: `pub import seq` passes a module on to your own importers, so a library's internal layout stops being part of its public surface | done: the last of the milestone-24 findings; `report.lume` imports `table` alone and still calls `seq` |
 | 30 | Sixth review round (`corpus/m30/`, 30 multi-file programs by three reviewers): module mechanics, extends across files, and real programs laid out the way a person would | done: 9 ranked problems fixed, 20 ok / 10 Lume errors / 0 leaks; an `extend` now travels as far as the program goes |
@@ -308,6 +309,45 @@ can be joined directly — `xs.map { |n| n * 2 }.join("-")` needs no
 
 `examples/printing.lume` is this table as a program.
 
+## Speed
+
+"As fast as Rust" is a claim, so it is measured. Each benchmark is a Lume
+program and the Rust a person would have written for the same job, timing the
+work itself rather than the process start or the file read.
+
+| benchmark | Lume | Rust | |
+| --- | --- | --- | --- |
+| generic helpers taking blocks, over 2M ints | 19 ms | 19 ms | 100% |
+| 4M interface values, dispatched in a loop | 22 ms | 21 ms | 104% |
+| counting a million words into a `{Str: Int}` | 41 ms | 36 ms | 113% |
+| building 200k lines with interpolation and `join` | 28 ms | 28 ms | 100% |
+| printing 200k lines | 87 ms | 84 ms | 103% |
+
+The one above parity is word count, and the reason is a deliberate trade:
+Lume's map keeps insertion order, which Rust's `HashMap` does not, so a
+lookup reads a key-to-position index and then the ordered entries. That is
+one hash and one compare, the same as Rust's, plus one indirection.
+
+```sh
+tests/bench.sh            # build both sides, best of five, compare to bench/BASELINE
+tests/bench.sh --update   # accept the current ratios as the new budget
+```
+
+The guard is the *ratio*, not the millisecond count, so it says the same
+thing on a slower machine; a benchmark fails when it is more than 25% over
+its number in `bench/BASELINE`. `bench/gen.py` makes the inputs, so nothing
+large is checked in.
+
+Two things worth knowing when you measure your own program:
+
+- **Benchmark what `lume build` produces, not what `lume run` does.**
+  `lume run` builds your program at `opt-level = 1` on top of fully
+  optimised dependencies, which is what makes edit-and-run take 0.2 s.
+  `lume build` is the real thing. On word count the difference is 11 ms
+  against 9 ms.
+- **Overflow still stops the program in a built binary.** That is milestone
+  15's rule and it is not traded away for speed.
+
 ## Tests
 
 ```sh
@@ -477,6 +517,8 @@ examples/shipping/                `pub import`: a library passes its own depende
 examples/printing.lume            how every kind of value prints, as a runnable table
 examples/lib/            a library written in Lume: seq (generic helpers), table (typed CSV),
                          a report program that uses both, and what writing it exposed
+bench/                   five benchmarks, each with the Rust a person would have written
+                         beside it; gen.py makes the inputs, BASELINE holds the budget
 examples/tests/          files with `test` blocks; expected `lume test` output
 examples/fmt/            badly spaced input; expected `lume fmt` output
 examples/errors/         programs that must keep failing, with good messages

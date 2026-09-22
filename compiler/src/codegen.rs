@@ -218,25 +218,21 @@ fn lume_path_stem(p: &str) -> String {
     match base.rfind('.') { Some(i) if i > 0 => base[..i].to_string(), _ => base }
 }
 /// Lume's map: insertion-ordered (as in Ruby), hash lookups, one copy of each key.
-/// Entries live in a Vec; a hash -> positions index finds them. Removal leaves a
-/// tombstone; the Vec is compacted when tombstones outnumber live entries.
+/// Entries live in a Vec, which alone carries the order; a key -> position index
+/// finds them in one hash and one compare. Removal leaves a tombstone; the Vec is
+/// compacted when tombstones outnumber live entries.
 #[derive(Clone, Debug)]
 struct LumeMap<K, V> {
     entries: Vec<Option<(K, V)>>,
-    index: std::collections::HashMap<u64, Vec<usize>>,
+    /// key -> its position in `entries`. One hash and one compare per
+    /// lookup; `entries` alone carries the insertion order.
+    index: std::collections::HashMap<K, usize>,
     live: usize,
 }
 impl<K: std::hash::Hash + Eq + Clone, V: Clone> LumeMap<K, V> {
     fn new() -> Self { LumeMap { entries: Vec::new(), index: std::collections::HashMap::new(), live: 0 } }
-    fn hash_of<Q: std::hash::Hash + ?std::marker::Sized>(k: &Q) -> u64 {
-        use std::hash::Hasher;
-        let mut h = std::collections::hash_map::DefaultHasher::new();
-        k.hash(&mut h);
-        h.finish()
-    }
     fn position<Q>(&self, k: &Q) -> Option<usize> where K: std::borrow::Borrow<Q>, Q: std::hash::Hash + Eq + ?std::marker::Sized {
-        let h = Self::hash_of(k);
-        self.index.get(&h)?.iter().copied().find(|&i| matches!(&self.entries[i], Some((ek, _)) if ek.borrow() == k))
+        self.index.get(k).copied()
     }
     fn get<Q>(&self, k: &Q) -> Option<&V> where K: std::borrow::Borrow<Q>, Q: std::hash::Hash + Eq + ?std::marker::Sized {
         self.position(k).and_then(|i| self.entries[i].as_ref().map(|(_, v)| v))
@@ -250,21 +246,39 @@ impl<K: std::hash::Hash + Eq + Clone, V: Clone> LumeMap<K, V> {
         if let Some(i) = self.position(&k) {
             return self.entries[i].as_mut().map(|e| std::mem::replace(&mut e.1, v));
         }
-        let h = Self::hash_of(&k);
-        self.index.entry(h).or_default().push(self.entries.len());
+        self.index.insert(k.clone(), self.entries.len());
         self.entries.push(Some((k, v)));
         self.live += 1;
         None
     }
     /// The value for `k`, starting from an empty one if absent: `m[k].push(x)`.
     fn slot(&mut self, k: K) -> &mut V where V: Default { self.entry_or_insert(k, V::default()) }
+    /// The value for a key we only have on loan, inserting `default` first
+    /// if absent. A key is only made when one is actually kept, so
+    /// `counts[w] = counts[w].or(0) + 1` over repeating words allocates
+    /// once per distinct word rather than once per word.
+    fn entry_or_insert_ref<Q>(&mut self, k: &Q, default: V) -> &mut V
+    where
+        K: std::borrow::Borrow<Q>,
+        Q: std::hash::Hash + Eq + ?std::marker::Sized + ToOwned<Owned = K>,
+    {
+        let i = match self.position(k) {
+            Some(i) => i,
+            None => {
+                self.index.insert(k.to_owned(), self.entries.len());
+                self.entries.push(Some((k.to_owned(), default)));
+                self.live += 1;
+                self.entries.len() - 1
+            }
+        };
+        &mut self.entries[i].as_mut().unwrap().1
+    }
     /// The value for `k`, inserting `default` first if absent.
     fn entry_or_insert(&mut self, k: K, default: V) -> &mut V {
         let i = match self.position(&k) {
             Some(i) => i,
             None => {
-                let h = Self::hash_of(&k);
-                self.index.entry(h).or_default().push(self.entries.len());
+                self.index.insert(k.clone(), self.entries.len());
                 self.entries.push(Some((k, default)));
                 self.live += 1;
                 self.entries.len() - 1
@@ -273,9 +287,7 @@ impl<K: std::hash::Hash + Eq + Clone, V: Clone> LumeMap<K, V> {
         &mut self.entries[i].as_mut().unwrap().1
     }
     fn remove<Q>(&mut self, k: &Q) -> Option<V> where K: std::borrow::Borrow<Q>, Q: std::hash::Hash + Eq + ?std::marker::Sized {
-        let i = self.position(k)?;
-        let h = Self::hash_of(k);
-        if let Some(v) = self.index.get_mut(&h) { v.retain(|&j| j != i); }
+        let i = self.index.remove(k)?;
         let (_, v) = self.entries[i].take()?;
         self.live -= 1;
         if self.entries.len() > 8 && self.live * 2 < self.entries.len() { self.compact(); }
@@ -311,11 +323,11 @@ impl<K: LumeShow + std::hash::Hash + Eq + Clone, V: LumeShow + Clone> LumeShow f
 impl<K: std::hash::Hash + Eq + Clone, V: Clone> LumeLen for LumeMap<K, V> { fn lume_len(&self) -> i64 { self.len() as i64 } }
 impl<K: std::hash::Hash + Eq + Clone, V: Clone> LumeEmpty for LumeMap<K, V> { fn lume_empty(&self) -> bool { self.is_empty() } }
 /// `split` that drops trailing empty pieces (Ruby), without collecting.
-struct LumeSplit<'a> { inner: std::str::Split<'a, &'a str>, pending_empty: usize, buffered: Option<&'a str>, done: bool }
-impl<'a> LumeSplit<'a> {
-    fn new(inner: std::str::Split<'a, &'a str>) -> Self { LumeSplit { inner, pending_empty: 0, buffered: None, done: false } }
+struct LumeSplit<'a, I: Iterator<Item = &'a str>> { inner: I, pending_empty: usize, buffered: Option<&'a str>, done: bool }
+impl<'a, I: Iterator<Item = &'a str>> LumeSplit<'a, I> {
+    fn new(inner: I) -> Self { LumeSplit { inner, pending_empty: 0, buffered: None, done: false } }
 }
-impl<'a> Iterator for LumeSplit<'a> {
+impl<'a, I: Iterator<Item = &'a str>> Iterator for LumeSplit<'a, I> {
     type Item = &'a str;
     fn next(&mut self) -> Option<&'a str> {
         if self.pending_empty > 0 { self.pending_empty -= 1; return Some(""); }
@@ -1747,6 +1759,51 @@ impl Gen {
             return None;
         }
         None
+    }
+
+    /// A value written into a `format!` or a `println!`: the value-as-itself
+    /// form of milestone 32. For the four types whose `lume_str` is exactly
+    /// Rust's `Display`, the value goes in as it stands, so `puts "n is #{n}"`
+    /// builds one string instead of three. A `Float` is not one of them — it
+    /// keeps its point — and neither is anything that renders its insides.
+    fn shown(&mut self, e: &Expr) -> Result<String> {
+        let v = self.expr_val(e)?;
+        Ok(match self.ty_of(e).materialized() {
+            Type::Str | Type::Int | Type::Bool | Type::Char => v,
+            _ => format!("({}).lume_str()", v),
+        })
+    }
+
+    /// `puts` and `warn`. An interpolated line goes straight to the terminal:
+    /// `puts "n is #{n}"` writes its pieces out rather than building a string
+    /// first, which is the shape most Lume programs print in.
+    fn print_call(&mut self, macro_name: &str, arg: &Expr) -> Result<String> {
+        if let ExprKind::Str(pieces) = &arg.kind {
+            if pieces.iter().any(|p| matches!(p, StrPiece::Expr(_))) {
+                let (fmt, args) = self.interp(pieces)?;
+                return Ok(format!("{}!(\"{}\", {})", macro_name, fmt, args.join(", ")));
+            }
+        }
+        self.check_printable(arg)?;
+        let a = self.shown(arg)?;
+        Ok(format!("{}!(\"{{}}\", {})", macro_name, a))
+    }
+
+    /// The Rust format string and arguments behind `"a #{b} c"`.
+    fn interp(&mut self, pieces: &[StrPiece]) -> Result<(String, Vec<String>)> {
+        let mut fmt = String::new();
+        let mut args = Vec::new();
+        for p in pieces {
+            match p {
+                StrPiece::Lit(s) => fmt.push_str(&escape_rust_str(s, true)),
+                StrPiece::Expr(x) => {
+                    self.check_printable(x)?;
+                    fmt.push_str("{}");
+                    args.push(self.shown(x)?);
+                }
+            }
+        }
+        Ok((fmt, args))
     }
 
     /// A crate type can be printed only when the crate says how (`Display`).
@@ -5566,8 +5623,13 @@ impl Gen {
                                     if let ExprKind::Index { recv: irecv, index: iidx } = &orecv.kind {
                                         if same_expr(irecv, recv) && same_expr(iidx, index) {
                                             let place = self.mutable_place(recv, "this map", *line, *col)?;
-                                            // the map keeps the key, so it needs one of its own
-                                            let k = self.expr_owned(index)?;
+                                            // The map only keeps a key when it actually stores one,
+                                            // so the key is lent and copied on a miss. Over repeating
+                                            // words that is one copy per distinct word, not per word.
+                                            let (entry, k) = match &**k_ty {
+                                                Type::Str => ("entry_or_insert_ref", format!("({}).lume_as_str()", self.expr(index)?)),
+                                                _ => ("entry_or_insert", self.expr_owned(index)?),
+                                            };
                                             let d = self.expr_owned(&oargs[0].value)?;
                                             let x = self.expr_val(rhs)?;
                                             let tmp = self.fresh("e");
@@ -5577,7 +5639,7 @@ impl Gen {
                                                 (Type::Str, "+") => format!("{}.push_str(({}).lume_as_str());", tmp, x),
                                                 _ => format!("*{} = *{} {} {};", tmp, tmp, bop, x),
                                             };
-                                            self.line(&format!("{{ let {} = {}.entry_or_insert({}, {}); {} }}", tmp, place, k, d, step));
+                                            self.line(&format!("{{ let {} = {}.{}({}, {}); {} }}", tmp, place, entry, k, d, step));
                                             if is_tail {
                                                 return self.tail_unit(*line, *col);
                                             }
@@ -7792,18 +7854,7 @@ impl Gen {
                         .collect();
                     format!("String::from(\"{}\")", escape_rust_str(&s, false))
                 } else {
-                    let mut fmt = String::new();
-                    let mut args = Vec::new();
-                    for p in pieces {
-                        match p {
-                            StrPiece::Lit(s) => fmt.push_str(&escape_rust_str(s, true)),
-                            StrPiece::Expr(x) => {
-                                self.check_printable(x)?;
-                                fmt.push_str("{}");
-                                args.push(format!("({}).lume_str()", self.expr_val(x)?));
-                            }
-                        }
-                    }
+                    let (fmt, args) = self.interp(pieces)?;
                     format!("format!(\"{}\", {})", fmt, args.join(", "))
                 }
             }
@@ -8727,16 +8778,8 @@ impl Gen {
                 self.if_chain(branches, else_block.as_ref(), true)?
             }
             ExprKind::Match { scrutinee, arms } => self.match_expr(scrutinee, arms, true, e)?,
-            ExprKind::Puts(arg) => {
-                self.check_printable(arg)?;
-                let a = self.expr_val(arg)?;
-                format!("println!(\"{{}}\", ({}).lume_str())", a)
-            }
-            ExprKind::Warn(arg) => {
-                self.check_printable(arg)?;
-                let a = self.expr_val(arg)?;
-                format!("eprintln!(\"{{}}\", ({}).lume_str())", a)
-            }
+            ExprKind::Puts(arg) => self.print_call("println", arg)?,
+            ExprKind::Warn(arg) => self.print_call("eprintln", arg)?,
             ExprKind::Placeholder => {
                 return Err(LumeError::new(e.line, e.col, "`_` can only be used inside a method argument").with_help("write `xs.map(_.name)`; elsewhere give the value a name"));
             }
@@ -8938,7 +8981,19 @@ impl Gen {
             }
             "lines" => { need(0)?; format!("({}).lines()", recv) }
             "split" if args.is_empty() => format!("({}).split_whitespace()", recv),
-            "split" => { need(1)?; format!("LumeSplit::new(({}).split(&*({})))", recv, args[0]) }
+            "split" => {
+                need(1)?;
+                // A one-character separator is searched as a character, which is
+                // a byte scan rather than a substring search.
+                let sep = match &e.kind {
+                    ExprKind::Method { args: a, .. } => a.first().and_then(|a| char_literal(&a.value)),
+                    _ => None,
+                };
+                match sep {
+                    Some(c) => format!("LumeSplit::new(({}).split('{}'))", recv, rust_char(c)),
+                    None => format!("LumeSplit::new(({}).split(&*({})))", recv, args[0]),
+                }
+            }
             "join" => {
                 need(1)?;
                 let strs = matches!(rt, Type::List(ref e) | Type::Iter(ref e, _) if **e == Type::Str);
