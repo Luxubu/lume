@@ -7,7 +7,7 @@ Some(true)
 Lost/Island
 Some(1)
 [4, 3, 9, 3]
-[(4, lost), (8, island)]
+[(4, "lost"), (8, "island")]
 9
 [23, 23, 42, 30]
 2

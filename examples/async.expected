@@ -11,9 +11,9 @@ warning: `seen` is `shared var`: every use of it takes a lock, so tasks change i
    |   ^
   help: fine for a store or a counter; keep the work done while it is locked short
 item 1
-[item 1, item 2, item 3, item 4]
+["item 1", "item 2", "item 3", "item 4"]
 sum = 10
 [1, 4, 9, 16, 25]
 hits: 55
-[t1, t2, t3]
-[hello 1, hello 2, hello 3]
+["t1", "t2", "t3"]
+["hello 1", "hello 2", "hello 3"]

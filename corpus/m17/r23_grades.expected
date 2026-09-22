@@ -1,9 +1,9 @@
 Ann  avg=86.0 best=93 letters=AC
 Bo   avg=68.0 best=71 letters=CD
 Cy   avg=94.0 best=100 letters=BA
-{A: 2, C: 2, B: 1, D: 1}
-[A, B, C, D]
-[ann, cy]
+{"A": 2, "C": 2, "B": 1, "D": 1}
+["A", "B", "C", "D"]
+["ann", "cy"]
 ([93, 88, 100], [71, 79, 65])
 [(100, 100)]
 [5, 5, 5, 5, 5, 0]

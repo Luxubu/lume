@@ -4,9 +4,9 @@ sum of squares of odds: 117
 how many > 3: 4
 any nine? true  all positive? true
 first three sorted: [1, 1, 2]
-adults: [Ana, Cy]
+adults: ["Ana", "Cy"]
 total age of adults: 76
-oldest first: [Cy, Ana, Bo, Di]
+oldest first: ["Cy", "Ana", "Bo", "Di"]
 average adult age: 38
 Ana (31), Bo (16), Cy (45), Di (12)
 welcome, Ana

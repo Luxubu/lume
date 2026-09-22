@@ -1,0 +1,89 @@
+# How a value prints.
+#
+# Six review rounds asked the same question first: what does `puts` do with
+# a list, a map, an optional, a struct? Nobody could predict their own
+# program's output, so everyone routed around it with `join` and `len`.
+# This file is the answer, and its expected output is the reference.
+#
+# The rule is one sentence: a value on its own prints as itself, and a
+# value *inside* another prints as you would write it. They differ only
+# for text, and that difference is what lets one item be told from two.
+
+struct Point:
+  x: Int
+  y: Int
+
+struct Person:
+  name: Str
+  home: Point
+
+enum Shape:
+  Dot
+  Circle(radius: Float)
+  Box(w: Int, h: Int)
+
+def fails -> Int or Error:
+  Error("no such row")
+
+def main:
+  # ---- on its own: the value as itself -------------------------------
+  puts 42
+  puts 0 - 7
+  puts 3.5
+  puts 2.0                      # a Float keeps its point
+  puts true
+  puts "plain text"             # no quotes: this is the text itself
+
+  # ---- inside another: the value as you would write it ---------------
+  puts ["a", "b"]
+  puts ["a, b"]                 # one item, and you can tell
+  puts [1, 2, 3]
+  empty: [Str] = []
+  puts empty
+
+  puts {"x": 1, "y": 2}
+  puts {"one", "two"}
+  none: {Str} = {}
+  puts none                     # an empty set and an empty map both print {}
+
+  pair = (1, "two", true)
+  puts pair
+  puts [[1, 2], [3]]
+
+  # ---- optional and result -------------------------------------------
+  found: Str? = Some("pear")
+  missing: Str? = None
+  puts found
+  puts missing
+  puts [Some(1), None]
+  puts Ok(5)
+  puts fails()
+
+  # ---- your own types ------------------------------------------------
+  puts Point(x: 1, y: 2)
+  puts Person(name: "Ada", home: Point(x: 0, y: 0))
+  puts Dot
+  puts Circle(radius: 1.5)
+  puts Box(w: 2, h: 3)
+  puts [Point(x: 1, y: 2)]
+
+  # ---- interpolation is the value as itself --------------------------
+  who = "Ada"
+  puts "hello #{who}"
+  puts "the list is #{["a", "b"]}"
+
+  # ---- laying things out ---------------------------------------------
+  # `pad` puts the spaces on the left, `pad_right` on the right, and
+  # neither ever cuts a value short.
+  puts "[" + "ab".pad(6) + "]"
+  puts "[" + "ab".pad_right(6) + "]"
+  puts "[" + 42.pad(6) + "]"
+  puts "[" + 42.pad_right(6) + "]"
+  puts "[" + "too long for this".pad(4) + "]"
+
+  # `join` works on any list whose items can be shown, not just text,
+  # and it uses the value-as-itself form, so no quotes appear.
+  puts [1, 2, 3].join("-")
+  puts [1.5, 2.5].join("-")
+  puts ["a", "b"].join("-")
+  puts [3, 1, 2].map { |n| n * 2 }.join("-")

@@ -6,8 +6,8 @@ Some(10)
 Some(30)
 pear, apple, fig
 apple-fig-pear
-Some(pear)
-Some(apple)
+Some("pear")
+Some("apple")
 0
 None
 None
@@ -18,5 +18,5 @@ None
 [20, 10, 30]
 {3, 1, 2}
 3
-[a, b]
+["a", "b"]
 exit: 0

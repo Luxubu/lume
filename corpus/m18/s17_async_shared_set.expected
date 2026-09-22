@@ -5,9 +5,9 @@ warning: `seen` is `shared var`: every use of it takes a lock, so tasks change i
   |   ^
   help: fine for a store or a counter; keep the work done while it is locked short
 3
-[job0, job1, job2]
+["job0", "job1", "job2"]
 true
-{A, B, C}
+{"A", "B", "C"}
 {1, 2, 3}
 {1, 2}
 exit: 0

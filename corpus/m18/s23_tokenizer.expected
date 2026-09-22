@@ -10,9 +10,9 @@ warning: `!` stops the program if the value is missing or an error
 49 |   puts eval_rpn(tokenize("100 7 - 3 /")!)
    |                                        ^
   help: fine in tests and quick scripts; elsewhere use `match`, `?` or `.or(default)`
-Ok([Num(v: 12), Op(c: +), LParen, Num(v: 3), Op(c: *), Num(v: 45), RParen])
-Error(bad char `%` at 2)
+Ok([Num(v: 12), Op(c: "+"), LParen, Num(v: 3), Op(c: "*"), Num(v: 45), RParen])
+Error("bad char `%` at 2")
 70
 31
-Error(bad char `€` at 2)
+Error("bad char `€` at 2")
 exit: 0

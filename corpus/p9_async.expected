@@ -14,5 +14,5 @@ warning: `seen` is `shared var`: every use of it takes a lock, so tasks change i
 total 12
 distinct 10
 the: 2
-Stats(words: 12, longest: )
+Stats(words: 12, longest: "")
 exit: 0

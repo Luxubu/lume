@@ -1,15 +1,15 @@
-{apple: 3, pear: 5, fig: 7, plum: 1}
-{apple: 3, pear: 0, fig: 7}
-[apple, fig]
-{fig: 7}
+{"apple": 3, "pear": 5, "fig": 7, "plum": 1}
+{"apple": 3, "pear": 0, "fig": 7}
+["apple", "fig"]
+{"fig": 7}
 [6, 0, 14]
 20
 true
-{apple: 50.0, fig: 200.0}
+{"apple": 50.0, "fig": 200.0}
 4
 0
-Some(7 left)
-[APPLE, FIG]
+Some("7 left")
+["APPLE", "FIG"]
 3
-{apple: 3, pear: 1}
+{"apple": 3, "pear": 1}
 exit: 0

@@ -5,10 +5,10 @@ warning: `things` holds values of different types behind `Priced`, so calls on i
    |   ^
   help: fine for most code; use a single concrete type or an enum if this is a hot loop
 total value: 50.3
-low: [nut, gear]
+low: ["nut", "gear"]
 gear x2
 bolt x110
-Some(Item(name: bolt, unit: 0.25, qty: 100))
+Some(Item(name: "bolt", unit: 0.25, qty: 100))
 pin x1000 @ 10.0
 install @ 160.0
 170.0

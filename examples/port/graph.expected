@@ -1,5 +1,5 @@
 build order: http, json, web, db, app
-who needs json: [web, db]
+who needs json: ["web", "db"]
 detected cycle: app -> web -> json -> app
 forward: [10, 20, 30, 40]
 backward: [40, 30, 20, 10]

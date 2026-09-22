@@ -1,5 +1,5 @@
 None
 None
 Some(1)
-Some(a)
+Some("a")
 exit: 0

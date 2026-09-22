@@ -6,7 +6,7 @@ warning: `store` is `shared var`: every use of it takes a lock, so tasks change 
   help: fine for a store or a counter; keep the work done while it is locked short
 201  Created(id: 1)
 201  Created(id: 2)
-400  BadRequest(why: bad email: nope)
-400  BadRequest(why: expected name,email; got 1 fields)
-[NotFound(what: user 7), Ok(body: Ana <ana@x.com>), Ok(body: Bo <bo@x.com>)]
+400  BadRequest(why: "bad email: nope")
+400  BadRequest(why: "expected name,email; got 1 fields")
+["NotFound(what: \"user 7\")", "Ok(body: \"Ana <ana@x.com>\")", "Ok(body: \"Bo <bo@x.com>\")"]
 2 users stored; next id 3

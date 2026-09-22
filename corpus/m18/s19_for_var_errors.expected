@@ -1,9 +1,9 @@
-[Bin(id: 1, items: {a, tag1}), Bin(id: 2, items: {tag2})]
-Ok((x, 10))
-Error(no = in `y10`)
-Error(`ten` is not an integer)
-Some(É)
+[Bin(id: 1, items: {"a", "tag1"}), Bin(id: 2, items: {"tag2"})]
+Ok(("x", 10))
+Error("no = in `y10`")
+Error("`ten` is not an integer")
+Some("É")
 None
-Ok({a: 1, bb: 22})
+Ok({"a": 1, "bb": 22})
 failed: no = in `oops`
 exit: 0

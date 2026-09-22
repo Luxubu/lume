@@ -13,10 +13,14 @@
 #
 # Meant to RUN.
 #
+# NOTE (milestone 32): this header was written when how a value prints
+# was undocumented. Lume now shows a value inside another in the form you
+# would write it, so text inside a list, a map, an optional or a struct
+# carries its quotes. The lines below are updated to match the rule.
 # EXPECTED OUTPUT:
 # 4
 # TSBF
-# Some(sleepy)
+# Some("sleepy")
 # THE-SLEEPY-BROWN-FOX
 # ONE-TWO
 # 3

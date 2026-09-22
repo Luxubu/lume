@@ -1,11 +1,11 @@
 ana
 ana
-U(name: ana, tags: [a])
-U(name: ana, tags: [a])
+U(name: "ana", tags: ["a"])
+U(name: "ana", tags: ["a"])
 ana
 a
-[ana, ana]
-U(name: ana, tags: [a])
-U(name: ana, tags: [a])
-U(name: ana, tags: [a])
+["ana", "ana"]
+U(name: "ana", tags: ["a"])
+U(name: "ana", tags: ["a"])
+U(name: "ana", tags: ["a"])
 exit: 0

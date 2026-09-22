@@ -1,6 +1,6 @@
-Some(b)
+Some("b")
 40
-[d, c]
+["d", "c"]
 None
 Some(40)
 3

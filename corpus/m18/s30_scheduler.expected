@@ -5,6 +5,6 @@ warning: `log` is `shared var`: every use of it takes a lock, so tasks change it
    |   ^
   help: fine for a store or a counter; keep the work done while it is locked short
 4
-[w1:FETCH, w2:PARSE, w2:LINT, w3:BUILD, w4:SHIP]
-stuck: {orphan}
+["w1:FETCH", "w2:PARSE", "w2:LINT", "w3:BUILD", "w4:SHIP"]
+stuck: {"orphan"}
 exit: 0

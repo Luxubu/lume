@@ -1,11 +1,11 @@
-[b, a, b, c]
+["b", "a", "b", "c"]
 4 items, 2 ops, uniq=3
-Some(c)
+Some("c")
 None
-[b, a]
-[push a, push b]
+["b", "a"]
+["push a", "push b"]
 Some(2)
-[(b, push a), (a, push b)]
+[("b", "push a"), ("a", "push b")]
 k: 3
 Push b
 Some(0)

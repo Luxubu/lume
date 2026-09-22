@@ -1,6 +1,6 @@
 2
 Ana Lee: ana@work.io, ana@x.io [vip work]
 bo Kim: bo@y.io [new]
-[Ana]
-{vip, work, new}
+["Ana"]
+{"vip", "work", "new"}
 exit: 0

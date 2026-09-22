@@ -20,7 +20,7 @@ program takes about 1 s in Python and 1.4 s in Ruby.
 The language design lives in the [Lume Language Design](https://claude.ai/code/artifact/1872fe63-1816-4b1e-9983-dec2774382fb)
 document. This repository is the compiler and the examples.
 
-## Status: milestones 1–31 done
+## Status: milestones 1–32 done
 
 | # | Milestone | Status |
 | --- | --- | --- |
@@ -42,6 +42,7 @@ document. This repository is the compiler and the examples.
 | 16 | Ownership by analysis: liveness-based copy or move, recursive enums boxed, `.or` on optional fields, string comparisons in blocks, `for var a in xs`, `xs[i].method` | done: review corpus leaks 6 → 0 |
 | 17 | Pattern completeness: a real exhaustiveness checker with nested witnesses, `A \| B` alternatives; the everyday standard methods; statements in inline blocks | done: 37 new methods, corpus 40 ok / 26 Lume errors / 0 leaks |
 | 18 | `{T}` sets with literals, algebra and iteration; `s[i]` / `s[a..b]` / `xs[a..b]` by character and position; structs and enums as map keys | done |
+| 32 | How a value prints: a value on its own prints as itself, a value inside another as you would write it — plus `pad`/`pad_right` on every scalar and the rules written down | done: the question every one of six review rounds asked first; `examples/printing.lume` is the reference |
 | 31 | Re-export: `pub import seq` passes a module on to your own importers, so a library's internal layout stops being part of its public surface | done: the last of the milestone-24 findings; `report.lume` imports `table` alone and still calls `seq` |
 | 30 | Sixth review round (`corpus/m30/`, 30 multi-file programs by three reviewers): module mechanics, extends across files, and real programs laid out the way a person would | done: 9 ranked problems fixed, 20 ok / 10 Lume errors / 0 leaks; an `extend` now travels as far as the program goes |
 | 29 | An `extend` travels with the import: a library ships its conformances, and two claiming the same type and interface is one error naming both files | done: `seq` ships `Walkable[T]`, and its consumer extends nothing; no `pub extend` — there is no name to export |
@@ -272,6 +273,41 @@ quotes'`, `null`, `print`, `;`, each with the Lume form). Warnings:
 `return` inside a block, a `match` arm that can never run because the arms
 above it already cover its values.
 
+## How a value prints
+
+A value on its own prints as itself. A value *inside* another prints as you
+would write it. They differ only for text, and that difference is what lets
+one item be told from two — `["a, b"]` is one item, `["a", "b"]` is two.
+
+| written | prints |
+| --- | --- |
+| `puts 42` / `puts 0 - 7` | `42` / `-7` |
+| `puts 3.5` / `puts 2.0` | `3.5` / `2.0` — a `Float` keeps its point |
+| `puts true` | `true` |
+| `puts "plain text"` | `plain text` — no quotes: this is the text itself |
+| `puts ["a", "b"]` | `["a", "b"]` |
+| `puts [1, 2, 3]` / an empty `[Str]` | `[1, 2, 3]` / `[]` |
+| `puts {"x": 1, "y": 2}` | `{"x": 1, "y": 2}` |
+| `puts {"one", "two"}` | `{"one", "two"}` |
+| an empty set or an empty map | `{}` — both, as both are written `{}` |
+| `puts (1, "two", true)` | `(1, "two", true)` |
+| `puts Some("pear")` / `puts None` | `Some("pear")` / `None` |
+| `puts Ok(5)` | `Ok(5)` |
+| a failed `T or Error` | `Error("no such row")` |
+| `puts Point(x: 1, y: 2)` | `Point(x: 1, y: 2)` — fields named, in order |
+| a variant with no fields / with fields | `Dot` / `Circle(radius: 1.5)` |
+| `"hello #{who}"` | interpolation is the value as itself, so no quotes |
+
+Laying things out: `pad(n)` puts the spaces on the left and `pad_right(n)`
+on the right, on text and on any number or `Bool`; neither ever cuts a value
+short, so a value wider than `n` comes back whole. `join(sep)` works on any
+list whose items can be shown, not only text, and uses the value-as-itself
+form, so no quotes appear: `[1, 2, 3].join("-")` is `1-2-3`. A lazy chain
+can be joined directly — `xs.map { |n| n * 2 }.join("-")` needs no
+`.to_list` first; `.to_list` is for when you want the list itself.
+
+`examples/printing.lume` is this table as a program.
+
 ## Tests
 
 ```sh
@@ -438,6 +474,7 @@ examples/generic_interfaces.lume  interfaces with type parameters: bounds, defau
 examples/generic_extend.lume      generic `extend`: lists, sets, maps and your own generic type under one interface
 examples/travel/                  a library that ships its conformances, and a consumer that writes no `extend`
 examples/shipping/                `pub import`: a library passes its own dependency on to its consumers
+examples/printing.lume            how every kind of value prints, as a runnable table
 examples/lib/            a library written in Lume: seq (generic helpers), table (typed CSV),
                          a report program that uses both, and what writing it exposed
 examples/tests/          files with `test` blocks; expected `lume test` output

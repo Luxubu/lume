@@ -3,4 +3,4 @@
 true
 a%20b%26c%3Dd
 a b&c
-[fast%20as%20Rust, easy%20as%20Ruby]
+["fast%20as%20Rust", "easy%20as%20Ruby"]

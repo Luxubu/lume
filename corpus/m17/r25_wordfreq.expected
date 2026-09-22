@@ -1,13 +1,13 @@
-{the: 3, cat: 1, and: 2, hat: 1, bat: 1, sat: 1}
-{the: 3, and: 2}
-[the, and, cat]
+{"the": 3, "cat": 1, "and": 2, "hat": 1, "bat": 1, "sat": 1}
+{"the": 3, "and": 2}
+["the", "and", "cat"]
 [3]
 {3: 6}
 The Cat And Hat Bat Sat
 Some(4)
 Some(9)
-[t, c, a, h, b, s]
+["t", "c", "a", "h", "b", "s"]
 0
 27
-[and]
+["and"]
 exit: 0

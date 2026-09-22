@@ -1,6 +1,6 @@
-U(name: ana, tags: [a, b])
+U(name: "ana", tags: ["a", "b"])
 ana
-[a, b]
-[U(name: ana, tags: [a, b])]
-U(name: ana, tags: [a, b])
+["a", "b"]
+[U(name: "ana", tags: ["a", "b"])]
+U(name: "ana", tags: ["a", "b"])
 exit: 0

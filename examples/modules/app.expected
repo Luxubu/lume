@@ -1,4 +1,4 @@
-3 users; admins: [Ana]
+3 users; admins: ["Ana"]
 Cy <cy@x.com> (guest for 30 days)
 rejected: unknown role `wizard`
 Ed <ed@x.com> (guest for 7 days)

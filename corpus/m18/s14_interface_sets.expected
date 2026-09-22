@@ -1,5 +1,5 @@
 true
-{lang}
+{"lang"}
 compilers,lang,rust has rust: true
 a,is,rust has rust: true
 hello...

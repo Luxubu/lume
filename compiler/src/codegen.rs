@@ -39,37 +39,76 @@ trait LumeSum<T> { fn lume_sum(&self) -> T; }
 impl LumeSum<i64> for Vec<i64> { fn lume_sum(&self) -> i64 { self.iter().sum() } }
 impl LumeSum<f64> for Vec<f64> { fn lume_sum(&self) -> f64 { self.iter().sum() } }
 impl<T, U: LumeSum<T>> LumeSum<T> for &U { fn lume_sum(&self) -> T { (**self).lume_sum() } }
-trait LumeShow { fn lume_str(&self) -> String; }
+// A value has two forms: `lume_str`, the value as itself, which is what
+// `puts` and interpolation show; and `lume_in`, the value as you would
+// write it, which is what a value *inside* another one shows. They differ
+// only for text: `puts name` is `Ada`, and `puts [name]` is `["Ada"]`, so
+// one item and two can always be told apart.
+trait LumeShow {
+    fn lume_str(&self) -> String;
+    fn lume_in(&self) -> String { self.lume_str() }
+}
+fn lume_quote(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('"');
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\t' => out.push_str("\\t"),
+            '\r' => out.push_str("\\r"),
+            _ => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
 impl LumeShow for i64 { fn lume_str(&self) -> String { self.to_string() } }
 impl LumeShow for f64 { fn lume_str(&self) -> String { format!("{:?}", if *self == 0.0 { 0.0 } else { *self }) } }
 impl LumeShow for bool { fn lume_str(&self) -> String { self.to_string() } }
-impl LumeShow for char { fn lume_str(&self) -> String { self.to_string() } }
+impl LumeShow for char {
+    fn lume_str(&self) -> String { self.to_string() }
+    fn lume_in(&self) -> String { lume_quote(&self.to_string()) }
+}
 fn lume_char_eq_str(c: char, s: &str) -> bool { let mut it = s.chars(); it.next() == Some(c) && it.next().is_none() }
 fn lume_join_chars(cs: &[char], sep: &str) -> String {
     let mut out = String::with_capacity(cs.len());
     for (i, c) in cs.iter().enumerate() { if i > 0 { out.push_str(sep); } out.push(*c); }
     out
 }
-impl LumeShow for String { fn lume_str(&self) -> String { self.clone() } }
-impl LumeShow for str { fn lume_str(&self) -> String { self.to_string() } }
+impl LumeShow for String {
+    fn lume_str(&self) -> String { self.clone() }
+    fn lume_in(&self) -> String { lume_quote(self) }
+}
+impl LumeShow for str {
+    fn lume_str(&self) -> String { self.to_string() }
+    fn lume_in(&self) -> String { lume_quote(self) }
+}
 impl LumeShow for () { fn lume_str(&self) -> String { String::from("()") } }
 impl<T: LumeShow> LumeShow for Vec<T> {
-    fn lume_str(&self) -> String { format!("[{}]", self.iter().map(|x| x.lume_str()).collect::<Vec<_>>().join(", ")) }
+    fn lume_str(&self) -> String { format!("[{}]", self.iter().map(|x| x.lume_in()).collect::<Vec<_>>().join(", ")) }
 }
 impl<T: LumeShow> LumeShow for [T] {
-    fn lume_str(&self) -> String { format!("[{}]", self.iter().map(|x| x.lume_str()).collect::<Vec<_>>().join(", ")) }
+    fn lume_str(&self) -> String { format!("[{}]", self.iter().map(|x| x.lume_in()).collect::<Vec<_>>().join(", ")) }
 }
 impl<T: LumeShow> LumeShow for Option<T> {
-    fn lume_str(&self) -> String { match self { Some(x) => format!("Some({})", x.lume_str()), None => String::from("None") } }
+    fn lume_str(&self) -> String { match self { Some(x) => format!("Some({})", x.lume_in()), None => String::from("None") } }
 }
 impl<A: LumeShow, B: LumeShow> LumeShow for (A, B) {
-    fn lume_str(&self) -> String { format!("({}, {})", self.0.lume_str(), self.1.lume_str()) }
+    fn lume_str(&self) -> String { format!("({}, {})", self.0.lume_in(), self.1.lume_in()) }
 }
 impl<A: LumeShow, B: LumeShow, C: LumeShow> LumeShow for (A, B, C) {
-    fn lume_str(&self) -> String { format!("({}, {}, {})", self.0.lume_str(), self.1.lume_str(), self.2.lume_str()) }
+    fn lume_str(&self) -> String { format!("({}, {}, {})", self.0.lume_in(), self.1.lume_in(), self.2.lume_in()) }
 }
-impl<T: LumeShow + ?std::marker::Sized> LumeShow for &T { fn lume_str(&self) -> String { (**self).lume_str() } }
-impl<T: LumeShow + ?std::marker::Sized> LumeShow for ::std::boxed::Box<T> { fn lume_str(&self) -> String { (**self).lume_str() } }
+impl<T: LumeShow + ?std::marker::Sized> LumeShow for &T {
+    fn lume_str(&self) -> String { (**self).lume_str() }
+    fn lume_in(&self) -> String { (**self).lume_in() }
+}
+impl<T: LumeShow + ?std::marker::Sized> LumeShow for ::std::boxed::Box<T> {
+    fn lume_str(&self) -> String { (**self).lume_str() }
+    fn lume_in(&self) -> String { (**self).lume_in() }
+}
 impl<T: LumeShow + ?std::marker::Sized> LumeShow for std::sync::Arc<T> { fn lume_str(&self) -> String { (**self).lume_str() } }
 impl<T: LumeShow> LumeShow for std::sync::Mutex<T> { fn lume_str(&self) -> String { self.lock().unwrap().lume_str() } }
 #[allow(dead_code)]
@@ -84,9 +123,9 @@ fn lume_assert_failed(line: usize, text: &str, sides: Option<(String, String)>) 
 struct LumeAssert(String);
 #[derive(Debug, Clone, PartialEq)]
 struct Error { message: String }
-impl LumeShow for Error { fn lume_str(&self) -> String { format!("Error({})", self.message) } }
+impl LumeShow for Error { fn lume_str(&self) -> String { format!("Error({})", lume_quote(&self.message)) } }
 impl<T: LumeShow, E: LumeShow> LumeShow for ::std::result::Result<T, E> {
-    fn lume_str(&self) -> String { match self { Ok(x) => format!("Ok({})", x.lume_str()), Err(e) => e.lume_str() } }
+    fn lume_str(&self) -> String { match self { Ok(x) => format!("Ok({})", x.lume_in()), Err(e) => e.lume_str() } }
 }
 fn lume_to_int(s: &str) -> ::std::result::Result<i64, Error> {
     s.trim().parse::<i64>().map_err(|_| Error { message: format!("`{}` is not an integer", s) })
@@ -266,7 +305,7 @@ impl<K: std::hash::Hash + Eq + Clone, V: Clone + PartialEq> PartialEq for LumeMa
 }
 impl<K: LumeShow + std::hash::Hash + Eq + Clone, V: LumeShow + Clone> LumeShow for LumeMap<K, V> {
     fn lume_str(&self) -> String {
-        format!("{{{}}}", self.iter().map(|(k, v)| format!("{}: {}", k.lume_str(), v.lume_str())).collect::<Vec<_>>().join(", "))
+        format!("{{{}}}", self.iter().map(|(k, v)| format!("{}: {}", k.lume_in(), v.lume_in())).collect::<Vec<_>>().join(", "))
     }
 }
 impl<K: std::hash::Hash + Eq + Clone, V: Clone> LumeLen for LumeMap<K, V> { fn lume_len(&self) -> i64 { self.len() as i64 } }
@@ -320,7 +359,7 @@ impl<T: std::hash::Hash + Eq + Clone> PartialEq for LumeSet<T> {
     fn eq(&self, o: &Self) -> bool { self.len() == o.len() && self.is_subset(o) }
 }
 impl<T: LumeShow + std::hash::Hash + Eq + Clone> LumeShow for LumeSet<T> {
-    fn lume_str(&self) -> String { format!("{{{}}}", self.iter().map(|x| x.lume_str()).collect::<Vec<_>>().join(", ")) }
+    fn lume_str(&self) -> String { format!("{{{}}}", self.iter().map(|x| x.lume_in()).collect::<Vec<_>>().join(", ")) }
 }
 impl<T: std::hash::Hash + Eq + Clone> LumeLen for LumeSet<T> { fn lume_len(&self) -> i64 { self.len() as i64 } }
 impl<T: std::hash::Hash + Eq + Clone> LumeEmpty for LumeSet<T> { fn lume_empty(&self) -> bool { self.is_empty() } }
@@ -4836,7 +4875,7 @@ impl Gen {
         self.line(&format!("impl{} LumeShow for {}{} {{", gen, s.name, gargs));
         self.indent += 1;
         let fmt: Vec<String> = s.fields.iter().map(|f| format!("{}: {{}}", f.name)).collect();
-        let args: Vec<String> = s.fields.iter().map(|f| format!("self.{}.lume_str()", rust_name(&f.name))).collect();
+        let args: Vec<String> = s.fields.iter().map(|f| format!("self.{}.lume_in()", rust_name(&f.name))).collect();
         self.line(&format!("fn lume_str(&self) -> String {{ format!(\"{}({})\", {}) }}", s.name, fmt.join(", "), args.join(", ")));
         self.indent -= 1;
         self.line("}");
@@ -4912,7 +4951,7 @@ impl Gen {
             } else {
                 let names: Vec<String> = v.fields.iter().map(|f| rust_name(&f.name)).collect();
                 let fmt: Vec<String> = v.fields.iter().map(|f| format!("{}: {{}}", f.name)).collect();
-                let args: Vec<String> = names.iter().map(|n| format!("{}.lume_str()", n)).collect();
+                let args: Vec<String> = names.iter().map(|n| format!("{}.lume_in()", n)).collect();
                 self.line(&format!(
                     "{}::{} {{ {} }} => format!(\"{}({})\", {}),",
                     e.name,
@@ -7935,7 +7974,19 @@ impl Gen {
                     _ => format!("({}).expect(\"expected a value, found None\")", inner),
                 }
             }
-            ExprKind::Ok(x) => format!("Ok({})", self.expr_owned(x)?),
+            ExprKind::Ok(x) => {
+                // `Ok(5)` where nothing says what it fails with: Lume has one
+                // error type, so that is what it fails with
+                let known = self.want.last().map(|w| matches!(w, Type::Result(..))).unwrap_or(false) || matches!(self.current_ret, Type::Result(..));
+                let v = self.expr_owned(x)?;
+                if known {
+                    format!("Ok({})", v)
+                } else {
+                    let xt = self.ty_of(x).materialized();
+                    let t = self.rt(&xt);
+                    format!("::std::result::Result::<{}, Error>::Ok({})", t, v)
+                }
+            }
             ExprKind::Index { recv, index } => {
                 let rt = self.ty_of(recv).materialized();
                 let r = self.expr_val(recv)?;
@@ -8977,7 +9028,7 @@ fn builtins_for(recv: &Type) -> Vec<&'static str> {
             "ends_with?", "pad", "pad_right", "reverse", "slice", "replace", "repeat", "capitalize", "index_of", "digit?", "alpha?", "space?",
             "trim_left", "trim_right",
         ],
-        Type::Char => vec!["digit?", "alpha?", "space?", "alnum?", "upper?", "lower?", "upcase", "downcase", "code", "pad"],
+        Type::Char => vec!["digit?", "alpha?", "space?", "alnum?", "upper?", "lower?", "upcase", "downcase", "code", "pad", "pad_right"],
         Type::List(_) => vec![
             "len", "empty?", "any?", "all?", "first", "last", "max", "min", "sum", "sort", "sort_by", "reverse", "push", "pop", "contains?",
             "join", "map", "filter", "reject", "each", "count", "find", "take", "skip", "take_while", "fold", "min_by", "max_by", "enumerate",
@@ -8995,9 +9046,9 @@ fn builtins_for(recv: &Type) -> Vec<&'static str> {
         ],
         Type::Option(_) => vec!["or", "some?", "none?", "or_error", "map"],
         Type::Result(..) => vec!["or", "ok?", "error?", "error", "ok", "map"],
-        Type::Int => vec!["to_float", "to_int", "abs", "pad", "max", "min", "clamp", "pow", "even?", "odd?", "to_char", "decimals"],
-        Type::Float => vec!["to_int", "to_float", "sqrt", "floor", "ceil", "round", "abs", "pad", "max", "min", "clamp", "pow", "decimals"],
-        Type::Bool => vec!["pad"],
+        Type::Int => vec!["to_float", "to_int", "abs", "pad", "pad_right", "max", "min", "clamp", "pow", "even?", "odd?", "to_char", "decimals"],
+        Type::Float => vec!["to_int", "to_float", "sqrt", "floor", "ceil", "round", "abs", "pad", "pad_right", "max", "min", "clamp", "pow", "decimals"],
+        Type::Bool => vec!["pad", "pad_right"],
         _ => vec![],
     };
     v.extend(common);
@@ -9565,7 +9616,7 @@ fn builtin_params(recv: &Type, name: &str) -> Option<Vec<Type>> {
         (Type::Str, "replace") => vec![st(), st()],
         (Type::Str, "repeat" | "pad" | "pad_right") => vec![int()],
         (Type::Str, "slice") => vec![int(), int()],
-        (Type::Int | Type::Float | Type::Bool, "pad") => vec![int()],
+        (Type::Int | Type::Float | Type::Bool, "pad" | "pad_right") => vec![int()],
         (Type::Int, "max" | "min" | "pow") => vec![int()],
         (Type::Int, "clamp") => vec![int(), int()],
         (Type::Float, "max" | "min" | "pow") => vec![Type::Float],

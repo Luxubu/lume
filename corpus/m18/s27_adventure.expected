@@ -8,7 +8,7 @@
 > east: The vault opens.
 > out: Freedom!
 > dance: Nothing happens.
-[book, key]
+["book", "key"]
 {Hall, Library, Vault, Outside}
 4
 true

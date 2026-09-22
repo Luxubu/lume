@@ -4,11 +4,11 @@ warning: `!` stops the program if the value is missing or an error
 38 |   c = load(good)!
    |                 ^
   help: fine in tests and quick scripts; elsewhere use `match`, `?` or `.or(default)`
-Ok(Config(host: example.com, port: 8080, debug: true))
-Error(missing port)
-Error(`abc` is not an integer)
-Error(port out of range: 99999)
-Error(not a bool: maybe)
+Ok(Config(host: "example.com", port: 8080, debug: true))
+Error("missing port")
+Error("`abc` is not an integer")
+Error("port out of range: 99999")
+Error("not a bool: maybe")
 Some(8080)
 None
 None
