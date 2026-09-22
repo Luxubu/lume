@@ -1774,6 +1774,12 @@ impl Gen {
     /// builds one string instead of three. A `Float` is not one of them — it
     /// keeps its point — and neither is anything that renders its insides.
     fn shown(&mut self, e: &Expr) -> Result<String> {
+        // `puts None` with nothing to say what it would have held. Every
+        // `T?` prints the same word here, so pick a `T` rather than leak
+        // rustc's complaint about a type parameter the program never named.
+        if matches!(e.kind, ExprKind::None) && matches!(self.ty_of(e).materialized(), Type::Option(i) if *i == Type::Unknown) {
+            return Ok("(None::<i64>).lume_str()".to_string());
+        }
         let v = self.expr_val(e)?;
         Ok(match self.ty_of(e).materialized() {
             Type::Str | Type::Int | Type::Bool | Type::Char => v,
@@ -2282,6 +2288,14 @@ impl Gen {
             }
         }
         missing.sort();
+        // An interface that asks for nothing — every method has a default —
+        // would otherwise be satisfied by every type in the program, which is
+        // not a claim anybody means to make. Conformance has to rest on at
+        // least one method the type really has; an `extend` says so outright
+        // and is registered before this runs.
+        if !info.methods.is_empty() && !info.methods.keys().any(|n| have.contains_key(n)) {
+            return (Conformance::Missing(info.methods.keys().cloned().collect()), Vec::new());
+        }
         let args: Vec<Type> = info.generics.iter().map(|p| sub.get(&p.name).cloned().unwrap_or(Type::Unknown)).collect();
         if !missing.is_empty() {
             return (Conformance::Missing(missing), args);
@@ -5249,7 +5263,9 @@ impl Gen {
     /// In a function returning `T or E`, a result value of type `T` is
     /// wrapped in `Ok`, and one of type `E` in `Err`.
     fn coerce_result(&mut self, text: String, e: &Expr) -> Result<String> {
-        if !self.tail_of_fn || (self.in_block && !matches!(self.block_ret, Some(Type::Result(..)))) {
+        // A block declared `(A) -> B?` implies its `Some` the same way one
+        // declared `(A) -> B or E` implies its `Ok`.
+        if !self.tail_of_fn || (self.in_block && !matches!(self.block_ret, Some(Type::Result(..)) | Some(Type::Option(_)))) {
             return Ok(text);
         }
         if matches!(e.kind, ExprKind::Rust(_)) {
@@ -6679,9 +6695,10 @@ impl Gen {
         self.current_fn = "this block".to_string();
         self.loop_depth = 0;
         self.in_block = true;
-        // a block that gives back a `T or E` ends the way a function does:
-        // a bare value is the implied `Ok`, and `?` leaves the block
-        self.tail_of_fn = matches!(out, Type::Result(..));
+        // a block that gives back a `T or E` or a `T?` ends the way a
+        // function does: a bare value is the implied `Ok` or `Some`, and `?`
+        // leaves the block
+        self.tail_of_fn = matches!(out, Type::Result(..) | Type::Option(_));
         self.current_ret = out.clone();
         self.barriers.push(self.scopes.len() - 1);
         let want_value = *out != Type::Unit;
@@ -6700,7 +6717,12 @@ impl Gen {
             match &body.stmts[0] {
                 Stmt::Expr(x) => {
                     let v = if want_value {
-                        let want = match out { Type::Result(ok, _) => (**ok).clone(), other => other.clone() };
+                        let want = match out {
+                            Type::Result(ok, _) => (**ok).clone(),
+                            // a bare value is fine where a `T?` is asked for
+                            Type::Option(inner) if !matches!(self.tail_type(body).materialized(), Type::Option(_)) => (**inner).clone(),
+                            other => other.clone(),
+                        };
                         let inner = self.expr_owned_as(x, &want)?;
                         self.coerce_result(inner, x)?
                     } else {
@@ -8592,7 +8614,15 @@ impl Gen {
                             return Ok(format!("{}.{}()", r, name));
                         }
                         "first" if args.is_empty() => {
-                            let r = if *by_ref { format!("{}.cloned()", r) } else { r };
+                            // `&str` is not `Clone`, so a chain of text ends
+                            // the way `collect_iter_t` ends one.
+                            let r = if *by_ref && **elem == Type::Str {
+                                format!("{}.map(|s| s.to_string())", r)
+                            } else if *by_ref {
+                                format!("{}.cloned()", r)
+                            } else {
+                                r
+                            };
                             return Ok(format!("{}.next()", r));
                         }
                         "empty?" | "any?" if args.is_empty() => {
@@ -8600,6 +8630,14 @@ impl Gen {
                             return Ok(format!("({}{}.next().is_none())", neg, r));
                         }
                         _ => {
+                            // A lazy chain is collected and then treated as a
+                            // list, so a name that is no method of either has
+                            // to be caught here — past this point it would
+                            // reach rustc as a method on a `Vec`.
+                            if !builtin_applies(&rt, name) && !builtins_for(&Type::List(elem.clone())).contains(&name.as_str()) {
+                                return Err(LumeError::new(e.line, e.col, format!("`{}` values have no method `{}`", type_name(&rt), name))
+                                    .with_help(format!("`{}` has: {}", type_name(&rt), builtins_for(&rt).join(", "))));
+                            }
                             let collected = self.collect_iter_t(&r, *by_ref, elem);
                             let mut parts = Vec::new();
                             for a in args {

@@ -4,6 +4,9 @@
 #   tests/run.sh            run every example and error case, diff against .expected
 #   tests/run.sh --update   regenerate the .expected files from current output
 #
+# It also runs tests/docs.sh, so a claim in the documentation that stops being
+# true fails the suite like any other expectation.
+#
 # examples/*.lume         must compile and run; stdout is compared
 # examples/lib/           a library (seq, table) and a program that uses it
 # examples/match/         a concurrent record matcher: fan out, collect, report
@@ -182,5 +185,14 @@ rm -rf "$tmp"
 
 rm -rf examples/.lume examples/errors/.lume examples/port/.lume examples/modules/.lume examples/tests/.lume examples/json/.lume examples/mini/.lume examples/site/.lume examples/lib/.lume
 if [ $UPDATE = 1 ]; then echo "expected files updated"; exit 0; fi
+
+# Every example in docs/ is run and checked against what the docs claim.
+doc_out=$(tests/docs.sh 2>&1); doc_code=$?
+echo "$doc_out" | tail -1
+if [ $doc_code -ne 0 ]; then
+  echo "$doc_out" | grep -A2 '^FAIL'
+  fail=$((fail+1)); failed+=("docs")
+fi
+
 echo "$pass passed, $fail failed"
 [ $fail -eq 0 ] || { printf '  %s\n' "${failed[@]}"; exit 1; }

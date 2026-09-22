@@ -28,11 +28,24 @@ use std::path::{Path, PathBuf};
 use std::process::{self, Command, Stdio};
 use std::time::Instant;
 
-fn usage() -> ! {
-    eprintln!(
-        "lume {}\n\nusage:\n  lume build <file.lume> [-o <binary>]\n  lume run   <file.lume> [-- <args>...]\n  lume test  <file.lume>\n  lume fmt   <file.lume> [--check | --stdout]\n  lume crate <file.lume> <crate>\n  lume clean <file.lume>\n  lume emit  <file.lume>\n  lume check <file.lume>",
+fn help_text() -> String {
+    format!(
+        "lume {}\n\nusage:\n  \
+         lume run   <file.lume> [-- <args>...]   compile and run it\n  \
+         lume build <file.lume> [-o <binary>]    compile it, fully optimised\n  \
+         lume test  <file.lume>                  run the file's `test` blocks\n  \
+         lume check <file.lume>                  parse and type-check only\n  \
+         lume fmt   <file.lume> [--check | --stdout]   rewrite in the canonical layout\n  \
+         lume emit  <file.lume>                  print the generated Rust\n  \
+         lume crate <file.lume> <crate>          what a Rust crate offers, in Lume types\n  \
+         lume clean <file.lume> [--cache]        remove build output\n\n\
+         docs: docs/README.md   a tour: docs/tour.md",
         env!("CARGO_PKG_VERSION")
-    );
+    )
+}
+
+fn usage() -> ! {
+    eprintln!("{}", help_text());
     process::exit(2);
 }
 
@@ -460,6 +473,19 @@ fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
     if args.is_empty() {
         usage();
+    }
+    // The two flags everyone types first. Asking for help is not a mistake,
+    // so it goes to stdout and exits 0.
+    match args[0].as_str() {
+        "--version" | "-V" | "version" => {
+            println!("lume {}", env!("CARGO_PKG_VERSION"));
+            process::exit(0);
+        }
+        "--help" | "-h" | "help" => {
+            println!("{}", help_text());
+            process::exit(0);
+        }
+        _ => {}
     }
     let cmd = args[0].as_str();
     let file = match args.get(1) {

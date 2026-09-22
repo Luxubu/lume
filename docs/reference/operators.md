@@ -1,0 +1,113 @@
+# Operators and precedence
+
+> No round could find a precedence table. One reviewer noticed that
+> `not a and not b` has two readings, could not tell which Lume takes, and
+> parenthesised everything in ten programs.
+
+## Precedence, tightest first
+
+| | operators | groups |
+|---|---|---|
+| 1 | `.` `[]` `()` | left |
+| 2 | `**` | **right** |
+| 3 | `-x` `not x` | right |
+| 4 | `*` `/` `%` | left |
+| 5 | `+` `-` | left |
+| 6 | `<` `<=` `>` `>=` | left |
+| 7 | `==` `!=` | left |
+| 8 | `and` | left |
+| 9 | `or` | left |
+| 10 | `\|>` | left |
+
+So `not` binds tighter than `and`, and `**` groups to the right:
+
+```lume
+a = false
+b = false
+puts not a and not b    #=> true
+puts 2 + 3 * 4          #=> 14
+puts 2 ** 3 ** 2        #=> 512
+```
+
+`not a and not b` is `(not a) and (not b)`. `2 ** 3 ** 2` is `2 ** (3 ** 2)`,
+which is 512 rather than 64.
+
+**`and` and `or` short-circuit**, so a guard before a lookup is safe:
+
+```lume
+xs = [1, 2]
+i = 9
+if i >= 0 and i < xs.len and xs.at(i) == 1:
+  puts "in range"
+else:
+  puts "guarded"    #=> guarded
+```
+
+## Unary minus
+
+`-x` works on a binding, not only on a literal:
+
+```lume
+x = 5
+puts -x        #=> -5
+puts 0 - x     #=> -5
+```
+
+## Arithmetic
+
+Integer division truncates **toward zero**, so `-7 / 2` is `-3`, not `-4`:
+
+```lume
+a = 0 - 7
+puts a / 2     #=> -3
+puts 7 / 2     #=> 3
+puts 7 % 2     #=> 1
+```
+
+An `Int` and a `Float` never mix silently — that is a compile error, not a
+promotion:
+
+```lume-bad
+x = 1 + 0.5
+#! cannot combine
+```
+
+Convert the side you mean:
+
+```lume
+puts 1.to_float + 0.5    #=> 1.5
+puts 3.7.round           #=> 4.0
+```
+
+`round`, `floor` and `ceil` on a `Float` give a **`Float`**. `.to_int` is how
+you cross over.
+
+**Overflow stops the program.** It is not wrapped and not undefined, in a
+built binary as much as under `lume run`.
+
+## Comparison
+
+`==` and `!=` work on anything built out of comparable parts, including your
+own structs and enums, without writing anything.
+
+`<` orders `Str` by code point, so uppercase sorts before lowercase:
+
+```lume
+puts "A" < "a"     #=> true
+puts "b" < "a"     #=> false
+```
+
+Defining `<` on your own type is what `sort`, `max`, `min`, `<=`, `>` and `>=`
+are built from — write the one and the rest follow.
+
+## `|>`
+
+`x |> f(y)` is `f(x, y)`: the value on the left becomes the first argument.
+It is the one operator that may continue an expression onto the next line.
+
+```lume
+def add(a: Int, b: Int) -> Int = a + b
+
+def main:
+  puts 1 |> add(2) |> add(3)    #=> 6
+```

@@ -20,304 +20,59 @@ program takes about 1 s in Python and 1.4 s in Ruby.
 The language design lives in the [Lume Language Design](https://claude.ai/code/artifact/1872fe63-1816-4b1e-9983-dec2774382fb)
 document. This repository is the compiler and the examples.
 
-## Status: milestones 1–34 done
+## Start here
 
-| # | Milestone | Status |
-| --- | --- | --- |
-| 1 | Lexer with indentation, parser, `fib` transpiles to Rust and runs | done |
-| 2 | `struct` with methods, bare field access, keyword constructors | done |
-| 3 | `_` shorthand, inline blocks, `do` blocks, `for ... where` | done |
-| 4 | `enum`, `match` with exhaustiveness errors, tuples, `T?` | done |
-| 5 | `T or E`, `Error`, `?` on Result, implicit `Ok`, `!`, `File`/`Env` | done |
-| 6 | `\|>`, `import rust.<crate>` + `rust:` blocks | done |
-| 7 | Port the sample programs plus a graph program; settle the memory policy | done: Rust-faithful ownership, no ORC |
-| 8 | Stdlib speed: ordered hash map, entry updates, lazy `split`/`lines`, key liveness | done: 74 ms → 23 ms |
-| 9 | Lume modules: `import users.model`, `model.User`, `import a.b.Name`, `pub`, cycle detection | done |
-| 10 | `interface` with defaults, structural conformance, `extend T with I`, operator methods | done |
-| 11 | `test "name":` blocks, `assert`, `lume test`, `lume fmt` | done |
-| 12 | `async def`/`await`, `spawn:` tasks, `Task[T]`, `shared`/`shared var` | done: sample 3 runs on threads, 5 `shared` words in 97 lines |
-| 13 | Rust bridge phase 2: crate signatures from rustdoc JSON; `regex.Regex.new(p)` with no bindings | done |
-| 14 | Compile time: incremental rustc, one shared cargo cache per machine, skip when unchanged | done: edit-and-run 0.2 s plain, 0.7–0.9 s with crates |
-| 15 | Soundness: nested rebinding is an error, argument/return/operand/branch type checks, `Str + Int` rejected, per-type method tables, overflow stops the program | done: review corpus leaks 14 → 6, all remaining are ownership (milestone 16) |
-| 16 | Ownership by analysis: liveness-based copy or move, recursive enums boxed, `.or` on optional fields, string comparisons in blocks, `for var a in xs`, `xs[i].method` | done: review corpus leaks 6 → 0 |
-| 17 | Pattern completeness: a real exhaustiveness checker with nested witnesses, `A \| B` alternatives; the everyday standard methods; statements in inline blocks | done: 37 new methods, corpus 40 ok / 26 Lume errors / 0 leaks |
-| 18 | `{T}` sets with literals, algebra and iteration; `s[i]` / `s[a..b]` / `xs[a..b]` by character and position; structs and enums as map keys | done |
-| 34 | Concurrency, dogfooded: a parallel record matcher written in Lume, and the rules writing it exposed — `await` takes the task, a failure nothing looks at is an error, a `shared var` collection can be walked, `split` settled | done: 2 rustc leaks closed as Lume errors, 1 soundness hole; `examples/match/` |
-| 33 | Speed, measured: five benchmarks against the Rust a person would have written, with the ratio checked in and guarded by `tests/bench.sh` | done: four of five at parity, word count at 113%; interpolation no longer builds a string to copy and throw away |
-| 32 | How a value prints: a value on its own prints as itself, a value inside another as you would write it — plus `pad`/`pad_right` on every scalar and the rules written down | done: the question every one of six review rounds asked first; `examples/printing.lume` is the reference |
-| 31 | Re-export: `pub import seq` passes a module on to your own importers, so a library's internal layout stops being part of its public surface | done: the last of the milestone-24 findings; `report.lume` imports `table` alone and still calls `seq` |
-| 30 | Sixth review round (`corpus/m30/`, 30 multi-file programs by three reviewers): module mechanics, extends across files, and real programs laid out the way a person would | done: 9 ranked problems fixed, 20 ok / 10 Lume errors / 0 leaks; an `extend` now travels as far as the program goes |
-| 29 | An `extend` travels with the import: a library ships its conformances, and two claiming the same type and interface is one error naming both files | done: `seq` ships `Walkable[T]`, and its consumer extends nothing; no `pub extend` — there is no name to export |
-| 28 | Fifth review round (`corpus/m28/`, 36 programs by three reviewers): generic `extend`, the seams where features meet, and whole programs | done: 12 ranked problems fixed, 27 ok / 9 Lume errors / 0 leaks; `Result` is a name you can use again |
-| 27 | Generic `extend`: an `extend` introduces a type parameter by using one, so `[T]`, `{T}`, `{K: V}` and a user's own `Stack[T]` all conform to the same interface | done: the second half of the gap milestone 24 found; one bounded helper now reaches every container |
-| 26 | Fourth review round (`corpus/m26/`, 36 programs by a fourth reviewer): how a block travels — reused, forwarded, handed to a built-in, carrying a failure — plus conformance at an argument other than `Self` and a generic enum's boxed field | done: 11 ranked problems fixed, 30 ok / 6 Lume errors / 0 leaks; `Box` is a name you can use again |
-| 25 | Interfaces that take type parameters: `interface Comparable[T]:`, bounds that carry arguments (`[T: Comparable[T]]`), `extend Int with Measures[Str]`, conformance that works the arguments out | done: the gap the library hit; structural conformance unchanged |
-| 24 | Dogfood a library: `seq` (24 generic helpers), `table` (a typed CSV table) and a program using both, then fix the six things writing it exposed | done: generics and blocks needed no workaround; `pub def`, keywords as method names, `at`, `trim_left`/`trim_right`, `decimals` |
-| 23 | Blocks of your own: a parameter typed `(A) -> B` takes a `{ \|x\| ... }` block, a `do \|x\|` body, the `_` shorthand, or a function's name | done: `map`, `retry`, `time_it` and friends are writeable in Lume; a block is inlined at the call, not boxed |
-| 22 | User-defined generics: `def first[T]`, `struct Stack[T]`, `enum Tree[T]`, two parameters, interface bounds and the built-in `Ordered` and `Hashable` | done: real Rust generics, no boxing; type arguments read off the call |
-| 21 | Dogfood a program that talks to the world: a static site generator, and the I/O it needed — `warn`, `Env.exit`/`stdin`, `Dir`, `Path`, more `File`, raw strings | done: builds a 3-page site, skips unchanged pages, exits 2 when the input is missing |
-| 20 | Dogfood again, across modules: a lexer/parser/evaluator for a small language, and what it exposed — nested patterns through recursive enums, top-level constants, `Variant(..)`, method-before-function resolution, `return` as a tail | done: Mini's `fib(21)` in 34 ms, 7× the same interpreter in Python |
-| 19 | Dogfood: a real JSON parser/printer/query tool written in Lume, and everything it exposed — `Char`, triple-quoted strings, `\r` and `1e15` literals, `Str +=`, `Time.now_ms`, six formatter defects | done: 13 ms vs hand-written Rust's 10 ms on 867 KB (was 100 ms) |
-| 18r | Third review round (`corpus/m18/`, 30 programs by a third reviewer): two block `if`s in a row, `{}` outside a typed binding, block parameters bound one reference too deep, mutations landing on temporaries, unchecked built-in arguments | done: 10 ranked problems fixed, 0 leaks |
+```sh
+./install.sh                    # builds the compiler, puts `lume` on your PATH
+lume run examples/fib.lume
+```
 
-What works today: functions (`def` block and one-liner forms, return type
-inferred when omitted), `struct` with fields and methods (fields used bare
-inside methods, `var self` for methods that change them, positional and
-keyword constructors, `p.x = v`, `==` and printing derived), `Int`/`Float`/
-`Bool`/`Str`/`[T]`, immutable bindings and `var` (with `x = x.trim`
-self-transform rebinding), blocks in three forms (`xs.map(_.name)`,
-`xs.map { |x| x * 2 }`, `xs.each do |x|` with an indented body) on `map`,
-`filter`, `reject`, `each`, `sum`, `count`, `any?`, `all?`, `sort_by`, plus
-`take`, `skip`, `to_list` — chains are lazy and compile to one fused Rust
-iterator, `find`/`take_while`/`fold`/`min_by`/`max_by`/`enumerate`, `enum`
-with data and methods (one variant per line under `enum Shape:`, its fields
-named and typed in parentheses — `Circle(radius: Float)` — then the methods;
-built as `Shape.Circle(1.0)`, or bare `Circle(1.0)` where unambiguous, or by
-name, `Circle(radius: 1.0)`), `match` as an expression with variant,
-literal, range, tuple,
-list (`[]`, `[x]`, `[first, ..rest]`) and string patterns, nested patterns
-through a recursive enum's fields (`Binary("+", Num(0.0), r, _)` reaches
-inside the pointer a recursive field lives behind), `Variant(..)` to ignore a
-variant's fields, `|` alternatives
-(`1 | 2`, `"a" | "e"`, `Some(0) | None`, `Wrap(B) | Empty`; every
-alternative binds the same names), guards, and an exhaustiveness check that
-works through nested patterns, tuples, lists and `T?`/`T or E` and names a
-missing value exactly (`Wrap(A(_))`, `(Green, Tick)`, `Ok(false)`,
-`[false, _, ..rest]`), tuples (`(1, "a")`,
-`t.0`, `(name, count) = pair` to take one apart, `_` for a part you do not
-need, `for i, x in xs.enumerate`), optional values (`T?`, `Some`/`None`,
-`.or(default)`, `?` early return in a function returning `T?`; `first`,
-`last`, `find`, `max`, `min`, `pop` all return `T?`), errors as values
-(`T or E`, the built-in `Error("message")` with `.message`, `?` passes the
-error up, a bare value in a `T or E` function is `Ok` and an `Error(...)` is
-`Err` automatically, `match` on `Ok(x)`/`Error(e)`, `.or(default)`, `.ok?`,
-`.error?`, `.or_error("msg")` to turn a `T?` into a `T or Error`, `!` to
-unwrap-or-stop with a warning, `Str.to_int`/`to_float` return `T or Error`),
-typed bindings (`var xs: [User] = []`), `def main -> () or Error`,
-talking to the world (`puts` and its twin `warn`, which writes to the error
-stream; `File.read`/`write`/`append`/`exists?`/`remove`/`size`/`modified`;
-`Dir.exists?`/`make`/`list`/`walk`/`remove`; `Path.join`/`dir`/`base`/`ext`/
-`stem`; `Env.args`/`get`/`stdin`/`exit(code)`; a user type of the same name
-wins over any of these namespaces), the pipe
-(`x |> .method`, `x |> f(y)` is `f(x, y)`, `x |> puts`; lines starting with
-`|>` continue the expression), function names as blocks (`xs.map(parse)`),
-the Rust bridge (`import rust.regex = "1"` adds a cargo dependency and reads
-the crate's signatures, so `regex.Regex.new(p)`, `re.find_iter(text)`,
-`hex.encode(s)` are typed Lume calls with nothing to declare: `&str`/`String`/
-`Cow<str>` are `Str`, integer widths are `Int`, `Option` is `T?`, `Result<T,
-E>` is `T or Error` with the crate's error shown as text, `Vec`/`&[T]` are
-`[T]`, a crate struct is an opaque type usable in signatures and fields, a
-crate iterator is a lazy chain, `T: AsRef<str>` parameters take a `Str`;
-`lume crate file.lume regex` lists what the crate offers in Lume types and
-says why the rest is not callable yet; a `rust:` block inside a Lume function
-is Rust with the parameters in scope, for those corners), Lume modules (`import users.model`
-loads `users/model.lume`; `model.User`, `model.parse(x)`, `model.Role.Guest(7)`
-in expressions, types and patterns; `import users.model.User` for one name;
-`as` to rename; only `pub` items cross a file boundary, and `pub import
-seq` passes a module you import on to your own importers under the name
-you gave it, so a library's internal layout is its own business — two
-modules passing different things on under one name is an error naming
-both), interfaces
-(`interface Shape:` lists required method signatures and default methods
-with bodies; a type conforms by having the methods, with nothing to declare,
-and then has the defaults as its own methods (`q.describe`);
-`def describe(s: Shape)` is a generic function, `[Shape]` holds mixed types
-behind a pointer and says so once; `extend Str with Shape:` adds the methods
-to a type you do not own; `pub interface` crosses modules; an interface
-may take type parameters — `interface Comparable[T]: def compare(other: T)
--> Int`, with defaults written in terms of them, a bound that carries
-arguments (`def largest[T: Comparable[T]](xs: [T])`), `Renders[Str]` as a
-value type, and `extend Int with Measures[Str]:`; conformance stays
-structural and works the arguments out from the type's own methods, so
-`Version` with `def compare(other: Version)` is a `Comparable[Version]`
-without naming it, and a parameter that appears only inside another's
-bound comes from that conformance; an `extend` may introduce a type
-parameter by using one, so the built-in containers conform too —
-`extend [T] with Bag[T]:`, `extend {T} with Bag[T]:`,
-`extend {K: V} with Bag[V]:` and `extend Stack[T] with Bag[T]:` — and so do
-a tuple and an optional, `extend (A, B) with Pairish[A, B]:` and
-`extend T? with Holder[T]:` — after
-which one `def describe[B: Bag[Str]](b: B)` reaches all of them. An `extend` travels
-with the import and keeps going, so a library ships its conformances, a
-consumer that imports it writes none of its own, and a file two hops away
-gets them too; the types a module names in what it exports travel the same
-way, so a value handed across two boundaries is still a value you can use; it has no name, so there is no
-`pub extend`, and two `extend`s claiming the same type and the same
-interface anywhere in one program is an error naming both files. A name
-inside the target that is no type of yours is a parameter; a bare target
-must still be a real type, so `extend Poimt with Named` is an unknown
-type rather than a silent parameter. A bound goes where every other
-generic puts it, `extend [T: Ordered] with Ranked[T]:`; inside `{...}` a
-`:` already means a map, so a set's item takes the bound its interface
-declared (`interface Ranked[T: Ordered]`), and a set's item and a map's
-key are `Hashable` without saying so), blocks of
-your own (a parameter typed `(A) -> B` takes behaviour: `def each[T](xs: [T],
-f: (T) -> ())` is called `each(xs) { |x| puts x }`, or with `do |x|` and an
-indented body, or `each(xs, _ * 2)`, or `each(xs, double)` naming a function;
-`() -> ()` takes a block with no arguments, and when the block is the only
-argument the parentheses go (`repeat do`); a block closes over what is around
-it and may change it; a method of your own wins over the built-in of the same
-name; a block parameter can be handed on to another function, given to a
-built-in (`def total[T](xs: [T], f: (T) -> Int) = xs.sum(f)`), or handed to
-the function's own recursive call; a block declared to give back a
-`T or Error` or a `T?` ends the way a function does, so a bare value is the
-implied `Ok` and `?` leaves the block; the block is
-compiled into the call, so there is no boxing and no lookup at run time;
-behaviour cannot be stored in a field or returned yet), generics
-(`def first[T](xs: [T]) -> T?`, `struct Stack[T]:`, `enum Tree[T]:`,
-`struct Pair[A, B]:` — the type arguments are read off the call, or off the
-type the result is going into (`var s: Stack[Int] = Stack(items: [])`), and
-never written at the call site; a bound says what the parameter can do:
-`[T: Ordered]` for `<`, `[T: Hashable]` to be a map key or set item, and any
-interface name for its methods; a generic type is a real Rust generic, so
-there is no boxing and no lookup at run time), operator methods
-(`def +(o: Point)`, `-`, `*`, `/`, `%`, `==`, `<`; `!=` follows from `==`,
-and `<=`, `>`, `>=`, `sort`, `max`, `min` follow from `<`), tests in the
-file they test (`test "name":` blocks with `assert`; `lume test` runs them
-and a failing `assert` prints both sides; `lume run`/`build` strip them; `!`
-is silent inside tests), `lume fmt` (one canonical layout, no options; keeps
-comments, blank lines, `x |> y` pipes, one-liner/inline forms and literal
-spelling; aligns `->` in a `match` and trailing comments), async
-(`async def f` is called with `await f()`; `t = spawn:` runs an indented
-block as its own task on a thread pool and gives a `Task[T]`; `await t`,
-`await [t1, t2]`; `await Time.sleep(ms)`; `async def main`; every local a
-task mentions is copied into it), sharing (`shared var x = v` puts one value
-behind a lock that any task may change: `x.push(1)`, `x += 1`, `x.count`;
-`shared x` is a read-only handle; a struct field can be `shared var Store`;
-uses are wrapped in short locks, arguments are computed before the lock, and
-a block that would take the lock twice is a compile error; a `shared var`
-list, set or map can be walked with `for`, which copies it out under one
-lock and walks the copy, so the lock is never held across the body;
-`await` takes the task, so a task cannot be awaited twice and a list of
-tasks cannot be used after `await ts` — keep what came back instead),
-`if`/`elif`/`else` as
-expressions, trailing `if`/`unless`, `while`, `for x in range` with `where`,
-lists, ranges (`1..10` inclusive, `1...10` exclusive), string interpolation,
-`Char` (one character: `s.chars` is a `[Char]`, `s[i]` is a `Char?`; a plain
-copied value, so character-at-a-time code runs at Rust speed; it compares
-with and matches one-character string literals (`c == "a"`, `"a" | "e" ->`),
-has `digit?`, `alpha?`, `space?`, `alnum?`, `upper?`, `lower?`, `upcase`,
-`downcase`, `code`, goes in sets and map keys, and becomes a `Str` with
-`.to_s` or wherever a `Str` is wanted; `Int.to_char` goes back, and gives a
-`Char?` because not every number is a character),
-multi-line strings (a `"""` block, with the leading line break and the common
-indentation removed; escapes and `#{}` work as usual), `1e15` and `2.5e-3`,
-`xs.at(i)` (the item when the position is already known to be good — the
-read generic code needs, since it has no default to fall back on),
-`trim_left`/`trim_right`, `x.decimals(n)` (the number as text to that
-many places, halves away from zero, for money and reports),
-top-level constants (`MAX = 100`, `KEYWORDS = {"let", "if"}` — computed once,
-`pub` to share them with other files), raw strings (`r"#{not interpolated}"`
-and `r"""blocks"""`, for templates, regexes and code),
-`and`/`or`/`not`, `**`, calls, `()` for an arm or block that does nothing,
-`xs + ys` to join two lists, `\u{1F600}` and `\r` escapes, one statement in an
-inline block (`xs.each { |x| total += x }`), and the everyday built-in
-methods: on `Str` `len`, `empty?`, `upcase`, `downcase`, `capitalize`, `trim`,
-`lines`, `split` (`split(sep)` keeps every piece, so `"a:".split(":")` is two
-and `s.split(sep).join(sep)` is `s` again; bare `split` splits on whitespace
-and drops the empties, so it is the one that can give nothing back),
-`chars`, `contains?`,
-`starts_with?`, `ends_with?`, `index_of`, `digit?`, `alpha?`, `space?`, `pad`,
-`pad_right`, `reverse`, `slice`, `replace`, `repeat`, `to_int`, `to_float`; on
-`Int`/`Float` `abs`, `max(x)`, `min(x)`, `clamp(lo, hi)`, `pow`, `even?`,
-`odd?`, `sqrt`, `floor`, `ceil`, `round`, `to_float`, `to_int`, `pad`; on lists
-`len`, `empty?`, `first`, `last`, `max`, `min`, `sum`, `avg` (a `Float`; `0.0`
-for an empty list), `sort`,
-`sort_by`, `reverse`, `uniq`, `flatten`, `zip`, `index_of`, `contains?`,
-`join`, `push`, `pop`, `insert`, `remove_at`, `take`, `skip`, `enumerate`,
-`to_list`, and the block methods `map`, `filter`, `reject`, `each`, `sum`,
-`count`, `any?`, `all?`, `find`, `take_while`, `fold`, `min_by`, `max_by`,
-`group_by`, `partition`, `flat_map` (a function name works as the block for
-all of these: `xs.map(parse)`, `xs.group_by(kind)`); on maps `len`, `keys`, `values`, `get`,
-`remove`, `contains?`, `merge`, `to_list`, `each`, `filter`, `reject`,
-`map_values`; a collection stored in a `var` map or list is changed where it
-is stored (`idx[w].add(x)`, `grid[i].push(x)`, `grid[i][j] = v`; a missing map
-key starts from an empty value), and a `for` loop whose body changes the
-collection walks a snapshot; on `T?` `or`, `some?`, `none?`, `or_error`, `map`; on `T or E`
-`or`, `ok?`, `error?`, `error`, `ok`, `map`; sets (`{1, 2, 3}` is a `{Int}`,
-each value once, insertion order kept; `var seen: {Str} = {}`; `add` returns
-whether the value was new, `remove`, `contains?`, `len`, `union`,
-`intersect`, `diff`, `subset?`, `superset?`, `to_list`, `sort`, `sum`, `max`,
-`min`, `join`, `first`, `xs.to_set`, `==` ignores order, `for x in s`, and
-the block methods with `filter`/`reject` giving a set back; items and map
-keys may be `Int`, `Str`, `Bool`, tuples of those, or a struct/enum made of
-them — never a `Float`), positions (`xs[i]` and `s[i]` are a `T?` / `Str?`,
-`s[i]` counting characters not bytes; `s[a..b]`, `s[a...b]`, `xs[a..b]` are
-slices clamped to the value, so `s[2..99]` is the tail and `s[3..2]` is
-empty).
+Then:
 
-Errors are Lume errors, not rustc errors: unknown names, fields and types (with
-a "did you mean"), assignment to an immutable binding (pointing at where it was
-declared), rebinding an outer name inside a loop or branch (`total = total + i`
-would silently make a new `total`; the error says to declare it `var`), an
-argument, field, return value or typed binding of the wrong type (`add(1,
-"2")`, with the conversion to use), operands that do not go together (`"n=" +
-5`, `7.0 / 2`, with the interpolation or `.to_float` to write), branches of an
-`if`/`match` used as a value that give different types, a method a type does
-not have (`"abc".reverse` is fine; `"abc".skip(1)` lists what `Str` has),
-`9223372036854775807 + 1` and `10 / 0` on literals, changing a field from a method without `var self`, calling a
-mutating method on an immutable value, wrong or missing arguments and keywords,
-`if` used as a value without `else`, non-exhaustive `match`, `clamp` with
-its bounds reversed (at run time, in Lume's words), `?` in a function
-that cannot return `None` or an error (with the right fix for each mismatch),
-a method or arithmetic on a `T?` or `T or E` without unwrapping, an empty
-`[]` binding with no type, a built-in method given
-the wrong argument type (`s.add("x")` on a `{Int}`), a list or set literal
-whose items disagree, a change that would land on a temporary copy
-(`m[k].or({}).add(x)`, `for var p in xs[0..1]`), a value used as an interface
-it does not satisfy (naming the missing method or the signature that differs), an `extend` that
-leaves a method out, an operator a type does not define, `sort` on a type
-without `<`, `await` outside `async def`, an `async def` called
-without `await`, a `var` changed inside a `spawn:` block (it is a copy), a
-mutating call on a read-only `shared`, a `spawn:` inside a method that uses
-`self`, a task awaited twice or used after `await` (waiting for a task
-takes it), a failure nothing looks at — an `Error` written without
-`return`, or a call that can fail on a line of its own, where `_ = ...`
-says you mean to drop it — a crate function or method that does not exist (or is not callable
-from Lume yet, with the reason), a wrong argument type for a crate call, a
-crate value with no text form printed, a borrowing crate type in a field,
-a `Float` (or a type holding one) as a set item or map key, indexing a set,
-`name (` with a space (ambiguous call), a user type named after a built-in
-(`struct Option`), `|` alternatives that bind different names, bad
-indentation, tabs, and the spellings other languages use (`continue`, `'single
-quotes'`, `null`, `print`, `;`, each with the Lume form). Warnings:
-`return` inside a block, a `match` arm that can never run because the arms
-above it already cover its values.
+- **[A tour of Lume](docs/tour.md)** — the language in half an hour.
+- **[The reference](docs/README.md)** — how a value prints, what `pad` fills,
+  which methods a list has, the precedence table.
+- **[The examples](docs/examples.md)** — 5,000 lines of working programs, in a
+  reading order.
+- **[Installing](docs/install.md)** — and what each command does.
 
-## How a value prints
+Every example in the documentation is compiled, run, and checked against the
+output it claims, by `tests/docs.sh`. An answer that stops being true fails
+the build.
 
-A value on its own prints as itself. A value *inside* another prints as you
-would write it. They differ only for text, and that difference is what lets
-one item be told from two — `["a, b"]` is one item, `["a", "b"]` is two.
+## What it is
 
-| written | prints |
-| --- | --- |
-| `puts 42` / `puts 0 - 7` | `42` / `-7` |
-| `puts 3.5` / `puts 2.0` | `3.5` / `2.0` — a `Float` keeps its point |
-| `puts true` | `true` |
-| `puts "plain text"` | `plain text` — no quotes: this is the text itself |
-| `puts ["a", "b"]` | `["a", "b"]` |
-| `puts [1, 2, 3]` / an empty `[Str]` | `[1, 2, 3]` / `[]` |
-| `puts {"x": 1, "y": 2}` | `{"x": 1, "y": 2}` |
-| `puts {"one", "two"}` | `{"one", "two"}` |
-| an empty set or an empty map | `{}` — both, as both are written `{}` |
-| `puts (1, "two", true)` | `(1, "two", true)` |
-| `puts Some("pear")` / `puts None` | `Some("pear")` / `None` |
-| `puts Ok(5)` | `Ok(5)` |
-| a failed `T or Error` | `Error("no such row")` |
-| `puts Point(x: 1, y: 2)` | `Point(x: 1, y: 2)` — fields named, in order |
-| a variant with no fields / with fields | `Dot` / `Circle(radius: 1.5)` |
-| `"hello #{who}"` | interpolation is the value as itself, so no quotes |
+Lume is a compiled language. Indentation makes blocks, types are inferred and
+written where they help, and there is no garbage collector and no runtime —
+ownership is worked out at compile time and the output is a native binary.
 
-Laying things out: `pad(n)` puts the spaces on the left and `pad_right(n)`
-on the right, on text and on any number or `Bool`; neither ever cuts a value
-short, so a value wider than `n` comes back whole. `join(sep)` works on any
-list whose items can be shown, not only text, and uses the value-as-itself
-form, so no quotes appear: `[1, 2, 3].join("-")` is `1-2-3`. A lazy chain
-can be joined directly — `xs.map { |n| n * 2 }.join("-")` needs no
-`.to_list` first; `.to_list` is for when you want the list itself.
+```ruby
+struct Record:
+  name: Str
+  zip: Str
 
-`examples/printing.lume` is this table as a program.
+def main:
+  rows = [Record(name: "Ada", zip: "90210"), Record(name: "Bo", zip: "10001")]
+  by_zip = rows.group_by { |r| r.zip }
+  for zip, people in by_zip:
+    puts "#{zip}: #{people.map(_.name).join(", ")}"
+```
+
+It is sound in a way that is meant to be load-bearing: 253 programs written by
+eighteen independent reviewers who had never seen the compiler, and not one of
+them produced a wrong answer or failed to compile after type-checking. What it
+refuses, it refuses with a message that names the fix — `examples/errors/` is
+106 programs kept around to prove it.
+
+**Where it is.** Version 0.1. The language is settled enough to write real
+programs in, and there is no editor support, no package manager, and no way to
+depend on Lume code you did not write — imports resolve relative to your own
+files. Rust crates are reachable today through `import rust.<crate>`, which is
+most of what a young standard library would otherwise be for.
+
+[HISTORY.md](HISTORY.md) is the record of how it got here, milestone by
+milestone, and the [design document](https://claude.ai/code/artifact/1872fe63-1816-4b1e-9983-dec2774382fb)
+is the reasoning behind the decisions.
 
 ## Speed
 
@@ -358,11 +113,14 @@ Two things worth knowing when you measure your own program:
 - **Overflow still stops the program in a built binary.** That is milestone
   15's rule and it is not traded away for speed.
 
+
 ## Tests
 
 ```sh
-tests/run.sh            # every example's output and every error message, diffed
-tests/run.sh --update   # accept current output as the new expectation
+tests/run.sh      # every example's output and every error message, diffed
+tests/docs.sh     # every example in docs/, run and checked against its claims
+tests/corpus.sh   # the 253 independently-written review programs
+tests/bench.sh    # the benchmarks, against their budget
 ```
 
 The suite also runs `lume test` on `examples/tests/`, `lume fmt` on
@@ -375,8 +133,8 @@ pattern and standard-method surface, `corpus/m18/` on sets and slicing,
 `corpus/m26/` on generics, parameterised interfaces and blocks, `corpus/m28/`
 on generic `extend`, the seams between features, and whole programs, and
 `corpus/m30/` on modules — thirty multi-file programs, each a directory with
-its own `main.lume`): 189
-run, 64 stop with a Lume error (each a deliberate rule or a deliberate error
+its own `main.lume`): 190
+run, 63 stop with a Lume error (each a deliberate rule or a deliberate error
 test: no shadowing, no `Float / Int`, an unbounded `T` as a map key, ...),
 none leaks a rustc error. Each round has a `REPORT.md` beside its programs.
 
@@ -439,54 +197,6 @@ in Python. Before `Char` existed the Lume version took 100 ms, because
 `s.chars` was a list of one-character heap strings — `examples/json/bench.sh`
 reproduces all of it, including a Rust build with that handicap put back.
 
-## Build
-
-Requires a Rust toolchain (https://rustup.rs).
-
-```sh
-cd compiler
-cargo build --release
-# the binary is compiler/target/release/lume
-```
-
-## Use
-
-```sh
-lume run   examples/fib.lume        # compile and run (fast turnaround)
-lume build examples/fib.lume        # compile to examples/.lume/fib, fully optimised
-lume test  examples/tests/parse.lume  # build and run the file's `test` blocks
-lume fmt   examples/fib.lume        # rewrite in the canonical layout (--check, --stdout)
-lume crate examples/crate.lume regex  # what the crate offers, in Lume types
-lume emit  examples/fib.lume        # print the generated Rust
-lume check examples/fib.lume        # parse and check only (tests included)
-lume clean examples/fib.lume        # remove examples/.lume (--cache: the shared cache too)
-```
-
-Generated Rust and binaries go in a `.lume/` directory next to the source
-file. A program that imports a crate, or uses `async`, is built with cargo.
-
-Compile time, after milestone 14:
-
-| | first time | unchanged | after an edit |
-| --- | --- | --- | --- |
-| plain program (`fib`, `graph`) | 0.3–0.9 s | 0.01 s | 0.15–0.2 s |
-| program using a crate (`regex`) | 1.3 s | 0.01 s | 0.7 s |
-| async program (tokio) | 2 s | 0.07 s | 0.9 s |
-
-How: `lume run` compiles with rustc's incremental cache (`.lume/inc-<name>/`),
-so an edit recompiles only what changed; a program whose generated Rust is
-identical to the last build is not compiled at all; every cargo build on the
-machine shares one target directory (`~/.cache/lume/target`, or
-`$LUME_CACHE_DIR/target`), so regex or tokio is compiled once per machine,
-not once per program — the first ever use costs 20–30 s, every program after
-that starts from the cache; through cargo, `lume run` builds the program
-crate at opt-level 1 on top of crates at opt-level 3, and `lume build` uses
-a separate `ship` profile with everything at opt-level 3. Reading a crate's
-signatures (`cargo rustdoc --output-format json`, about 4 s for regex) is
-cached next to the project; rustdoc JSON is still unstable in rustdoc, so the
-compiler sets `RUSTC_BOOTSTRAP=1` for that one command, and the program
-itself is built by the stable toolchain. The whole test suite (99 programs)
-runs in 18 s.
 
 ## Layout
 
@@ -531,6 +241,9 @@ examples/lib/            a library written in Lume: seq (generic helpers), table
                          a report program that uses both, and what writing it exposed
 bench/                   five benchmarks, each with the Rust a person would have written
                          beside it; gen.py makes the inputs, BASELINE holds the budget
+docs/                    the manual: a tour, a reference, and the questions
+                         six review rounds could not answer (QUESTIONS.md)
+install.sh               builds the compiler and puts `lume` on your PATH
 examples/tests/          files with `test` blocks; expected `lume test` output
 examples/fmt/            badly spaced input; expected `lume fmt` output
 examples/errors/         programs that must keep failing, with good messages
