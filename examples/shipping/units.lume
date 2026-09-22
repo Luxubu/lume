@@ -1,0 +1,6 @@
+# units.lume — the bottom of the stack. Nothing imports anything.
+
+pub def round_to(n: Int, step: Int) -> Int:
+  ((n + step / 2) / step) * step
+
+pub def label(n: Int) -> Str = "#{n}g"

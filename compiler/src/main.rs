@@ -87,6 +87,30 @@ fn compile_to_rust(path: &Path, test_mode: bool) -> Result<Compiled, String> {
             }
         }
     }
+    // `pub import seq` in a module means its own importers get `seq` too,
+    // under the name it used. Keyed by module id.
+    // name, module id, and the single item when it is `pub import a.b.Name`
+    type ReExport = (String, String, Option<String>);
+    let mut reexports: std::collections::HashMap<String, Vec<ReExport>> = std::collections::HashMap::new();
+    for m in &modules {
+        let mut out: Vec<ReExport> = Vec::new();
+        for imp in m.items.iter().filter_map(|it| match it {
+            ast::Item::Import(imp) if imp.public && !imp.is_rust => Some(imp),
+            _ => None,
+        }) {
+            let name = imp.alias.clone().unwrap_or_else(|| imp.path.last().cloned().unwrap_or_default());
+            for res in &m.imports {
+                match res {
+                    loader::Resolved::Module { alias, id, .. } if *alias == name => out.push((name.clone(), id.clone(), None)),
+                    loader::Resolved::Single { local, id, item, .. } if *local == name => out.push((name.clone(), id.clone(), Some(item.clone()))),
+                    _ => {}
+                }
+            }
+        }
+        if !out.is_empty() {
+            reexports.insert(m.id.clone(), out);
+        }
+    }
     let mut exports: std::collections::HashMap<String, codegen::Exports> = std::collections::HashMap::new();
     let mut rust = String::new();
     let mut deps: Vec<(String, String)> = Vec::new();
@@ -103,6 +127,57 @@ fn compile_to_rust(path: &Path, test_mode: bool) -> Result<Compiled, String> {
                 loader::Resolved::Single { local, id, item, line, col } => codegen::Dep::Single { local: local.clone(), id: id.clone(), item: item.clone(), exports: &exports[id], line: *line, col: *col },
             })
             .collect();
+        // a module this one imports may pass others on with `pub import`
+        {
+            let mut seen: Vec<String> = dep_list
+                .iter()
+                .filter_map(|d| match d {
+                    codegen::Dep::Module { alias, .. } => Some(alias.clone()),
+                    _ => None,
+                })
+                .collect();
+            // each entry keeps the import in this file that led to it, so
+            // an error points at a line someone can act on
+            let mut queue: Vec<(String, usize, usize)> = m
+                .imports
+                .iter()
+                .map(|r| match r {
+                    loader::Resolved::Module { id, line, col, .. } | loader::Resolved::Single { id, line, col, .. } => (id.clone(), *line, *col),
+                })
+                .collect();
+            let mut extra: Vec<ReExport> = Vec::new();
+            // where each re-exported name came from, so two modules passing
+            // on different things under one name is caught rather than
+            // silently resolved to whichever arrived last
+            let mut origin: std::collections::HashMap<String, (String, String)> = std::collections::HashMap::new();
+            while let Some((id, at_line, at_col)) = queue.pop() {
+                for (name, rid, item) in reexports.get(&id).map(|v| v.as_slice()).unwrap_or(&[]) {
+                    if let Some((other_id, via)) = origin.get(name) {
+                        if other_id != rid {
+                            let e = error::LumeError::new(at_line, at_col, format!("`{}` is passed on by two modules and means something different in each", name))
+                                .with_help(format!("`{}` passes on `{}` and `{}` passes on `{}`; import the one you want directly, or have them agree on a name", via, other_id, id, rid));
+                            return Err(e.render(&file, &m.src));
+                        }
+                        continue;
+                    }
+                    if seen.contains(name) {
+                        continue;
+                    }
+                    seen.push(name.clone());
+                    origin.insert(name.clone(), (rid.clone(), id.clone()));
+                    extra.push((name.clone(), rid.clone(), item.clone()));
+                    queue.push((rid.clone(), at_line, at_col));
+                }
+            }
+            for (name, rid, item) in extra {
+                if let Some(ex) = exports.get(&rid) {
+                    match item {
+                        Some(it) => dep_list.push(codegen::Dep::Single { local: name, id: rid, item: it, exports: ex, line: 0, col: 0 }),
+                        None => dep_list.push(codegen::Dep::Module { alias: name, id: rid, exports: ex, line: 0, col: 0 }),
+                    }
+                }
+            }
+        }
         for item in &m.items {
             if let ast::Item::Import(imp) = item {
                 if imp.is_rust {

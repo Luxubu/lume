@@ -1,0 +1,9 @@
+# Two modules each pass a different module on under the name `core`, so
+# this file would have two answers to one question.
+
+import one
+import two
+
+def main:
+  puts one.x
+  puts two.y

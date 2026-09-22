@@ -1,0 +1,15 @@
+# parcels.lume — built on `units`, and a consumer of `parcels` will want
+# `units` too. Passing it on is one word, and it means the layout of this
+# library is its own business: `parcels` could split `units` in two
+# tomorrow without touching anyone who imports it.
+
+pub import units
+
+pub struct Parcel:
+  name: Str
+  grams: Int
+
+  def rounded -> Int = units.round_to(grams, 50)
+
+pub def heaviest(ps: [Parcel]) -> Parcel?:
+  ps.max_by(_.grams)

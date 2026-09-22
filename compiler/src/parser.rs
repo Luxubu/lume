@@ -254,8 +254,8 @@ impl Parser {
                 let (pl, pc) = self.here();
                 self.advance();
                 let const_next = matches!(self.peek(), Tok::Ident(_)) && self.const_ahead();
-                if !(self.at_kw("def") || self.at_kw("async") || self.at_kw("struct") || self.at_kw("enum") || self.at_kw("interface") || const_next) {
-                    return Err(LumeError::new(pl, pc, "`pub` goes before `def`, `struct`, `enum`, `interface` or a constant"));
+                if !(self.at_kw("def") || self.at_kw("async") || self.at_kw("struct") || self.at_kw("enum") || self.at_kw("interface") || self.at_kw("import") || const_next) {
+                    return Err(LumeError::new(pl, pc, "`pub` goes before `def`, `struct`, `enum`, `interface`, `import` or a constant"));
                 }
             }
             if self.at_kw("interface") {
@@ -288,7 +288,13 @@ impl Parser {
                 e.public = public;
                 items.push(Item::Enum(e));
             } else if self.at_kw("import") {
-                items.push(Item::Import(self.import_def()?));
+                let mut im = self.import_def()?;
+                im.public = public;
+                if im.public && im.is_rust {
+                    return Err(LumeError::new(im.line, im.col, "a crate import cannot be `pub`")
+                        .with_help("`pub import` passes a Lume module on to your own importers; a crate is reached with `import rust.<crate>` in each file that needs it"));
+                }
+                items.push(Item::Import(im));
             } else if matches!(self.peek(), Tok::Ident(_)) && self.const_ahead() {
                 let mut c = self.const_def()?;
                 c.public = public;
@@ -581,7 +587,7 @@ impl Parser {
             None
         };
         self.end_stmt()?;
-        Ok(Import { path, is_rust, version, alias, line, col })
+        Ok(Import { path, is_rust, version, alias, public: false, line, col })
     }
 
     fn enum_def(&mut self) -> Result<EnumDef> {

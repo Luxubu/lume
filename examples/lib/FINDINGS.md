@@ -118,6 +118,12 @@ expected to: `1234.5.decimals(2)` is `"1234.50"`, `0.125.decimals(2)` is
 - **No re-export.** `table` imports `seq`, but a consumer of `table` that
   wants `seq.map` must import `seq` itself, so a library's internal
   module layout is part of its public surface.
+
+  *Fixed in milestone 31: `pub import seq` in `table.lume` passes it on, so
+  `report.lume` imports `table` alone and still calls `seq` throughout. Two
+  modules passing on different things under one name is an error naming
+  both. With that, a library's layout is its own business — the last thing
+  on this list.*
 - **No interface over "anything you can iterate".** Every helper in `seq`
   takes a `[T]`. Making one work on a `{K: V}` or a `{T}` as well would
   need an interface with a type parameter, which interfaces cannot take.

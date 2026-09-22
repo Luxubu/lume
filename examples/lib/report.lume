@@ -6,7 +6,7 @@
 # Reads a CSV of logged hours and prints a report: totals per team, the
 # busiest people, and anything that looks wrong.
 
-import seq
+# `table` passes `seq` on, so importing it is enough for both.
 import table
 import table.Table
 

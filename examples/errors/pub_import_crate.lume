@@ -1,0 +1,7 @@
+# `pub import` passes a Lume module on to your own importers. A crate has
+# no such thing: each file that needs it says so.
+
+pub import rust.regex
+
+def main:
+  puts 1

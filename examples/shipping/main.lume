@@ -1,0 +1,21 @@
+# main.lume — imports `parcels` and nothing else, and uses both.
+
+import parcels
+import parcels.Parcel
+
+def main:
+  ps = [
+    Parcel(name: "books", grams: 1240),
+    Parcel(name: "mug", grams: 380),
+    Parcel(name: "cable", grams: 95),
+  ]
+
+  for p in ps:
+    puts "#{p.name.pad_right(6)}#{units.label(p.rounded)}"
+
+  match parcels.heaviest(ps):
+    Some(p) -> puts "heaviest: #{p.name}"
+    None    -> puts "nothing to send"
+
+  # `units` came with `parcels`; this file never imported it.
+  puts units.round_to(1240, 100)

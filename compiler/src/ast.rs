@@ -160,6 +160,9 @@ pub struct Import {
     pub is_rust: bool,
     pub version: Option<String>,
     pub alias: Option<String>,
+    /// `pub import seq`: what this module imports, its own importers get
+    /// too, under the name written here.
+    pub public: bool,
     pub line: usize,
     pub col: usize,
 }

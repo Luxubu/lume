@@ -1,0 +1,2 @@
+pub import a as core
+pub def x -> Str = core.who

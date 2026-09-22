@@ -4,7 +4,9 @@
 # the caller asks for, and a bad cell is an error naming the row and the
 # column, not a silent zero.
 
-import seq
+# A consumer of `table` almost always wants `seq` as well, so it is passed
+# on rather than made their problem: `import table` is enough.
+pub import seq
 
 pub struct Table:
   columns: [Str]

@@ -20,7 +20,7 @@ program takes about 1 s in Python and 1.4 s in Ruby.
 The language design lives in the [Lume Language Design](https://claude.ai/code/artifact/1872fe63-1816-4b1e-9983-dec2774382fb)
 document. This repository is the compiler and the examples.
 
-## Status: milestones 1–30 done
+## Status: milestones 1–31 done
 
 | # | Milestone | Status |
 | --- | --- | --- |
@@ -42,6 +42,7 @@ document. This repository is the compiler and the examples.
 | 16 | Ownership by analysis: liveness-based copy or move, recursive enums boxed, `.or` on optional fields, string comparisons in blocks, `for var a in xs`, `xs[i].method` | done: review corpus leaks 6 → 0 |
 | 17 | Pattern completeness: a real exhaustiveness checker with nested witnesses, `A \| B` alternatives; the everyday standard methods; statements in inline blocks | done: 37 new methods, corpus 40 ok / 26 Lume errors / 0 leaks |
 | 18 | `{T}` sets with literals, algebra and iteration; `s[i]` / `s[a..b]` / `xs[a..b]` by character and position; structs and enums as map keys | done |
+| 31 | Re-export: `pub import seq` passes a module on to your own importers, so a library's internal layout stops being part of its public surface | done: the last of the milestone-24 findings; `report.lume` imports `table` alone and still calls `seq` |
 | 30 | Sixth review round (`corpus/m30/`, 30 multi-file programs by three reviewers): module mechanics, extends across files, and real programs laid out the way a person would | done: 9 ranked problems fixed, 20 ok / 10 Lume errors / 0 leaks; an `extend` now travels as far as the program goes |
 | 29 | An `extend` travels with the import: a library ships its conformances, and two claiming the same type and interface is one error naming both files | done: `seq` ships `Walkable[T]`, and its consumer extends nothing; no `pub extend` — there is no name to export |
 | 28 | Fifth review round (`corpus/m28/`, 36 programs by three reviewers): generic `extend`, the seams where features meet, and whole programs | done: 12 ranked problems fixed, 27 ok / 9 Lume errors / 0 leaks; `Result` is a name you can use again |
@@ -109,7 +110,11 @@ says why the rest is not callable yet; a `rust:` block inside a Lume function
 is Rust with the parameters in scope, for those corners), Lume modules (`import users.model`
 loads `users/model.lume`; `model.User`, `model.parse(x)`, `model.Role.Guest(7)`
 in expressions, types and patterns; `import users.model.User` for one name;
-`as` to rename; only `pub` items cross a file boundary), interfaces
+`as` to rename; only `pub` items cross a file boundary, and `pub import
+seq` passes a module you import on to your own importers under the name
+you gave it, so a library's internal layout is its own business — two
+modules passing different things on under one name is an error naming
+both), interfaces
 (`interface Shape:` lists required method signatures and default methods
 with bodies; a type conforms by having the methods, with nothing to declare,
 and then has the defaults as its own methods (`q.describe`);
@@ -432,6 +437,7 @@ examples/blocks_of_your_own.lume  functions that take behaviour: each, map, keep
 examples/generic_interfaces.lume  interfaces with type parameters: bounds, defaults, values, extend
 examples/generic_extend.lume      generic `extend`: lists, sets, maps and your own generic type under one interface
 examples/travel/                  a library that ships its conformances, and a consumer that writes no `extend`
+examples/shipping/                `pub import`: a library passes its own dependency on to its consumers
 examples/lib/            a library written in Lume: seq (generic helpers), table (typed CSV),
                          a report program that uses both, and what writing it exposed
 examples/tests/          files with `test` blocks; expected `lume test` output

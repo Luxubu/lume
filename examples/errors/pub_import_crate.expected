@@ -1,0 +1,6 @@
+error: a crate import cannot be `pub`
+  --> examples/errors/pub_import_crate.lume:4:5
+  |
+4 | pub import rust.regex
+  |     ^
+  help: `pub import` passes a Lume module on to your own importers; a crate is reached with `import rust.<crate>` in each file that needs it

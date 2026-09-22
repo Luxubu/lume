@@ -1,0 +1,6 @@
+error: `core` is passed on by two modules and means something different in each
+  --> examples/errors/reexport/main.lume:4:1
+  |
+4 | import one
+  | ^
+  help: `two` passes on `b` and `one` passes on `a`; import the one you want directly, or have them agree on a name
