@@ -1,0 +1,5 @@
+# A task is the work itself, so awaiting it uses it up.
+async def main:
+  t = spawn: 1
+  puts await t
+  puts await t

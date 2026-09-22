@@ -20,7 +20,7 @@ program takes about 1 s in Python and 1.4 s in Ruby.
 The language design lives in the [Lume Language Design](https://claude.ai/code/artifact/1872fe63-1816-4b1e-9983-dec2774382fb)
 document. This repository is the compiler and the examples.
 
-## Status: milestones 1–33 done
+## Status: milestones 1–34 done
 
 | # | Milestone | Status |
 | --- | --- | --- |
@@ -42,6 +42,7 @@ document. This repository is the compiler and the examples.
 | 16 | Ownership by analysis: liveness-based copy or move, recursive enums boxed, `.or` on optional fields, string comparisons in blocks, `for var a in xs`, `xs[i].method` | done: review corpus leaks 6 → 0 |
 | 17 | Pattern completeness: a real exhaustiveness checker with nested witnesses, `A \| B` alternatives; the everyday standard methods; statements in inline blocks | done: 37 new methods, corpus 40 ok / 26 Lume errors / 0 leaks |
 | 18 | `{T}` sets with literals, algebra and iteration; `s[i]` / `s[a..b]` / `xs[a..b]` by character and position; structs and enums as map keys | done |
+| 34 | Concurrency, dogfooded: a parallel record matcher written in Lume, and the rules writing it exposed — `await` takes the task, a failure nothing looks at is an error, a `shared var` collection can be walked, `split` settled | done: 2 rustc leaks closed as Lume errors, 1 soundness hole; `examples/match/` |
 | 33 | Speed, measured: five benchmarks against the Rust a person would have written, with the ratio checked in and guarded by `tests/bench.sh` | done: four of five at parity, word count at 113%; interpolation no longer builds a string to copy and throw away |
 | 32 | How a value prints: a value on its own prints as itself, a value inside another as you would write it — plus `pad`/`pad_right` on every scalar and the rules written down | done: the question every one of six review rounds asked first; `examples/printing.lume` is the reference |
 | 31 | Re-export: `pub import seq` passes a module on to your own importers, so a library's internal layout stops being part of its public surface | done: the last of the milestone-24 findings; `report.lume` imports `table` alone and still calls `seq` |
@@ -184,7 +185,12 @@ task mentions is copied into it), sharing (`shared var x = v` puts one value
 behind a lock that any task may change: `x.push(1)`, `x += 1`, `x.count`;
 `shared x` is a read-only handle; a struct field can be `shared var Store`;
 uses are wrapped in short locks, arguments are computed before the lock, and
-a block that would take the lock twice is a compile error), `if`/`elif`/`else` as
+a block that would take the lock twice is a compile error; a `shared var`
+list, set or map can be walked with `for`, which copies it out under one
+lock and walks the copy, so the lock is never held across the body;
+`await` takes the task, so a task cannot be awaited twice and a list of
+tasks cannot be used after `await ts` — keep what came back instead),
+`if`/`elif`/`else` as
 expressions, trailing `if`/`unless`, `while`, `for x in range` with `where`,
 lists, ranges (`1..10` inclusive, `1...10` exclusive), string interpolation,
 `Char` (one character: `s.chars` is a `[Char]`, `s[i]` is a `Char?`; a plain
@@ -207,9 +213,10 @@ and `r"""blocks"""`, for templates, regexes and code),
 `xs + ys` to join two lists, `\u{1F600}` and `\r` escapes, one statement in an
 inline block (`xs.each { |x| total += x }`), and the everyday built-in
 methods: on `Str` `len`, `empty?`, `upcase`, `downcase`, `capitalize`, `trim`,
-`lines`, `split` (with or without a separator; an empty piece between two
-separators is kept, a trailing one is not, so `"a::b".split(":")` is three
-pieces and `"a:".split(":")` is one), `chars`, `contains?`,
+`lines`, `split` (`split(sep)` keeps every piece, so `"a:".split(":")` is two
+and `s.split(sep).join(sep)` is `s` again; bare `split` splits on whitespace
+and drops the empties, so it is the one that can give nothing back),
+`chars`, `contains?`,
 `starts_with?`, `ends_with?`, `index_of`, `digit?`, `alpha?`, `space?`, `pad`,
 `pad_right`, `reverse`, `slice`, `replace`, `repeat`, `to_int`, `to_float`; on
 `Int`/`Float` `abs`, `max(x)`, `min(x)`, `clamp(lo, hi)`, `pow`, `even?`,
@@ -263,7 +270,10 @@ leaves a method out, an operator a type does not define, `sort` on a type
 without `<`, `await` outside `async def`, an `async def` called
 without `await`, a `var` changed inside a `spawn:` block (it is a copy), a
 mutating call on a read-only `shared`, a `spawn:` inside a method that uses
-`self`, a crate function or method that does not exist (or is not callable
+`self`, a task awaited twice or used after `await` (waiting for a task
+takes it), a failure nothing looks at — an `Error` written without
+`return`, or a call that can fail on a line of its own, where `_ = ...`
+says you mean to drop it — a crate function or method that does not exist (or is not callable
 from Lume yet, with the reason), a wrong argument type for a crate call, a
 crate value with no text form printed, a borrowing crate type in a field,
 a `Float` (or a type holding one) as a set item or map key, indexing a set,
@@ -515,6 +525,8 @@ examples/generic_extend.lume      generic `extend`: lists, sets, maps and your o
 examples/travel/                  a library that ships its conformances, and a consumer that writes no `extend`
 examples/shipping/                `pub import`: a library passes its own dependency on to its consumers
 examples/printing.lume            how every kind of value prints, as a runnable table
+examples/match/          a concurrent record matcher: block, fan out across tasks,
+                         collect, report — and FINDINGS.md, what writing it exposed
 examples/lib/            a library written in Lume: seq (generic helpers), table (typed CSV),
                          a report program that uses both, and what writing it exposed
 bench/                   five benchmarks, each with the Rust a person would have written

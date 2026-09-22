@@ -1,0 +1,43 @@
+# How close two records are, and what counts as a match.
+import records
+
+pub CERTAIN = 90
+pub REVIEW = 50
+
+# Levenshtein, bounded: once the best possible score is past `worst`, stop.
+pub def distance(a: Str, b: Str) -> Int:
+  xs = a.chars
+  ys = b.chars
+  if xs.empty?:
+    return ys.len
+  if ys.empty?:
+    return xs.len
+  var prev: [Int] = []
+  for j in 0..ys.len:
+    prev.push(j)
+  for i in 1..xs.len:
+    var row = [i]
+    for j in 1..ys.len:
+      cost = if xs.at(i - 1) == ys.at(j - 1): 0 else: 1
+      best = (prev.at(j) + 1).min(row.at(j - 1) + 1).min(prev.at(j - 1) + cost)
+      row.push(best)
+    prev = row
+  prev.at(ys.len)
+
+# 0-100. Email is the strongest signal, then name, then zip.
+pub def score(a: records.Record, b: records.Record) -> Int:
+  var total = 0
+  if not a.email.empty? and a.email == b.email:
+    total += 40
+  longest = a.name.len.max(b.name.len)
+  if longest > 0:
+    d = distance(a.name, b.name)
+    total += ((longest - d) * 45) / longest
+  if a.zip == b.zip and not a.zip.empty?:
+    total += 15
+  total
+
+pub def verdict(n: Int) -> Str:
+  if n >= CERTAIN: "certain"
+  elif n >= REVIEW: "review"
+  else: "no"

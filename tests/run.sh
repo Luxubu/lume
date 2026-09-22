@@ -6,6 +6,7 @@
 #
 # examples/*.lume         must compile and run; stdout is compared
 # examples/lib/           a library (seq, table) and a program that uses it
+# examples/match/         a concurrent record matcher: fan out, collect, report
 # examples/errors/*.lume  must fail `lume check`; stderr is compared
 # examples/tests/*.lume   `lume test` output and exit code are compared
 # examples/fmt/*.lume     `lume fmt --stdout` is compared; every example
@@ -51,7 +52,7 @@ check() {  # name, expected-file, actual-text
   fi
 }
 
-for f in examples/*.lume examples/port/*.lume examples/modules/*.lume examples/json/json.lume examples/mini/main.lume examples/lib/report.lume examples/travel/main.lume examples/shipping/main.lume; do
+for f in examples/*.lume examples/port/*.lume examples/modules/*.lume examples/json/json.lume examples/mini/main.lume examples/lib/report.lume examples/travel/main.lume examples/shipping/main.lume examples/match/main.lume; do
   name=$(basename "$(dirname "$f")")/$(basename "$f" .lume); name=${name#examples/}
   [ "$(dirname "$f")" = "examples" ] && name=$(basename "$f" .lume)
   out=$("$LUME" run "$f" 2>&1); code=$?

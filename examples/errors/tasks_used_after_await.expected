@@ -1,0 +1,6 @@
+error: `await` takes these tasks, and `ts` is used again below
+  --> examples/errors/tasks_used_after_await.lume:6:14
+  |
+6 |   puts await ts
+  |              ^
+  help: a task is the work itself, so waiting for it uses it up; keep what came back with `results = await ts` and use that

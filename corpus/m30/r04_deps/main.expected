@@ -1,2 +1,11 @@
-error: line 5: expected `name: deps`
-exit: 1
+6 packages
+missing: missing_thing
+build order:
+  1. util
+  2. core
+  3. tools
+  4. widgets
+  5. ui
+  6. app
+error: cycle among: a, b, c
+exit: 0

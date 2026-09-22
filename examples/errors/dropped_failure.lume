@@ -1,0 +1,9 @@
+# An `Error` written without `return` used to evaporate, and the function
+# carried on to its last expression as if the failure had not happened.
+def risky(n: Int) -> Int or Error:
+  if n == 3:
+    Error("three is bad")
+  n * 10
+
+def main -> () or Error:
+  puts risky(3)?

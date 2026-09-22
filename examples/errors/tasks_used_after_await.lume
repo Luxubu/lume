@@ -1,0 +1,7 @@
+# The same rule for a list of tasks: `await` takes them.
+async def main:
+  var ts: [Task[Int]] = []
+  for i in 1..3:
+    ts.push(spawn: i)
+  puts await ts
+  puts ts.len

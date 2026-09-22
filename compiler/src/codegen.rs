@@ -322,29 +322,8 @@ impl<K: LumeShow + std::hash::Hash + Eq + Clone, V: LumeShow + Clone> LumeShow f
 }
 impl<K: std::hash::Hash + Eq + Clone, V: Clone> LumeLen for LumeMap<K, V> { fn lume_len(&self) -> i64 { self.len() as i64 } }
 impl<K: std::hash::Hash + Eq + Clone, V: Clone> LumeEmpty for LumeMap<K, V> { fn lume_empty(&self) -> bool { self.is_empty() } }
-/// `split` that drops trailing empty pieces (Ruby), without collecting.
-struct LumeSplit<'a, I: Iterator<Item = &'a str>> { inner: I, pending_empty: usize, buffered: Option<&'a str>, done: bool }
-impl<'a, I: Iterator<Item = &'a str>> LumeSplit<'a, I> {
-    fn new(inner: I) -> Self { LumeSplit { inner, pending_empty: 0, buffered: None, done: false } }
-}
-impl<'a, I: Iterator<Item = &'a str>> Iterator for LumeSplit<'a, I> {
-    type Item = &'a str;
-    fn next(&mut self) -> Option<&'a str> {
-        if self.pending_empty > 0 { self.pending_empty -= 1; return Some(""); }
-        if let Some(b) = self.buffered.take() { return Some(b); }
-        if self.done { return None; }
-        loop {
-            match self.inner.next() {
-                None => { self.done = true; self.pending_empty = 0; return None; }
-                Some("") => { self.pending_empty += 1; }
-                Some(piece) => {
-                    if self.pending_empty > 0 { self.pending_empty -= 1; self.buffered = Some(piece); return Some(""); }
-                    return Some(piece);
-                }
-            }
-        }
-    }
-}
+// `split(sep)` keeps every piece, so `s.split(sep).join(sep)` is `s` again.
+// Rust's own `split` is exactly that rule, so there is nothing to wrap.
 #[derive(Clone, Debug)]
 struct LumeSet<T> { m: LumeMap<T, ()> }
 impl<T: std::hash::Hash + Eq + Clone> LumeSet<T> {
@@ -1759,6 +1738,34 @@ impl Gen {
             return None;
         }
         None
+    }
+
+    /// A statement whose value is dropped on the floor. Most values may be:
+    /// `xs.push(1)` gives a `()` nobody wants. A failure may not — an `Error`
+    /// written without `return` used to evaporate, and a call that can fail
+    /// used to carry on as if it had not.
+    fn check_not_dropped(&mut self, e: &Expr, t: &Type) -> Result<()> {
+        let t = t.materialized();
+        // A bare error value: the failure path, written and then not taken.
+        let err_here = match &self.current_ret {
+            Type::Result(_, err_t) => t == **err_t && t != Type::Unknown,
+            _ => false,
+        };
+        if err_here {
+            return Err(LumeError::new(e.line, e.col, "this failure is thrown away, because nothing returns it")
+                .with_help(format!("write `return {}` to stop here with it", snippet(e))));
+        }
+        if let Type::Result(ok, _) = &t {
+            let what = match &e.kind {
+                ExprKind::Call { name, .. } => format!("`{}` can fail", name),
+                ExprKind::Method { name, .. } => format!("`{}` can fail", name),
+                _ => "this can fail".to_string(),
+            };
+            let seen = if **ok == Type::Unit { "whether it did" } else { "the result" };
+            return Err(LumeError::new(e.line, e.col, format!("{}, and nothing here looks at {}", what, seen))
+                .with_help("pass the failure on with `?`, handle it with `match`, or say you mean to drop it: `_ = ...`"));
+        }
+        Ok(())
     }
 
     /// A value written into a `format!` or a `println!`: the value-as-itself
@@ -5762,6 +5769,7 @@ impl Gen {
                             }
                         }
                     }
+                    self.check_not_dropped(e, &et0)?;
                     let v = self.expr_stmt(e)?;
                     self.line(&format!("{};", v));
                 }
@@ -5893,6 +5901,23 @@ impl Gen {
                                 false,
                             ),
                             _ => (format!("({}).clone().into_iter()", ex), (**elem).clone(), false),
+                        }
+                    }
+                    // A `shared var` collection: copy it out under one lock and
+                    // walk the copy. Holding the lock for the whole body is how
+                    // a program deadlocks, and `shared var` is short locks.
+                    Type::Shared(inner, _) if matches!(**inner, Type::List(_) | Type::Map(..) | Type::Set(_)) => {
+                        let h = self.handle_expr(iter)?;
+                        let snap = |what: &str| format!("{{ let lume_g = {}.lock().unwrap(); {} }}.into_iter()", h, what);
+                        match &**inner {
+                            Type::Map(k, v) => (
+                                snap("lume_g.iter().map(|(k, v)| (k.clone(), v.clone())).collect::<Vec<_>>()"),
+                                Type::Tuple(vec![(**k).clone(), (**v).clone()]),
+                                false,
+                            ),
+                            Type::Set(e) => (snap("lume_g.iter().cloned().collect::<Vec<_>>()"), (**e).clone(), false),
+                            Type::List(e) => (snap("lume_g.clone()"), (**e).clone(), false),
+                            _ => unreachable!(),
                         }
                     }
                     Type::List(elem) if elem.is_copy() || **elem == Type::Unknown => (format!("({}).iter().cloned()", self.expr(iter)?), (**elem).clone(), false),
@@ -8113,6 +8138,26 @@ impl Gen {
                 }
                 self.uses_async = true;
                 let xt = self.ty_of(x).materialized();
+                // A task is the running work itself, not a handle to it, so
+                // awaiting takes it. Without this the name would be cloned
+                // for its later use, and a task is the one thing that cannot
+                // be — which used to surface as a rustc error.
+                let awaits_task = matches!(xt, Type::Task(_))
+                    || matches!(&xt, Type::List(i) if matches!(**i, Type::Task(_)));
+                if awaits_task {
+                    if let ExprKind::Ident(n) = &x.kind {
+                        if self.lookup(n).is_some() && self.used_after(n) {
+                            let many = matches!(xt, Type::List(_));
+                            let (what, keep) = if many {
+                                ("these tasks", format!("results = await {}", n))
+                            } else {
+                                ("this task", format!("result = await {}", n))
+                            };
+                            return Err(LumeError::new(x.line, x.col, format!("`await` takes {}, and `{}` is used again below", what, n))
+                                .with_help(format!("a task is the work itself, so waiting for it uses it up; keep what came back with `{}` and use that", keep)));
+                        }
+                    }
+                }
                 let v = self.expr(x)?;
                 match xt {
                     Type::Future(_) => format!("({}).await", v),
@@ -8990,8 +9035,8 @@ impl Gen {
                     _ => None,
                 };
                 match sep {
-                    Some(c) => format!("LumeSplit::new(({}).split('{}'))", recv, rust_char(c)),
-                    None => format!("LumeSplit::new(({}).split(&*({})))", recv, args[0]),
+                    Some(c) => format!("({}).split('{}')", recv, rust_char(c)),
+                    None => format!("({}).split(&*({}))", recv, args[0]),
                 }
             }
             "join" => {

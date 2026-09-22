@@ -1,0 +1,23 @@
+warning: `compared` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> examples/match/main.lume:67:3
+   |
+67 |   shared var compared = 0
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+warning: `per_block` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> examples/match/main.lume:68:3
+   |
+68 |   shared var per_block: {Str: Int} = {}
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+13 records, 5 blocks, 5 tasks, 5 comparisons
+r1 Ana Silva ~ r2 Anna Silva  95 (certain)
+r4 Bob Jones ~ r5 Robert Jones  85 (review)
+r6 Carl Weathers ~ r7 Carl Weathers  60 (review)
+r1 Ana Silva ~ r3 Ana Silvia  55 (review)
+r2 Anna Silva ~ r3 Ana Silvia  51 (review)
+skipped: no id in: ,Nameless,none@x.com,00000
+skipped: expected 4 fields, got 3: r15,Jim Smith,broken-row
+skipped: block `s30301` has 5 records; over 4 the pairs stop being worth it
+5 pairs, 3 skipped
+busiest block: s90210 with 3 comparisons

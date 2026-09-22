@@ -11,7 +11,15 @@ def main:
   puts "  ".space?
   puts "[#{"ab".pad_right(5)}]"
   puts "[#{"ab".pad(5)}]"
+  # `split` with no separator splits on whitespace and drops the empties;
+  # `split(sep)` keeps every piece, so it undoes a `join` exactly.
   puts "a  b   c".split.to_list
+  puts "a:b:c".split(":").to_list
+  puts "a:".split(":").to_list          # the trailing piece is a piece
+  puts ":a".split(":").to_list
+  puts "".split(":").to_list            # always at least one
+  puts "a::b".split(":").to_list
+  puts "a:b:".split(":").join(":")      # split then join gives it back
   # milestone 24: the pieces a library asked for
   puts "[#{"  hi  ".trim_left}]"
   puts "[#{"  hi  ".trim_right}]"

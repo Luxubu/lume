@@ -1,0 +1,30 @@
+# A record as it arrives, and how a line of text becomes one.
+
+pub struct Record:
+  id: Str
+  name: Str
+  email: Str
+  zip: Str
+
+  # The blocking key: records that disagree here are never compared, which
+  # is what keeps matching from being quadratic. Last-name initial and zip,
+  # so "Bob Jones" and "Robert Jones" still meet.
+  pub def block -> Str:
+    # `[.., last]` is not a pattern Lume has, so the list is reversed.
+    words = name.trim.downcase.split.to_list
+    initial = match words.reverse:
+      [last, ..] -> last[0].or("?").to_s
+      []         -> "?"
+    "#{initial}#{zip.trim}"
+
+  pub def label -> Str = "#{id} #{name}"
+
+# `id,name,email,zip` — every field kept, so a trailing empty one is an
+# empty field rather than a missing column.
+pub def parse(line: Str) -> Record or Error:
+  match line.split(","):
+    [id, name, email, zip] ->
+      if id.trim.empty?:
+        return Error("no id in: #{line}")
+      Record(id: id.trim, name: name.trim, email: email.trim.downcase, zip: zip.trim)
+    parts -> Error("expected 4 fields, got #{parts.len}: #{line}")

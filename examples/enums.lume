@@ -45,8 +45,11 @@ def classify(n: Int) -> Str:
     10...100 -> "medium"
     _        -> "large"
 
+# `split` with no separator splits on whitespace and drops the empties, so
+# it can give nothing back. `split(sep)` keeps every piece and so always
+# gives at least one — the `[]` arm below would be unreachable with it.
 def first_word(s: Str) -> Str:
-  match s.split(" "):
+  match s.split:
     []           -> "(empty)"
     [only]       -> only
     [first, ..]  -> "#{first}..."

@@ -1,0 +1,6 @@
+error: this failure is thrown away, because nothing returns it
+  --> examples/errors/dropped_failure.lume:5:5
+  |
+5 |     Error("three is bad")
+  |     ^
+  help: write `return Error(...)` to stop here with it

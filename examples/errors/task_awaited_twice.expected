@@ -1,0 +1,6 @@
+error: `await` takes this task, and `t` is used again below
+  --> examples/errors/task_awaited_twice.lume:4:14
+  |
+4 |   puts await t
+  |              ^
+  help: a task is the work itself, so waiting for it uses it up; keep what came back with `result = await t` and use that

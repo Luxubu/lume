@@ -255,7 +255,13 @@ impl Parser {
                 self.advance();
                 let const_next = matches!(self.peek(), Tok::Ident(_)) && self.const_ahead();
                 if !(self.at_kw("def") || self.at_kw("async") || self.at_kw("struct") || self.at_kw("enum") || self.at_kw("interface") || self.at_kw("import") || const_next) {
-                    return Err(LumeError::new(pl, pc, "`pub` goes before `def`, `struct`, `enum`, `interface`, `import` or a constant"));
+                    let mut err = LumeError::new(pl, pc, "`pub` goes before `def`, `struct`, `enum`, `interface`, `import` or a constant");
+                    // `pub const X = 1`: the word every other language uses,
+                    // and the one Lume does not have.
+                    if self.at_kw("const") {
+                        err = err.with_help("a constant is a name and a value with no keyword: write `pub NAME = value`");
+                    }
+                    return Err(err);
                 }
             }
             if self.at_kw("interface") {

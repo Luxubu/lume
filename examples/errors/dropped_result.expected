@@ -1,0 +1,6 @@
+error: `save` can fail, and nothing here looks at whether it did
+  --> examples/errors/dropped_result.lume:7:3
+  |
+7 |   save(-1)
+  |   ^
+  help: pass the failure on with `?`, handle it with `match`, or say you mean to drop it: `_ = ...`

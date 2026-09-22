@@ -1,0 +1,8 @@
+# A call that can fail, on a line of its own, with nothing looking at it.
+def save(n: Int) -> () or Error:
+  if n < 0:
+    return Error("negative")
+
+def main:
+  save(-1)
+  puts "kept going"

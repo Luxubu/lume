@@ -1,0 +1,110 @@
+# Matching records in parallel: block, fan out, collect, report.
+#
+# The shape every concurrent program has: split the work, run it on tasks,
+# gather what came back, and say what happened — including what failed.
+import records
+import scoring
+
+INPUT = """r1,Ana Silva,ana@x.com,90210
+r2,Anna Silva,ana@x.com,90210
+r3,Ana Silvia,,90210
+r4,Bob Jones,bob@y.com,10001
+r5,Robert Jones,bob@y.com,10001
+r6,Carl Weathers,carl@z.com,60601
+r7,Carl Weathers,,60601
+,Nameless,none@x.com,00000
+r9,Dana Scully,dana@x.com,20500
+r10,Jo Smith,jo@s.com,30301
+r11,Joe Smith,joe@s.com,30301
+r12,Jon Smith,jon@s.com,30301
+r13,Jan Smith,jan@s.com,30301
+r14,June Smith,june@s.com,30301
+r15,Jim Smith,broken-row"""
+
+struct Pair:
+  a: Str
+  b: Str
+  score: Int
+
+  def line -> Str = "#{a} ~ #{b}  #{score} (#{scoring.verdict(score)})"
+
+# A real threshold is in the thousands; it is small here so the guard fires
+# on the sample input and the failure has a trip back to survive.
+MAX_BLOCK = 4
+
+# One block's worth of work: compare every pair inside it. This is the unit
+# a task runs, so it takes what it needs and gives back what it found -- or
+# says why it could not, which has to survive the trip back.
+def compare_block(key: Str, group: [records.Record]) -> [Pair] or Error:
+  if group.len > MAX_BLOCK:
+    return Error("block `#{key}` has #{group.len} records; over #{MAX_BLOCK} the pairs stop being worth it")
+  var found: [Pair] = []
+  for i in 0...group.len:
+    for j in (i + 1)...group.len:
+      a = group.at(i)
+      b = group.at(j)
+      s = scoring.score(a, b)
+      if s >= scoring.REVIEW:
+        found.push(Pair(a: a.label, b: b.label, score: s))
+  found
+
+async def main -> () or Error:
+  # Parse first, keeping the failures rather than dropping them.
+  var good: [records.Record] = []
+  var bad: [Str] = []
+  for line in INPUT.lines:
+    match records.parse(line):
+      Ok(r)  -> good.push(r)
+      Error(e) -> bad.push(e.message)
+
+  # Block, so only plausible pairs are compared.
+  var blocks: {Str: [records.Record]} = {}
+  for r in good:
+    blocks[r.block].push(r)
+
+  # Fan out: one task per block, each counting its own work into one
+  # shared tally so the report can say how much comparing was done.
+  shared var compared = 0
+  shared var per_block: {Str: Int} = {}
+  var tasks: [Task[[Pair] or Error]] = []
+  for key, group in blocks:
+    t = spawn:
+      match compare_block(key, group):
+        Ok(ps) ->
+          n = (group.len * (group.len - 1)) / 2
+          compared += n
+          per_block[key] = n
+          Ok(ps)
+        Error(e) -> e
+    tasks.push(t)
+
+  # `await` takes the tasks, so anything the report needs is read first.
+  task_count = tasks.len
+  results = await tasks
+
+  # A `shared var` collection can be walked: it is copied out under one lock
+  # and the copy is what the loop sees, so the lock is never held across a
+  # body that might do anything.
+  var busiest = ""
+  var most = 0
+  for key, n in per_block:
+    if n > most:
+      most = n
+      busiest = key
+
+  # Gather, keeping a block's failure instead of losing it.
+  var pairs: [Pair] = []
+  for batch in results:
+    match batch:
+      Ok(ps) ->
+        for p in ps:
+          pairs.push(p)
+      Error(e) -> bad.push(e.message)
+
+  puts "#{good.len} records, #{blocks.len} blocks, #{task_count} tasks, #{compared} comparisons"
+  for p in pairs.sort_by { |p| 0 - p.score }:
+    puts p.line
+  for b in bad:
+    warn "skipped: #{b}"
+  puts "#{pairs.len} pairs, #{bad.len} skipped"
+  puts "busiest block: #{busiest} with #{most} comparisons"
