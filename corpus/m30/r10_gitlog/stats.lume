@@ -1,0 +1,24 @@
+# stats.lume — aggregation. One function, because the only thing that
+# differs between "by author", "by area" and "by month" is which key to
+# use — so the caller hands in a block that picks it.
+
+import record
+
+pub struct Tally:
+  key: Str
+  commits: Int
+  added: Int
+  removed: Int
+
+  def net -> Int = added - removed
+
+pub def by(cs: [record.Change], pick: (record.Change) -> Str) -> [Tally]:
+  var adds: {Str: Int} = {}
+  var dels: {Str: Int} = {}
+  var hits: {Str: Int} = {}
+  for x in cs:
+    k = pick(x)
+    hits[k] = hits[k].or(0) + 1
+    adds[k] = adds[k].or(0) + x.added
+    dels[k] = dels[k].or(0) + x.removed
+  hits.keys.sort.map { |k| Tally(k, hits[k].or(0), adds[k].or(0), dels[k].or(0)) }.to_list

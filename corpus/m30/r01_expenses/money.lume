@@ -1,0 +1,21 @@
+# money.lume — money is whole cents, so no Float ever reaches the report.
+# Operator methods live with the type they belong to.
+
+pub struct Money:
+  cents: Int
+
+  def +(o: Money) -> Money:
+    Money(cents + o.cents)
+
+  def <(o: Money) -> Bool:
+    cents < o.cents
+
+  def show -> Str:
+    whole = cents / 100
+    rest = cents % 100
+    if rest < 10:
+      "#{whole}.0#{rest}"
+    else:
+      "#{whole}.#{rest}"
+
+pub def zero -> Money = Money(0)

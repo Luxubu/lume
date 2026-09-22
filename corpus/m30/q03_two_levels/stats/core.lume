@@ -1,0 +1,15 @@
+# stats/core.lume — two levels from the entry. `main.lume` never names this
+# file; only `report.lume` imports it. The `extend`s below still have to
+# reach the entry, because an `extend` travels with the import.
+
+pub interface Spread[T]:
+  def sample -> [T]
+
+  def n -> Int = sample.len
+  def listed -> Str = sample.map { |x| "#{x}" }.to_list.join(" ")
+
+extend [T] with Spread[T]:
+  def sample -> [T] = self
+
+extend {T} with Spread[T]:
+  def sample -> [T] = self.to_list

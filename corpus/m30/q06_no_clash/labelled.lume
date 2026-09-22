@@ -1,0 +1,27 @@
+# labelled.lume — the two things that must NOT clash, side by side:
+#
+#   1. a second, different interface (`Labelled`) on the same shape `[T]`
+#      that `counted.lume` already claimed for `Counted`;
+#   2. the same interface (`Counted`) on a different shape, `{T}`, in a
+#      different file from the `[T]` one.
+#
+# `Labelled` takes no type parameter, so `extend [T] with Labelled` uses
+# `T` only in the target — the README's "an `extend` introduces a type
+# parameter by using one" with nowhere else to use it.
+
+import counted
+import counted.Counted
+
+pub interface Labelled:
+  def tag -> Str
+
+  def badge -> Str = "[#{tag}]"
+
+extend [T] with Labelled:
+  def tag -> Str = "list"
+
+extend {T} with Labelled:
+  def tag -> Str = "set"
+
+extend {T} with Counted[T]:
+  def all -> [T] = self.to_list

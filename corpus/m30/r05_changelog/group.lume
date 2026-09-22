@@ -1,0 +1,20 @@
+# group.lume — commits into sections, one per kind, ordered by the kind's
+# own rank. The heading for a rank comes from the first commit that used
+# it, which matters only for `Unknown`.
+
+import commit
+
+pub struct Section:
+  heading: Str
+  rank: Int
+  lines: [Str]
+
+pub def sections(cs: [commit.Commit]) -> [Section]:
+  var headings: {Int: Str} = {}
+  var body: {Int: [Str]} = {}
+  for c in cs:
+    r = c.kind.rank
+    if not headings.contains?(r):
+      headings[r] = c.kind.heading
+    body[r].push(c.label)
+  headings.keys.sort.map { |r| Section(headings[r].or("?"), r, body[r].or([])) }.to_list

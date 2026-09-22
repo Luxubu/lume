@@ -1,0 +1,10 @@
+# metric.lume — millimetres and grams. Written first.
+
+import scale.Scaled
+
+extend Int with Scaled[Str]:
+  def unit_name(x: Str) -> Str:
+    match x:
+      "length" -> "mm"
+      "mass"   -> "g"
+      _        -> "units"

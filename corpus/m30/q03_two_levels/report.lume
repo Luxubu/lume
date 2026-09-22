@@ -1,0 +1,13 @@
+# report.lume — the middle file. It imports `stats.core`; the entry imports
+# only this one. Two spellings of the same bound are used on purpose:
+# `Spread[Int]` from the by-name import, and `core.Spread[Int]` through
+# the module name, to check that a qualified interface is legal in a bound.
+
+import stats.core
+import stats.core.Spread
+
+pub def headline[S: Spread[Int]](s: S) -> Str:
+  "#{s.n} readings: #{s.listed}"
+
+pub def widest[A: core.Spread[Int], B: core.Spread[Int]](a: A, b: B) -> Int:
+  a.n.max(b.n)

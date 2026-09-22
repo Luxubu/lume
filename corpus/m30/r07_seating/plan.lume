@@ -1,0 +1,18 @@
+# plan.lume — the assignment. Greedy and deterministic: sort by name, fill
+# a table, start the next one. It builds each table's list before the
+# Table exists, so nothing has to reach inside a list item.
+
+import guests
+
+pub def seat(gs: [guests.Guest], per: Int) -> [guests.Table[guests.Guest]]:
+  ordered = gs.sort_by { |x| x.name }.to_list
+  var tables: [guests.Table[guests.Guest]] = []
+  var current: [guests.Guest] = []
+  for g in ordered:
+    current.push(g)
+    if current.len == per:
+      tables.push(guests.Table(tables.len + 1, current))
+      current = []
+  if not current.empty?:
+    tables.push(guests.Table(tables.len + 1, current))
+  tables

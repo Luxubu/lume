@@ -1,0 +1,29 @@
+# ledger.lume — a tiny ledger. Most of this file is deliberately NOT `pub`:
+# main.lume reaches for each private item in turn. Only `Entry` and `entry`
+# are meant to cross the boundary.
+
+RATE_PERCENT = 7                        # private constant
+
+enum Level:                             # private enum
+  Low
+  High
+
+interface Signed:                       # private interface
+  def sign -> Str
+
+struct Audit:                           # private struct
+  who: Str
+  amount: Int
+
+  def line -> Str = "#{who}/#{amount}"
+
+def fee(amount: Int) -> Int = amount * RATE_PERCENT / 100    # private function
+
+pub struct Entry:
+  who: Str
+  amount: Int
+
+  def total -> Int = amount + fee(amount)
+  def label -> Str = "#{who}: #{total}"
+
+pub def entry(who: Str, amount: Int) -> Entry = Entry(who, amount)

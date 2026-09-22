@@ -1,0 +1,70 @@
+# main.lume — every import form the README names, in one file.
+#
+# Probes, in order of how confident I am that they exist:
+#   * `import geo.point`            — whole module, bound as `point`
+#   * `import geo.point.Point`      — one name brought in directly
+#   * `import geo.point as pt`      — the module under a second name, while
+#                                     the plain name is *also* bound
+#   * `import geo.units as u` and `import geo.units as un`
+#                                   — the same module under TWO aliases
+#   * `import geo.units.METRES_PER_MILE`
+#                                   — a *constant* by name, not a type or a
+#                                     function. The README only shows
+#                                     "`import users.model.User` for one
+#                                     name"; a constant is a name too, but it
+#                                     never says so.
+#   * `import geo.units.miles_to_metres as to_metres`
+#                                   — `as` renaming a SINGLE NAME rather than
+#                                     a module. The README says only "`as` to
+#                                     rename", with no example of this form.
+#                                     GUESS. If it is refused, the message
+#                                     should say `as` applies to modules only,
+#                                     and that is the finding.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# home(0,0)
+# work(3,4)
+# 7
+# 7
+# home(0,0) -> work(3,4) = 7 m
+# 12 m
+# 12 m
+# 1609
+# 1609
+# 3218
+# 1609
+
+import geo.point
+import geo.point.Point
+import geo.point as pt
+import geo.units
+import geo.units as u
+import geo.units as un
+import geo.units.METRES_PER_MILE
+import geo.units.miles_to_metres as to_metres
+
+def main:
+  a: Point = point.Point("home", 0, 0)
+  b = pt.Point(name: "work", x: 3, y: 4)
+
+  puts a.label
+  puts b.label
+
+  # the same function through the plain name and through the alias
+  puts point.manhattan(a, b)
+  puts pt.manhattan(a, b)
+  puts point.leg_label(a, b)
+
+  # the same module through two different aliases
+  puts units.describe(12)
+  puts u.describe(12)
+
+  # a pub constant: through an alias, then bare after a single-name import
+  puts un.METRES_PER_MILE
+  puts METRES_PER_MILE
+
+  # a pub function renamed at the import, then the same one qualified
+  puts to_metres(2)
+  puts u.miles_to_metres(1)

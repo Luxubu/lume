@@ -1,0 +1,21 @@
+# kitchen/pantry.lume — ONE hop from kitchen.scale. This is the case the
+# travel/ example already proves works: a file that imports the library gets
+# its `extend`s and writes none of its own.
+#
+# `Item` has a `grams` method, so it conforms to `scale.Weighed` structurally
+# and should have `kilos_text` as its own method without declaring anything.
+
+import kitchen.scale
+
+pub struct Item:
+  name: Str
+  weight: Int
+
+  def grams -> Int = weight
+  def line -> Str = "#{name}: #{self.kilos_text}"
+
+pub def item(name: Str, weight: Int) -> Item = Item(name, weight)
+
+pub def total(xs: [Item]) -> Int = xs.map(_.weight).sum
+
+pub def lines_of(xs: [Item]) -> Str = xs.map(_.line).to_list.join("; ")

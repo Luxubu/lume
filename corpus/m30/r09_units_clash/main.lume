@@ -1,0 +1,49 @@
+# r09 — AWKWARD, and meant to be REFUSED.
+#
+# A unit converter split the way a small team would split it: one file per
+# system of units, one shared interface, one driver that imports both
+# because it wants to print both. The accident the layout invites is that
+# both files extend the same type with the same interface — and since an
+# `extend` has no name, neither file can see the other's.
+#
+# The README promises exactly this error:
+#
+#   "two `extend`s claiming the same type and the same interface anywhere
+#    in one program is an error naming both files"
+#
+# and, in the milestone 29 row, "two claiming the same type and interface
+# is one error naming both files".
+#
+# EXPECTED: refused, with one Lume error (not two, and not a rustc error).
+#
+#   - the claim is `Int` with `Scaled[Str]`;
+#   - the two `extend`s are `metric.lume` line 5 and `imperial.lume`
+#     line 6, and BOTH files must be named in the message;
+#   - the caret should sit on an `extend` line, not on `main.lume`, and
+#     not on `scale.lume` line 5 where the interface is declared.
+#
+# What I am checking beyond "it fails": that the message names both files
+# rather than just the second one, that it says which type and which
+# interface are being claimed twice (`Scaled[Str]`, with its argument, not
+# bare `Scaled`), and that it does not instead complain about something
+# downstream — a duplicate method `unit_name` on Int, an ambiguous call at
+# `width.described("length")`, or a conflicting `impl` leaking out of
+# rustc.
+#
+# Nothing else here is wrong on purpose: the interface has one required
+# method and one default, both files supply the required method with a
+# matching signature, and `main` would print two lines if only one of the
+# two `extend`s existed. If the program builds and prints, the rule in
+# milestone 29 is not enforced across files.
+#
+# (The values are written into bindings rather than used as literals
+# because `12.described(...)` looked to me like it might lex as a Float.)
+
+import metric
+import imperial
+
+def main:
+  width = 12
+  weight = 500
+  puts width.described("length")
+  puts weight.described("mass")

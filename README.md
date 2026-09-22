@@ -20,7 +20,7 @@ program takes about 1 s in Python and 1.4 s in Ruby.
 The language design lives in the [Lume Language Design](https://claude.ai/code/artifact/1872fe63-1816-4b1e-9983-dec2774382fb)
 document. This repository is the compiler and the examples.
 
-## Status: milestones 1–29 done
+## Status: milestones 1–30 done
 
 | # | Milestone | Status |
 | --- | --- | --- |
@@ -42,6 +42,7 @@ document. This repository is the compiler and the examples.
 | 16 | Ownership by analysis: liveness-based copy or move, recursive enums boxed, `.or` on optional fields, string comparisons in blocks, `for var a in xs`, `xs[i].method` | done: review corpus leaks 6 → 0 |
 | 17 | Pattern completeness: a real exhaustiveness checker with nested witnesses, `A \| B` alternatives; the everyday standard methods; statements in inline blocks | done: 37 new methods, corpus 40 ok / 26 Lume errors / 0 leaks |
 | 18 | `{T}` sets with literals, algebra and iteration; `s[i]` / `s[a..b]` / `xs[a..b]` by character and position; structs and enums as map keys | done |
+| 30 | Sixth review round (`corpus/m30/`, 30 multi-file programs by three reviewers): module mechanics, extends across files, and real programs laid out the way a person would | done: 9 ranked problems fixed, 20 ok / 10 Lume errors / 0 leaks; an `extend` now travels as far as the program goes |
 | 29 | An `extend` travels with the import: a library ships its conformances, and two claiming the same type and interface is one error naming both files | done: `seq` ships `Walkable[T]`, and its consumer extends nothing; no `pub extend` — there is no name to export |
 | 28 | Fifth review round (`corpus/m28/`, 36 programs by three reviewers): generic `extend`, the seams where features meet, and whole programs | done: 12 ranked problems fixed, 27 ok / 9 Lume errors / 0 leaks; `Result` is a name you can use again |
 | 27 | Generic `extend`: an `extend` introduces a type parameter by using one, so `[T]`, `{T}`, `{K: V}` and a user's own `Stack[T]` all conform to the same interface | done: the second half of the gap milestone 24 found; one bounded helper now reaches every container |
@@ -129,8 +130,10 @@ parameter by using one, so the built-in containers conform too —
 a tuple and an optional, `extend (A, B) with Pairish[A, B]:` and
 `extend T? with Holder[T]:` — after
 which one `def describe[B: Bag[Str]](b: B)` reaches all of them. An `extend` travels
-with the import, so a library ships its conformances and a consumer that
-imports it writes none of its own; it has no name, so there is no
+with the import and keeps going, so a library ships its conformances, a
+consumer that imports it writes none of its own, and a file two hops away
+gets them too; the types a module names in what it exports travel the same
+way, so a value handed across two boundaries is still a value you can use; it has no name, so there is no
 `pub extend`, and two `extend`s claiming the same type and the same
 interface anywhere in one program is an error naming both files. A name
 inside the target that is no type of yours is a parameter; a bare target
@@ -197,7 +200,9 @@ and `r"""blocks"""`, for templates, regexes and code),
 `xs + ys` to join two lists, `\u{1F600}` and `\r` escapes, one statement in an
 inline block (`xs.each { |x| total += x }`), and the everyday built-in
 methods: on `Str` `len`, `empty?`, `upcase`, `downcase`, `capitalize`, `trim`,
-`lines`, `split` (with or without a separator), `chars`, `contains?`,
+`lines`, `split` (with or without a separator; an empty piece between two
+separators is kept, a trailing one is not, so `"a::b".split(":")` is three
+pieces and `"a:".split(":")` is one), `chars`, `contains?`,
 `starts_with?`, `ends_with?`, `index_of`, `digit?`, `alpha?`, `space?`, `pad`,
 `pad_right`, `reverse`, `slice`, `replace`, `repeat`, `to_int`, `to_float`; on
 `Int`/`Float` `abs`, `max(x)`, `min(x)`, `clamp(lo, hi)`, `pow`, `even?`,
@@ -273,13 +278,14 @@ The suite also runs `lume test` on `examples/tests/`, `lume fmt` on
 `examples/fmt/`, checks that formatting every example is idempotent and leaves
 the generated Rust unchanged, and runs the review corpora (programs written by
 independent reviewers who did not know the compiler).
-`tests/corpus.sh` classifies the corpus (223 programs from five review
+`tests/corpus.sh` classifies the corpus (253 programs from six review
 rounds: `corpus/` and `corpus/edge/` after milestone 14, `corpus/m17/` on the
 pattern and standard-method surface, `corpus/m18/` on sets and slicing,
-`corpus/m26/` on generics, parameterised interfaces and blocks, and
-`corpus/m28/` on generic `extend`, the seams between features, and whole
-programs): 168
-run, 55 stop with a Lume error (each a deliberate rule or a deliberate error
+`corpus/m26/` on generics, parameterised interfaces and blocks, `corpus/m28/`
+on generic `extend`, the seams between features, and whole programs, and
+`corpus/m30/` on modules — thirty multi-file programs, each a directory with
+its own `main.lume`): 189
+run, 64 stop with a Lume error (each a deliberate rule or a deliberate error
 test: no shadowing, no `Float / Int`, an unbounded `T` as a map key, ...),
 none leaks a rustc error. Each round has a `REPORT.md` beside its programs.
 

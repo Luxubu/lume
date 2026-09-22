@@ -1,0 +1,49 @@
+# q10 — DELIBERATE ERROR. The consumer supplies a method of its own with
+# the same name as one an imported `extend` already gave the same type.
+#
+# `megaphone.lume` line 10 writes `extend Str with Loud:`, whose `shout`
+# (line 11) becomes a method of `Str` in every file that imports it.
+# This file writes `extend Str with Polite:` — a *different* interface,
+# so it is not the (type, interface) pair the clash rule forbids — whose
+# `shout` becomes a second method of `Str` with the same name and the
+# same signature.
+#
+# Meant to be REFUSED.
+#
+# EXPECTED ERROR: a duplicate-method error on `Str`, reported at the
+# second `extend`'s method, `main.lume:42`, and naming the first,
+# `megaphone.lume:11`, the way the two-extends rule names both files.
+# Second best: an ambiguity error at the call, `main.lume:45`, saying
+# `Str.shout` could be `Loud.shout` or `Polite.shout`.
+#
+# Why I think it must be refused rather than resolved: the README's one
+# tie-break is "a method of your own wins over the built-in of the same
+# name", which is about built-ins, not about two extends. Letting the
+# nearer file win would silently change what `megaphone.announce` does
+# for everyone, since `announce` calls `x.shout` through the `Loud`
+# bound; letting the library win would silently ignore what this file
+# wrote. Both are worse than an error.
+#
+# If it is accepted instead, the two outcomes to tell apart are `HELLO!`
+# (the library's `shout` won) and `hello...` (this file's won) on the
+# first line of output.
+
+import megaphone
+import poster
+
+interface Polite:
+  def shout -> Str
+
+  def softly -> Str = "(#{shout})"
+
+# A DIFFERENT interface, so not the pair the clash rule names — but a
+# second `shout` on `Str` all the same.
+extend Str with Polite:
+  def shout -> Str = "#{downcase}..."
+
+def main:
+  puts "Hello".shout
+  puts "Hello".twice
+  puts "Hello".softly
+  puts megaphone.announce("Hello")
+  puts poster.banner(["one", "two"])

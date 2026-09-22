@@ -1,0 +1,58 @@
+# q01 — a library ships an `extend` on every built-in shape, and the
+# consumer extends nothing at all.
+#
+# Probes: `extend [T]`, `extend {T}`, `extend {K: V}`, `extend (A, B)` and
+# `extend T?` all crossing one `import`; the interface's defaults arriving
+# as methods of the built-ins; one bounded helper reaching three of them.
+#
+# The sharpest question here is the `T?` one. The README lists
+# `extend T? with Holder[T]:` as a legal target, but it also says a method
+# on a `T?` without unwrapping is an error. This program calls
+# `found.bulk` on a `Str?`, so it asks which rule wins. I expect the
+# `extend` to win — otherwise `extend T?` could never be used.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# 3
+# ant|bee|cow
+# 2
+# red|blue
+# 2
+# alpha|beta
+# 1
+# seven
+# 1
+# hit
+# true
+# left:ant|bee|cow
+# right:ant|bee|cow
+
+import tally
+
+def main:
+  xs = ["ant", "bee", "cow"]
+  puts xs.bulk
+  puts xs.shown
+
+  s = {"red", "blue"}
+  puts s.bulk
+  puts s.shown
+
+  m = {"a": "alpha", "b": "beta"}
+  puts m.bulk
+  puts m.shown
+
+  pair = (7, "seven")
+  puts pair.bulk
+  puts pair.shown
+
+  found: Str? = Some("hit")
+  puts found.bulk
+  puts found.shown
+
+  missing: Str? = None
+  puts missing.blank?
+
+  puts tally.wider(xs, s)
+  puts tally.wider(m, xs)

@@ -1,0 +1,47 @@
+# q04 — the module carrying the `extend` is imported under an alias.
+#
+# Probes: `import text.metrics as tm` renames the module, so `tm.shout`
+# and `tm.Headline` are qualified — but the `extend` has no name, so
+# `"...".word_count` must still be spelled bare. The consumer also never
+# writes the interface name `Wordy` anywhere, and still gets three
+# defaults (`word_count`, `longest_word`, `initials`) on `Str`.
+#
+# `longest_word` returns a `Str?`; the expected line below depends on
+# `Some(x)` rendering a `Str` without quotes, as `examples/generics.lume`
+# prints `Some(ada)`. The sentence is chosen so the longest word is
+# unique — no tie for `max_by` to break.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# 4
+# TSBF
+# Some(sleepy)
+# THE-SLEEPY-BROWN-FOX
+# ONE-TWO
+# 3
+# 3
+# 3
+# LSC
+# LUME-SHIPS-CONFORMANCES
+
+import text.metrics as tm
+
+def main:
+  line = "the sleepy brown fox"
+  puts line.word_count
+  puts line.initials
+  puts line.longest_word
+  puts tm.shout(line)
+  puts tm.shout("one two")
+
+  # the alias names the module, never the methods the `extend` supplied
+  puts "alpha beta gamma".words.len
+  puts "alpha beta gamma".word_count
+
+  # the library's own type, reached through the alias, under the same
+  # interface as `Str`
+  h = tm.Headline(["Lume", "ships", "conformances"])
+  puts h.word_count
+  puts h.initials
+  puts tm.shout(h)

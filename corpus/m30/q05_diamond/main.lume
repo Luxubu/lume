@@ -1,0 +1,34 @@
+# q05 — a diamond: two modules both importing a third that writes the
+# `extend`, with the entry importing the third as well.
+#
+# Probes: the clash rule says "two `extend`s claiming the same type and
+# the same interface anywhere in one program is an error". This program
+# has ONE extend per pair, arriving along three paths (main -> left ->
+# base, main -> right -> base, main -> base). Counting arrivals rather
+# than definitions would wrongly refuse this, so the diamond is the test
+# of which one the rule counts.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# crew(3): Ada, Bo, Cy
+# desks(2): Ada, Bo
+# 3
+# 3
+# Ada, Bo
+
+import left
+import right
+import base
+
+def main:
+  names = ["Ada", "Bo", "Cy"]
+  seats = {"a1": "Ada", "b2": "Bo"}
+
+  puts left.crew_line(names)
+  puts right.desk_line(seats)
+
+  # the entry's own third path to the same extend
+  puts base.bigger(names, seats)
+  puts names.how_many
+  puts seats.roster

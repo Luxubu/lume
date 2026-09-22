@@ -1,0 +1,68 @@
+# r02 — a test-result summariser in four files: the model, the line format,
+# the per-suite roll-up, and this driver.
+#
+# Probes: a `pub enum` and a `pub struct` in one module, with the struct's
+# methods delegating to the enum's; list patterns with a leading literal
+# and a rest binding (`["fail", ..rest]`) in an imported module; `group_by`
+# on a list of an imported struct type; blocks (`count { |c| ... }`) over
+# imported types; an error reported per line instead of aborting the run.
+#
+# Meant to RUN.
+#
+# Notes on what I deliberately avoided: nothing prints a list, map, Float
+# or optional directly, so no rendering the README leaves open is relied
+# on. The "slowest" line sorts and takes `first` rather than using
+# `max_by`, because the README lists `max_by` among the block methods but
+# only says `first`/`last`/`find`/`max`/`min`/`pop` give back a `T?` — I
+# could not tell what `max_by` returns.
+#
+# EXPECTED OUTPUT:
+# ! line 9: expected 3 fields, got 2
+# .F..sF..
+# cli: 1 passed, 0 failed, 0 skipped
+# model: 2 passed, 1 failed, 0 skipped
+# store: 2 passed, 1 failed, 1 skipped
+# 5/8 passed
+# FAIL model :: rejects junk: wrong field count
+# FAIL store :: removes: nothing was removed
+# total time: 49 ms
+# slowest: store :: saves a user (30 ms)
+
+import cases
+import parse
+import suite
+
+def main:
+  lines = [
+    "model | parses a line | ok 12",
+    "model | rejects junk | fail wrong field count",
+    "model | keeps the order | ok 4",
+    "store | saves a user | ok 30",
+    "store | reloads | skip needs a disk",
+    "store | removes | fail nothing was removed",
+    "store | counts | ok 2",
+    "cli | prints help | ok 1",
+    "cli | broken row",
+  ]
+
+  var runs: [cases.Case] = []
+  for i, text in lines.enumerate:
+    match parse.case(text, i + 1):
+      Ok(c)    -> runs.push(c)
+      Error(e) -> puts "! #{e.message}"
+
+  puts runs.map { |c| c.mark }.to_list.join("")
+
+  for s in suite.summarise(runs):
+    puts "#{s.name}: #{s.passed} passed, #{s.failed} failed, #{s.skipped} skipped"
+
+  puts "#{runs.count { |c| c.passed? }}/#{runs.len} passed"
+
+  for c in runs.filter { |c| c.failed? }.to_list:
+    puts "FAIL #{c.line}: #{c.detail}"
+
+  puts "total time: #{runs.sum { |c| c.ms }} ms"
+
+  match runs.sort_by { |c| 0 - c.ms }.to_list.first:
+    Some(c) -> puts "slowest: #{c.line} (#{c.ms} ms)"
+    None    -> puts "no cases"

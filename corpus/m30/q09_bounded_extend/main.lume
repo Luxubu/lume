@@ -1,0 +1,54 @@
+# q09 — imported `extend`s whose methods call the library's own generic
+# functions, under three kinds of interface bound.
+#
+# Probes: `Ranked[T: Ordered]`, `Tidied[T: Hashable]` and
+# `Roster[T: Named]` — a built-in bound, another built-in bound, and one
+# of the library's own interfaces as a bound. `[Int]` is both `Ordered`
+# and `Hashable`, so one list answers to two of these extends at once,
+# from three `extend [T] ...` lines in one file. The defaults call
+# `util.top` and `util.dedup` across a module boundary the consumer never
+# names, and `[T: Named]` asks whether a user interface works as a bound
+# inside an `extend` target.
+#
+# `Player` is given an explicit `def name -> Str` rather than relying on
+# its field: I could not tell from the README whether a bare field
+# satisfies a required method for structural conformance, and did not
+# want that question to decide this program.
+#
+# `best` returns a `T?`; the two `Some(...)` lines below assume the
+# rendering `examples/generics.lume` shows (`Some(3)`, `Some(ada)`).
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# Some(9)
+# [3, 3, 7, 7, 9]
+# [7, 3, 9]
+# 3
+# Some(pear)
+# [date, fig, pear]
+# Ada & Bo
+# 2
+
+import seqx.rank
+
+struct Player:
+  handle: Str
+  score: Int
+
+  def name -> Str = handle
+
+def main:
+  scores = [7, 3, 9, 3, 7]
+  puts scores.best
+  puts scores.in_order
+  puts scores.once
+  puts scores.once_count
+
+  words = {"pear", "fig", "date"}
+  puts words.best
+  puts words.in_order
+
+  squad = [Player("Ada", 4), Player("Bo", 6)]
+  puts squad.names
+  puts squad.folks.len

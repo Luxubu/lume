@@ -1,0 +1,18 @@
+# parse.lume — the format: `suite | name | ok 12`, `... | fail why`,
+# `... | skip why`. Nothing else in the program knows this shape.
+
+import cases
+
+pub def case(text: Str, n: Int) -> cases.Case or Error:
+  match text.split("|").to_list:
+    [suite, name, result] ->
+      cases.Case(suite.trim, name.trim, read_outcome(result.trim, n)?)
+    parts ->
+      Error("line #{n}: expected 3 fields, got #{parts.len}")
+
+def read_outcome(s: Str, n: Int) -> cases.Outcome or Error:
+  match s.split(" ").to_list:
+    ["ok", ms]       -> cases.Outcome.Pass(ms.to_int?)
+    ["fail", ..rest] -> cases.Outcome.Fail(rest.join(" "))
+    ["skip", ..rest] -> cases.Outcome.Skip(rest.join(" "))
+    _                -> Error("line #{n}: cannot read result `#{s}`")

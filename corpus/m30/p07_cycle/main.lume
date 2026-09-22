@@ -1,0 +1,41 @@
+# main.lume — DELIBERATE ERROR PROGRAM (an import cycle).
+#
+# graph/node.lume imports graph.edge (its line 4).
+# graph/edge.lume imports graph.node (its line 4).
+#
+# Expected: REFUSED, before anything is generated, with an import-cycle error
+# that names both files and both import lines and draws the loop — README,
+# milestone 9: "Lume modules: ... cycle detection".
+#
+# What would be a bad message, and what I am really checking for:
+#   * a rustc error of any kind (the README promises none ever leak);
+#   * "unknown type `edge.Edge`" or "unknown type `node.Node`", which is what
+#     a loader that gave up part-way through the loop would say, and which
+#     sends the reader looking for a spelling mistake;
+#   * an error naming only ONE of the two files, which leaves the reader with
+#     half the loop;
+#   * a hang or a stack overflow.
+#
+# The shape matters, because it is not a contrived one. A graph whose Node
+# holds Edges and whose Edge holds Nodes is the first data structure a person
+# reaches for, and splitting it across two files is the obvious layout. If
+# Lume refuses it, the only fix is to put both types in one file — and the
+# README never says so. It lists "cycle detection" as a feature and stops.
+# The error message is the only documentation this rule has, so it ought to
+# end with the fix.
+#
+# (Were the cycle allowed, this program would print `3` then `0`: `a.degree`
+# is 0 because `node` builds every node with an empty edge list and nothing
+# here puts `e` back into it.)
+
+import graph.node
+import graph.edge
+
+def main:
+  a = node.node("a")
+  b = node.node("b")
+  e = edge.edge(a, b, 3)
+  puts e.weight
+  puts e.label
+  puts a.degree
+  puts a.label

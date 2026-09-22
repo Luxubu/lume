@@ -1,0 +1,41 @@
+# seqx/rank.lume — three interfaces with three kinds of bound on their
+# type parameter: the built-in `Ordered`, the built-in `Hashable`, and an
+# interface of this library's own (`Named`). Every default here is written
+# in terms of `seqx.util`, so the methods a consumer gets from these
+# `extend`s call the library's generic functions.
+
+import seqx.util
+
+pub interface Ranked[T: Ordered]:
+  def all -> [T]
+
+  def best -> T? = util.top(all)
+  def in_order -> [T] = all.sort
+
+extend [T: Ordered] with Ranked[T]:
+  def all -> [T] = self
+
+# A set's item cannot take a bound inside `{...}` — a `:` there already
+# means a map — so it takes the one `Ranked` declared.
+extend {T} with Ranked[T]:
+  def all -> [T] = self.to_list
+
+pub interface Tidied[T: Hashable]:
+  def raw -> [T]
+
+  def once -> [T] = util.dedup(raw)
+  def once_count -> Int = once.len
+
+extend [T: Hashable] with Tidied[T]:
+  def raw -> [T] = self
+
+pub interface Named:
+  def name -> Str
+
+pub interface Roster[T: Named]:
+  def folks -> [T]
+
+  def names -> Str = folks.map { |p| p.name }.to_list.join(" & ")
+
+extend [T: Named] with Roster[T]:
+  def folks -> [T] = self

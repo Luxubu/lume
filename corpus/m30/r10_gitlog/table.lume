@@ -1,0 +1,16 @@
+# table.lume — the only file that knows about column widths. The key
+# column is as wide as the widest key, or the title, whichever is larger;
+# the four number columns are fixed at the width of their headings.
+
+import stats
+
+pub def render(title: Str, rows: [stats.Tally]) -> [Str]:
+  w = rows.map { |r| r.key.len }.to_list.max.or(0).max(title.len)
+  var out = ["#{title.pad_right(w)}  commits  added  removed    net"]
+  for r in rows:
+    c = "#{r.commits}".pad(7)
+    a = "#{r.added}".pad(5)
+    d = "#{r.removed}".pad(7)
+    n = "#{r.net}".pad(5)
+    out.push("#{r.key.pad_right(w)}  #{c}  #{a}  #{d}  #{n}")
+  out

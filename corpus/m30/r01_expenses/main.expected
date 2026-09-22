@@ -1,0 +1,14 @@
+skipped: line 8: expected 4 fields, got 3
+
+by person
+  Ana     3     159.00
+  Bo      2      57.50
+  Cy      2      63.05
+  TOTAL   7     279.55
+by category
+  travel: 150.25 (2)
+  tools: 60.00 (1)
+  fuel: 45.00 (1)
+  food: 24.30 (3)
+largest single: 120.00
+exit: 0

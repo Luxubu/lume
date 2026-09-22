@@ -1,0 +1,23 @@
+# suite.lume — the reporting layer: cases in, one Summary per suite out,
+# in alphabetical order so two runs of the program agree.
+
+import cases
+
+pub struct Summary:
+  name: Str
+  passed: Int
+  failed: Int
+  skipped: Int
+
+  def total -> Int = passed + failed + skipped
+  def ok? -> Bool = failed == 0
+
+pub def summarise(cs: [cases.Case]) -> [Summary]:
+  groups = cs.group_by { |c| c.suite }
+  groups.keys.sort.map { |k| one(k, groups[k].or([])) }.to_list
+
+def one(name: Str, cs: [cases.Case]) -> Summary:
+  p = cs.count { |c| c.passed? }
+  f = cs.count { |c| c.failed? }
+  s = cs.count { |c| c.skipped? }
+  Summary(name, p, f, s)

@@ -1,0 +1,47 @@
+# main.lume — DELIBERATE ERROR PROGRAM (colliding module names).
+#
+# Three collisions in one file, in the order I expect them to be caught.
+#
+#   1. Lines 37 and 38: `import app.config` and `import db.config` both bind
+#      the bare name `config`. Expected: REFUSED at main.lume:38, with a
+#      message that names both app/config.lume and db/config.lume and
+#      suggests `as` — which is exactly what `as` is for and the one place
+#      the README never mentions it. The bad outcome is a silent last-import-
+#      wins, because then `config.NAME` on line 42 means `db` for a reason
+#      that is invisible at the call site and depends on the order of two
+#      lines one after the other.
+#
+#   2. Line 39: `import str`. Lume's built-in is `Str`, capital S. I expect
+#      this to be ALLOWED, since the README only forbids a user type named
+#      after a built-in, and a module is not a type. If it is refused, the
+#      message should say which spelling clashes and that case matters,
+#      because "`str` is already a type" would be untrue.
+#
+#   3. Line 46: `config = "local"` binds a local with the name of an imported
+#      module. The README says rebinding an outer name is an error and that
+#      Lume has no shadowing, but it never says whether a module name and a
+#      local live in the same namespace. Either answer is defensible; a
+#      silent shadow that makes line 47 print `local` while line 42 printed a
+#      module's constant is not.
+#
+# EXPECTED: refused, at main.lume:38.
+#
+# EXPECTED OUTPUT IF COLLISION 1 IS ACCEPTED (last import winning, and
+# collisions 2 and 3 both allowed) — which would itself be the finding:
+# db
+# db:host
+# APP
+# 3
+# local
+
+import app.config
+import db.config
+import str
+
+def main:
+  puts config.NAME
+  puts config.setting("host")
+  puts str.shout("app")
+  puts str.width("abc")
+  config = "local"
+  puts config

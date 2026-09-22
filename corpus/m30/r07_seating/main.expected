@@ -1,0 +1,7 @@
+error: `seating.roll` needs `S: seating.Seating[T]`, and `guests.Table[guests.Guest]` is not seating.Seating[T]
+  --> corpus/m30/r07_seating/main.lume:68:39
+   |
+68 |     puts "table #{t.number}: #{seating.roll(t, _.name)}"
+   |                                       ^
+  help: its `occupants` is `-> [guests.Guest]`, and `seating.Seating[T]` asks for `-> [T]`
+exit: 1

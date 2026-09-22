@@ -1,0 +1,7 @@
+error: `{T}` is already a `Bagged[T]`
+  --> corpus/m30/q07_clash/store/annex.lume:10:1
+   |
+10 | extend {T} with Bagged[T]:
+   | ^
+  help: corpus/m30/q07_clash/store/vault.lume:10 extends it too, and an `extend` travels with the import, so only one of them can hold: remove one, or give one of them an interface of its own
+exit: 1

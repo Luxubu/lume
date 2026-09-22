@@ -1,0 +1,38 @@
+# q03 — the `extend` is two levels down, in a file the entry never imports.
+#
+# Probes: `main.lume` imports `report` and nothing else. `report.lume`
+# imports `stats.core`, which is where both `extend`s live. If an `extend`
+# travels with the import, the entry's lists and sets arrive with `n` and
+# `listed` on them without the entry ever naming `stats.core`. Also probes
+# a module-qualified interface (`core.Spread[Int]`) used as a bound.
+#
+# The thing I am least sure of: whether an `extend` travels one hop or all
+# the way. "An `extend` travels with the import, so a library ships its
+# conformances" reads as transitive to me; if it is one hop only, lines
+# four to six below are unknown-method errors in `main.lume`.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# 4 readings: 4 9 4 2
+# 2 readings: 7 1
+# 4
+# 4
+# 7 1
+# 1 2 3
+
+import report
+
+def main:
+  day1 = [4, 9, 4, 2]
+  day2 = {7, 1}
+
+  puts report.headline(day1)
+  puts report.headline(day2)
+  puts report.widest(day1, day2)
+
+  # the extend's own methods, on types the entry never extended, from a
+  # module the entry never named
+  puts day1.n
+  puts day2.listed
+  puts [1, 2, 3].listed

@@ -1,0 +1,22 @@
+# check.lume — runs every rule on every field, in order, and reports. The
+# renderer is a block the caller hands in, so this file has no opinion on
+# how a problem reads.
+
+import field
+import rules
+
+pub def run(fs: [field.Field]) -> [field.Problem]:
+  var out: [field.Problem] = []
+  for f in fs:
+    for r in f.checks:
+      match r.check(f.value):
+        Some(m) -> out.push(field.Problem(f.label, m))
+        None    -> ()
+  out
+
+pub def report(ps: [field.Problem], show: (field.Problem) -> Str) -> [Str]:
+  ps.map(show).to_list
+
+pub def clean(fs: [field.Field], ps: [field.Problem]) -> [Str]:
+  bad = ps.map { |p| p.label }.to_list.to_set
+  fs.reject { |f| bad.contains?(f.label) }.map { |f| f.label }.to_list

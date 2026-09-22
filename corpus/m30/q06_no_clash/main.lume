@@ -1,0 +1,41 @@
+# q06 — the two shapes of near-clash that the rule must NOT refuse.
+#
+# Probes: `[T]` carries `Counted` from one file and `Labelled` from
+# another (two different interfaces, one shape); `Counted` is claimed for
+# `[T]` in one file and for `{T}` in another (one interface, two shapes).
+# Neither is "the same type and the same interface", so both must compile,
+# and a single list must answer to both interfaces at once.
+#
+# It also probes `extend [T] with Labelled`, where the interface has no
+# type parameter at all and `T` appears only inside the target.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# 3
+# 10/20/30
+# [list]
+# 2
+# p/q
+# [set]
+# 3 vs 2
+
+import counted
+import labelled
+
+def main:
+  xs = [10, 20, 30]
+  st = {"p", "q"}
+
+  # two different interfaces on the same `[T]`, written in two files
+  puts xs.how_many
+  puts xs.joined
+  puts xs.badge
+
+  # the same interface on a different shape, from the other file
+  puts st.how_many
+  puts st.joined
+  puts st.badge
+
+  # a bound carrying two different arguments in one signature
+  puts counted.widest(xs, st)

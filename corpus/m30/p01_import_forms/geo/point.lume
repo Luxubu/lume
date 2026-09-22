@@ -1,0 +1,15 @@
+# geo/point.lume — a point on a grid. Imports its sibling `geo.units` with a
+# plain whole-module import, and calls its own `manhattan` unqualified.
+
+import geo.units
+
+pub struct Point:
+  name: Str
+  x: Int
+  y: Int
+
+  def label -> Str = "#{name}(#{x},#{y})"
+
+pub def manhattan(a: Point, b: Point) -> Int = (a.x - b.x).abs + (a.y - b.y).abs
+
+pub def leg_label(a: Point, b: Point) -> Str = "#{a.label} -> #{b.label} = #{units.describe(manhattan(a, b))}"

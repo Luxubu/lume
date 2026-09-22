@@ -1,0 +1,44 @@
+# parse.lume — one line of `git log --oneline` in the conventional-commit
+# style: `<hash> kind(scope): subject`. This is the only file that knows
+# about colons and brackets.
+
+import commit
+
+pub def line(text: Str, n: Int) -> commit.Commit or Error:
+  parts = text.trim.split(" ").to_list
+  match parts:
+    [] ->
+      Error("line #{n}: empty")
+    [hash, ..rest] ->
+      if rest.empty?:
+        return Error("line #{n}: no message after `#{hash}`")
+      head = rest.join(" ")
+      i = head.index_of(":").or_error("line #{n}: no `kind:` prefix in `#{head}`")?
+      prefix = head[0...i]
+      body = head[i + 1...head.len].trim
+      if body.empty?:
+        return Error("line #{n}: empty subject")
+      commit.Commit(hash, kind_of(prefix), scope_of(prefix), body)
+
+def bare(prefix: Str) -> Str:
+  match prefix.index_of("("):
+    Some(i) -> prefix[0...i]
+    None    -> prefix
+
+def kind_of(prefix: Str) -> commit.Kind:
+  match bare(prefix):
+    "feat"  -> commit.Kind.Feature
+    "fix"   -> commit.Kind.Fix
+    "docs"  -> commit.Kind.Docs
+    "chore" -> commit.Kind.Chore
+    other   -> commit.Kind.Unknown(other)
+
+def scope_of(prefix: Str) -> Str?:
+  match prefix.index_of("("):
+    Some(i) ->
+      if prefix.ends_with?(")"):
+        Some(prefix[i + 1...prefix.len - 1])
+      else:
+        None
+    None ->
+      None

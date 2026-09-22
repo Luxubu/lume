@@ -1,0 +1,39 @@
+# parse.lume — the parsing layer. One line of the expense file becomes one
+# Expense, or an Error that names the line number.
+
+import expense
+import money
+
+pub def line(text: Str, n: Int) -> expense.Expense or Error:
+  match text.split(";").to_list:
+    [d, who, cat, amount] ->
+      day = read_day(d.trim, n)?
+      cents = read_money(amount.trim, n)?
+      expense.Expense(day, who.trim, read_category(cat.trim), money.Money(cents))
+    parts ->
+      Error("line #{n}: expected 4 fields, got #{parts.len}")
+
+def read_day(s: Str, n: Int) -> Int or Error:
+  d = s.to_int?
+  if d < 1 or d > 31:
+    return Error("line #{n}: day #{d} is out of range")
+  d
+
+# Amounts are positive and written with two decimal places or none at all.
+def read_money(s: Str, n: Int) -> Int or Error:
+  match s.split(".").to_list:
+    [whole, frac] ->
+      if frac.len != 2:
+        return Error("line #{n}: `#{s}` needs two decimal places")
+      whole.to_int? * 100 + frac.to_int?
+    [whole] ->
+      whole.to_int? * 100
+    _ ->
+      Error("line #{n}: `#{s}` is not an amount")
+
+def read_category(s: Str) -> expense.Category:
+  match s.downcase:
+    "travel" -> expense.Category.Travel
+    "food"   -> expense.Category.Food
+    "tools"  -> expense.Category.Tools
+    other    -> expense.Category.Other(other)

@@ -1,0 +1,9 @@
+# str.lume — a module whose name is a built-in type's name in lower case.
+# The README forbids a user *type* named after a built-in ("a user type named
+# after a built-in (`struct Option`)"), and says a user type of the same name
+# as a namespace like `File` or `Env` wins over it. It says nothing about a
+# module called `str`, so this file is here to find out.
+
+pub def shout(s: Str) -> Str = s.upcase
+
+pub def width(s: Str) -> Int = s.len

@@ -1,0 +1,14 @@
+# megaphone.lume — the library. `extend Str with Loud` makes `shout` and
+# `twice` methods of `Str` for every file that imports this one, directly
+# or not. Nothing here is wrong; the conflict is in `main.lume`.
+
+pub interface Loud:
+  def shout -> Str
+
+  def twice -> Str = "#{shout} #{shout}"
+
+extend Str with Loud:
+  def shout -> Str = "#{upcase}!"
+
+pub def announce[L: Loud](x: L) -> Str:
+  "** #{x.shout} **"

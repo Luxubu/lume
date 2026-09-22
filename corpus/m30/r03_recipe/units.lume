@@ -1,0 +1,35 @@
+# units.lume — a quantity is an integer count of tenths of a base unit, so
+# scaling a recipe never touches a Float. Truncation is deliberate: a
+# kitchen scale has one decimal place and so does this.
+
+pub enum Unit:
+  Gram
+  Millilitre
+  Piece
+
+  def suffix -> Str = match self:
+    Gram       -> "g"
+    Millilitre -> "ml"
+    Piece      -> ""
+
+pub struct Qty:
+  amount: Int
+  unit: Unit
+
+  def +(o: Qty) -> Qty:
+    Qty(amount + o.amount, unit)
+
+  def scale(num: Int, den: Int) -> Qty:
+    Qty(amount * num / den, unit)
+
+  def gram? -> Bool = match unit:
+    Gram -> true
+    _    -> false
+
+  def show -> Str:
+    whole = amount / 10
+    rest = amount % 10
+    if rest == 0:
+      "#{whole}#{unit.suffix}"
+    else:
+      "#{whole}.#{rest}#{unit.suffix}"

@@ -1,0 +1,6 @@
+error: `best_tag` is a function; call it with `best_tag()`
+  --> corpus/m30/p05_qualified_everywhere/main.lume:59:14
+   |
+59 |   puts score(best_tag)
+   |              ^
+exit: 1

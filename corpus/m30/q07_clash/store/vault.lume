@@ -1,0 +1,14 @@
+# store/vault.lume — the first claim on `{T}` for `Bagged`. This file is
+# the honest one; the clash is in `store/annex.lume`.
+
+pub interface Bagged[T]:
+  def held -> [T]
+
+  def held_count -> Int = held.len
+  def held_list -> Str = held.map { |x| "#{x}" }.to_list.join(", ")
+
+extend {T} with Bagged[T]:
+  def held -> [T] = self.to_list
+
+pub def summary[B: Bagged[Str]](b: B) -> Str:
+  "#{b.held_count}: #{b.held_list}"

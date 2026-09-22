@@ -1,0 +1,51 @@
+# main.lume — a diamond.
+#
+#              main.lume
+#              /   |    \
+#   billing.invoice |  billing.receipt
+#              \    |    /
+#               core.money
+#
+# core/money.lume is imported by three files: billing/invoice.lume calls it
+# `money`, billing/receipt.lume calls it `m`, and this file calls it `cash`.
+# The one thing that must hold is that `Money` is a single type across all
+# three: `inv.total` comes back from the left arm and goes straight into
+# `receipt.change` in the right arm, with no conversion written anywhere.
+#
+# It also probes a value whose type main.lume never spells: `due` is a
+# `money.Money` obtained from `inv.total`, and `due.text` is called on it
+# without naming any module.
+#
+# Meant to RUN. `.decimals(2)` is the only rendering this leans on, and the
+# README pins it: "the number as text to that many places, halves away from
+# zero".
+#
+# EXPECTED OUTPUT:
+# Ana owes 165.50 EUR
+# 165.50 EUR
+# Ana paid 200.00 EUR in EUR
+# 34.50 EUR
+# 3450
+# EUR
+
+import billing.invoice
+import billing.receipt
+import core.money as cash
+
+def main:
+  items = [invoice.line("desk", 12000), invoice.line("lamp", 4550)]
+  inv = invoice.build("Ana", items)
+  puts inv.label
+
+  # a type this file never names, flowing from the left arm to the right one
+  due = inv.total
+  puts due.text
+
+  paid = cash.cents(20000)
+  puts receipt.render("Ana", paid)
+
+  back = receipt.change(due, paid)
+  puts back.text
+  puts back.cents
+
+  puts cash.CURRENCY

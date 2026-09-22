@@ -1,0 +1,65 @@
+# r04 — a dependency resolver in four files: the manifest format, the
+# graph, the ordering algorithm, and this driver. Split the way it wants
+# to be: `order.lume` knows nothing about text, `manifest.lume` knows
+# nothing about cycles.
+#
+# Probes: a struct holding a `{Str: [Str]}` crossing a module boundary;
+# methods on that struct called from a third file; `next` inside a `for`
+# in an imported module; a `{Str}` set built and sorted in one module and
+# consumed in another; a block that closes over two things from around it
+# (`done` and `g`) inside a `while`; a `T or Error` returned from a module
+# and matched twice in main.
+#
+# Meant to RUN.
+#
+# Assumption: `"util:".split(":")` gives two fields, `["util", ""]`. The
+# README says `split` works "with or without a separator" but never says
+# what either form does at the ends of the string, so `manifest.read`
+# rejects empty dependency names rather than trusting `"".split` to give
+# back an empty list — that guess would otherwise show up as an empty
+# entry on the `missing:` line.
+#
+# EXPECTED OUTPUT:
+# 6 packages
+# missing: missing_thing
+# build order:
+#   1. util
+#   2. core
+#   3. tools
+#   4. widgets
+#   5. ui
+#   6. app
+# error: cycle among: a, b, c
+
+import manifest
+import graph
+import order
+
+def main -> () or Error:
+  lines = [
+    "app: ui core",
+    "ui: core widgets",
+    "widgets: core",
+    "core: util",
+    "util:",
+    "tools: core missing_thing",
+  ]
+
+  g = graph.build(manifest.read(lines)?)
+  puts "#{g.size} packages"
+  gone = graph.missing(g)
+  puts "missing: #{gone.join(", ")}" unless gone.empty?
+
+  match order.topological(g):
+    Ok(names) ->
+      puts "build order:"
+      for i, n in names.enumerate:
+        puts "  #{i + 1}. #{n}"
+    Error(e) ->
+      puts "error: #{e.message}"
+
+  bad = ["a: b", "b: c", "c: a"]
+  h = graph.build(manifest.read(bad)?)
+  match order.topological(h):
+    Ok(names) -> puts "unexpected: #{names.join(", ")}"
+    Error(e)  -> puts "error: #{e.message}"

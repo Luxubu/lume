@@ -1,0 +1,25 @@
+# reader.lume — the text format: `date author added removed path`, one
+# change per line. The only file that knows a date is ten characters.
+
+import record
+
+pub def changes(lines: [Str]) -> [record.Change] or Error:
+  var out: [record.Change] = []
+  for i, text in lines.enumerate:
+    t = text.trim
+    if t.empty?:
+      next
+    out.push(one(t, i + 1)?)
+  out
+
+def one(t: Str, n: Int) -> record.Change or Error:
+  match t.split(" ").to_list:
+    [date, author, added, removed, path] ->
+      record.Change(month_of(date, n)?, author, added.to_int?, removed.to_int?, path)
+    parts ->
+      Error("line #{n}: expected 5 fields, got #{parts.len}")
+
+def month_of(date: Str, n: Int) -> Str or Error:
+  if date.len < 7:
+    return Error("line #{n}: `#{date}` is not a date")
+  date[0...7]

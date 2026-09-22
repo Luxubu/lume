@@ -1,0 +1,29 @@
+# graph.lume — the shape of the problem: which package needs which. The
+# insertion order of `names` is kept so nothing here depends on hashing.
+
+import manifest
+
+pub struct Graph:
+  names: [Str]
+  edges: {Str: [Str]}
+
+  def known?(n: Str) -> Bool = edges.contains?(n)
+  def deps_of(n: Str) -> [Str] = edges[n].or([])
+  def size -> Int = names.len
+
+pub def build(nodes: [manifest.Node]) -> Graph:
+  var names: [Str] = []
+  var edges: {Str: [Str]} = {}
+  for n in nodes:
+    names.push(n.name)
+    edges[n.name] = n.deps
+  Graph(names, edges)
+
+# Dependencies nobody declares. Reported, not fatal.
+pub def missing(g: Graph) -> [Str]:
+  var out: {Str} = {}
+  for n in g.names:
+    for d in g.deps_of(n):
+      if not g.known?(d):
+        out.add(d)
+  out.to_list.sort

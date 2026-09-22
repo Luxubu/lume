@@ -1,0 +1,11 @@
+# billing/receipt.lume — the right arm of the diamond. It imports the same
+# core.money as billing/invoice.lume does, but under the alias `m`, and it
+# also pulls `CURRENCY` in by name. Two files in one program therefore know
+# the same module by two different names.
+
+import core.money as m
+import core.money.CURRENCY
+
+pub def render(who: Str, paid: m.Money) -> Str = "#{who} paid #{paid.text} in #{CURRENCY}"
+
+pub def change(due: m.Money, paid: m.Money) -> m.Money = m.Money(paid.cents - due.cents)

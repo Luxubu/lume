@@ -1,0 +1,7 @@
+error: circular import: graph.node -> graph.edge -> graph.node
+  --> corpus/m30/p07_cycle/graph/edge.lume:4:1
+  |
+4 | import graph.node
+  | ^
+  help: move the shared definitions into a third module that both import
+exit: 1

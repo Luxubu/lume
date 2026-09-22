@@ -1,0 +1,19 @@
+# store/report.lume — one directory up from the csv modules, importing down
+# into them. Note the two spellings of the same type in this file: `Row`
+# (imported by name) and `rows.Row` (which `reader.parse` returns). They must
+# be the same type, or `rs: [Row] = reader.parse(text)` fails.
+
+import store.csv.reader
+import store.csv.rows.Row
+
+pub def summary(text: Str) -> Str:
+  rs: [Row] = reader.parse(text)
+  names = reader.column(rs, 0)
+  joined = names.join("|")
+  "#{rs.len} rows: #{joined}"
+
+pub def first_width(text: Str) -> Int:
+  rs = reader.parse(text)
+  match rs.first:
+    Some(r) -> r.width
+    None    -> 0

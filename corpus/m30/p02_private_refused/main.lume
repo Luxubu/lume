@@ -1,0 +1,44 @@
+# main.lume — DELIBERATE ERROR PROGRAM (private items reached from outside).
+#
+# ledger.lume marks only `Entry` and `entry` as `pub`. This file reaches for
+# five private items: a function, a constant, a struct, an enum and an
+# interface. Every one of them should be REFUSED.
+#
+# What I am really testing is the wording. Each error should say the item is
+# *private* — something like "`fee` is not `pub` in ledger.lume" — and point
+# at the line in ledger.lume where it is declared. The bad outcome is
+# "unknown name `fee`" with a "did you mean", which sends the reader hunting
+# for a typo in a name they can plainly see in the other file.
+#
+# Expected FIRST error: main.lume:37 — `ledger.fee` is private
+#   (declared at ledger.lume:20, with no `pub`).
+#
+# The other four, each of which should be reported the same way — ideally all
+# five in one run, at minimum the first:
+#   main.lume:31  `ledger.Signed`       private interface (ledger.lume:11)
+#   main.lume:38  `ledger.RATE_PERCENT` private constant  (ledger.lume:5)
+#   main.lume:39  `ledger.Audit`        private struct    (ledger.lume:14)
+#   main.lume:41  `ledger.Level`        private enum      (ledger.lume:7)
+#
+# Note also that `Entry.total` calls the private `fee` from inside ledger.lume:
+# a private item must still work in its own file, so `e.label` on line 35 must
+# not become collateral damage. If the whole file were rejected, or `e.label`
+# were reported too, that would be a bug. (Were it to run, it would print
+# "Ana: 107": 100 + 100 * 7 / 100.)
+
+import ledger
+
+def describe(s: ledger.Signed) -> Str = s.sign
+
+def main:
+  e = ledger.entry("Ana", 100)
+  puts e.label
+
+  puts ledger.fee(100)
+  puts ledger.RATE_PERCENT
+  a = ledger.Audit("Bo", 5)
+  puts a.line
+  l = ledger.Level.High
+  match l:
+    ledger.Level.High -> puts "high"
+    ledger.Level.Low  -> puts "low"

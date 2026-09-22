@@ -1,0 +1,22 @@
+# table.lume — a library built on `seq`, and the shape of the problem:
+# it uses seq everywhere internally, but it cannot hand seq on to its own
+# consumer. There is no `pub import`, no `pub use seq.tally`, nothing in the
+# README that re-exports a name.
+#
+# So the author has exactly two choices, and this file shows both:
+#   * wrap by hand — `width`, `count`, `header_line` below are one-line
+#     forwarders that exist only because seq cannot be re-exported;
+#   * or tell the consumer to `import seq` as well, which makes `seq` part of
+#     this library's public contract without any of the files saying so.
+
+import seq
+
+pub struct Table:
+  headers: [Str]
+  rows: [[Str]]
+
+  def width -> Int = seq.tally(headers)
+  def count -> Int = seq.tally(rows)
+  def header_line -> Str = seq.labelled(headers)
+
+pub def build(headers: [Str], rows: [[Str]]) -> Table = Table(headers, rows)

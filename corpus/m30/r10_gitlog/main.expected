@@ -1,0 +1,20 @@
+9 changes, +565 -287 (net 278)
+author  commits  added  removed    net
+ana           4    230      135     95
+bo            3     55       22     33
+cy            2    280      130    150
+
+area      commits  added  removed    net
+(root)          2     50        5     45
+compiler        3    260      250     10
+docs            2     45       20     25
+examples        1    200       10    190
+tests           1     10        2      8
+
+month    commits  added  removed    net
+2026-01        2    150       45    105
+2026-02        3    275      115    160
+2026-03        4    140      127     13
+
+error: line 1: expected 5 fields, got 3
+exit: 0

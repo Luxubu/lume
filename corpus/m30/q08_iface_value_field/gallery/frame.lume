@@ -1,0 +1,24 @@
+# gallery/frame.lume — the interface, and conformances for two types this
+# library does not own: `Str` and a pair of `Int`s.
+
+pub interface Panel:
+  def area -> Int
+  def caption -> Str
+
+  def plate -> Str = "#{caption} (#{area} cm2)"
+  def big? -> Bool = area >= 100
+
+extend Str with Panel:
+  def area -> Int = len * 10
+  def caption -> Str = "text: #{self}"
+
+extend (Int, Int) with Panel:
+  def area -> Int = self.0 * self.1
+  def caption -> Str = "#{self.0}x#{self.1}"
+
+# The interface as a bound, crossing two file boundaries before it is used.
+pub def widest[P: Panel](xs: [P]) -> Int:
+  var best = 0
+  for x in xs:
+    best = best.max(x.area)
+  best

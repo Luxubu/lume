@@ -1,0 +1,66 @@
+# r08 — AWKWARD. A spreadsheet formula evaluator in four files: the tree,
+# the parser, the grid-plus-evaluator, and this driver.
+#
+# What makes it awkward, and why I laid it out this way: the natural place
+# for `eval` is next to the grid, not next to the tree, because it needs
+# the cells. That forces `sheet.lume` to `match` an enum it does not own,
+# with every pattern written `expr.Expr.Add(l, r)` — five qualified
+# variant patterns in one `match`, two of them binding recursive fields.
+# The README shows a qualified variant pattern once
+# (`model.Role.Guest(d)`, one arm, one level) and says a nested pattern
+# through a recursive field is an error that tells you to `match` the
+# field in the arm — which is exactly what the recursion here does. It
+# never shows a qualified pattern as an exhaustiveness witness, so I do
+# not know what a missing arm would be called here.
+#
+# Also awkward, and deliberate: `eval` and `value` are two methods of the
+# same struct calling each other, one of them reached through a `?` inside
+# a `match` arm that also runs a `for` loop.
+#
+# Meant to RUN.
+#
+# Assumption: `pad_right(n)` pads on the right, as
+# `examples/collections.lume` uses it. Nothing prints a list, map, Float
+# or optional directly.
+#
+# EXPECTED OUTPUT:
+# A1    = 10
+# A2    = 20
+# A3    = 12
+# B1    = 30
+# B2    = 30
+# Total = 72
+# Grand = 102
+# cells that B1 uses: A1, A2
+# error: unknown cell `Nope`
+
+import expr
+import sheet
+import parse
+
+def main -> () or Error:
+  rows = [
+    ("A1", "10"),
+    ("A2", "20"),
+    ("A3", "12"),
+    ("B1", "A1 + A2"),
+    ("B2", "A1 * 3"),
+    ("Total", "SUM(A1, A2, A3, B2)"),
+    ("Grand", "Total + B1"),
+  ]
+
+  var s = sheet.empty
+  for name, text in rows:
+    s.put(name, parse.formula(text)?)
+
+  for name in s.order:
+    match s.value(name):
+      Ok(v)    -> puts "#{name.pad_right(6)}= #{v}"
+      Error(e) -> puts "#{name.pad_right(6)}! #{e.message}"
+
+  b1 = s.cells["B1"].or(expr.Expr.Num(0))
+  puts "cells that B1 uses: #{b1.uses.join(", ")}"
+
+  match s.value("Nope"):
+    Ok(v)    -> puts "unexpected #{v}"
+    Error(e) -> puts "error: #{e.message}"

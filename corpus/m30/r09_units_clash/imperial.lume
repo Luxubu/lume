@@ -1,0 +1,11 @@
+# imperial.lume — inches and ounces. Written later, by someone who did not
+# know metric.lume existed. This is the file the error should name second.
+
+import scale.Scaled
+
+extend Int with Scaled[Str]:
+  def unit_name(x: Str) -> Str:
+    match x:
+      "length" -> "in"
+      "mass"   -> "oz"
+      _        -> "units"

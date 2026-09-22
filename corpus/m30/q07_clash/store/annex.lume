@@ -1,0 +1,14 @@
+# store/annex.lume — DELIBERATE CLASH. A second module, written by someone
+# who did not know `vault.lume` had already done it, claims `{T}` for the
+# very same `Bagged` interface. Two `extend`s on the same type and the
+# same interface anywhere in one program is the one thing the rule
+# forbids, and the message should name both files.
+
+import store.vault
+import store.vault.Bagged
+
+extend {T} with Bagged[T]:
+  def held -> [T] = self.to_list.reverse
+
+pub def loudly[B: Bagged[Str]](b: B) -> Str:
+  "annex sees #{b.held_count}"

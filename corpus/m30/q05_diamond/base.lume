@@ -1,0 +1,18 @@
+# base.lume — the bottom of the diamond, and the only file in the program
+# that writes an `extend`. `left.lume`, `right.lume` and `main.lume` all
+# reach it, so the compiler sees these two extends three times over.
+
+pub interface Sized[T]:
+  def members -> [T]
+
+  def how_many -> Int = members.len
+  def roster -> Str = members.map { |x| "#{x}" }.to_list.join(", ")
+
+extend [T] with Sized[T]:
+  def members -> [T] = self
+
+extend {K: V} with Sized[V]:
+  def members -> [V] = self.values.to_list
+
+pub def bigger[A: Sized[Str], B: Sized[Str]](a: A, b: B) -> Int:
+  a.how_many.max(b.how_many)

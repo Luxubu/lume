@@ -1,0 +1,17 @@
+# expr.lume — a formula as a tree. The enum is recursive; nothing here
+# writes a Box. `uses` is the one thing the tree can answer on its own:
+# evaluation needs a grid, so it lives in sheet.lume instead.
+
+pub enum Expr:
+  Num(value: Int)
+  Ref(name: Str)
+  Add(left: Expr, right: Expr)
+  Mul(left: Expr, right: Expr)
+  Sum(names: [Str])
+
+  def uses -> [Str] = match self:
+    Num(_)    -> []
+    Ref(n)    -> [n]
+    Add(l, r) -> l.uses + r.uses
+    Mul(l, r) -> l.uses + r.uses
+    Sum(ns)   -> ns

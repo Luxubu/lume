@@ -1,0 +1,10 @@
+A1    = 10
+A2    = 20
+A3    = 12
+B1    = 30
+B2    = 30
+Total = 72
+Grand = 102
+cells that B1 uses: A1, A2
+error: unknown cell `Nope`
+exit: 0

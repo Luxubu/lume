@@ -1,0 +1,7 @@
+5 fields, 4 problems
+  email: must start with `mailto:`
+  role: must be one of admin, guest, member
+  bio: must not be empty
+  bio: must be at least 10 characters
+ok fields: name, age
+exit: 0

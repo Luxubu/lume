@@ -1,0 +1,65 @@
+# r03 — a recipe scaler in four files: units, the domain model, the card
+# layout, and this driver.
+#
+# Probes: an enum and a struct from the same module used together across
+# a boundary (`units.Qty(tenths, units.Unit.Gram)` built inside
+# `recipe.lume`, and again inside `main.lume`); a method that returns a
+# fresh value of its own type (`Recipe.scaled`); a block inside a method
+# that reads a field through a local binding; a list of an imported struct
+# built in main and handed straight to another module.
+#
+# Meant to RUN.
+#
+# Assumptions: `pad_right(n)` pads on the right, as
+# `examples/collections.lume` uses it. Integer division truncates towards
+# zero — the sugar row at 6 and at 2 servings is the visible proof
+# (750 / 4 = 187, 250 / 4 = 62), and that is intentional, not a rounding
+# bug. Nothing prints a Float, list, map or optional directly.
+#
+# EXPECTED OUTPUT:
+# Pancakes (serves 4)
+#   flour   250g
+#   milk    300ml
+#   eggs    3
+#   sugar   12.5g
+#   butter  50g
+#
+# Pancakes (serves 6)
+#   flour   375g
+#   milk    450ml
+#   eggs    4.5
+#   sugar   18.7g
+#   butter  75g
+#
+# Pancakes (serves 2)
+#   flour   125g
+#   milk    150ml
+#   eggs    1.5
+#   sugar   6.2g
+#   butter  25g
+# dry weight at 4: 312.5g
+
+import units
+import recipe
+import format
+
+def main:
+  items = [
+    recipe.Ingredient("flour", units.Qty(2500, units.Unit.Gram)),
+    recipe.Ingredient("milk", units.Qty(3000, units.Unit.Millilitre)),
+    recipe.Ingredient("eggs", units.Qty(30, units.Unit.Piece)),
+    recipe.Ingredient("sugar", units.Qty(125, units.Unit.Gram)),
+    recipe.Ingredient("butter", units.Qty(500, units.Unit.Gram)),
+  ]
+  base = recipe.Recipe("Pancakes", 4, items)
+
+  for line in format.card(base):
+    puts line
+  puts ""
+  for line in format.card(base.scaled(6)):
+    puts line
+  puts ""
+  for line in format.card(base.scaled(2)):
+    puts line
+
+  puts "dry weight at 4: #{base.dry_weight.show}"

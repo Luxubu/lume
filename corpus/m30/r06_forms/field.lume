@@ -1,0 +1,15 @@
+# field.lume — a form field is a label, the value someone typed, and the
+# rules it must satisfy. A Problem is what comes back when one fails.
+
+import rules
+
+pub struct Field:
+  label: Str
+  value: Str
+  checks: [rules.Rule]
+
+pub struct Problem:
+  label: Str
+  message: Str
+
+  def line -> Str = "#{label}: #{message}"

@@ -1,0 +1,19 @@
+# billing/invoice.lume — the left arm of the diamond. Imports core.money
+# under its plain name.
+
+import core.money
+
+pub struct Line:
+  what: Str
+  price: money.Money
+
+pub struct Invoice:
+  who: Str
+  lines: [Line]
+
+  def total -> money.Money = money.sum_of(lines.map(_.price).to_list)
+  def label -> Str = "#{who} owes #{total.text}"
+
+pub def line(what: Str, cents: Int) -> Line = Line(what, money.cents(cents))
+
+pub def build(who: Str, lines: [Line]) -> Invoice = Invoice(who, lines)

@@ -1,0 +1,22 @@
+# order.lume — Kahn's algorithm over a Graph. A layer is sorted before it
+# is emitted, so the build order is the same every run. A cycle is an
+# error carrying the names still waiting.
+
+import graph
+
+pub def topological(g: graph.Graph) -> [Str] or Error:
+  var done: {Str} = {}
+  var out: [Str] = []
+  var left = g.names
+  while not left.empty?:
+    var ready: [Str] = []
+    for n in left:
+      if g.deps_of(n).all? { |d| done.contains?(d) or not g.known?(d) }:
+        ready.push(n)
+    if ready.empty?:
+      return Error("cycle among: #{left.sort.join(", ")}")
+    for n in ready.sort:
+      done.add(n)
+      out.push(n)
+    left = left.reject { |n| done.contains?(n) }.to_list
+  out

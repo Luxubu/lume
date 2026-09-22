@@ -1,0 +1,18 @@
+# kitchen/scale.lume — the leaf library. It ships an interface and two
+# `extend`s and nothing else. main.lume never imports this file; it reaches
+# it only through kitchen.pantry and kitchen.recipe.
+#
+# An `extend` has no name, so there is nothing to mark `pub`. The README says
+# it "travels with the import" — the question this program asks is how far.
+
+pub interface Weighed:
+  def grams -> Int
+
+  def kilos_text -> Str = "#{grams / 1000}kg #{grams % 1000}g"
+  def heavy? -> Bool = grams >= 1000
+
+extend Int with Weighed:
+  def grams -> Int = self
+
+extend [Int] with Weighed:
+  def grams -> Int = self.sum

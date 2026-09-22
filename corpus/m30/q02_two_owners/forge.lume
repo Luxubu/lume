@@ -1,0 +1,34 @@
+# forge.lume — the library. It owns `Ingot`, writes the `extend` for it,
+# and offers two bounded helpers that any `Priced` value fits, including
+# ones declared in files this library will never see.
+
+pub interface Priced:
+  def cents -> Int
+  def label -> Str
+
+  def price -> Str = "#{label}: $#{(cents.to_float / 100.0).decimals(2)}"
+  def free? -> Bool = cents == 0
+
+pub struct Ingot:
+  metal: Str
+  grams: Int
+
+# An `extend` on a type the library itself owns. `Ingot` could have carried
+# these two methods directly; writing them as an `extend` says out loud
+# which interface they are for.
+extend Ingot with Priced:
+  def cents -> Int = grams * 3
+  def label -> Str = "#{grams}g #{metal}"
+
+pub def cheapest[P: Priced](xs: [P]) -> Str:
+  var best = xs.at(0)
+  for x in xs:
+    if x.cents < best.cents:
+      best = x
+  best.price
+
+pub def total_cents[P: Priced](xs: [P]) -> Int:
+  var n = 0
+  for x in xs:
+    n += x.cents
+  n

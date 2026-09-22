@@ -1,0 +1,15 @@
+# kit/tags.lume — an enum and a constant for main.lume to reach across the
+# boundary with a qualified name. `pub enum` puts both the type and its
+# variants on the far side of the import.
+
+pub MAX_TAGS = 3
+
+pub enum Tag:
+  Plain
+  Ranked(score: Int)
+  Named(text: Str)
+
+  def label -> Str = match self:
+    Plain     -> "plain"
+    Ranked(s) -> "ranked #{s}"
+    Named(t)  -> t

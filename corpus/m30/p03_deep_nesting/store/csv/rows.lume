@@ -1,0 +1,11 @@
+# store/csv/rows.lume — the deepest module in the program, two directories
+# down. It imports nothing: it is the bottom of the three-hop chain
+# main -> store.report -> store.csv.reader -> store.csv.rows.
+
+pub struct Row:
+  cells: [Str]
+
+  def width -> Int = cells.len
+  def at_or(i: Int, fallback: Str) -> Str = cells[i].or(fallback)
+
+pub def row(line: Str) -> Row = Row(line.split(",").map(_.trim).to_list)

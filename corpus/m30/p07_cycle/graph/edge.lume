@@ -1,0 +1,13 @@
+# graph/edge.lume — an edge holding its two nodes. It imports graph.node,
+# which imports this file. The loop closes here.
+
+import graph.node
+
+pub struct Edge:
+  left: node.Node
+  right: node.Node
+  weight: Int
+
+  def label -> Str = "#{left.name}-#{right.name}:#{weight}"
+
+pub def edge(a: node.Node, b: node.Node, w: Int) -> Edge = Edge(a, b, w)

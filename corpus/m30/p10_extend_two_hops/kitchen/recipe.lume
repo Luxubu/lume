@@ -1,0 +1,16 @@
+# kitchen/recipe.lume — TWO hops from kitchen.scale, which it never imports.
+# It knows only kitchen.pantry. `Recipe.weight` is a plain `Int`, so this
+# file makes no use of the conformance at all; it just stands between
+# main.lume and the library that owns it.
+
+import kitchen.pantry
+
+pub struct Recipe:
+  title: Str
+  items: [pantry.Item]
+
+  def weight -> Int = pantry.total(items)
+  def lines -> Str = pantry.lines_of(items)
+  def label -> Str = "#{title} (#{items.len} items)"
+
+pub def recipe(title: Str, items: [pantry.Item]) -> Recipe = Recipe(title, items)

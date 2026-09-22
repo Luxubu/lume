@@ -1,0 +1,64 @@
+# main.lume — how far does an `extend` travel?
+#
+#   kitchen/scale.lume    holds `interface Weighed` and two `extend`s,
+#                         on `Int` and on `[Int]`
+#   kitchen/pantry.lume   imports kitchen.scale                (one hop)
+#   kitchen/recipe.lume   imports kitchen.pantry               (two hops)
+#   main.lume             imports kitchen.recipe and kitchen.pantry
+#                         — and NEVER imports kitchen.scale
+#
+# The README says: "An `extend` travels with the import, so a library ships
+# its conformances and a consumer that imports it writes none of its own."
+# The travel/ example proves the one-hop case. It does not say whether the
+# conformance keeps travelling: is it a property of the program once any file
+# has loaded scale.lume, or is it a property of *this file's* imports?
+#
+# Both answers are reasonable and they are very different to live with:
+#   * program-wide, and `2050.kilos_text` below works, but a method appears on
+#     `Int` in a file that cannot see where it came from, and adding an import
+#     three files away can change what a method call means here;
+#   * import-local, and `2050.kilos_text` is refused, which means a library
+#     that wraps another library has to re-export conformances it cannot name
+#     (there is no `pub extend` — the README says so explicitly: "it has no
+#     name, so there is no `pub extend`"). That is a real hole.
+#
+# Meant to RUN, betting on the program-wide answer. Lines 55-56 and 60-61 are
+# the bet; if they are refused, the error should say the conformance exists
+# but is not in scope here, and name kitchen/scale.lume. Lines 48-50 and 64
+# are the one-hop case and must work either way.
+#
+# EXPECTED OUTPUT:
+# cake (3 items)
+# 2050
+# flour: 1kg 500g; sugar: 0kg 250g; butter: 0kg 300g
+# 2kg 50g
+# true
+# 2050
+# 2kg 50g
+# salt: 0kg 40g
+
+import kitchen.recipe
+import kitchen.pantry
+
+def main:
+  items = [pantry.item("flour", 1500), pantry.item("sugar", 250), pantry.item("butter", 300)]
+  r = recipe.recipe("cake", items)
+
+  # one hop: pantry.Item uses the conformance inside pantry.lume
+  puts r.label
+  puts r.weight
+  puts r.lines
+
+  # two hops: `kilos_text` and `heavy?` come from kitchen/scale.lume, which
+  # this file does not import, applied to a plain `Int`
+  total = r.weight
+  puts total.kilos_text
+  puts total.heavy?
+
+  # the same again for the `extend [Int]`
+  weights = [1500, 250, 300]
+  puts weights.grams
+  puts weights.kilos_text
+
+  salt = pantry.item("salt", 40)
+  puts salt.line

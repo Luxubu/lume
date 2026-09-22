@@ -1,0 +1,74 @@
+# r01 — an expense tracker in five files: a money type with operators, a
+# domain model, a parsing layer and a reporting layer. This is the layout
+# I would actually use: `report.lume` never sees a Str, `parse.lume` never
+# sees a column width.
+#
+# Probes: a struct with operator methods crossing a module boundary; a
+# `pub enum` with a method used from two other files; `?` through two
+# module hops; a `T or Error` matched in main; reading a field of a
+# `pub struct` from another module (`r.total.cents`, `x.amount.cents`);
+# calling a method (`Money.show`) on a value whose module main never
+# imports.
+#
+# Meant to RUN.
+#
+# Assumptions I could not check in the README:
+#   - `pad_right(n)` pads on the right (text left-aligned) and `pad(n)`
+#     pads on the left (text right-aligned). The README lists both for Str
+#     but never says which side; `examples/collections.lume` uses
+#     `pad_right(6)` for a left-aligned column, which is where I get this.
+#   - fields of a `pub struct` are readable from an importing file.
+#   - Int division truncates towards zero (all amounts here are positive,
+#     so this only shows up in `cents / 100`).
+# No Float, list, map or optional is ever printed directly.
+#
+# EXPECTED OUTPUT:
+# skipped: line 8: expected 4 fields, got 3
+#
+# by person
+#   Ana     3     159.00
+#   Bo      2      57.50
+#   Cy      2      63.05
+#   TOTAL   7     279.55
+# by category
+#   travel: 150.25 (2)
+#   tools: 60.00 (1)
+#   fuel: 45.00 (1)
+#   food: 24.30 (3)
+# largest single: 120.00
+
+import expense
+import parse
+import report
+
+def main:
+  rows = [
+    "3; Ana; travel; 120.00",
+    "3; Bo; food; 12.50",
+    "5; Ana; food; 8.75",
+    "7; Cy; tools; 60.00",
+    "7; Ana; travel; 30.25",
+    "9; Bo; fuel; 45.00",
+    "9; Cy; food; 3.05",
+    "9; Di; food",
+  ]
+
+  var good: [expense.Expense] = []
+  for i, text in rows.enumerate:
+    match parse.line(text, i + 1):
+      Ok(e)    -> good.push(e)
+      Error(m) -> puts "skipped: #{m.message}"
+
+  puts ""
+  puts "by person"
+  for r in report.by_person(good) + [report.grand_total(good)]:
+    n = "#{r.count}".pad(3)
+    puts "  #{r.key.pad_right(6)}#{n}  #{r.total.show.pad(9)}"
+
+  puts "by category"
+  for r in report.by_category(good):
+    puts "  #{r.key}: #{r.total.show} (#{r.count})"
+
+  match good.map(_.amount).to_list.max:
+    Some(m) -> puts "largest single: #{m.show}"
+    None    -> puts "no expenses"

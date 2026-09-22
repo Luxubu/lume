@@ -1,0 +1,8 @@
+# geo/units.lume — length conversions and one shared constant.
+# Everything here is `pub`; nothing in this file is private.
+
+pub METRES_PER_MILE = 1609
+
+pub def miles_to_metres(miles: Int) -> Int = miles * METRES_PER_MILE
+
+pub def describe(metres: Int) -> Str = "#{metres} m"

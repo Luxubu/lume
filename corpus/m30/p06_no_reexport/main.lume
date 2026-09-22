@@ -1,0 +1,58 @@
+# main.lume — what the consumer of a layered library actually has to write.
+#
+# `table` is built on `seq`. This file wants both: `table.Table` for the
+# shape, and `seq.tally`/`seq.head` for the helpers. Importing `table` does
+# NOT bring `seq` along — the README has no re-export of any kind — so the
+# only thing that works is to import `seq` a second time, here, by hand.
+#
+# Things I expect to be REFUSED, and which are therefore NOT in the program
+# below (I would rather this one run):
+#   table.seq.tally(t.rows)     reaching through the importing module
+#   tally(t.rows)               a bare name that only `table` imported
+#
+# The interesting cost is not the extra line. It is that `seq` is now part of
+# `table`'s public contract — a consumer must know which library `table` was
+# built on, and nothing in table.lume says so — and that if `table` ever
+# switches from `seq` to something else, every consumer breaks even though
+# `table`'s own interface never changed.
+#
+# One guess, on the line marked below: `t.headers.map(seq.shout)` uses a
+# QUALIFIED function name as a block. The README says "a function name works
+# as the block for all of these: `xs.map(parse)`" and never shows a dotted
+# one. If that is refused, that is the finding, and the workaround is the
+# explicit `{ |s| seq.shout(s) }`.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# name, city, age
+# 3
+# 2
+# 2
+# name, city, age
+# NAME-CITY-AGE
+# Ana,Oslo,31
+
+import table
+import seq
+
+def main:
+  rows = [["Ana", "Oslo", "31"], ["Bo", "Lima", "24"]]
+  t = table.build(["name", "city", "age"], rows)
+
+  # what `table` wrapped by hand, because it could not pass `seq` on
+  puts t.header_line
+  puts t.width
+  puts t.count
+
+  # the same two helpers, reached the way the consumer must reach them
+  puts seq.tally(t.rows)
+  puts seq.labelled(t.headers)
+
+  # GUESS: a qualified function name used as a block
+  shouted = t.headers.map(seq.shout).to_list
+  puts shouted.join("-")
+
+  match seq.head(t.rows):
+    Some(r) -> puts r.join(",")
+    None    -> puts "no rows"

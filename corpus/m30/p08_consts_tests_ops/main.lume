@@ -1,0 +1,78 @@
+# main.lume — top-level constants, operator methods and `test` blocks across
+# a module boundary.
+#
+# Probes:
+#   * `pub` constants of three types — Int, Str and a `{Str}` set — reached
+#     through the module name;
+#   * a private constant (`SECRET`) reachable only through a `pub` function
+#     in its own file, which is the pattern a person uses when they want a
+#     value shared but not spelled;
+#   * hand-written operator methods (`+`, `-`, `*`, `<`) called from another
+#     file, including the ones the README says FOLLOW from `<`: `!=` from the
+#     derived `==`, and `>`, `sort` and `max` from `<`. None of those four
+#     are written anywhere in vec2.lume, so this is really asking whether a
+#     derived operator survives an import;
+#   * a `test` block in an imported module (vec/vec2.lume) and another in
+#     this file. `lume run` must strip both; `lume test main.lume` should run
+#     at least this file's. Whether it also runs the imported module's tests
+#     is NOT stated in the README and is worth knowing either way.
+#
+# Everything goes through a binding rather than `puts (a + b).text`, because
+# the README warns that "`name (` with a space" is an ambiguous call.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# (4, 6)px
+# (2, 2)px
+# (3, 6)px
+# true
+# true
+# true
+# true
+# (0, 0)px (1, 2)px (3, 4)px
+# (3, 4)px
+# 100
+# px
+# x,y
+# 84
+
+import vec.vec2
+import vec.vec2.Vec2
+import vec.limits
+
+def main:
+  a = vec2.vec(1, 2)
+  b = Vec2(3, 4)
+
+  sum = a + b
+  diff = b - a
+  tripled = a * 3
+  puts sum.text
+  puts diff.text
+  puts tripled.text
+
+  same = a == Vec2(1, 2)
+  puts same
+  differ = a != b
+  puts differ
+  smaller = a < b
+  puts smaller
+  bigger = b > a
+  puts bigger
+
+  vs = [b, a, vec2.vec(0, 0)]
+  puts vs.sort.map(_.text).to_list.join(" ")
+  biggest = vs.max.or(Vec2(0, 0))
+  puts biggest.text
+
+  puts limits.MAX_LEN
+  puts limits.UNITS
+  puts limits.AXES.sort.join(",")
+  puts limits.secret_doubled
+
+test "an imported module's operators reach the importing file":
+  p = vec2.vec(1, 1)
+  q = vec2.vec(2, 2)
+  assert (p + q).size == 6
+  assert limits.MAX_LEN == 100

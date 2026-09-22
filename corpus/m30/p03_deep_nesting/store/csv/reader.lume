@@ -1,0 +1,9 @@
+# store/csv/reader.lume — a module importing its sibling by the sibling's
+# FULL path (`store.csv.rows`), not by a short relative name. The README only
+# ever shows full paths, so this is the only spelling I believe exists.
+
+import store.csv.rows
+
+pub def parse(text: Str) -> [rows.Row] = text.lines.map { |l| rows.row(l) }.to_list
+
+pub def column(rs: [rows.Row], i: Int) -> [Str] = rs.map { |r| r.at_or(i, "-") }.to_list

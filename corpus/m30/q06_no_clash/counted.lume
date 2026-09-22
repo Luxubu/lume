@@ -1,0 +1,15 @@
+# counted.lume — interface one, extended onto `[T]` here. The *same*
+# interface is extended onto `{T}` in `labelled.lume`, which is a
+# different pair and so must be allowed.
+
+pub interface Counted[T]:
+  def all -> [T]
+
+  def how_many -> Int = all.len
+  def joined -> Str = all.map { |x| "#{x}" }.to_list.join("/")
+
+extend [T] with Counted[T]:
+  def all -> [T] = self
+
+pub def widest[A: Counted[Int], B: Counted[Str]](a: A, b: B) -> Str:
+  "#{a.how_many} vs #{b.how_many}"

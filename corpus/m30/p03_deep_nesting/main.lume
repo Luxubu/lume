@@ -1,0 +1,47 @@
+# main.lume — three-segment import paths (`a.b.c`) and a three-hop chain.
+#
+# The chain is
+#     main.lume
+#       -> store/report.lume
+#            -> store/csv/reader.lume
+#                 -> store/csv/rows.lume
+# and no file in it imports anything main.lume also imports, so this is a
+# straight line, not a diamond (p04 does the diamond).
+#
+# It also probes:
+#   * `import store.csv.rows` from main.lume while store/report.lume has
+#     already imported the same module — the deepest module is reached from
+#     two different depths in one program;
+#   * `import store.csv.rows.Row` (one name out of a three-segment path)
+#     against `import store.csv.rows` (the whole module), in different files;
+#   * a qualified type inside a list type, `[rows.Row]`, as a return type.
+#
+# Meant to RUN. Nothing here depends on how Lume renders a value: every line
+# is a Str built by hand, or an Int.
+#
+# EXPECTED OUTPUT:
+# 3 rows: name|Ana|Bo
+# 2
+# 3
+# y
+# -
+# x|y|z
+
+import store.report
+import store.csv.rows
+
+def main:
+  text = "name,city\nAna,Oslo\nBo,Lima"
+
+  # through the top of the chain
+  puts report.summary(text)
+  puts report.first_width(text)
+
+  # and straight into the bottom of it, from here
+  r = rows.row("x, y ,z")
+  puts r.width
+  puts r.at_or(1, "-")
+  puts r.at_or(9, "-")
+
+  cells = [r.at_or(0, "-"), r.at_or(1, "-"), r.at_or(2, "-")]
+  puts cells.join("|")

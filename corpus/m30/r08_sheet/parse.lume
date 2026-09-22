@@ -1,0 +1,39 @@
+# parse.lume — text to tree. The grammar is deliberately tiny: `SUM(a, b)`
+# or terms joined left to right by `+` and `*` with no precedence, so the
+# expected output does not depend on a precedence rule I invented.
+#
+# A term is all digits (a number) or all letters and digits (a reference).
+
+import expr
+
+pub def formula(text: Str) -> expr.Expr or Error:
+  t = text.trim
+  if t.starts_with?("SUM(") and t.ends_with?(")"):
+    inside = t[4...t.len - 1]
+    return expr.Expr.Sum(inside.split(",").map { |s| s.trim }.to_list)
+
+  parts = t.split(" ").to_list
+  if parts.empty?:
+    return Error("empty formula")
+  var acc = term(parts.at(0))?
+  var i = 1
+  while i < parts.len:
+    op = parts.at(i)
+    if i + 1 >= parts.len:
+      return Error("`#{t}` ends with `#{op}`")
+    if op != "+" and op != "*":
+      return Error("unknown operator `#{op}` in `#{t}`")
+    rhs = term(parts.at(i + 1))?
+    acc = if op == "+": expr.Expr.Add(acc, rhs) else: expr.Expr.Mul(acc, rhs)
+    i += 2
+  acc
+
+def term(s: Str) -> expr.Expr or Error:
+  if s.empty?:
+    Error("empty term")
+  elif s.digit?:
+    expr.Expr.Num(s.to_int?)
+  elif s.chars.all? { |c| c.alnum? }:
+    expr.Expr.Ref(s)
+  else:
+    Error("cannot read `#{s}`")

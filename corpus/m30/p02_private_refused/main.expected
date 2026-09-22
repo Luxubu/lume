@@ -1,0 +1,7 @@
+error: `Signed` exists in module `ledger` but is not `pub`
+  --> corpus/m30/p02_private_refused/main.lume:31:14
+   |
+31 | def describe(s: ledger.Signed) -> Str = s.sign
+   |              ^
+  help: add `pub` in front of its definition in ledger.lume
+exit: 1

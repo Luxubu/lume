@@ -1,0 +1,31 @@
+# rules.lume — a rule is data, not behaviour. The README says behaviour
+# cannot be stored in a field yet, so an enum carries the rule and one
+# method interprets it. A rule that passes gives back None.
+
+pub enum Rule:
+  Required
+  MinLen(n: Int)
+  MaxLen(n: Int)
+  Digits
+  OneOf(allowed: {Str})
+  Matches(prefix: Str)
+
+  def check(value: Str) -> Str? = match self:
+    Required ->
+      if value.trim.empty?: Some("must not be empty")
+      else: None
+    MinLen(n) ->
+      if value.len < n: Some("must be at least #{n} characters")
+      else: None
+    MaxLen(n) ->
+      if value.len > n: Some("must be at most #{n} characters")
+      else: None
+    Digits ->
+      if value.digit?: None
+      else: Some("must be digits only")
+    OneOf(a) ->
+      if a.contains?(value): None
+      else: Some("must be one of #{a.to_list.sort.join(", ")}")
+    Matches(p) ->
+      if value.starts_with?(p): None
+      else: Some("must start with `#{p}`")

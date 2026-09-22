@@ -22,19 +22,19 @@ impl LumePow for f64 { fn lume_pow(self, e: Self) -> Self { self.powf(e) } }
 trait LumeAsStr { fn lume_as_str(&self) -> &str; }
 impl LumeAsStr for str { fn lume_as_str(&self) -> &str { self } }
 impl LumeAsStr for String { fn lume_as_str(&self) -> &str { self.as_str() } }
-impl<T: LumeAsStr + ?Sized> LumeAsStr for &T { fn lume_as_str(&self) -> &str { (**self).lume_as_str() } }
+impl<T: LumeAsStr + ?std::marker::Sized> LumeAsStr for &T { fn lume_as_str(&self) -> &str { (**self).lume_as_str() } }
 trait LumeLen { fn lume_len(&self) -> i64; }
 impl<T> LumeLen for Vec<T> { fn lume_len(&self) -> i64 { self.len() as i64 } }
 impl<T> LumeLen for [T] { fn lume_len(&self) -> i64 { self.len() as i64 } }
 impl LumeLen for String { fn lume_len(&self) -> i64 { self.chars().count() as i64 } }
 impl LumeLen for str { fn lume_len(&self) -> i64 { self.chars().count() as i64 } }
-impl<T: LumeLen + ?Sized> LumeLen for &T { fn lume_len(&self) -> i64 { (**self).lume_len() } }
+impl<T: LumeLen + ?std::marker::Sized> LumeLen for &T { fn lume_len(&self) -> i64 { (**self).lume_len() } }
 trait LumeEmpty { fn lume_empty(&self) -> bool; }
 impl<T> LumeEmpty for Vec<T> { fn lume_empty(&self) -> bool { self.is_empty() } }
 impl<T> LumeEmpty for [T] { fn lume_empty(&self) -> bool { self.is_empty() } }
 impl LumeEmpty for String { fn lume_empty(&self) -> bool { self.is_empty() } }
 impl LumeEmpty for str { fn lume_empty(&self) -> bool { self.is_empty() } }
-impl<T: LumeEmpty + ?Sized> LumeEmpty for &T { fn lume_empty(&self) -> bool { (**self).lume_empty() } }
+impl<T: LumeEmpty + ?std::marker::Sized> LumeEmpty for &T { fn lume_empty(&self) -> bool { (**self).lume_empty() } }
 trait LumeSum<T> { fn lume_sum(&self) -> T; }
 impl LumeSum<i64> for Vec<i64> { fn lume_sum(&self) -> i64 { self.iter().sum() } }
 impl LumeSum<f64> for Vec<f64> { fn lume_sum(&self) -> f64 { self.iter().sum() } }
@@ -68,9 +68,9 @@ impl<A: LumeShow, B: LumeShow> LumeShow for (A, B) {
 impl<A: LumeShow, B: LumeShow, C: LumeShow> LumeShow for (A, B, C) {
     fn lume_str(&self) -> String { format!("({}, {}, {})", self.0.lume_str(), self.1.lume_str(), self.2.lume_str()) }
 }
-impl<T: LumeShow + ?Sized> LumeShow for &T { fn lume_str(&self) -> String { (**self).lume_str() } }
-impl<T: LumeShow + ?Sized> LumeShow for ::std::boxed::Box<T> { fn lume_str(&self) -> String { (**self).lume_str() } }
-impl<T: LumeShow + ?Sized> LumeShow for std::sync::Arc<T> { fn lume_str(&self) -> String { (**self).lume_str() } }
+impl<T: LumeShow + ?std::marker::Sized> LumeShow for &T { fn lume_str(&self) -> String { (**self).lume_str() } }
+impl<T: LumeShow + ?std::marker::Sized> LumeShow for ::std::boxed::Box<T> { fn lume_str(&self) -> String { (**self).lume_str() } }
+impl<T: LumeShow + ?std::marker::Sized> LumeShow for std::sync::Arc<T> { fn lume_str(&self) -> String { (**self).lume_str() } }
 impl<T: LumeShow> LumeShow for std::sync::Mutex<T> { fn lume_str(&self) -> String { self.lock().unwrap().lume_str() } }
 #[allow(dead_code)]
 fn lume_assert_failed(line: usize, text: &str, sides: Option<(String, String)>) -> ! {
@@ -189,24 +189,24 @@ struct LumeMap<K, V> {
 }
 impl<K: std::hash::Hash + Eq + Clone, V: Clone> LumeMap<K, V> {
     fn new() -> Self { LumeMap { entries: Vec::new(), index: std::collections::HashMap::new(), live: 0 } }
-    fn hash_of<Q: std::hash::Hash + ?Sized>(k: &Q) -> u64 {
+    fn hash_of<Q: std::hash::Hash + ?std::marker::Sized>(k: &Q) -> u64 {
         use std::hash::Hasher;
         let mut h = std::collections::hash_map::DefaultHasher::new();
         k.hash(&mut h);
         h.finish()
     }
-    fn position<Q>(&self, k: &Q) -> Option<usize> where K: std::borrow::Borrow<Q>, Q: std::hash::Hash + Eq + ?Sized {
+    fn position<Q>(&self, k: &Q) -> Option<usize> where K: std::borrow::Borrow<Q>, Q: std::hash::Hash + Eq + ?std::marker::Sized {
         let h = Self::hash_of(k);
         self.index.get(&h)?.iter().copied().find(|&i| matches!(&self.entries[i], Some((ek, _)) if ek.borrow() == k))
     }
-    fn get<Q>(&self, k: &Q) -> Option<&V> where K: std::borrow::Borrow<Q>, Q: std::hash::Hash + Eq + ?Sized {
+    fn get<Q>(&self, k: &Q) -> Option<&V> where K: std::borrow::Borrow<Q>, Q: std::hash::Hash + Eq + ?std::marker::Sized {
         self.position(k).and_then(|i| self.entries[i].as_ref().map(|(_, v)| v))
     }
-    fn get_mut<Q>(&mut self, k: &Q) -> Option<&mut V> where K: std::borrow::Borrow<Q>, Q: std::hash::Hash + Eq + ?Sized {
+    fn get_mut<Q>(&mut self, k: &Q) -> Option<&mut V> where K: std::borrow::Borrow<Q>, Q: std::hash::Hash + Eq + ?std::marker::Sized {
         let i = self.position(k)?;
         self.entries[i].as_mut().map(|(_, v)| v)
     }
-    fn contains_key<Q>(&self, k: &Q) -> bool where K: std::borrow::Borrow<Q>, Q: std::hash::Hash + Eq + ?Sized { self.position(k).is_some() }
+    fn contains_key<Q>(&self, k: &Q) -> bool where K: std::borrow::Borrow<Q>, Q: std::hash::Hash + Eq + ?std::marker::Sized { self.position(k).is_some() }
     fn insert(&mut self, k: K, v: V) -> Option<V> {
         if let Some(i) = self.position(&k) {
             return self.entries[i].as_mut().map(|e| std::mem::replace(&mut e.1, v));
@@ -233,7 +233,7 @@ impl<K: std::hash::Hash + Eq + Clone, V: Clone> LumeMap<K, V> {
         };
         &mut self.entries[i].as_mut().unwrap().1
     }
-    fn remove<Q>(&mut self, k: &Q) -> Option<V> where K: std::borrow::Borrow<Q>, Q: std::hash::Hash + Eq + ?Sized {
+    fn remove<Q>(&mut self, k: &Q) -> Option<V> where K: std::borrow::Borrow<Q>, Q: std::hash::Hash + Eq + ?std::marker::Sized {
         let i = self.position(k)?;
         let h = Self::hash_of(k);
         if let Some(v) = self.index.get_mut(&h) { v.retain(|&j| j != i); }
@@ -300,8 +300,8 @@ impl<T: std::hash::Hash + Eq + Clone> LumeSet<T> {
     fn new() -> Self { LumeSet { m: LumeMap::new() } }
     fn from<const N: usize>(items: [T; N]) -> Self { let mut s = Self::new(); for i in items { s.insert(i); } s }
     fn insert(&mut self, x: T) -> bool { if self.m.contains_key(&x) { false } else { self.m.insert(x, ()); true } }
-    fn remove<Q>(&mut self, x: &Q) -> bool where T: std::borrow::Borrow<Q>, Q: std::hash::Hash + Eq + ?Sized { self.m.remove(x).is_some() }
-    fn contains<Q>(&self, x: &Q) -> bool where T: std::borrow::Borrow<Q>, Q: std::hash::Hash + Eq + ?Sized { self.m.contains_key(x) }
+    fn remove<Q>(&mut self, x: &Q) -> bool where T: std::borrow::Borrow<Q>, Q: std::hash::Hash + Eq + ?std::marker::Sized { self.m.remove(x).is_some() }
+    fn contains<Q>(&self, x: &Q) -> bool where T: std::borrow::Borrow<Q>, Q: std::hash::Hash + Eq + ?std::marker::Sized { self.m.contains_key(x) }
     fn len(&self) -> usize { self.m.len() }
     fn is_empty(&self) -> bool { self.m.is_empty() }
     fn iter(&self) -> impl Iterator<Item = &T> { self.m.keys() }
@@ -344,8 +344,8 @@ fn lume_slice_list<T: Clone>(xs: &[T], a: i64, b: i64) -> Vec<T> {
     if b <= a { return Vec::new(); }
     xs[a as usize..b as usize].to_vec()
 }
-fn lume_pad<T: LumeShow + ?Sized>(x: &T, width: i64) -> String { format!("{:>w$}", x.lume_str(), w = width.max(0) as usize) }
-fn lume_pad_right<T: LumeShow + ?Sized>(x: &T, width: i64) -> String { format!("{:<w$}", x.lume_str(), w = width.max(0) as usize) }
+fn lume_pad<T: LumeShow + ?std::marker::Sized>(x: &T, width: i64) -> String { format!("{:>w$}", x.lume_str(), w = width.max(0) as usize) }
+fn lume_pad_right<T: LumeShow + ?std::marker::Sized>(x: &T, width: i64) -> String { format!("{:<w$}", x.lume_str(), w = width.max(0) as usize) }
 fn lume_capitalize(s: &str) -> String {
     let mut c = s.chars();
     match c.next() { Some(f) => f.to_uppercase().collect::<String>() + &c.as_str().to_lowercase(), None => String::new() }
@@ -531,6 +531,19 @@ pub struct Exports {
     /// Where each `extend` was written, for the message when two of them
     /// claim the same type and interface.
     ext_where: HashMap<(String, String), (String, usize)>,
+    /// The interfaces those extends name, already qualified, with their
+    /// Rust paths. An `extend` is not a name, so it keeps travelling past
+    /// the file that imported it — but it can only be honoured where the
+    /// interface behind it is known, so that comes along. The name itself
+    /// stays unusable: only a file that imports the module can write it.
+    ext_ifaces: HashMap<String, (IfaceInfo, String)>,
+    /// Types this module reached from its own imports and then named in
+    /// something it exports — a field, a return type, a parameter. Without
+    /// them an importer can hold such a value but not use it.
+    carried_structs: HashMap<String, StructInfo>,
+    carried_enums: HashMap<String, EnumInfo>,
+    carried_ifaces: HashMap<String, IfaceInfo>,
+    carried_paths: HashMap<String, String>,
     private: Vec<String>,
 }
 
@@ -660,6 +673,10 @@ pub struct Gen {
     /// Parameters of the method being emitted that are copied types
     /// arriving behind a reference, because the trait said `T`.
     lent_names: HashSet<String>,
+    /// Parameters whose declared type is an interface. Rust takes those as
+    /// a generic, while a stored one is a pointer to the trait, so putting
+    /// one into a field or a list needs the pointer made here.
+    iface_params: HashSet<String>,
     /// Inside a block the program itself declared: the result that block
     /// promises. A built-in collection block leaves this None, because its
     /// closure gives back a plain value.
@@ -692,6 +709,7 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, deps: &[Dep], t
         type_params: Vec::new(),
         trait_decl: None,
         lent_names: HashSet::new(),
+        iface_params: HashSet::new(),
         block_ret: None,
         ext_methods: HashMap::new(),
         ext_targets: HashMap::new(),
@@ -2329,7 +2347,7 @@ impl Gen {
 
     /// Makes an imported module's public items visible under `key_prefix`
     /// ("model" for an alias, "users.model" for the full id).
-    fn register_module_items(&mut self, key_prefix: &str, id: &str, ex: &Exports) {
+    fn register_module_items(&mut self, key_prefix: &str, id: &str, ex: &Exports, line: usize, col: usize) -> Result<()> {
         for (n, info) in &ex.structs {
             let key = format!("{}.{}", key_prefix, n);
             let qualified = StructInfo {
@@ -2413,8 +2431,51 @@ impl Gen {
         }
         for ((tkey, iname), w) in &ex.ext_where {
             let ik = if ex.interfaces.contains_key(iname) { format!("{}.{}", key_prefix, iname) } else { iname.clone() };
-            self.ext_where.insert((requalify(tkey), ik), w.clone());
+            let k = (requalify(tkey), ik);
+            // Two modules can each write an `extend` without ever seeing
+            // the other; where they meet is here.
+            if let Some(other) = self.ext_where.get(&k) {
+                if other.0 != w.0 {
+                    return Err(LumeError::new(line, col, format!("`{}` is extended with `{}` twice", k.0, k.1))
+                        .with_help(format!("{}:{} and {}:{} both extend it, and an `extend` travels with the import, so this program would have two answers: remove one, or give one of them an interface of its own", other.0, other.1, w.0, w.1)));
+                }
+            }
+            self.ext_where.insert(k, w.clone());
         }
+        // Types this module reached through its own imports, kept under the
+        // ids they already have: a value handed across two boundaries is
+        // still a value you can use.
+        for (k, v) in &ex.carried_structs {
+            self.structs.entry(k.clone()).or_insert_with(|| v.clone());
+        }
+        for (k, v) in &ex.carried_enums {
+            self.enums.entry(k.clone()).or_insert_with(|| v.clone());
+        }
+        for (k, v) in &ex.carried_ifaces {
+            self.interfaces.entry(k.clone()).or_insert_with(|| IfaceInfo { local: false, ..v.clone() });
+        }
+        for (k, v) in &ex.carried_paths {
+            self.paths.entry(k.clone()).or_insert_with(|| v.clone());
+        }
+        // The interfaces those extends name. An `extend` is not a name, so
+        // it keeps travelling past the file that imported it; the interface
+        // behind it comes along so the conformance can still be honoured,
+        // under a key no file can write unless it imports that module.
+        for (iname, (info, path)) in &ex.ext_ifaces {
+            let ik = if ex.interfaces.contains_key(iname) { format!("{}.{}", key_prefix, iname) } else { iname.clone() };
+            if !self.interfaces.contains_key(&ik) {
+                let carried = IfaceInfo { local: false, ..info.clone() };
+                self.interfaces.insert(ik.clone(), carried);
+                self.paths.insert(ik.clone(), path.clone());
+            }
+            // the `use` is needed either way: Rust offers a trait's methods
+            // only where the trait is in scope
+            let u = format!("use crate::{};", path);
+            if !self.trait_uses.contains(&u) {
+                self.trait_uses.push(u);
+            }
+        }
+        Ok(())
     }
 
     fn register_deps(&mut self, deps: &[Dep]) -> Result<()> {
@@ -2437,23 +2498,30 @@ impl Gen {
                     }
                     self.module_aliases.insert(alias.clone(), id.clone());
                     self.module_private.insert(alias.clone(), exports.private.clone());
-                    self.register_module_items(id, id, exports);
-                    for n in exports.structs.keys().chain(exports.enums.keys()).chain(exports.fns.keys()).chain(exports.interfaces.keys()) {
+                    self.register_module_items(id, id, exports, *line, *col)?;
+                    for n in exports.structs.keys().chain(exports.enums.keys()).chain(exports.fns.keys()).chain(exports.interfaces.keys()).chain(exports.consts.keys()) {
                         self.canon.insert(format!("{}.{}", alias, n), format!("{}.{}", id, n));
                     }
                 }
                 Dep::Single { local, id, item, exports, line, col } => {
                     // the module's types must resolve for signatures that mention them
-                    self.register_module_items(id, id, exports);
+                    self.register_module_items(id, id, exports, *line, *col)?;
                     let full = format!("{}.{}", id, item);
-                    if self.structs.contains_key(&full) || self.enums.contains_key(&full) || self.fns.contains_key(&full) || self.interfaces.contains_key(&full) {
+                    // a constant is as importable by name as a type or a
+                    // function: `import geo.units.METRES_PER_MILE`
+                    if self.structs.contains_key(&full)
+                        || self.enums.contains_key(&full)
+                        || self.fns.contains_key(&full)
+                        || self.interfaces.contains_key(&full)
+                        || self.consts.contains_key(&full)
+                    {
                         self.canon.insert(local.clone(), full.clone());
                     } else if exports.private.contains(item) {
                         return Err(LumeError::new(*line, *col, format!("`{}` exists in module `{}` but is not `pub`", item, id))
                             .with_help(format!("add `pub` in front of its definition in {}.lume", id.replace('.', "/"))));
                     } else {
                         let e = LumeError::new(*line, *col, format!("module `{}` has no `{}`", id, item));
-                        let names: Vec<String> = exports.structs.keys().chain(exports.enums.keys()).chain(exports.fns.keys()).cloned().collect();
+                        let names: Vec<String> = exports.structs.keys().chain(exports.enums.keys()).chain(exports.fns.keys()).chain(exports.consts.keys()).chain(exports.interfaces.keys()).cloned().collect();
                         return Err(match self.suggest_from(item, names.iter().cloned()) {
                             Some(sug) => e.with_help(format!("did you mean `{}`?", sug)),
                             None => e.with_help(format!("its public items are: {}", names.join(", "))),
@@ -2499,6 +2567,34 @@ impl Gen {
         ex.ext_method_target = self.ext_method_target.clone();
         ex.ext_impl_generics = self.ext_impl_generics.clone();
         ex.ext_where = self.ext_where.clone();
+        // Types from this module's own imports: an importer that never
+        // imported them still has to be able to use what it is handed.
+        for (k, v) in &self.structs {
+            if k.contains('.') {
+                ex.carried_structs.insert(k.clone(), v.clone());
+            }
+        }
+        for (k, v) in &self.enums {
+            if k.contains('.') {
+                ex.carried_enums.insert(k.clone(), v.clone());
+            }
+        }
+        for (k, v) in &self.interfaces {
+            if k.contains('.') {
+                ex.carried_ifaces.insert(k.clone(), v.clone());
+            }
+        }
+        for (k, v) in &self.paths {
+            if k.contains('.') {
+                ex.carried_paths.insert(k.clone(), v.clone());
+            }
+        }
+        for (_, iname) in self.ext_where.keys() {
+            if let (Some(info), Some(path)) = (self.interfaces.get(iname), self.paths.get(iname).cloned().or_else(|| Some(iname.clone()))) {
+                let path = if info.local { format!("{}::{}", ex.rust_mod, iname) } else { path };
+                ex.ext_ifaces.insert(iname.clone(), (info.clone(), path));
+            }
+        }
         ex
     }
 
@@ -2896,6 +2992,16 @@ impl Gen {
                 self.check_type_args(&gs, args, &format!("`{}`", n), line, col)
             }
             Type::Named(n) if !self.is_type(&self.canon(n)) => {
+                // `ledger.Signed` where `Signed` is there but not `pub`:
+                // say so, rather than calling it unknown
+                if let Some((alias, name)) = n.split_once('.') {
+                    if let Some(id) = self.module_aliases.get(alias).cloned() {
+                        if self.module_private.get(alias).map(|p| p.contains(&name.to_string())).unwrap_or(false) {
+                            return Err(LumeError::new(line, col, format!("`{}` exists in module `{}` but is not `pub`", name, id))
+                                .with_help(format!("add `pub` in front of its definition in {}.lume", id.replace('.', "/"))));
+                        }
+                    }
+                }
                 let e = LumeError::new(line, col, format!("unknown type `{}`", n));
                 let cands = self
                     .structs
@@ -4354,9 +4460,9 @@ impl Gen {
         self.line("}");
         // Boxed values forward to the value inside.
         let box_gen = if i.generics.is_empty() {
-            format!("<Inner: {} + ?Sized>", i.name)
+            format!("<Inner: {} + ?std::marker::Sized>", i.name)
         } else {
-            format!("<{}, Inner: {}{} + ?Sized>", i.generics.iter().map(|p| self.rust_bounds(p)).collect::<Vec<_>>().join(", "), i.name, gargs)
+            format!("<{}, Inner: {}{} + ?std::marker::Sized>", i.generics.iter().map(|p| self.rust_bounds(p)).collect::<Vec<_>>().join(", "), i.name, gargs)
         };
         self.line(&format!("impl{} {}{} for ::std::boxed::Box<Inner> {{", box_gen, i.name, gargs));
         self.indent += 1;
@@ -4952,6 +5058,9 @@ impl Gen {
         for p in &f.params {
             let pty = self.ct(&p.ty);
             let borrowed = !pty.is_copy() || lent_params.get(&p.name).copied().unwrap_or(false);
+            if self.is_interface(&pty) {
+                self.iface_params.insert(p.name.clone());
+            }
             self.declare(&p.name, p.mutable, borrowed, pty, p.line);
         }
         self.current_ret = sig.ret.clone();
@@ -5939,13 +6048,20 @@ impl Gen {
 
     /// True when the expression names a place we cannot move out of: a
     /// borrowed parameter, `self`, or a field reached through either.
+    /// In an `extend` on a copied built-in — `extend Int with ...` — the
+    /// method takes `&self`, so `self` is already read through once and no
+    /// other rule should read through it again.
+    fn self_is_lent_copy(&self) -> bool {
+        self.current_self_ty.as_ref().map(|t| t.materialized().is_copy()).unwrap_or(false)
+    }
+
     fn is_borrowed_place(&mut self, e: &Expr) -> bool {
         match &e.kind {
             ExprKind::Ident(n) => match self.lookup(n) {
                 Some(b) => b.borrowed,
                 None => self.field_type(n).is_some() || self.consts.contains_key(&self.canon(n)),
             },
-            ExprKind::SelfRef => true,
+            ExprKind::SelfRef => !self.self_is_lent_copy(),
             ExprKind::Method { recv, name, args }
                 if args.is_empty()
                     && matches!(&recv.kind, ExprKind::Ident(a) if self.lookup(a).is_none() && self.module_aliases.contains_key(a))
@@ -5971,8 +6087,11 @@ impl Gen {
 
     fn is_borrowed_ident(&self, e: &Expr) -> bool {
         match &e.kind {
+            // a lent copy is already read through once when its value is
+            // taken, so it is not borrowed by the time anyone asks
+            ExprKind::Ident(n) if self.lent_names.contains(n) => false,
             ExprKind::Ident(n) => self.lookup(n).map(|b| b.borrowed).unwrap_or(false),
-            ExprKind::SelfRef => true,
+            ExprKind::SelfRef => !self.self_is_lent_copy(),
             _ => false,
         }
     }
@@ -6081,6 +6200,17 @@ impl Gen {
             _ => {
                 let from = self.ty_of(e).materialized();
                 let v = self.expr_owned(e)?;
+                // an interface parameter arrives as a generic; stored, it
+                // has to become the pointer a field or a list holds
+                if self.is_interface(expected) {
+                    if let ExprKind::Ident(n) = &e.kind {
+                        if self.iface_params.contains(n) {
+                            // the value inside makes the pointer, which is
+                            // what every interface carries `lume_box` for
+                            return Ok(format!("{}.lume_box()", rust_name(n)));
+                        }
+                    }
+                }
                 self.coerce(v, &from, expected, e.line, e.col)
             }
         }
@@ -7683,13 +7813,30 @@ impl Gen {
                 if self.current_type.is_none() {
                     return Err(LumeError::new(e.line, e.col, "`self` is only meaningful inside a method"));
                 }
-                "self".into()
+                // `extend Int with ...`: a method takes `self` by reference,
+                // so a copied target is read through it
+                if self.self_is_lent_copy() { "(*self)".into() } else { "self".into() }
             }
             ExprKind::List(items) => {
-                let et = match self.ty_of(e).materialized() {
+                let mut et = match self.ty_of(e).materialized() {
                     Type::List(t) => *t,
                     _ => Type::Unknown,
                 };
+                // `[Shape]` holds mixed types, so a literal whose items
+                // disagree is read as the wanted interface rather than as
+                // its first item
+                if !self.is_interface(&et) && items.len() > 1 {
+                    let mut ts = items.iter().map(|i| self.ty_of(i).materialized());
+                    let first = ts.next().unwrap_or(Type::Unknown);
+                    let mixed = ts.any(|t| t != first);
+                    if mixed {
+                        if let Some(Type::List(w)) = self.want.last().cloned() {
+                            if self.is_interface(&w) {
+                                et = *w;
+                            }
+                        }
+                    }
+                }
                 let mut parts = Vec::new();
                 for i in items {
                     if type_is_known(&et) && !self.is_interface(&et) {
@@ -9330,11 +9477,11 @@ fn describe_names(names: &[&String]) -> String {
 fn reserved_type_name(name: &str, line: usize, col: usize) -> Result<()> {
     const RESERVED: &[&str] = &[
         "Int", "Float", "Str", "Char", "Bool", "List", "Map", "Set", "Option", "Vec", "String", "Task", "Time", "File", "Math", "Rc", "Arc", "Mutex", "Some",
-        "None", "Ok", "Err", "Sized", "Clone", "Copy", "Iterator", "Ordering", "Self",
+        "None", "Ok", "Err", "Clone", "Copy", "Iterator", "Ordering", "Self",
     ];
     if RESERVED.contains(&name) {
         let why = match name {
-            "Vec" | "String" | "Rc" | "Arc" | "Mutex" | "Sized" | "Clone" | "Copy" | "Iterator" | "Ordering" | "Self" => "the compiler keeps this name for itself",
+            "Vec" | "String" | "Rc" | "Arc" | "Mutex" | "Clone" | "Copy" | "Iterator" | "Ordering" | "Self" => "the compiler keeps this name for itself",
             _ => "this is a built-in Lume name",
         };
         return Err(LumeError::new(line, col, format!("`{}` cannot be a type name: {}", name, why))

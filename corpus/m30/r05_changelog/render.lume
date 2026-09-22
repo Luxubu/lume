@@ -1,0 +1,13 @@
+# render.lume — Markdown out. Nothing here knows what a commit line looks
+# like; it only sees sections and strings.
+
+import group
+
+pub def markdown(version: Str, ss: [group.Section]) -> [Str]:
+  var out = ["# #{version}"]
+  for s in ss:
+    out.push("")
+    out.push("## #{s.heading} (#{s.lines.len})")
+    for l in s.lines:
+      out.push("- #{l}")
+  out

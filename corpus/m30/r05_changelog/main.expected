@@ -1,0 +1,21 @@
+skip: line 8: no `kind:` prefix in `no colon here`
+skip: line 9: no message after `8c9e0a1`
+# v0.30.0
+
+## Added (2)
+- parser: ranges in patterns
+- fmt: align match arrows
+
+## Fixed (2)
+- lexer: tabs are rejected
+- off-by-one in slices
+
+## Documentation (1)
+- rewrite the tour
+
+## Housekeeping (1)
+- bump the corpus
+
+## Other (style) (1)
+- fmt: spaces
+exit: 0

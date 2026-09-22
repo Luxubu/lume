@@ -1,0 +1,51 @@
+# q02 — an `extend` on a type the library owns, and an `extend` on a type
+# the consumer owns, both against the library's interface.
+#
+# Probes: `extend Ingot with Priced` written in the library and reaching
+# the consumer; `extend Crate with Priced` written in the consumer against
+# an interface it imported by name; the same bounded helper
+# (`cheapest[P: Priced]`) crossing the boundary in both directions; an
+# interface default (`free?`, `price`) called straight on a value.
+#
+# Money is printed through `decimals(2)`, so the rendering is pinned by
+# `x.decimals(n)` ("halves away from zero"), not by Float printing.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# 25g zinc: $0.75
+# 195
+# crate of 1 screws: $4.99
+# 1996
+# true
+# 40g tin: $1.20
+# 2191
+
+import forge
+import forge.Priced
+
+struct Crate:
+  what: Str
+  units: Int
+
+# The one `extend` the library could not write: the consumer's own type,
+# against the library's interface.
+extend Crate with Priced:
+  def cents -> Int = units * 499
+  def label -> Str = "crate of #{units} #{what}"
+
+def main:
+  bars = [forge.Ingot("tin", 40), forge.Ingot("zinc", 25)]
+  puts forge.cheapest(bars)
+  puts forge.total_cents(bars)
+
+  boxes = [Crate("nails", 3), Crate("screws", 1)]
+  puts forge.cheapest(boxes)
+  puts forge.total_cents(boxes)
+
+  # a default reached on a value whose `extend` is two lines above, and on
+  # one whose `extend` is in the other file
+  puts Crate("air", 0).free?
+  puts bars.at(0).price
+
+  puts forge.total_cents(bars) + forge.total_cents(boxes)

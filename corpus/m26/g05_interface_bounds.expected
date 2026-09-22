@@ -1,7 +1,19 @@
-error: `Sized` cannot be a type name: the compiler keeps this name for itself
-  --> corpus/m26/g05_interface_bounds.lume:51:1
-   |
-51 | interface Sized:
-   | ^
-  help: pick another name, like `MySized`
-exit: 1
+ada
+ADA!
+<ada>
+ROOM 7
+<room 7>
+ada/bo
+room 7/room 8
+BERTHA!
+none
+int 5
+INT 5!
+int 1/int 2
+2
+ada, bo
+ada=7
+room 7=36
+3: ada
+4: int 5
+exit: 0

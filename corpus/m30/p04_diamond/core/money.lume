@@ -1,0 +1,17 @@
+# core/money.lume — the bottom of the diamond. Three separate files import
+# this one: billing/invoice.lume, billing/receipt.lume and main.lume, each
+# under a different name (`money`, `m`, `cash`). It must be loaded once and
+# its `Money` must be one type in all three.
+
+pub CURRENCY = "EUR"
+
+pub struct Money:
+  cents: Int
+
+  def plus(o: Money) -> Money = Money(cents + o.cents)
+  def text -> Str = "#{whole} #{CURRENCY}"
+  def whole -> Str = (cents.to_float / 100.0).decimals(2)
+
+pub def cents(n: Int) -> Money = Money(n)
+
+pub def sum_of(xs: [Money]) -> Money = Money(xs.map(_.cents).sum)

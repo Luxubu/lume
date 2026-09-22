@@ -1,0 +1,24 @@
+# expense.lume — the domain model. What an expense is, and the categories
+# it can fall into. Knows nothing about the file format or the report.
+
+import money
+
+pub enum Category:
+  Travel
+  Food
+  Tools
+  Other(label: Str)
+
+  def name -> Str = match self:
+    Travel     -> "travel"
+    Food       -> "food"
+    Tools      -> "tools"
+    Other(l)   -> l
+
+pub struct Expense:
+  day: Int
+  who: Str
+  category: Category
+  amount: money.Money
+
+  def label -> Str = "#{who}/#{category.name}"

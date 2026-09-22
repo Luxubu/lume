@@ -1,0 +1,26 @@
+# gallery/wall.lume — the interface used as a struct field type (`hero`),
+# as a value type in a field (`rest: [Panel]`) and as a parameter type,
+# one file away from where the interface and its `extend`s were written.
+
+import gallery.frame
+import gallery.frame.Panel
+
+pub struct Wall:
+  title: Str
+  hero: Panel
+  rest: [Panel]
+
+  def lines -> [Str]:
+    var out = [hero.plate]
+    for p in rest:
+      out.push(p.plate)
+    out
+
+  def total -> Int:
+    var n = hero.area
+    for p in rest:
+      n += p.area
+    n
+
+pub def hang(title: Str, hero: Panel, rest: [Panel]) -> Wall:
+  Wall(title, hero, rest)

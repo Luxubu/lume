@@ -1,0 +1,18 @@
+# seqx/util.lume — the library's own generic helpers. The interface
+# defaults and `extend`s in `seqx/rank.lume` are written in terms of
+# these, so an imported `extend` ends up calling back into the library.
+
+pub def dedup[T: Hashable](xs: [T]) -> [T]:
+  var seen: {T} = {}
+  var out: [T] = []
+  for x in xs:
+    if seen.add(x):
+      out.push(x)
+  out
+
+pub def top[T: Ordered](xs: [T]) -> T?:
+  var best = xs[0]?
+  for x in xs:
+    if best < x:
+      best = x
+  Some(best)

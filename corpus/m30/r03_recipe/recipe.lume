@@ -1,0 +1,22 @@
+# recipe.lume — the domain model. Scaling belongs here, next to the data
+# it changes; the printing does not.
+
+import units
+
+pub struct Ingredient:
+  name: Str
+  qty: units.Qty
+
+pub struct Recipe:
+  title: Str
+  serves: Int
+  items: [Ingredient]
+
+  def scaled(to: Int) -> Recipe:
+    base = serves
+    grown = items.map { |i| Ingredient(i.name, i.qty.scale(to, base)) }.to_list
+    Recipe(title, to, grown)
+
+  def dry_weight -> units.Qty:
+    tenths = items.filter { |i| i.qty.gram? }.to_list.sum { |i| i.qty.amount }
+    units.Qty(tenths, units.Unit.Gram)

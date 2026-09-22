@@ -1,0 +1,17 @@
+# guests.lume — the domain. It owns `Table[T]` and makes it conform to an
+# interface it does not own, in a file that is neither the interface's nor
+# the consumer's. Anyone who imports `guests` should get that conformance.
+
+import seating.Seating
+
+pub struct Guest:
+  name: Str
+  side: Str
+  vegetarian: Bool
+
+pub struct Table[T]:
+  number: Int
+  seats: [T]
+
+extend Table[T] with Seating[T]:
+  def occupants -> [T] = seats

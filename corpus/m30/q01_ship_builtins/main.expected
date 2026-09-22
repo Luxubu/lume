@@ -1,0 +1,14 @@
+3
+ant|bee|cow
+2
+red|blue
+2
+alpha|beta
+1
+seven
+1
+hit
+true
+left:ant|bee|cow
+right:ant|bee|cow
+exit: 0

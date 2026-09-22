@@ -1,0 +1,6 @@
+# app/config.lume — one of two modules in this program whose last path
+# segment is `config`. Both want to be bound as the bare name `config`.
+
+pub NAME = "app"
+
+pub def setting(k: Str) -> Str = "app:#{k}"

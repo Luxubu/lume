@@ -1,0 +1,42 @@
+# cases.lume — the domain model: what one test run produced. The enum
+# carries the detail; the struct carries the identity.
+
+pub enum Outcome:
+  Pass(took: Int)
+  Fail(reason: Str)
+  Skip(why: Str)
+
+  def mark -> Str = match self:
+    Pass(_) -> "."
+    Fail(_) -> "F"
+    Skip(_) -> "s"
+
+pub struct Case:
+  suite: Str
+  name: Str
+  outcome: Outcome
+
+  def line -> Str = "#{suite} :: #{name}"
+
+  def mark -> Str = outcome.mark
+
+  def passed? -> Bool = match outcome:
+    Pass(_) -> true
+    _       -> false
+
+  def failed? -> Bool = match outcome:
+    Fail(_) -> true
+    _       -> false
+
+  def skipped? -> Bool = match outcome:
+    Skip(_) -> true
+    _       -> false
+
+  def ms -> Int = match outcome:
+    Pass(t) -> t
+    _       -> 0
+
+  def detail -> Str = match outcome:
+    Pass(t) -> "#{t} ms"
+    Fail(r) -> r
+    Skip(w) -> w

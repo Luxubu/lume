@@ -1,0 +1,11 @@
+# format.lume — the presentation layer. It works out the name column from
+# the recipe it is handed and gives back lines; it does not print.
+
+import recipe
+
+pub def card(r: recipe.Recipe) -> [Str]:
+  width = r.items.map { |i| i.name.len }.to_list.max.or(0)
+  var out = ["#{r.title} (serves #{r.serves})"]
+  for i in r.items:
+    out.push("  #{i.name.pad_right(width)}  #{i.qty.show}")
+  out

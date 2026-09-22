@@ -1,0 +1,13 @@
+# graph/node.lume — a node holding its edges. It imports graph.edge, and
+# graph/edge.lume imports this file straight back. That is the cycle.
+
+import graph.edge
+
+pub struct Node:
+  name: Str
+  edges: [edge.Edge]
+
+  def degree -> Int = edges.len
+  def label -> Str = "#{name}/#{degree}"
+
+pub def node(name: Str) -> Node = Node(name, [])

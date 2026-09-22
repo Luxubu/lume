@@ -1,0 +1,7 @@
+error: `Int` is extended with `scale.Scaled` twice
+  --> corpus/m30/r09_units_clash/main.lume:43:1
+   |
+43 | import imperial
+   | ^
+  help: corpus/m30/r09_units_clash/metric.lume:5 and corpus/m30/r09_units_clash/imperial.lume:6 both extend it, and an `extend` travels with the import, so this program would have two answers: remove one, or give one of them an interface of its own
+exit: 1

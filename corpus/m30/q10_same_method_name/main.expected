@@ -1,0 +1,6 @@
+error: `Str` already has a `shout` method
+  --> corpus/m30/q10_same_method_name/main.lume:42:3
+   |
+42 |   def shout -> Str = "#{downcase}..."
+   |   ^
+exit: 1

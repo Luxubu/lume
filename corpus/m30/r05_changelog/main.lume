@@ -1,0 +1,66 @@
+# r05 — a changelog builder in five files: the model, the line format, the
+# grouping, the Markdown, and this driver. Four layers because each one
+# has exactly one reason to change.
+#
+# Probes: an optional field (`scope: Str?`) on a `pub struct`, matched in
+# the struct's own method and built in another module; a `{Int: [Str]}`
+# grown with `body[r].push(...)` where the key may be missing, in an
+# imported module; `.or_error(...)?` turning a `Str.index_of` miss into a
+# reported error; string slicing (`head[0...i]`, `prefix[i + 1...len - 1]`)
+# across a module boundary; a three-deep import chain
+# (main -> render -> group -> commit).
+#
+# Meant to RUN.
+#
+# Note: a `#` inside a string literal starts nothing — `"# #{version}"` is
+# a Markdown heading, not a comment. If Lume disagrees this program will
+# not build, and that would be worth knowing.
+#
+# EXPECTED OUTPUT:
+# skip: line 8: no `kind:` prefix in `no colon here`
+# skip: line 9: no message after `8c9e0a1`
+# # v0.30.0
+#
+# ## Added (2)
+# - parser: ranges in patterns
+# - fmt: align match arrows
+#
+# ## Fixed (2)
+# - lexer: tabs are rejected
+# - off-by-one in slices
+#
+# ## Documentation (1)
+# - rewrite the tour
+#
+# ## Housekeeping (1)
+# - bump the corpus
+#
+# ## Other (style) (1)
+# - fmt: spaces
+
+import commit
+import parse
+import group
+import render
+
+def main:
+  log = [
+    "9a1c2f3 feat(parser): ranges in patterns",
+    "1b4d5e6 fix(lexer): tabs are rejected",
+    "2c7f8a9 docs: rewrite the tour",
+    "3d0e1b2 feat(fmt): align match arrows",
+    "4e3a5c6 chore: bump the corpus",
+    "5f6b7d8 fix: off-by-one in slices",
+    "6a7c8e9 style(fmt): spaces",
+    "7b8d9f0 no colon here",
+    "8c9e0a1",
+  ]
+
+  var good: [commit.Commit] = []
+  for i, text in log.enumerate:
+    match parse.line(text, i + 1):
+      Ok(c)    -> good.push(c)
+      Error(e) -> puts "skip: #{e.message}"
+
+  for l in render.markdown("v0.30.0", group.sections(good)):
+    puts l

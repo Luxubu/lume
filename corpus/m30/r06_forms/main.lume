@@ -1,0 +1,43 @@
+# r06 — a form validator in four files: the rule language, the form model,
+# the runner, and this driver.
+#
+# Probes: an enum variant holding a set (`OneOf(allowed: {Str})`) built in
+# main and matched in its own module; a struct field holding a list of an
+# imported enum (`checks: [rules.Rule]`); a method returning `Str?` and
+# matched from another file; a block parameter passed through a module
+# boundary and handed straight to the built-in `map`
+# (`ps.map(show)`); the `_` shorthand (`_.line`) supplied as that block
+# from main.
+#
+# Meant to RUN.
+#
+# Assumption: `Str.digit?` on a non-empty string of digits is true. The
+# README shows `"123".digit?` and `"12a".digit?` but never the empty
+# string, so the one field with a `Digits` rule here is never empty.
+#
+# EXPECTED OUTPUT:
+# 5 fields, 4 problems
+#   email: must start with `mailto:`
+#   role: must be one of admin, guest, member
+#   bio: must not be empty
+#   bio: must be at least 10 characters
+# ok fields: name, age
+
+import rules
+import field
+import check
+
+def main:
+  form = [
+    field.Field("name", "Ada", [rules.Rule.Required, rules.Rule.MinLen(2), rules.Rule.MaxLen(20)]),
+    field.Field("age", "31", [rules.Rule.Required, rules.Rule.Digits]),
+    field.Field("email", "ada-at-example.com", [rules.Rule.Required, rules.Rule.Matches("mailto:")]),
+    field.Field("role", "wizard", [rules.Rule.OneOf({"admin", "member", "guest"})]),
+    field.Field("bio", "", [rules.Rule.Required, rules.Rule.MinLen(10)]),
+  ]
+
+  problems = check.run(form)
+  puts "#{form.len} fields, #{problems.len} problems"
+  for l in check.report(problems, _.line):
+    puts "  #{l}"
+  puts "ok fields: #{check.clean(form, problems).join(", ")}"

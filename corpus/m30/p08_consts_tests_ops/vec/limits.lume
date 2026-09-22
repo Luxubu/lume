@@ -1,0 +1,12 @@
+# vec/limits.lume — nothing but top-level constants, of three different
+# types, plus one private constant reached only through a `pub` function.
+# The README says constants are "computed once, `pub` to share them with
+# other files"; `AXES` checks that a set constant crosses too.
+
+pub MAX_LEN = 100
+pub UNITS = "px"
+pub AXES = {"y", "x"}
+
+SECRET = 42
+
+pub def secret_doubled -> Int = SECRET * 2

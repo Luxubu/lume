@@ -1,0 +1,7 @@
+# left.lume — one arm of the diamond. It imports `base` for itself and
+# uses the extend's methods on a plain `[Str]`.
+
+import base
+
+pub def crew_line(names: [Str]) -> Str:
+  "crew(#{names.how_many}): #{names.roster}"

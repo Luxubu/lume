@@ -1,0 +1,28 @@
+# vec/vec2.lume — operator methods, and a `test` block living in the file it
+# tests. `lume run main.lume` must strip this test; `lume test vec/vec2.lume`
+# must run it. `==` is NOT written here on purpose: the README says it is
+# derived for a struct, and I want to check the derived one crosses the
+# import boundary as well as the hand-written `<` does.
+
+import vec.limits
+
+pub struct Vec2:
+  x: Int
+  y: Int
+
+  def +(o: Vec2) -> Vec2 = Vec2(x + o.x, y + o.y)
+  def -(o: Vec2) -> Vec2 = Vec2(x - o.x, y - o.y)
+  def *(k: Int) -> Vec2 = Vec2(x * k, y * k)
+  def <(o: Vec2) -> Bool = size < o.size
+
+  def size -> Int = x.abs + y.abs
+  def text -> Str = "(#{x}, #{y})#{limits.UNITS}"
+
+pub def vec(x: Int, y: Int) -> Vec2 = Vec2(x, y)
+
+test "the operators work inside the module that defines them":
+  a = Vec2(1, 2)
+  b = Vec2(3, 4)
+  assert (a + b).size == 10
+  assert (b - a) == Vec2(2, 2)
+  assert a < b

@@ -1,0 +1,72 @@
+# r07 — AWKWARD. A seating planner in four files, laid out so the
+# interface, the `extend` for the program's own type, the algorithm and
+# the consumer are all in different files.
+#
+# This is the layout that made me least comfortable while reading. The
+# README pins down "a library ships its conformances and a consumer that
+# imports it writes none of its own", but every example of that has the
+# interface and the `extend` in the same file. Here:
+#
+#   - `seating.lume` owns the interface and extends `[T]` and `{T}`;
+#   - `guests.lume` owns `Table[T]` and writes
+#     `extend Table[T] with Seating[T]` — the `extend` and the interface
+#     are in different modules, and the interface arrives by
+#     `import seating.Seating` (one name, not the module);
+#   - `plan.lume` spells a generic type with a module-qualified argument,
+#     `guests.Table[guests.Guest]`, four times;
+#   - `main.lume` calls `people.taken` and `people.free(8)` on a plain
+#     `[Guest]` — defaults it only has because it imports `seating`.
+#
+# The thing I could not settle from the README: whether an `extend`
+# travels *transitively*. `main.lume` imports `seating` directly, so the
+# list and set conformances arrive whatever the answer. But the
+# `Table[T]` conformance reaches main only through `import guests`, and
+# main never imports the module the interface lives in as a module — only
+# `guests` does, and only by the single name `Seating`. If `t.taken` and
+# `t.full?(3)` do not resolve in main, that is the answer.
+#
+# Also unclear, and used here anyway: whether a `[T]` and a `{T}` extended
+# by the same library can both be passed to one bounded generic function
+# in the same program (`seating.roll` is called with a `Table`, a list and
+# a set).
+#
+# Meant to RUN.
+#
+# Nothing prints a list, set, map, Float or optional directly; every
+# rendering goes through `roll`, which joins with ", ". The set is built
+# by filtering in source order, and the README says a set "keeps insertion
+# order", which is what the last line depends on.
+#
+# EXPECTED OUTPUT:
+# 7 guests, 1 places left
+# table 1: Ana, Bo, Cy
+#   seated 3, 0 free, full? true
+# table 2: Dee, Eli, Fay
+#   seated 3, 0 free, full? true
+# table 3: Gus
+#   seated 1, 2 free, full? false
+# vegetarian: Ana, Cy, Fay (3)
+
+import guests
+import plan
+import seating
+
+def main:
+  people = [
+    guests.Guest("Ana", "bride", true),
+    guests.Guest("Bo", "groom", false),
+    guests.Guest("Cy", "bride", true),
+    guests.Guest("Dee", "groom", false),
+    guests.Guest("Eli", "bride", false),
+    guests.Guest("Fay", "groom", true),
+    guests.Guest("Gus", "bride", false),
+  ]
+
+  puts "#{people.taken} guests, #{people.free(8)} places left"
+
+  for t in plan.seat(people, 3):
+    puts "table #{t.number}: #{seating.roll(t, _.name)}"
+    puts "  seated #{t.taken}, #{t.free(3)} free, full? #{t.full?(3)}"
+
+  veg = people.filter { |g| g.vegetarian }.to_list.to_set
+  puts "vegetarian: #{seating.roll(veg, _.name)} (#{veg.taken})"

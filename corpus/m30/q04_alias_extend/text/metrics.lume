@@ -1,0 +1,25 @@
+# text/metrics.lume — a library that extends `Str`, a type nobody here
+# owns, and its own `Headline` with the same interface. The consumer
+# imports this module under an alias; an `extend` has no name, so the
+# alias has nothing to rename and the methods must arrive unqualified.
+
+pub interface Wordy:
+  def words -> [Str]
+
+  def word_count -> Int = words.len
+  def longest_word -> Str? = words.max_by { |w| w.len }
+  def initials -> Str = words.map { |w| w.slice(0, 1).upcase }.to_list.join("")
+
+extend Str with Wordy:
+  def words -> [Str] = split.to_list
+
+pub struct Headline:
+  parts: [Str]
+
+# The same interface on a second shape, in the same file: not the pair the
+# clash rule forbids.
+extend Headline with Wordy:
+  def words -> [Str] = parts
+
+pub def shout[W: Wordy](w: W) -> Str:
+  w.words.map { |x| x.upcase }.to_list.join("-")

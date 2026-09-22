@@ -1,0 +1,9 @@
+# scale.lume — one interface: a number that can name the unit it is
+# measured in, for some system of units. Neither of the two files that
+# implement it knows about the other.
+
+pub interface Scaled[T]:
+  def unit_name(x: T) -> Str
+
+  def described(x: T) -> Str:
+    "#{self} #{unit_name(x)}"

@@ -1,0 +1,33 @@
+# report.lume — the reporting layer. Takes parsed expenses, gives rows.
+# It never prints anything itself, so main owns the layout.
+
+import expense
+import money
+
+pub struct Row:
+  key: Str
+  count: Int
+  total: money.Money
+
+pub def by_person(xs: [expense.Expense]) -> [Row]:
+  var totals: {Str: Int} = {}
+  var counts: {Str: Int} = {}
+  for x in xs:
+    totals[x.who] = totals[x.who].or(0) + x.amount.cents
+    counts[x.who] = counts[x.who].or(0) + 1
+  totals.keys.sort.map { |n| Row(n, counts[n].or(0), money.Money(totals[n].or(0))) }.to_list
+
+# Categories come out biggest first. Sorting on the negated total keeps the
+# comparison an Int comparison, which is the only one this file needs.
+pub def by_category(xs: [expense.Expense]) -> [Row]:
+  var totals: {Str: Int} = {}
+  var counts: {Str: Int} = {}
+  for x in xs:
+    k = x.category.name
+    totals[k] = totals[k].or(0) + x.amount.cents
+    counts[k] = counts[k].or(0) + 1
+  rows = totals.keys.map { |k| Row(k, counts[k].or(0), money.Money(totals[k].or(0))) }.to_list
+  rows.sort_by { |r| 0 - r.total.cents }.to_list
+
+pub def grand_total(xs: [expense.Expense]) -> Row:
+  Row("TOTAL", xs.len, money.Money(xs.sum { |e| e.amount.cents }))

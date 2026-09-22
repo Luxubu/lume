@@ -1,0 +1,15 @@
+# record.lume — the model: one commit's effect on one file. `area` is the
+# first path segment, which is the unit the report cares about.
+
+pub struct Change:
+  month: Str
+  author: Str
+  added: Int
+  removed: Int
+  path: Str
+
+  def net -> Int = added - removed
+
+  def area -> Str = match path.index_of("/"):
+    Some(i) -> path[0...i]
+    None    -> "(root)"

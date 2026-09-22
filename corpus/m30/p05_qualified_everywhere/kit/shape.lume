@@ -1,0 +1,20 @@
+# kit/shape.lume — a `pub interface`, a struct with a field whose type comes
+# from another module, and a bounded helper. `Card` conforms to `Sized`
+# structurally (it has `size`), so it should also have `blurb`, the
+# interface's default, as its own method — on the far side of the import too.
+
+import kit.tags
+
+pub interface Sized:
+  def size -> Int
+
+  def blurb -> Str = "size #{size}"
+
+pub struct Card:
+  title: Str
+  tag: tags.Tag
+
+  def size -> Int = title.len
+  def tag_label -> Str = tag.label
+
+pub def widest[S: Sized](xs: [S]) -> Int = xs.map(_.size).max.or(0)

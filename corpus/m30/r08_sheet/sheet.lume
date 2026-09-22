@@ -1,0 +1,41 @@
+# sheet.lume — the grid, and the evaluator that needs it. This is the file
+# that matches an enum it does not own, variant by variant, with every
+# pattern module-qualified.
+#
+# `value` and `eval` call each other. There is no cycle check: the
+# spreadsheet in main.lume has none, and adding one would hide the thing
+# this file is here to test.
+
+import expr
+
+pub struct Sheet:
+  order: [Str]
+  cells: {Str: expr.Expr}
+
+  def put(var self, name: Str, e: expr.Expr):
+    if not cells.contains?(name):
+      order.push(name)
+    cells[name] = e
+
+  def value(name: Str) -> Int or Error:
+    e = cells[name].or_error("unknown cell `#{name}`")?
+    eval(e)
+
+  def eval(e: expr.Expr) -> Int or Error = match e:
+    expr.Expr.Num(v)    -> v
+    expr.Expr.Ref(n)    -> value(n)?
+    expr.Expr.Add(l, r) -> eval(l)? + eval(r)?
+    expr.Expr.Mul(l, r) -> eval(l)? * eval(r)?
+    expr.Expr.Sum(ns)   ->
+      var total = 0
+      for n in ns:
+        total += value(n)?
+      total
+
+# The empty list and map are bound with their types first: the README says
+# an empty `[]` with no type is an error, and does not say whether a
+# constructor's field type counts as the type it is going into.
+pub def empty -> Sheet:
+  var order: [Str] = []
+  var cells: {Str: expr.Expr} = {}
+  Sheet(order, cells)

@@ -1,0 +1,24 @@
+# seating.lume — a small library. One interface with a type parameter, the
+# conformances for the built-in containers, and a bounded helper. Nothing
+# here knows what a guest is; the whole file would compile if the program
+# were about parking spaces.
+#
+# The `extend`s have no name, so they travel with `import seating`.
+
+pub interface Seating[T]:
+  def occupants -> [T]
+
+  def taken -> Int = occupants.len
+  def free(cap: Int) -> Int = cap - taken
+  def full?(cap: Int) -> Bool = free(cap) <= 0
+
+extend [T] with Seating[T]:
+  def occupants -> [T] = self
+
+extend {T} with Seating[T]:
+  def occupants -> [T] = self.to_list
+
+# A bound that carries a parameter, plus a block: the caller says how a T
+# is spelled, so this file never needs to print one.
+pub def roll[T, S: Seating[T]](s: S, show: (T) -> Str) -> Str:
+  s.occupants.map(show).to_list.join(", ")

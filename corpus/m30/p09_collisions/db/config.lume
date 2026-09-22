@@ -1,0 +1,6 @@
+# db/config.lume — the other `config`. Nothing about this file is wrong on
+# its own; the collision only exists in a file that imports both.
+
+pub NAME = "db"
+
+pub def setting(k: Str) -> Str = "db:#{k}"

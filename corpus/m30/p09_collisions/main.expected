@@ -1,0 +1,7 @@
+error: `config` is imported twice
+  --> corpus/m30/p09_collisions/main.lume:38:1
+   |
+38 | import db.config
+   | ^
+  help: use `as` to give one of them another name
+exit: 1

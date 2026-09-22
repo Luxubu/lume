@@ -1,0 +1,17 @@
+# manifest.lume — the file format: `name: dep dep dep`, one package per
+# line, blank lines ignored.
+
+pub struct Node:
+  name: Str
+  deps: [Str]
+
+pub def read(lines: [Str]) -> [Node] or Error:
+  var out: [Node] = []
+  for i, text in lines.enumerate:
+    t = text.trim
+    if t.empty?:
+      next
+    match t.split(":").to_list:
+      [name, rest] -> out.push(Node(name.trim, rest.split.reject { |d| d.empty? }.to_list))
+      _            -> return Error("line #{i + 1}: expected `name: deps`")
+  out

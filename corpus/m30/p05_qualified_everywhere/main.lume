@@ -1,0 +1,63 @@
+# main.lume — a qualified name in every position I can find for one.
+#
+#   tags.Tag.Ranked(9)          an enum variant, in an expression   (line 38)
+#   def best_tag -> tags.Tag    a return type                       (line 40)
+#   def score(t: tags.Tag)      a parameter type                    (line 42)
+#   tags.Tag.Ranked(s) ->       an enum variant, in a pattern       (line 43)
+#   [S: shape.Sized]            an interface as a generic BOUND     (line 47)
+#   c: shape.Card = ...         a qualified type in a binding       (line 50)
+#   shape.Card(title:, tag:)    a constructor with keyword args     (line 50)
+#   c.blurb                     an interface default, on an imported
+#                               type, inherited structurally        (line 55)
+#   tags.MAX_TAGS               a constant through the module name  (line 60)
+#
+# The bound on line 47 is the one I am least sure of: the README says
+# "`pub interface` crosses modules" and that "any interface name" may be a
+# bound, but it never writes a dotted one.
+#
+# `BEST` is deliberately written WITHOUT a type annotation. The README's only
+# example of a top-level constant is "MAX = 100"; whether `BEST: tags.Tag =`
+# is allowed is not stated anywhere, so I did not bet the program on it.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# plain
+# ranked 9
+# size 5
+# 8
+# 9
+# 1
+# 3
+# widest 5
+# 5
+
+import kit.shape
+import kit.tags
+
+BEST = tags.Tag.Ranked(9)
+
+def best_tag -> tags.Tag = tags.Tag.Named("gold")
+
+def score(t: tags.Tag) -> Int = match t:
+  tags.Tag.Ranked(s) -> s
+  tags.Tag.Named(_)  -> 1
+  tags.Tag.Plain     -> 0
+
+def report[S: shape.Sized](xs: [S]) -> Str = "widest #{shape.widest(xs)}"
+
+def main:
+  c: shape.Card = shape.Card(title: "atlas", tag: tags.Tag.Plain)
+  d = shape.Card(title: "map", tag: BEST)
+
+  puts c.tag_label
+  puts d.tag_label
+  puts c.blurb
+  puts c.size + d.size
+
+  puts score(BEST)
+  puts score(best_tag)
+  puts tags.MAX_TAGS
+
+  puts report([c, d])
+  puts shape.widest([c, d])

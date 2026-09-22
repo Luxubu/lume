@@ -1,0 +1,50 @@
+# q08 — an interface from an imported library used as a value type, as a
+# struct field type, and as a bound; and its defaults reached in a file
+# that never writes its name.
+#
+# Probes: `[Panel]` holding a `Str` and an `(Int, Int)` together, both
+# conforming only through an `extend` that arrived with the import; a
+# struct field typed `Panel`; `frame.widest[P: Panel]` as a bound two
+# files from the `extend`. The word `Panel` does not appear in this file
+# at all, yet `"hello".plate` and `pair.big?` must work.
+#
+# Two things I could not pin down and am guessing at:
+#   1. whether an interface is allowed as a struct field type at all —
+#      `gallery/wall.lume` writes `hero: Panel`. The README says behaviour
+#      "cannot be stored in a field"; that sentence is about blocks, and I
+#      am reading it as not covering interface values. If it does cover
+#      them, the error belongs at `gallery/wall.lume:10`.
+#   2. whether `rest: [Panel]` raises the "holds values of different types
+#      behind `Panel`" warning that `examples/interfaces.lume` shows on a
+#      `[Shape]` binding, and if so where it points. The EXPECTED OUTPUT
+#      below is stdout only and does NOT include any such warning.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# studio
+# 12x9 (108 cm2)
+# text: hi (20 cm2)
+# 4x4 (16 cm2)
+# 144
+# 100
+# text: hello (50 cm2)
+# false
+
+import gallery.wall
+import gallery.frame
+
+def main:
+  w = wall.hang("studio", (12, 9), ["hi", (4, 4)])
+  puts w.title
+  for l in w.lines:
+    puts l
+  puts w.total
+
+  # the same interface as a bound, over a list of one concrete type
+  puts frame.widest(["abcdefghij", "xy"])
+
+  # the defaults, straight on built-ins, in a file naming no interface
+  puts "hello".plate
+  pair = (3, 5)
+  puts pair.big?

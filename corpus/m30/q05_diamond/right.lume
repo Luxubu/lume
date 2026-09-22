@@ -1,0 +1,7 @@
+# right.lume — the other arm. It imports the same `base`, knowing nothing
+# about `left.lume`, and uses the map extend.
+
+import base
+
+pub def desk_line(desks: {Str: Str}) -> Str:
+  "desks(#{desks.how_many}): #{desks.roster}"

@@ -1,0 +1,8 @@
+# poster.lume — an innocent second consumer. It uses the extend's methods
+# and adds none of its own, so the error the entry provokes is clearly
+# about `main.lume` and not about using `shout` at all.
+
+import megaphone
+
+pub def banner(lines: [Str]) -> Str:
+  lines.map { |l| megaphone.announce(l) }.to_list.join(" / ")

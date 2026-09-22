@@ -1,0 +1,11 @@
+# seq.lume — the bottom library: small helpers over lists. `table.lume`
+# imports this file; `main.lume` has to import it separately, because there
+# is no way for `table` to pass it on.
+
+pub def head[T](xs: [T]) -> T? = xs.first
+
+pub def tally[T](xs: [T]) -> Int = xs.len
+
+pub def labelled(xs: [Str]) -> Str = xs.join(", ")
+
+pub def shout(s: Str) -> Str = s.upcase

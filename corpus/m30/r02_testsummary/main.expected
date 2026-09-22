@@ -1,0 +1,11 @@
+! line 9: expected 3 fields, got 2
+.F..sF..
+cli: 1 passed, 0 failed, 0 skipped
+model: 2 passed, 1 failed, 0 skipped
+store: 2 passed, 1 failed, 1 skipped
+5/8 passed
+FAIL model :: rejects junk: wrong field count
+FAIL store :: removes: nothing was removed
+total time: 49 ms
+slowest: store :: saves a user (30 ms)
+exit: 0

@@ -1,0 +1,36 @@
+# q07 — DELIBERATE ERROR. Two files claim the same type and the same
+# interface.
+#
+# `store/vault.lume` line 10 writes `extend {T} with Bagged[T]:`.
+# `store/annex.lume` line 10 writes `extend {T} with Bagged[T]:` again,
+# with a different body. This entry imports both, so both are in one
+# program.
+#
+# Meant to be REFUSED.
+#
+# EXPECTED ERROR: a duplicate-`extend` error, reported at one of the two
+# `extend` lines — I would report the second one the loader reaches,
+# `corpus/m30/q07_clash/store/annex.lume:10` — and NAMING BOTH FILES, the
+# other being `corpus/m30/q07_clash/store/vault.lume:10`. The README
+# promises exactly this: "two `extend`s claiming the same type and the
+# same interface anywhere in one program is an error naming both files."
+#
+# What I want to see in the message: both paths, both line numbers, the
+# type (`{T}`) and the interface (`Bagged`) spelled out, and no mention of
+# `main.lume`, which is innocent — it only imports.
+#
+# What would be a bad message: an error at the `import store.annex` line
+# of this file; an error naming only one file; a "duplicate method `held` on
+# `{T}`" that never says the word `extend`; or, worst, no error at all
+# with one of the two bodies silently winning (then `puts nums.held_list`
+# below would print either "3, 1, 2" or "2, 1, 3" depending on which).
+
+import store.vault
+import store.annex
+
+def main:
+  nums = {3, 1, 2}
+  puts vault.summary({"a", "b"})
+  puts annex.loudly({"a", "b"})
+  puts nums.held_count
+  puts nums.held_list
