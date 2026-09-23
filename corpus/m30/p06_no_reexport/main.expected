@@ -1,7 +1,8 @@
-error: cannot tell the type of `shouted` from `t.headers.map(...).to_list` alone
-  --> corpus/m30/p06_no_reexport/main.lume:53:3
-   |
-53 |   shouted = t.headers.map(seq.shout).to_list
-   |   ^
-  help: add the type: `shouted: Type = ...`
-exit: 1
+name, city, age
+3
+2
+2
+name, city, age
+NAME-CITY-AGE
+Ana,Oslo,31
+exit: 0

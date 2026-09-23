@@ -1,0 +1,6 @@
+error: `pow` on an `Int` needs a power of 0 or more, and this one is -1
+  --> examples/errors/int_pow_negative.lume:2:9
+  |
+2 |   puts 2.pow(-1)
+  |         ^
+  help: for a fraction, use a `Float`: `2.to_float.pow(-1.0)`

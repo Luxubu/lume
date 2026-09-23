@@ -1,0 +1,6 @@
+error: `<` cannot combine a `(Int, P)` and a `(Int, P)`
+  --> examples/errors/tuple_order_parts.lume:7:10
+  |
+7 |   puts a < b
+  |          ^
+  help: a tuple compares part by part, and `P` has no order: add `def <(other: P) -> Bool:` to it

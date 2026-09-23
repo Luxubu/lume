@@ -1,0 +1,6 @@
+error: `None` is no value, so it cannot be used with `+`
+  --> examples/errors/none_arith.lume:2:7
+  |
+2 |   x = None + 1
+  |       ^
+  help: `None` stands for a missing value; use the value itself here, or a default such as `0`

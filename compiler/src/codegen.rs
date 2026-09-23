@@ -15,7 +15,14 @@ use crate::error::{LumeError, Result};
 pub const PRELUDE: &str = r#"#![allow(unused, non_snake_case, non_camel_case_types, unused_parens, unused_mut, arithmetic_overflow, unconditional_panic, clippy::all)]
 // ---- Lume prelude ----
 trait LumePow { fn lume_pow(self, e: Self) -> Self; }
-impl LumePow for i64 { fn lume_pow(self, e: Self) -> Self { self.pow(e as u32) } }
+impl LumePow for i64 { fn lume_pow(self, e: Self) -> Self { lume_int_pow(self, e) } }
+/// `Int` to a power: a whole number only when the power is 0 or more, and
+/// an overflow is named as one rather than as the multiply inside it.
+fn lume_int_pow(x: i64, e: i64) -> i64 {
+    if e < 0 { panic!("`pow` on an `Int` needs a power of 0 or more, and this one is {}", e); }
+    let e = u32::try_from(e).unwrap_or(u32::MAX);
+    match x.checked_pow(e) { Some(v) => v, None => panic!("Int overflow in `pow`") }
+}
 impl LumePow for f64 { fn lume_pow(self, e: Self) -> Self { self.powf(e) } }
 /// A string however it is held: `String`, `&str`, `&&String`, ... Comparisons
 /// go through this so closure parameters need no deref guessing.
@@ -1455,6 +1462,8 @@ impl Gen {
                     None => Type::Unknown,
                 }
             }
+            // a function of an imported module used as behaviour
+            ExprKind::Method { .. } if self.module_fn_ref(e).is_some() => self.ty_of(e),
             _ => Type::Unknown,
         }
     }
@@ -2519,12 +2528,12 @@ impl Gen {
         for (n, sig) in &ex.fns {
             let key = format!("{}.{}", key_prefix, n);
             self.fns.insert(key.clone(), qualify_sig(sig, id, ex));
-            self.paths.insert(key, format!("{}::{}", ex.rust_mod, n));
+            self.paths.insert(key, format!("{}::{}", ex.rust_mod, rust_name(n)));
         }
         for (n, t) in &ex.consts {
             let key = format!("{}.{}", key_prefix, n);
             self.consts.insert(key.clone(), qualify_type(t, id, ex));
-            self.paths.insert(key, format!("{}::{}", ex.rust_mod, n));
+            self.paths.insert(key, format!("{}::{}", ex.rust_mod, rust_name(n)));
         }
         for (n, info) in &ex.interfaces {
             let key = format!("{}.{}", key_prefix, n);
@@ -3515,6 +3524,11 @@ impl Gen {
             // a block the function was given, handed straight on to a
             // built-in: `def total(xs, f) = xs.sum(f)`
             ExprKind::Ident(n) if matches!(self.lookup(n).map(|b| &b.ty), Some(Type::Fn(..))) => Expr::new(ExprKind::Call { name: n.clone(), args: vec![it] }, l, c),
+            // a function of an imported module: `xs.map(text.shout)`
+            ExprKind::Method { .. } if self.module_fn_ref(&args[0].value).is_some() => {
+                let key = self.module_fn_ref(&args[0].value).unwrap();
+                Expr::new(ExprKind::Call { name: key, args: vec![it] }, l, c)
+            }
             // a crate function named by its path: `xs.map(urlencoding.encode)`
             ExprKind::Method { recv: fr, name: fname, args: fargs } if fargs.is_empty() && matches!(self.foreign_ref(&args[0].value), Some(ForeignRef::Fn(_)) | Some(ForeignRef::Assoc(..))) => {
                 Expr::new(ExprKind::Method { recv: fr.clone(), name: fname.clone(), args: vec![it] }, l, c)
@@ -3523,6 +3537,32 @@ impl Gen {
         };
         let lam = Expr::new(ExprKind::Lambda { params: vec!["_".into()], body: Block { stmts: vec![Stmt::Expr(call)] } }, l, c);
         Some(Expr::new(ExprKind::Method { recv: recv.clone(), name: name.clone(), args: vec![Arg { name: None, value: lam }] }, e.line, e.col))
+    }
+
+    /// `text.shout` with no arguments, where `text` is an imported module and
+    /// `shout` one of its public functions: the function's key, so it can
+    /// stand where behaviour is wanted, as a local function's name can.
+    fn module_fn_ref(&self, e: &Expr) -> Option<String> {
+        let (recv, name, args) = match &e.kind {
+            ExprKind::Method { recv, name, args } => (recv, name, args),
+            _ => return None,
+        };
+        if !args.is_empty() {
+            return None;
+        }
+        let alias = match &recv.kind {
+            ExprKind::Ident(a) => a,
+            _ => return None,
+        };
+        if self.lookup(alias).is_some() || !self.module_aliases.contains_key(alias) {
+            return None;
+        }
+        let key = self.canon(&format!("{}.{}", alias, name));
+        // one with no parameters is called bare: `util.now` is its value
+        match self.fns.get(&key) {
+            Some(sig) if !sig.params.is_empty() => Some(key),
+            _ => None,
+        }
     }
 
     /// `total?` where nothing is called `total?` but `total` is a value
@@ -3545,6 +3585,23 @@ impl Gen {
         }
         let inner = Expr::new(ExprKind::Ident(base.to_string()), e.line, e.col);
         Some(Expr::new(ExprKind::Try(Box::new(inner)), e.line, e.col))
+    }
+
+    /// `await t?`: the lexer reads `t?` as one name, and the parser can only
+    /// move a `?` it can see. Where `t?` is `t` and a `?`, the `?` belongs
+    /// outside the `await`, as it does after `await f()?`.
+    fn await_try(&mut self, e: &Expr) -> Option<Expr> {
+        let x = match &e.kind {
+            ExprKind::Await(x) => x,
+            _ => return None,
+        };
+        match self.split_ident_try(x)?.kind {
+            ExprKind::Try(inner) => {
+                let aw = Expr::new(ExprKind::Await(inner), e.line, e.col);
+                Some(Expr::new(ExprKind::Try(Box::new(aw)), x.line, x.col))
+            }
+            _ => None,
+        }
     }
 
     /// `x.name?` where no method `name?` exists but `name` does means
@@ -3598,6 +3655,10 @@ impl Gen {
             }
             if let Some(ne) = self.fn_ref_as_block(e) {
                 return self.ty_of(&ne);
+            }
+            if let Some(key) = self.module_fn_ref(e) {
+                let s = self.fns[&key].clone();
+                return Type::Fn(s.params.iter().map(|(_, t)| t.clone()).collect(), Box::new(s.ret));
             }
             if let Ok(Some(ne)) = self.module_ref(e) {
                 return self.ty_of(&ne);
@@ -3852,6 +3913,10 @@ impl Gen {
                     _ => Type::Result(Box::new(t), Box::new(Type::Named("Error".into()))),
                 }
             }
+            ExprKind::Await(_) if self.await_try(e).is_some() => {
+                let ne = self.await_try(e).unwrap();
+                self.ty_of(&ne)
+            }
             ExprKind::Await(x) => match self.ty_of(x).materialized() {
                 Type::Future(t) | Type::Task(t) => *t,
                 Type::List(inner) => match *inner {
@@ -3911,7 +3976,9 @@ impl Gen {
             "+" => (numeric(lt) && same) || (*lt == Type::Str && rt == Type::Str) || (matches!(lt, Type::List(_) | Type::Iter(..)) && self.assignable(lt, &rt)) || text_like(lt) && text_like(&rt),
             "-" | "*" | "/" | "%" | "**" => numeric(lt) && same,
             // a type parameter compares when its bound says it is `Ordered`
-            "<" | "<=" | ">" | ">=" => (same && (numeric(lt) || *lt == Type::Str || (matches!(lt, Type::Var(_)) && self.meets_bound(lt, &Type::Named("Ordered".into()))))) || (text_like(lt) && text_like(&rt)),
+            // a tuple compares part by part, first part first: the order
+            // `sort`, `max` and `min` already put tuples in
+            "<" | "<=" | ">" | ">=" => (same && (numeric(lt) || *lt == Type::Str || self.tuple_orders(lt) || (matches!(lt, Type::Var(_)) && self.meets_bound(lt, &Type::Named("Ordered".into()))))) || (text_like(lt) && text_like(&rt)),
             // `1 == 1.0` is an Int against a Float, which never mixes silently
             "==" | "!=" => (same && !(numeric(lt) && numeric(&rt) && *lt != rt)) || (text_like(lt) && text_like(&rt)),
             _ => true,
@@ -3937,12 +4004,31 @@ impl Gen {
             ("+", Type::Set(_), Type::Set(_)) => Some("sets combine by name: `a.union(b)`; the others are `.intersect(b)` and `.diff(b)`".to_string()),
             ("-", Type::Set(_), Type::Set(_)) => Some("write `a.diff(b)` for the items of `a` that are not in `b`".to_string()),
             ("+", Type::Map(..), Type::Map(..)) => Some("write `a.merge(b)`: the entries of `b` win where the keys are the same".to_string()),
+            ("<" | "<=" | ">" | ">=", Type::Tuple(ts), Type::Tuple(_)) => ts.iter().find(|p| !self.orders(p)).map(|p| match p {
+                Type::Named(n) => format!("a tuple compares part by part, and `{}` has no order: add `def <(other: {}) -> Bool:` to it", n, n),
+                other => format!("a tuple compares part by part, and a `{}` part has no order", type_name(other)),
+            }),
             _ => None,
         };
         if let Some(h) = help {
             err = err.with_help(h);
         }
         Err(err)
+    }
+
+    /// A tuple whose every part has an order of its own: numbers, text,
+    /// characters, `Bool`, a type with its own `<`, and tuples of those.
+    fn tuple_orders(&self, t: &Type) -> bool {
+        matches!(t, Type::Tuple(ts) if ts.iter().all(|p| self.orders(p)))
+    }
+
+    fn orders(&self, t: &Type) -> bool {
+        match t {
+            Type::Int | Type::Float | Type::Str | Type::Char | Type::Bool => true,
+            Type::Tuple(ts) => ts.iter().all(|p| self.orders(p)),
+            Type::Named(n) => self.methods_of(&self.canon(n)).map(|m| m.contains_key("<")).unwrap_or(false),
+            _ => false,
+        }
     }
 
     /// `xs[i]` where `xs` is a list of structs/enums: the element type, when
@@ -5450,6 +5536,8 @@ impl Gen {
                 if ty.is_none() && !type_is_known(&inner) {
                     // a private or missing module item explains the unknown type better
                     self.module_ref(value)?;
+                    // a value that is itself wrong says why better than its missing type does
+                    self.expr(value)?;
                     return Err(LumeError::new(*line, *col, format!("cannot tell the type of `{}` from `{}` alone", name, describe_value(value)))
                         .with_help(type_hint(&format!("shared var {}", name), value, &inner)));
                 }
@@ -5495,6 +5583,8 @@ impl Gen {
                 if ty.is_none() && !type_is_known(&inferred) {
                     // a private or missing module item explains the unknown type better
                     self.module_ref(value)?;
+                    // a value that is itself wrong says why better than its missing type does
+                    self.expr(value)?;
                     return Err(LumeError::new(*line, *col, format!("cannot tell the type of `{}` from `{}` alone", name, describe_value(value)))
                         .with_help(type_hint(&format!("var {}", name), value, &inferred)));
                 }
@@ -5591,6 +5681,8 @@ impl Gen {
                 if ty.is_none() && self.lookup(name).is_none() && self.field_type(name).is_none() && !type_is_known(&inferred) {
                     // a private or missing module item explains the unknown type better
                     self.module_ref(value)?;
+                    // a value that is itself wrong says why better than its missing type does
+                    self.expr(value)?;
                     return Err(LumeError::new(*line, *col, format!("cannot tell the type of `{}` from `{}` alone", name, describe_value(value)))
                         .with_help(type_hint(name, value, &inferred)));
                 }
@@ -6726,6 +6818,8 @@ impl Gen {
         // a function named where behaviour is wanted: `map_all(xs, double)`
         let named = match &e.kind {
             ExprKind::Ident(n) if self.lookup(n).is_none() && (self.fns.contains_key(&self.canon(n)) || self.bare_method(n).is_some()) => Some(n.clone()),
+            // a function of an imported module: `apply(xs, text.shout)`
+            ExprKind::Method { .. } => self.module_fn_ref(e),
             _ => None,
         };
         if let Some(n) = named {
@@ -8283,6 +8377,10 @@ impl Gen {
                     format!("LumeMap::from([{}])", parts.join(", "))
                 }
             }
+            ExprKind::Await(_) if self.await_try(e).is_some() => {
+                let ne = self.await_try(e).unwrap();
+                return self.expr(&ne);
+            }
             ExprKind::Await(x) => {
                 if !self.in_async {
                     return Err(LumeError::new(e.line, e.col, "`await` only works inside an `async def` or a `spawn:` block")
@@ -8390,6 +8488,11 @@ impl Gen {
                 }
                 if matches!(*op, "+" | "-" | "*" | "/" | "%" | "**" | "<" | "<=" | ">" | ">=") {
                     for side in [lhs, rhs] {
+                        // a bare `None` is no value at all, not one that may be absent
+                        if matches!(side.kind, ExprKind::None) {
+                            return Err(LumeError::new(side.line, side.col, format!("`None` is no value, so it cannot be used with `{}`", op))
+                                .with_help("`None` stands for a missing value; use the value itself here, or a default such as `0`"));
+                        }
                         let st = self.ty_of(side);
                         let what = match &st {
                             Type::Option(_) => Some("may be absent"),
@@ -9117,7 +9220,20 @@ impl Gen {
             "clamp" => { need(2)?; format!("lume_clamp({}, {}, {})", recv, args[0], args[1]) }
             "pow" => {
                 need(1)?;
-                if *rt == Type::Float { format!("({}).powf({})", recv, args[0]) } else { format!("({}).pow(({}) as u32)", recv, args[0]) }
+                if *rt == Type::Float {
+                    format!("({}).powf({})", recv, args[0])
+                } else {
+                    // a power written as a negative literal is wrong before the program runs
+                    let lit = match &e.kind {
+                        ExprKind::Method { args: a, .. } => a.first().and_then(|a| int_literal(&a.value)),
+                        _ => None,
+                    };
+                    if let Some(p) = lit.filter(|p| *p < 0) {
+                        return Err(LumeError::new(e.line, e.col, format!("`pow` on an `Int` needs a power of 0 or more, and this one is {}", p))
+                            .with_help(format!("for a fraction, use a `Float`: `{}.to_float.pow({}.0)`", snippet(match &e.kind { ExprKind::Method { recv, .. } => recv, _ => e }), p)));
+                    }
+                    format!("lume_int_pow({}, {})", recv, args[0])
+                }
             }
             "even?" => { need(0)?; format!("(({}) % 2 == 0)", recv) }
             "odd?" => { need(0)?; format!("(({}) % 2 != 0)", recv) }
@@ -9620,6 +9736,16 @@ fn snippet(e: &Expr) -> String {
             _ => format!("{}[...]", snippet(recv)),
         },
         ExprKind::TupleIndex { recv, index } => format!("{}.{}", snippet(recv), index),
+        ExprKind::None => "None".into(),
+        ExprKind::Some(x) => format!("Some({})", snippet(x)),
+        ExprKind::Ok(x) => format!("Ok({})", snippet(x)),
+        ExprKind::Unary { op: "-", expr } => format!("-{}", snippet(expr)),
+        ExprKind::Unary { op, expr } => format!("{} {}", op, snippet(expr)),
+        ExprKind::List(items) if items.is_empty() => "[]".into(),
+        ExprKind::List(_) => "[...]".into(),
+        ExprKind::Tuple(_) => "(...)".into(),
+        ExprKind::Try(x) => format!("{}?", snippet(x)),
+        ExprKind::Await(x) => format!("await {}", snippet(x)),
         _ => "x".into(),
     }
 }

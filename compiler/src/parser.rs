@@ -1721,8 +1721,32 @@ impl Parser {
     fn unary(&mut self) -> Result<Expr> {
         let (line, col) = self.here();
         if self.eat_kw("await") {
-            let e = self.unary()?;
-            return Ok(Expr::new(ExprKind::Await(Box::new(e)), line, col));
+            // `await fetch(url)?` waits and then passes the failure on: a
+            // `?` or `!` at the end applies to what `await` gives back, not
+            // to the call being waited for, which has not failed yet.
+            let mut e = self.unary()?;
+            let mut after: Vec<(bool, usize, usize)> = Vec::new();
+            loop {
+                match e.kind {
+                    ExprKind::Try(inner) => {
+                        after.push((true, e.line, e.col));
+                        e = *inner;
+                    }
+                    ExprKind::Unwrap(inner) => {
+                        after.push((false, e.line, e.col));
+                        e = *inner;
+                    }
+                    kind => {
+                        e = Expr::new(kind, e.line, e.col);
+                        break;
+                    }
+                }
+            }
+            let mut out = Expr::new(ExprKind::Await(Box::new(e)), line, col);
+            for (is_try, l, c) in after.into_iter().rev() {
+                out = Expr::new(if is_try { ExprKind::Try(Box::new(out)) } else { ExprKind::Unwrap(Box::new(out)) }, l, c);
+            }
+            return Ok(out);
         }
         if self.eat_kw("not") {
             let e = self.binary(3)?; // binds looser than comparison: `not a == b`

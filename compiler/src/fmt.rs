@@ -926,6 +926,19 @@ impl Fmt {
             ExprKind::TupleIndex { recv, index } => format!("{}.{}", self.expr_p(recv, 10), index),
             ExprKind::Some(x) => format!("Some({})", self.expr(x)),
             ExprKind::Ok(x) => format!("Ok({})", self.expr(x)),
+            // `await f()?` is `(await f())?`: the parser puts the `?` outside
+            ExprKind::Try(x) | ExprKind::Unwrap(x) if matches!(x.kind, ExprKind::Await(_)) => {
+                let mark = if matches!(e.kind, ExprKind::Try(_)) { "?" } else { "!" };
+                match &x.kind {
+                    ExprKind::Await(inner) => match &inner.kind {
+                        ExprKind::Method { recv, name, args } if args.is_empty() && !name.ends_with('?') && !self.is_pipe(inner) => {
+                            format!("await {}.{}(){}", self.expr_p(recv, 10), name, mark)
+                        }
+                        _ => format!("await {}{}", self.expr_p(inner, 10), mark),
+                    },
+                    _ => unreachable!(),
+                }
+            }
             ExprKind::Try(x) => match &x.kind {
                 // `p.next()?`, not `p.next?`: the latter reads as a predicate
                 ExprKind::Method { recv, name, args } if args.is_empty() && !name.ends_with('?') && !self.is_pipe(x) => {

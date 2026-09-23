@@ -1,0 +1,7 @@
+struct P:
+  x: Int
+
+def main:
+  a = (1, P(x: 1))
+  b = (1, P(x: 2))
+  puts a < b

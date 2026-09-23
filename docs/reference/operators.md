@@ -98,6 +98,17 @@ you cross over.
 **Overflow stops the program.** It is not wrapped and not undefined, in a
 built binary as much as under `lume run`.
 
+An `Int` raised to a power — `2 ** 10`, `2.pow(10)` — needs a power of 0 or
+more, since the answer has to be a whole number. A negative power written as a
+literal is refused before the program runs; one that is only known at run time
+stops the program with `` `pow` on an `Int` needs a power of 0 or more ``. For
+a fraction, use a `Float`: `2.to_float.pow(-1.0)` is `0.5`.
+
+```lume
+puts 2 ** 10               #=> 1024
+puts 2.to_float.pow(-1.0)  #=> 0.5
+```
+
 ## Comparison
 
 `==` and `!=` work on anything built out of comparable parts, including your
@@ -108,6 +119,18 @@ own structs and enums, without writing anything.
 ```lume
 puts "A" < "a"     #=> true
 puts "b" < "a"     #=> false
+```
+
+Tuples compare part by part, the first part first and the next only on a tie —
+the same order `sort`, `max` and `min` put them in. Every part must have an
+order of its own: a number, text, a `Char`, a `Bool`, or another such tuple.
+
+```lume
+a = (1, "b")
+b = (1, "c")
+puts a < b                 #=> true
+puts b > (0, "z")          #=> true
+puts [b, a].sort           #=> [(1, "b"), (1, "c")]
 ```
 
 Defining `<` on your own type is what `sort`, `max`, `min`, `<=`, `>` and `>=`

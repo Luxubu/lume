@@ -77,7 +77,11 @@ decision rather than a fact:
 
 - Two `extend`s on one target with different bounds — one clash or two claims?
 - A specificity rule when `extend [T]` and `extend [[T]]` both match.
-- A module-qualified function name as a block (`xs.map(seq.shout)`).
+
+Decided in milestone 37: a module's function is a block by its qualified name
+(`xs.map(seq.shout)`, [functions and blocks](reference/functions-and-blocks.md#a-functions-name-as-a-block));
+tuples order with `<` as they sort ([operators](reference/operators.md#comparison));
+`await f()?` passes on the awaited failure ([concurrency](reference/concurrency.md)).
 
 ## Round seven
 

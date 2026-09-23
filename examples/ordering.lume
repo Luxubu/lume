@@ -1,0 +1,23 @@
+# Ordering: tuples compare part by part, the order `sort` uses.
+
+struct Version:
+  major: Int
+  minor: Int
+
+  def <(other: Version) -> Bool = major < other.major or (major == other.major and minor < other.minor)
+
+def main:
+  a = (1, "b")
+  b = (1, "c")
+  c = (2, "a")
+  puts a < b
+  puts c > b
+  puts a <= a
+  puts b >= c
+  puts [c, b, a].sort
+  puts [c, b, a].max
+  puts [(2.5, "x"), (0.5, "y")].min
+  old = ("lume", Version(major: 0, minor: 9))
+  puts old < ("lume", Version(major: 1, minor: 0))
+  puts 2 ** 10
+  puts 3.pow(4)

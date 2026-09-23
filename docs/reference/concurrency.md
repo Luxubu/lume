@@ -87,8 +87,10 @@ async def main:
 ```
 
 `await` covers everything to its right, so `await (1..3).map { … }.to_list`
-waits for the whole list. To use `?` or a method on what comes back, put the
-`await` in brackets: `(await t)?`, `(await tasks).sort`.
+waits for the whole list. A `?` or `!` at the very end is the exception: it
+applies to what `await` gives back, so `await fetch(url)?` waits and then
+passes a failure on. To call a method on what comes back, put the `await` in
+brackets: `(await tasks).sort`.
 
 ## Many tasks at once, and the order results come back in
 
@@ -288,7 +290,7 @@ async def main:
   #=> failed: empty input
 ```
 
-`main` can be `async def main -> () or Error`, and then `(await t)?` passes
+`main` can be `async def main -> () or Error`, and then `await t?` passes
 a task's failure straight up. The program then stops with the message on
 standard error and exit status 1:
 
@@ -300,13 +302,12 @@ def half(n: Int) -> Int or Error:
 
 async def main -> () or Error:
   t = spawn: half(10)
-  n = (await t)?
+  n = await t?
   puts n    #=> 5
 ```
 
-Write the brackets. `await f()?` puts the `?` on the call before it is
-awaited, and is refused with a message that does not say why:
-``cannot tell the type of `m` from `x` alone``.
+The `?` belongs to the `await`, not to `t`: a task has not failed until it has
+been waited for. `(await t)?` means the same and is still accepted.
 
 A crash inside a task — `.at(9)` on a short list, say — stops the whole
 program when the task is awaited, as a crash anywhere else would.

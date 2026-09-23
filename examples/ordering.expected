@@ -1,0 +1,10 @@
+true
+true
+true
+false
+[(1, "b"), (1, "c"), (2, "a")]
+Some((2, "a"))
+Some((0.5, "y"))
+true
+1024
+81

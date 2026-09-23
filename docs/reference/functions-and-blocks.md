@@ -212,6 +212,20 @@ def main:
   puts ["a", "bb"].map(_.len).map(double)    #=> [2, 4]
 ```
 
+A function of an imported module works the same way, by its qualified name:
+with `import lib.text`, `words.map(text.shout)` and `words.filter(text.long?)`
+hand over `text`'s functions, and so does passing `text.shout` to a block
+parameter of your own. A module function that takes no arguments is still a
+call when written bare — `text.banner` is its value — because there is nothing
+to hand it.
+
+```lume-skip
+import lib.text
+
+def main:
+  puts ["ab", "lume"].map(text.shout)    # ["AB", "LUME"]
+```
+
 ## Blocks of your own
 
 A parameter typed `(A) -> B` takes a block, so the built-in methods are not a
