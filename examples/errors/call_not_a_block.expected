@@ -1,0 +1,6 @@
+error: `double(...)` is an `Int`, not a block, so it cannot be called
+  --> examples/errors/call_not_a_block.lume:4:17
+  |
+4 |   puts double(2)(3)
+  |                 ^
+  help: only a block — a value of a type like `(Int) -> Int` — is called with `(...)` after it

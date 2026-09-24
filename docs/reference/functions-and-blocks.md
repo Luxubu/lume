@@ -446,6 +446,32 @@ a method, `rule.check(s)`, or by its bare name inside the type. A kept block
 can be handed on wherever a block is wanted: `xs.map(add10)`, or to a
 function of your own.
 
+A block that is the value of an expression is called straight away by
+writing the arguments right after it, with no space — `adder(1)(5)`,
+`steps.at(0)(3)` — and can be handed on without a name, as in
+`run_on(twice(double), 3)`:
+
+```lume
+def adder(n: Int) -> (Int) -> Int = { |x| x + n }
+
+def main:
+  puts adder(1)(5)                  #=> 6
+  puts adder(1)(adder(2)(3))        #=> 6
+  steps: [(Int) -> Int] = [adder(10)]
+  puts steps.at(0)(3)               #=> 13
+```
+
+A value that may be absent must be unwrapped first — `steps.first!(3)` — and
+only a block can be called this way:
+
+```lume-bad
+def double(n: Int) -> Int = n * 2
+
+def main:
+  puts double(2)(3)
+#! `double(...)` is an `Int`, not a block, so it cannot be called
+```
+
 **It copies in what it uses when it is made**, as Rust's `move` closure does
 and as `spawn:` does. So it can outlive the function that made it — `adder`'s
 `n` lives on in the block it returns — and it may go to another task. For the

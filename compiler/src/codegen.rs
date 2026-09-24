@@ -1014,8 +1014,11 @@ pub fn type_name(t: &Type) -> String {
         Type::Unit => "()".into(),
         Type::List(i) => format!("[{}]", type_name(i)),
         Type::Named(n) => n.clone(),
+        // a block's own arrow would swallow the `?`: `((Int) -> Int)?`
+        Type::Option(i) if matches!(**i, Type::Fn(..)) => format!("({})?", type_name(i)),
         Type::Option(i) => format!("{}?", type_name(i)),
         Type::Tuple(ts) => format!("({})", ts.iter().map(type_name).collect::<Vec<_>>().join(", ")),
+        Type::Result(t, e) if matches!(**t, Type::Fn(..)) => format!("({}) or {}", type_name(t), type_name(e)),
         Type::Result(t, e) => format!("{} or {}", type_name(t), type_name(e)),
         Type::Map(k, v) => format!("{{{}: {}}}", type_name(k), type_name(v)),
         Type::Set(t) => format!("{{{}}}", type_name(t)),
@@ -1648,6 +1651,31 @@ impl Gen {
         self.call_block_at(&target, name, ins, args, e)
     }
 
+    /// `twice(double)(5)`, `steps.first!(3)`: a call of the block that the
+    /// value on the left is.
+    fn value_call(&mut self, recv: &Expr, args: &[Arg], e: &Expr) -> Result<String> {
+        let what = snippet(recv);
+        match self.ty_of(recv) {
+            Type::Fn(ins, _) => {
+                let target = match &recv.kind {
+                    ExprKind::Ident(n) if self.param_blocks.contains(n) => rust_name(n),
+                    _ => format!("({}.0)", self.expr(recv)?),
+                };
+                self.call_block_at(&target, &what, &ins, args, e)
+            }
+            Type::Unknown => Err(LumeError::new(e.line, e.col, format!("cannot tell what `{}` is, so it cannot be called", what))
+                .with_help("only a block can be called like this; bind the value with its type first, as in `f: (Int) -> Int = ...`")),
+            other => {
+                let err = LumeError::new(e.line, e.col, format!("`{}` is {}, not a block, so it cannot be called", what, a_type(&other.materialized())));
+                Err(match &other {
+                    Type::Option(i) if matches!(**i, Type::Fn(..)) => err.with_help(format!("it may be absent: unwrap it first, as in `{}!(...)` or with `match`", what)),
+                    Type::Result(i, _) if matches!(**i, Type::Fn(..)) => err.with_help(format!("it may be an error: unwrap it first, as in `{}?(...)`", what)),
+                    _ => err.with_help("only a block — a value of a type like `(Int) -> Int` — is called with `(...)` after it"),
+                })
+            }
+        }
+    }
+
     /// A call of a block held in a field: `rule.check(s)`, or bare `check(s)`
     /// inside a method.
     fn call_field_block(&mut self, place: &str, name: &str, ins: &[Type], args: &[Arg], e: &Expr) -> Result<String> {
@@ -1676,7 +1704,7 @@ impl Gen {
         let mut parts = Vec::new();
         let mut lets = String::new();
         for (i, (a, t)) in args.iter().zip(ins).enumerate() {
-            self.check_assign(&a.value, t, &format!("`{}` takes a `{}`", name, type_name(t)))?;
+            self.check_assign(&a.value, t, &format!("`{}` takes {}", name, a_type(t)))?;
             let v = self.expr_arg(&a.value, t)?;
             // a block is handed its arguments lent, copied types included
             let v = if *t != Type::Str && t.is_copy() { format!("&({})", v) } else { v };
@@ -4122,6 +4150,11 @@ impl Gen {
                     Type::Unknown
                 }
             }
+            // `f(x)(y)`: what the block on the left gives back
+            ExprKind::Method { recv, name, .. } if name == "()" => match self.ty_of(recv) {
+                Type::Fn(_, out) => *out,
+                _ => Type::Unknown,
+            },
             ExprKind::Method { recv, name, args } => {
                 // Enum variant constructor: Shape.Circle(...)
                 if let ExprKind::Ident(tn) = &recv.kind {
@@ -7385,6 +7418,17 @@ impl Gen {
             let body = Block { stmts: vec![Stmt::Expr(call)] };
             return self.gen_block_closure(&names, &body, ins, decl, out, e);
         }
+        // a kept block made by an expression, `apply(twice(double), 3)`:
+        // lent for the call as the `dyn Fn` it holds
+        if !matches!(e.kind, ExprKind::Lambda { .. }) {
+            let have = self.ty_of(e).materialized();
+            if matches!(have, Type::Fn(..)) {
+                if !self.assignable(&have, &Type::Fn(ins.to_vec(), Box::new(out.clone()))) {
+                    return Err(LumeError::new(e.line, e.col, format!("`{}` is `{}`, but this parameter takes `{}`", snippet(e), type_name(&have), want)));
+                }
+                return Ok(format!("&*({}).0", self.expr(e)?));
+            }
+        }
         let (params, body) = match &e.kind {
             ExprKind::Lambda { params, body } => (params.clone(), body.clone()),
             _ => {
@@ -9262,6 +9306,7 @@ impl Gen {
                     return Err(self.unknown_fn(name, e.line, e.col));
                 }
             }
+            ExprKind::Method { recv, name, args } if name == "()" => self.value_call(recv, args, e)?,
             ExprKind::Method { recv, name, args } => {
                 if let Some(ne) = self.split_trailing_try(e) {
                     return self.expr(&ne);
@@ -10682,6 +10727,10 @@ fn snippet(e: &Expr) -> String {
             _ => "\"...\"".into(),
         },
         ExprKind::Call { name, args } => if args.is_empty() { format!("{}()", name) } else { format!("{}(...)", name) },
+        ExprKind::Method { recv, name, args } if name == "()" => {
+            let r = snippet(recv);
+            if args.is_empty() { format!("{}()", r) } else { format!("{}(...)", r) }
+        }
         ExprKind::Method { recv, name, args } => {
             let r = snippet(recv);
             if args.is_empty() { format!("{}.{}", r, name) } else { format!("{}.{}(...)", r, name) }

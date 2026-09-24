@@ -21,6 +21,8 @@ def compose(f: (Int) -> Int, g: (Int) -> Int) -> (Int) -> Int = { |x| g(f(x)) }
 
 def twice(f: (Int) -> Int) -> (Int) -> Int = compose(f, f)
 
+def run_on(f: (Int) -> Int, x: Int) -> Int = f(x)
+
 struct Pipeline:
   steps: [(Int) -> Int]
 
@@ -54,6 +56,14 @@ def main:
   puts inc_then_double(3)
   quad = twice(double)
   puts quad(5)
+
+  # a block that is the value of an expression is called straight away,
+  # and handed on like any other
+  puts twice(double)(5)
+  puts adder(1)(adder(2)(3))
+  puts steps.at(1)(4)
+  puts [1, 2].map { |x| twice(adder(x))(x) }.to_list
+  puts run_on(twice(double), 3)
   p = Pipeline(steps: [double, { |x| x - 1 }, twice(double)])
   puts p.run(3)
 

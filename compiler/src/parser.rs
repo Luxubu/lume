@@ -1832,6 +1832,15 @@ impl Parser {
                 e = Expr::new(ExprKind::Unwrap(Box::new(e)), line, col);
                 continue;
             }
+            // `twice(double)(5)`: a `(` right after a value calls the block
+            // that value is. Held as a method named `()`, which no program
+            // can write, so everything that walks a call walks this one.
+            if self.at_sym("(") && !self.toks[self.pos].space_before {
+                let (line, col) = self.here();
+                let args = self.call_args()?;
+                e = Expr::new(ExprKind::Method { recv: Box::new(e), name: "()".to_string(), args }, line, col);
+                continue;
+            }
             if self.at_sym("[") && !self.toks[self.pos].space_before {
                 let (line, col) = self.here();
                 self.advance();

@@ -1,0 +1,6 @@
+error: `steps.first` is a `((Int) -> Int)?`, not a block, so it cannot be called
+  --> examples/errors/call_optional_block.lume:3:21
+  |
+3 |   puts steps.first()(1)
+  |                     ^
+  help: it may be absent: unwrap it first, as in `steps.first!(...)` or with `match`

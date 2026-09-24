@@ -896,6 +896,14 @@ impl Fmt {
                 }
                 format!("{}{}", name, if args.is_empty() { "()".to_string() } else { self.args_text(args) })
             }
+            // `f(x)(y)`: a call of the value on the left, arguments always in brackets
+            ExprKind::Method { recv, name, args } if name == "()" => {
+                let parts: Vec<String> = args.iter().map(|a| match &a.name {
+                    Some(n) => format!("{}: {}", n, self.expr(&a.value)),
+                    None => self.expr(&a.value),
+                }).collect();
+                format!("{}({})", self.expr_p(recv, 10), parts.join(", "))
+            }
             ExprKind::Method { recv, name, args } => {
                 let head = if self.is_pipe(e) {
                     let lhs = self.pipe_lhs(recv);

@@ -1,0 +1,3 @@
+def main:
+  steps: [(Int) -> Int] = [{ |x| x }]
+  puts steps.first()(1)
