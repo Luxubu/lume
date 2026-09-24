@@ -1,5 +1,5 @@
-# A function cannot hand behaviour back yet: a block is run where it is
-# passed in, so there is nowhere for a returned one to live.
+# A function that hands back a block must end with one: here the last line
+# prints, and so gives back nothing.
 def adder(n: Int) -> (Int) -> Int:
   puts n
 

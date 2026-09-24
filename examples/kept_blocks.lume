@@ -1,0 +1,74 @@
+# Blocks as values. A block whose type is said where it goes — a binding, a
+# field, a list, a result — is kept: made once, carried, called later. It
+# copies in the locals it uses when it is made, as Rust's `move` closure
+# does, and becomes an `Arc<dyn Fn>`. A block handed straight to a call is
+# unchanged: compiled into the call, with nothing boxed.
+
+struct Rule:
+  name: Str
+  check: (Str) -> Bool
+
+  # a block in a field is called like a method, inside and out
+  def passes?(s: Str) -> Bool = check(s)
+
+def double(n: Int) -> Int = n * 2
+
+# handed back: the block keeps `n` after `adder` returns
+def adder(n: Int) -> (Int) -> Int = { |x| x + n }
+
+# a function that keeps the blocks it is given
+def compose(f: (Int) -> Int, g: (Int) -> Int) -> (Int) -> Int = { |x| g(f(x)) }
+
+def twice(f: (Int) -> Int) -> (Int) -> Int = compose(f, f)
+
+struct Pipeline:
+  steps: [(Int) -> Int]
+
+  def run(x: Int) -> Int = steps.fold(x) { |acc, step| step(acc) }
+
+def main:
+  min = 3
+  rules: [Rule] = [
+    Rule(name: "long", check: { |s| s.len > min }),
+    Rule(name: "lower", check: { |s| s == s.downcase }),
+  ]
+  for w in ["hello", "Hi", "ok"]:
+    failed = rules.filter { |r| not r.check(w) }.map(_.name).to_list
+    puts "#{w}: #{failed}"
+  puts rules.all? { |r| r.passes?("abcd") }
+  puts rules.first
+
+  # a function's name, a returned block, and a list of them
+  f: (Int) -> Int = double
+  add10 = adder(10)
+  steps: [(Int) -> Int] = [double, adder(1), { |x| x * x }]
+  puts f(4)
+  puts add10(5)
+  puts steps.map { |g| g(3) }.to_list
+
+  # handed on to a built-in or a function, like any block
+  puts [1, 2, 3].map(add10).to_list
+  puts [1, 2].map(compose(double, double)).to_list
+
+  inc_then_double = compose({ |x| x + 1 }, double)
+  puts inc_then_double(3)
+  quad = twice(double)
+  puts quad(5)
+  p = Pipeline(steps: [double, { |x| x - 1 }, twice(double)])
+  puts p.run(3)
+
+  # a `do` body, and one that takes nothing
+  greet: (Str) -> Str = do |name|
+    upper = name.upcase
+    "hi #{upper}"
+  puts greet("ada")
+  later: () -> Int = do
+    min * 100
+  puts later()
+
+  # a block may change a `shared var`, the one thing it does not copy
+  shared var total = 0
+  add: (Int) -> () = { |x| total += x }
+  add(3)
+  add(4)
+  puts total

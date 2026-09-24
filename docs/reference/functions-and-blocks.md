@@ -421,47 +421,106 @@ def main:
   #=> A
 ```
 
-## Behaviour is not a value
+## Blocks as values
 
-**A block can be passed to a function and run there. It cannot be stored in a
-binding, put in a field, or handed back.** Each of those is refused by name:
+**A block can be kept: put in a binding, a field or a list, or handed back
+from a function.** Its type says what it takes and gives, and where it goes
+has to say it, because a block on its own names no types:
 
-```lume-bad
-struct Button:
-  label: Str
-  on_click: (Int) -> ()
-
-def main:
-  puts "never gets here"
-#! a block cannot be a field
-```
-
-```lume-bad
+```lume
 def double(n: Int) -> Int = n * 2
 
-def pick -> (Int) -> Int:
-  double
+def adder(n: Int) -> (Int) -> Int = { |x| x + n }
 
 def main:
-  puts "never gets here"
-#! a block cannot be a result
+  f: (Int) -> Int = { |x| x * 3 }
+  g: (Int) -> Int = double
+  add10 = adder(10)
+  steps: [(Int) -> Int] = [f, g, add10]
+  puts steps.map { |s| s(1) }.to_list    #=> [3, 2, 11]
+  puts add10                             #=> <block>
+```
+
+A kept block is called like a function, `f(1)`. One in a field is called like
+a method, `rule.check(s)`, or by its bare name inside the type. A kept block
+can be handed on wherever a block is wanted: `xs.map(add10)`, or to a
+function of your own.
+
+**It copies in what it uses when it is made**, as Rust's `move` closure does
+and as `spawn:` does. So it can outlive the function that made it — `adder`'s
+`n` lives on in the block it returns — and it may go to another task. For the
+same reason it cannot change a `var` it copied, because the change would land
+on the copy; a `shared var` is the one thing it changes where it lives:
+
+```lume-bad
+def main:
+  var count = 0
+  inc: () -> () = do
+    count += 1
+  inc()
+#! `count` was copied into this block when the block was made
+```
+
+```lume
+def main:
+  shared var total = 0
+  add: (Int) -> () = { |x| total += x }
+  add(3)
+  add(4)
+  puts total    #=> 7
+```
+
+A kept block inside a method cannot use `self` or its fields — it may outlive
+the value — so bind what it needs to a name first.
+
+**A function may keep the blocks it is given.** `compose` below keeps `f` and
+`g` in the block it returns, and `twice` keeps its `f` by handing it to
+`compose`. Nothing is written to say so: Lume sees it, and passes a kept block
+where one is kept and an ordinary one everywhere else.
+
+```lume
+def double(n: Int) -> Int = n * 2
+
+def compose(f: (Int) -> Int, g: (Int) -> Int) -> (Int) -> Int = { |x| g(f(x)) }
+
+def twice(f: (Int) -> Int) -> (Int) -> Int = compose(f, f)
+
+def main:
+  inc_then_double = compose({ |x| x + 1 }, double)
+  quad = twice(double)
+  puts inc_then_double(3)    #=> 8
+  puts quad(5)               #=> 20
+```
+
+**A block has no `==`.** Whether two blocks do the same thing cannot be
+checked, as in Rust, so `==` on blocks — or on a struct holding one — is
+refused. Such a struct still prints, with `<block>` for the block:
+
+```lume
+struct Rule:
+  name: Str
+  check: (Str) -> Bool
+
+def main:
+  r = Rule(name: "long", check: { |s| s.len > 3 })
+  puts r.check("hello")    #=> true
+  puts r                   #=> Rule(name: "long", check: <block>)
 ```
 
 ```lume-bad
-fs: [(Int) -> Int] = []
-#! a block cannot be a binding
+def main:
+  f = { |x| x + 1 }
+#! a block used as a value needs its type said where it goes
 ```
 
-```lume-bad
-f = { |x| x + 1 }
-#! a `{ |x| ... }` block goes after a method call
-```
+In Rust a kept block is an `Arc<dyn Fn>`, called through a pointer. A block
+handed straight to a call is not kept, and costs nothing: it is compiled into
+the call, as before.
 
-### What to write instead
+### When an enum is the better choice
 
-**Name the choices in an `enum` and `match` on it.** The enum is an ordinary
-value, so it goes in a field, in a list, and across a return, and it prints
-and compares like any other:
+**When the choices are known, name them in an `enum` and `match` on it.** The
+enum can be printed, compared and saved, which a list of blocks cannot:
 
 ```lume
 enum Step:
@@ -484,24 +543,15 @@ struct Pipeline:
       out = apply(s, out)
     out
 
-def next_step(s: Step) -> Step:
-  match s:
-    Double -> AddOne
-    AddOne -> Square
-    Square -> Double
-
 def main:
   p = Pipeline(steps: [Double, AddOne, Square])
   puts p.run(3)              #=> 49
   puts p                     #=> Pipeline(steps: [Double, AddOne, Square])
-  puts next_step(Double)     #=> AddOne
-  puts Double == Double      #=> true
   puts p.steps.contains?(Square)    #=> true
 ```
 
-This is more to write than a stored block, and it buys something back: the
-pipeline above can be printed, compared and saved, which a field full of
-behaviour could not be.
+Keep blocks for behaviour that comes from outside the type — a caller's rule,
+a callback, a step built at run time.
 
-`examples/blocks.lume` and `examples/blocks_of_your_own.lume` are longer
+`examples/blocks.lume`, `examples/blocks_of_your_own.lume` and `examples/kept_blocks.lume` are longer
 runnable versions of this page.

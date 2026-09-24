@@ -1,0 +1,8 @@
+struct C:
+  n: Int
+
+  def later -> () -> Int = do
+    n
+
+def main:
+  puts C(n: 1).later()

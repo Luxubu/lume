@@ -1,0 +1,6 @@
+error: this block gives back an `Int`, but it is kept as a `(Int) -> Str`, which gives back a `Str`
+  --> examples/errors/block_kept_result.lume:2:21
+  |
+2 |   f: (Int) -> Str = { |x| x + 1 }
+  |                     ^
+  help: the block's last line must be a `Str`

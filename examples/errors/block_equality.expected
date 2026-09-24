@@ -1,0 +1,6 @@
+error: `==` cannot compare blocks
+  --> examples/errors/block_equality.lume:4:10
+  |
+4 |   puts f == g
+  |          ^
+  help: a block has no `==`: whether two do the same thing cannot be checked; compare the other fields, or give the type its own `def ==`

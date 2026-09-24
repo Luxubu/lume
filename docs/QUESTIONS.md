@@ -31,7 +31,7 @@ than once, which are the ones that shaped these pages.
 | 11 | Which names are reserved by the Rust backend? *(4 rounds, and all three reviewers in round seven)* | [names](reference/names.md) |
 | 12 | Does a method of your own shadow a built-in of the same name? | [interfaces](reference/interfaces.md) |
 | 13 | Can you destructure a tuple — `(a, b) = expr`? | [structs and enums](reference/structs-and-enums.md) |
-| 14 | Behaviour cannot be stored in a field or returned — what do you write instead? | [functions and blocks](reference/functions-and-blocks.md) |
+| 14 | Behaviour cannot be stored in a field or returned — what do you write instead? | since milestone 40 it can: [blocks as values](reference/functions-and-blocks.md#blocks-as-values) |
 
 ## Raised in two rounds
 

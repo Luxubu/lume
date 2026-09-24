@@ -1,0 +1,22 @@
+warning: `total` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> examples/kept_blocks.lume:70:3
+   |
+70 |   shared var total = 0
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+hello: []
+Hi: ["long", "lower"]
+ok: ["long"]
+true
+Some(Rule(name: "long", check: <block>))
+8
+15
+[6, 4, 9]
+[11, 12, 13]
+[4, 8]
+8
+20
+20
+hi ADA
+300
+7

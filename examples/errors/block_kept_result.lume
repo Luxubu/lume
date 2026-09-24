@@ -1,0 +1,3 @@
+def main:
+  f: (Int) -> Str = { |x| x + 1 }
+  puts f(1)

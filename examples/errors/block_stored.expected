@@ -1,6 +1,0 @@
-error: a block cannot be a field
-  --> examples/errors/block_stored.lume:3:3
-  |
-3 |   work: () -> ()
-  |   ^
-  help: behaviour is passed to a function and run there; it cannot be stored or handed back yet

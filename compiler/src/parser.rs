@@ -2038,10 +2038,11 @@ impl Parser {
                 self.expect_sym("]", "to close the list")?;
                 Ok(Expr::new(ExprKind::List(items), line, col))
             }
+            // a block as a value: `f: (Int) -> Int = { |x| x * 2 }`; what it
+            // takes and gives comes from where it goes
+            Tok::Sym("{") if matches!(self.peek_at(1), Tok::Sym("|")) => Ok(self.trailing_block()?.unwrap()),
+            Tok::Ident(ref kw) if kw == "do" => Ok(self.trailing_block()?.unwrap()),
             Tok::Sym("{") => {
-                if matches!(self.peek_at(1), Tok::Sym("|")) {
-                    return Err(self.err("a `{ |x| ... }` block goes after a method call, like `xs.map { |x| x * 2 }`"));
-                }
                 self.advance();
                 let mut pairs = Vec::new();
                 let mut items = Vec::new();

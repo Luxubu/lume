@@ -1,0 +1,6 @@
+error: `count` was copied into this block when the block was made, so changing it here would not be seen outside
+  --> examples/errors/block_kept_changes_var.lume:4:5
+  |
+4 |     count += 1
+  |     ^
+  help: declare it `shared var count` before the block if the block is meant to change it, or have the block give back the new value

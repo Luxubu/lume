@@ -1,0 +1,6 @@
+error: a `(Int, Int) -> Int` takes 2 values, but this block names 1
+  --> examples/errors/block_kept_arity.lume:2:26
+  |
+2 |   f: (Int, Int) -> Int = { |x| x }
+  |                          ^
+  help: name them: `{ |x, y| ... }`

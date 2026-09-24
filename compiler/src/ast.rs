@@ -53,8 +53,9 @@ impl Type {
             Type::Int | Type::Float | Type::Bool | Type::Char | Type::Unit => true,
             // a type parameter stands for anything, so it is always borrowed
             Type::Var(_) => false,
-            // behaviour is moved into the call, never lent
-            Type::Fn(..) => true,
+            // a block kept as a value is shared, not copied bit for bit: it
+            // is lent to a call and cloned (one more handle) when kept twice
+            Type::Fn(..) => false,
             Type::Option(t) => t.is_copy(),
             // a handle is cheap to clone, and cloning is how it is shared
             Type::Shared(..) => true,

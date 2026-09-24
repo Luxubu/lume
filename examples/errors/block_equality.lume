@@ -1,0 +1,4 @@
+def main:
+  f: (Int) -> Int = { |x| x }
+  g: (Int) -> Int = { |x| x }
+  puts f == g

@@ -1,7 +1,6 @@
 error: a block used as a value needs its type said where it goes
-  --> corpus/edge/e01_nested_closures.lume:6:11
+  --> examples/errors/block_value_untyped.lume:2:7
   |
-6 |   adder = { |a| a + k }
-  |           ^
+2 |   f = { |x| x * 2 }
+  |       ^
   help: say what it takes and gives: `f: (Int) -> Int = { |x| x * 2 }`, or pass it straight to a method: `xs.map { |x| ... }`
-exit: 1

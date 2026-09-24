@@ -1,0 +1,6 @@
+error: a block that is kept cannot use `self` or its fields
+  --> examples/errors/block_kept_self.lume:4:28
+  |
+4 |   def later -> () -> Int = do
+  |                            ^
+  help: it may outlive this value; bind what it needs to a name before the block, and use that
