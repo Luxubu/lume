@@ -1,0 +1,6 @@
+error: `dist` works on one `Point`, so it is called on a value, not on the type
+  --> examples/errors/value_call.lume:8:13
+  |
+8 |   puts Point.dist
+  |             ^
+  help: make a value first, as in `Point(...).dist`, or make it a function of the type with `def self.dist`

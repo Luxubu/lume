@@ -444,6 +444,11 @@ impl Parser {
                 self.pos = save;
                 let (line, col) = self.here();
                 self.advance(); // def
+                if self.at_kw("self") && matches!(self.peek_at(1), Tok::Sym(".")) {
+                    let n = match self.peek_at(2) { Tok::Ident(n) => n.clone(), _ => "name".to_string() };
+                    return Err(self.err(format!("an interface says what a value can do, so `def self.{}` does not belong in one", n))
+                        .with_help("put the function in the struct or enum that has it"));
+                }
                 let (name, _, _) = self.ident("a method name")?;
                 let mut params = Vec::new();
                 if self.eat_sym("(") {
@@ -691,6 +696,16 @@ impl Parser {
             return Err(self.err(format!("expected `def` after `async`, found {}", self.describe())).with_help("write `async def name(...)`"));
         }
         self.advance(); // def
+        // `def self.origin` — a function of the type, not of one value
+        let is_static = self.at_kw("self") && matches!(self.peek_at(1), Tok::Sym(".")) && !self.toks[self.pos + 1].space_before;
+        if is_static {
+            if !in_struct {
+                return Err(self.err("`def self.name` defines a function of a type, so it belongs inside a struct or enum")
+                    .with_help("a function of its own is written `def name(...)` at the top level"));
+            }
+            self.advance();
+            self.advance();
+        }
         let name = match self.peek().clone() {
             Tok::Sym(op) if matches!(op, "+" | "-" | "*" | "/" | "%" | "==" | "!=" | "<" | "<=" | ">" | ">=") => {
                 let (ol, oc) = self.here();
@@ -705,7 +720,7 @@ impl Parser {
         };
         let generics = self.generic_params("def name")?;
         let mut params = Vec::new();
-        let mut self_kind = SelfKind::Read;
+        let mut self_kind = if is_static { SelfKind::Static } else { SelfKind::Read };
         if self.eat_sym("(") {
             let mut first = true;
             while !self.at_sym(")") {
@@ -719,6 +734,10 @@ impl Parser {
                     }
                     if !first {
                         return Err(LumeError::new(sl, sc, "`self` must be the first parameter"));
+                    }
+                    if is_static {
+                        return Err(LumeError::new(sl, sc, format!("`def self.{}` belongs to the type, so it has no `self` parameter", name))
+                            .with_help(format!("for a method of one value, write `def {}(var self, ...)`", name)));
                     }
                     if is_var {
                         self.advance();

@@ -102,6 +102,9 @@ pub enum SelfKind {
     Read,
     /// `def f(var self, ...)` — may change fields (`&mut self`).
     Mutate,
+    /// `def self.f(...)` — a function of the type itself, with no value to
+    /// work on: Rust's associated function, called as `Point.f(...)`.
+    Static,
 }
 
 #[derive(Debug, Clone)]

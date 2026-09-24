@@ -1,0 +1,8 @@
+enum Light:
+  Red
+  Green
+
+  def self.Red -> Light = Green
+
+def main:
+  puts Light.Red

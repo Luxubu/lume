@@ -515,6 +515,9 @@ impl Fmt {
             out.push_str("async ");
         }
         out.push_str("def ");
+        if f.self_kind == SelfKind::Static {
+            out.push_str("self.");
+        }
         out.push_str(&f.name);
         out.push_str(&generics_str(&f.generics));
         let mut params: Vec<String> = Vec::new();

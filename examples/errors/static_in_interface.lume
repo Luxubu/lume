@@ -1,0 +1,4 @@
+def self.make -> Int = 1
+
+def main:
+  puts 1

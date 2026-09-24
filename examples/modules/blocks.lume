@@ -22,3 +22,6 @@ def main:
   # the same function handed to a block parameter of our own
   again = parse_all(lines, model.parse)
   puts again.count { |r| r.error? }
+
+  # a function of an imported type, called through the module
+  puts model.User.guest("Eve").label

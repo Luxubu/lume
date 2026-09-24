@@ -491,6 +491,9 @@ struct StructInfo {
     generics: Vec<TypeParam>,
     fields: Vec<(String, Type)>,
     methods: HashMap<String, Sig>,
+    /// `def self.name`: functions of the type itself, with no value to work
+    /// on. Also in `fns`, as `Type.name`, which is how they are called.
+    statics: HashMap<String, Sig>,
 }
 
 #[derive(Clone)]
@@ -498,6 +501,7 @@ struct EnumInfo {
     generics: Vec<TypeParam>,
     variants: Vec<(String, Vec<(String, Type)>)>,
     methods: HashMap<String, Sig>,
+    statics: HashMap<String, Sig>,
 }
 
 #[derive(Clone)]
@@ -812,7 +816,7 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, deps: &[Dep], t
         foreign_types: HashMap::new(),
     };
     // The built-in Error type: a struct with one field, defined in the prelude.
-    g.structs.insert("Error".into(), StructInfo { generics: Vec::new(), fields: vec![("message".into(), Type::Str)], methods: HashMap::new() });
+    g.structs.insert("Error".into(), StructInfo { generics: Vec::new(), fields: vec![("message".into(), Type::Str)], methods: HashMap::new(), statics: HashMap::new() });
     g.is_entry = rust_mod.is_none();
     // `import lib.one` and a `def one` in the same file: one name, two
     // things. The import used to win without a word, so the file's own
@@ -1145,6 +1149,31 @@ impl Gen {
         self.type_params = saved;
     }
 
+    /// Known, and every type parameter in it is one in scope here. A call
+    /// whose `T` nothing fixed leaves the callee's own `T` in its result,
+    /// which names no type at all where the value lands.
+    fn known_here(&self, t: &Type) -> bool {
+        fn params(t: &Type, out: &mut Vec<String>) {
+            match t {
+                Type::Var(n) => out.push(n.clone()),
+                Type::App(_, a) | Type::Tuple(a) => a.iter().for_each(|x| params(x, out)),
+                Type::List(i) | Type::Option(i) | Type::Set(i) | Type::Task(i) | Type::Future(i) | Type::Iter(i, _) | Type::Shared(i, _) => params(i, out),
+                Type::Result(a, b) | Type::Map(a, b) => {
+                    params(a, out);
+                    params(b, out);
+                }
+                Type::Fn(ps, r) => {
+                    ps.iter().for_each(|x| params(x, out));
+                    params(r, out);
+                }
+                _ => {}
+            }
+        }
+        let mut vs = Vec::new();
+        params(t, &mut vs);
+        type_is_known(t) && vs.iter().all(|v| self.type_param(v).is_some())
+    }
+
     fn type_param(&self, name: &str) -> Option<&TypeParam> {
         self.type_params.iter().find(|p| p.name == name)
     }
@@ -1466,7 +1495,26 @@ impl Gen {
                 for (p, t) in params.iter().zip(ins) {
                     self.declare(p, false, !t.is_copy(), t.clone(), e.line);
                 }
-                let r = self.tail_type(body).materialized();
+                let mut r = self.tail_type(body).materialized();
+                // `if bad: Error(...) else: n` — the error says nothing about
+                // the value's type, so read it from a branch that gives one
+                if r == Type::Named("Error".into()) {
+                    if let Some(Stmt::Expr(tail)) = body.stmts.last() {
+                        // the names the block binds before its tail are in scope there
+                        self.push_scope();
+                        for st in &body.stmts[..body.stmts.len() - 1] {
+                            if let Stmt::Bind { name, ty, value, line, .. } | Stmt::Var { name, ty, value, line, .. } = st {
+                                let t = ty.as_ref().map(|t| self.ct(t)).unwrap_or_else(|| self.ty_of(value).materialized());
+                                self.declare(name, false, false, t, *line);
+                            }
+                        }
+                        let found = self.value_branch_type(tail);
+                        self.pop_scope();
+                        if let Some(t) = found {
+                            r = t;
+                        }
+                    }
+                }
                 self.pop_scope();
                 Type::Fn(ins.to_vec(), Box::new(r))
             }
@@ -1485,6 +1533,37 @@ impl Gen {
             // a function of an imported module used as behaviour
             ExprKind::Method { .. } if self.module_fn_ref(e).is_some() => self.ty_of(e),
             _ => Type::Unknown,
+        }
+    }
+
+    /// The first branch of a tail `if`/`match` that gives something other
+    /// than an `Error`, with the names bound before it in scope.
+    fn value_branch_type(&mut self, tail: &Expr) -> Option<Type> {
+        let err = Type::Named("Error".into());
+        match &tail.kind {
+            ExprKind::If { branches, else_block } => {
+                for b in branches.iter().map(|(_, b)| b).chain(else_block.iter()) {
+                    let t = self.tail_type(b).materialized();
+                    if t != err && type_is_known(&t) {
+                        return Some(t);
+                    }
+                }
+                None
+            }
+            ExprKind::Match { scrutinee, arms } => {
+                let st = self.ty_of(scrutinee);
+                for arm in arms {
+                    self.push_scope();
+                    let _ = self.declare_pattern_types(&arm.pat, &st);
+                    let t = self.tail_type(&arm.body).materialized();
+                    self.pop_scope();
+                    if t != err && type_is_known(&t) {
+                        return Some(t);
+                    }
+                }
+                None
+            }
+            _ => None,
         }
     }
 
@@ -1595,6 +1674,7 @@ impl Gen {
             generics: Vec::new(),
             fields: info.fields.iter().map(|(n, t)| (n.clone(), Self::subst(t, &m))).collect(),
             methods: info.methods.clone(),
+            statics: info.statics.clone(),
         })
     }
 
@@ -1652,6 +1732,10 @@ impl Gen {
     }
 
     fn field_type(&self, name: &str) -> Option<Type> {
+        // a `def self.` function has no value whose fields it could read
+        if self.current_self == SelfKind::Static {
+            return None;
+        }
         let s = self.current_type.as_ref()?;
         let info = self.structs.get(s)?;
         info.fields.iter().find(|(n, _)| n == name).map(|(_, t)| t.clone())
@@ -1660,6 +1744,9 @@ impl Gen {
     /// A zero-argument method of the current type, callable bare inside
     /// another method (`total` for `def total`).
     fn bare_method(&self, name: &str) -> Option<Sig> {
+        if self.current_self == SelfKind::Static {
+            return None;
+        }
         let t = self.current_type.as_ref()?;
         let ms = self.methods_of(t)?;
         let m = ms.get(name)?;
@@ -2163,6 +2250,10 @@ impl Gen {
             if m.self_kind == SelfKind::Mutate {
                 return Err(LumeError::new(m.line, m.col, "methods in an `extend` block cannot take `var self`"));
             }
+            if m.self_kind == SelfKind::Static {
+                return Err(LumeError::new(m.line, m.col, format!("`def self.{}` belongs in the type's own definition, not in an `extend`", m.name))
+                    .with_help("an `extend` gives a type the methods an interface asks of its values"));
+            }
             if !self.interfaces[&iface].methods.contains_key(&m.name) {
                 return Err(LumeError::new(m.line, m.col, format!("`{}` is not a method of `{}`", m.name, type_name(&x.iface)))
                     .with_help(format!("`{}` has: {}", type_name(&x.iface), self.interfaces[&iface].methods.keys().cloned().collect::<Vec<_>>().join(", "))));
@@ -2612,7 +2703,9 @@ impl Gen {
                 generics: info.generics.clone(),
                 fields: info.fields.iter().map(|(f, t)| (f.clone(), qualify_type(t, id, ex))).collect(),
                 methods: info.methods.iter().map(|(m, sg)| (m.clone(), qualify_sig(sg, id, ex))).collect(),
+                statics: info.statics.iter().map(|(m, sg)| (m.clone(), qualify_sig(sg, id, ex))).collect(),
             };
+            self.register_statics(&key, &format!("{}::{}", ex.rust_mod, n), &qualified.generics, &qualified.statics);
             self.structs.insert(key.clone(), qualified);
             self.paths.insert(key, format!("{}::{}", ex.rust_mod, n));
         }
@@ -2622,7 +2715,9 @@ impl Gen {
                 generics: info.generics.clone(),
                 variants: info.variants.iter().map(|(v, fs)| (v.clone(), fs.iter().map(|(f, t)| (f.clone(), qualify_type(t, id, ex))).collect())).collect(),
                 methods: info.methods.iter().map(|(m, sg)| (m.clone(), qualify_sig(sg, id, ex))).collect(),
+                statics: info.statics.iter().map(|(m, sg)| (m.clone(), qualify_sig(sg, id, ex))).collect(),
             };
+            self.register_statics(&key, &format!("{}::{}", ex.rust_mod, n), &qualified.generics, &qualified.statics);
             self.enums.insert(key.clone(), qualified);
             self.paths.insert(key, format!("{}::{}", ex.rust_mod, n));
         }
@@ -2708,9 +2803,19 @@ impl Gen {
         // ids they already have: a value handed across two boundaries is
         // still a value you can use.
         for (k, v) in &ex.carried_structs {
+            if !self.structs.contains_key(k) {
+                if let Some(path) = ex.carried_paths.get(k) {
+                    self.register_statics(k, path, &v.generics, &v.statics);
+                }
+            }
             self.structs.entry(k.clone()).or_insert_with(|| v.clone());
         }
         for (k, v) in &ex.carried_enums {
+            if !self.enums.contains_key(k) {
+                if let Some(path) = ex.carried_paths.get(k) {
+                    self.register_statics(k, path, &v.generics, &v.statics);
+                }
+            }
             self.enums.entry(k.clone()).or_insert_with(|| v.clone());
         }
         for (k, v) in &ex.carried_ifaces {
@@ -2937,10 +3042,12 @@ impl Gen {
                         }
                     }
                     let saved = self.push_generics(&s.generics);
-                    let methods = self.collect_methods(&s.methods, &s.name, &fnames)?;
+                    let (methods, statics) = self.collect_methods(&s.methods, &s.name, &fnames)?;
                     let fields = s.fields.iter().map(|p| (p.name.clone(), self.ct(&p.ty))).collect();
                     self.pop_generics(saved);
-                    self.structs.insert(s.name.clone(), StructInfo { generics: self.norm_generics(&s.generics), fields, methods });
+                    let generics = self.norm_generics(&s.generics);
+                    self.register_statics(&s.name, &s.name, &generics, &statics);
+                    self.structs.insert(s.name.clone(), StructInfo { generics, fields, methods, statics });
                 }
                 Item::Enum(e) => {
                     reserved_type_name(&e.name, e.line, e.col)?;
@@ -2948,14 +3055,21 @@ impl Gen {
                         return Err(LumeError::new(e.line, e.col, format!("`{}` is defined twice", e.name)));
                     }
                     let saved = self.push_generics(&e.generics);
-                    let methods = self.collect_methods(&e.methods, &e.name, &HashSet::new())?;
+                    let (methods, statics) = self.collect_methods(&e.methods, &e.name, &HashSet::new())?;
+                    if let Some(v) = e.variants.iter().find(|v| statics.contains_key(&v.name)) {
+                        let m = e.methods.iter().find(|m| m.name == v.name).unwrap();
+                        return Err(LumeError::new(m.line, m.col, format!("`{}` is both a variant and a function of `{}`", v.name, e.name))
+                            .with_help(format!("`{}.{}` would mean two things; rename one of them", e.name, v.name)));
+                    }
                     let variants = e
                         .variants
                         .iter()
                         .map(|v| (v.name.clone(), v.fields.iter().map(|p| (p.name.clone(), self.ct(&p.ty))).collect()))
                         .collect();
                     self.pop_generics(saved);
-                    self.enums.insert(e.name.clone(), EnumInfo { generics: self.norm_generics(&e.generics), variants, methods });
+                    let generics = self.norm_generics(&e.generics);
+                    self.register_statics(&e.name, &e.name, &generics, &statics);
+                    self.enums.insert(e.name.clone(), EnumInfo { generics, variants, methods, statics });
                     self.local_types.insert(e.name.clone());
                 }
                 Item::Interface(i) => {
@@ -2966,6 +3080,10 @@ impl Gen {
                     let saved = self.push_generics(&i.generics);
                     let mut methods = HashMap::new();
                     for m in i.required.iter().chain(&i.defaults) {
+                        if m.self_kind == SelfKind::Static {
+                            return Err(LumeError::new(m.line, m.col, format!("an interface says what a value can do, so `def self.{}` does not belong in one", m.name))
+                                .with_help("put the function in the struct or enum that has it"));
+                        }
                         if m.self_kind == SelfKind::Mutate {
                             return Err(LumeError::new(m.line, m.col, format!("interface method `{}` cannot take `var self`", m.name))
                                 .with_help("interfaces describe reading behaviour; mutation stays on the concrete type"));
@@ -3210,7 +3328,11 @@ impl Gen {
     fn sig_ret(&self, name: &str, owner: Option<&String>) -> Type {
         match owner {
             None => self.fns[name].ret.clone(),
-            Some(o) => self.methods_of(o).and_then(|m| m.get(name).map(|s| s.ret.clone())).unwrap_or(Type::Unknown),
+            Some(o) => self
+                .methods_of(o)
+                .and_then(|m| m.get(name).map(|s| s.ret.clone()))
+                .or_else(|| self.fns.get(&format!("{}.{}", o, name)).map(|s| s.ret.clone()))
+                .unwrap_or(Type::Unknown),
         }
     }
 
@@ -3218,6 +3340,17 @@ impl Gen {
         match owner {
             None => self.fns.get_mut(name).unwrap().ret = t,
             Some(o) => {
+                // a `def self.` function: its entry in `fns` and in the type
+                if let Some(s) = self.fns.get_mut(&format!("{}.{}", o, name)) {
+                    s.ret = t.clone();
+                    if let Some(s) = self.structs.get_mut(o).and_then(|s| s.statics.get_mut(name)) {
+                        s.ret = t.clone();
+                    }
+                    if let Some(s) = self.enums.get_mut(o).and_then(|e| e.statics.get_mut(name)) {
+                        s.ret = t;
+                    }
+                    return;
+                }
                 if let Some(s) = self.structs.get_mut(o).and_then(|s| s.methods.get_mut(name)) {
                     s.ret = t;
                 } else if let Some(s) = self.enums.get_mut(o).and_then(|e| e.methods.get_mut(name)) {
@@ -3656,6 +3789,13 @@ impl Gen {
         if !args.is_empty() {
             return None;
         }
+        // a function of a type, `Temp.from_f`, is handed over the same way
+        if let Some(Expr { kind: ExprKind::Call { name: key, .. }, .. }) = self.static_ref(e) {
+            return match self.fns.get(&key) {
+                Some(sig) if !sig.params.is_empty() => Some(key),
+                _ => None,
+            };
+        }
         let alias = match &recv.kind {
             ExprKind::Ident(a) => a,
             _ => return None,
@@ -3750,6 +3890,14 @@ impl Gen {
     // ----- type inference ---------------------------------------------------
 
     fn ty_of(&mut self, e: &Expr) -> Type {
+        // `Temp.from_f` named where behaviour is wanted is behaviour
+        if let Some(key) = self.module_fn_ref(e) {
+            let s = self.fns[&key].clone();
+            return Type::Fn(s.params.iter().map(|(_, t)| t.clone()).collect(), Box::new(s.ret));
+        }
+        if let Some(ne) = self.static_rewrite(e) {
+            return self.ty_of(&ne);
+        }
         if matches!(&e.kind, ExprKind::Ident(_) | ExprKind::Call { .. }) {
             if let Some(ne) = self.split_ident_try(e) {
                 return self.ty_of(&ne);
@@ -5309,6 +5457,7 @@ impl Gen {
     fn fn_def(&mut self, f: &FnDef, owner: Option<&String>) -> Result<()> {
         let sig = match owner {
             None => self.fns[&f.name].clone(),
+            Some(s) if f.self_kind == SelfKind::Static => self.fns[&format!("{}.{}", s, f.name)].clone(),
             Some(s) => self.methods_of(s).unwrap()[&f.name].clone(),
         };
         let is_main = f.name == "main" && owner.is_none() && self.is_entry;
@@ -5351,7 +5500,12 @@ impl Gen {
             parts.push(match f.self_kind {
                 SelfKind::Read => "&self".into(),
                 SelfKind::Mutate => "&mut self".into(),
+                // Rust's associated function: no `self` at all
+                SelfKind::Static => String::new(),
             });
+            if parts.last().map(|p| p.is_empty()).unwrap_or(false) {
+                parts.pop();
+            }
         }
         let mut names = HashSet::new();
         let saved_lent = std::mem::take(&mut self.lent_names);
@@ -5643,7 +5797,7 @@ impl Gen {
                         .with_help(format!("another handle to the same value is just `{} = {}`", name, describe_value(value))));
                 }
                 let inner = ty.as_ref().map(|t| self.ct(t)).unwrap_or_else(|| vt0.clone());
-                if ty.is_none() && !type_is_known(&inner) {
+                if ty.is_none() && !self.known_here(&inner) {
                     // a private or missing module item explains the unknown type better
                     self.module_ref(value)?;
                     // a value that is itself wrong says why better than its missing type does
@@ -5690,7 +5844,7 @@ impl Gen {
                 let inferred = self.ty_of(value).materialized();
                 self.no_future(&inferred, value)?;
                 let vt = ty.as_ref().map(|t| self.ct(t)).unwrap_or_else(|| inferred.clone());
-                if ty.is_none() && !type_is_known(&inferred) {
+                if ty.is_none() && !self.known_here(&inferred) {
                     // a private or missing module item explains the unknown type better
                     self.module_ref(value)?;
                     // a value that is itself wrong says why better than its missing type does
@@ -5788,7 +5942,7 @@ impl Gen {
                 }
                 let inferred = self.ty_of(value).materialized();
                 let vt = ty.as_ref().map(|t| self.ct(t)).unwrap_or_else(|| inferred.clone());
-                if ty.is_none() && self.lookup(name).is_none() && self.field_type(name).is_none() && !type_is_known(&inferred) {
+                if ty.is_none() && self.lookup(name).is_none() && self.field_type(name).is_none() && !self.known_here(&inferred) {
                     // a private or missing module item explains the unknown type better
                     self.module_ref(value)?;
                     // a value that is itself wrong says why better than its missing type does
@@ -6450,6 +6604,17 @@ impl Gen {
     // ----- expressions ------------------------------------------------------
 
     fn unknown_name(&self, name: &str, line: usize, col: usize) -> LumeError {
+        // a field or method of the type, reached where there is no `self`
+        if self.current_self == SelfKind::Static {
+            if let Some(t) = &self.current_type {
+                if self.structs.get(t).map(|s| s.fields.iter().any(|(f, _)| f == name)).unwrap_or(false) {
+                    return self.no_self_here(&format!("the field `{}`", name), line, col);
+                }
+                if self.methods_of(t).map(|m| m.contains_key(name)).unwrap_or(false) {
+                    return self.no_self_here(&format!("the method `{}`", name), line, col);
+                }
+            }
+        }
         let e = LumeError::new(line, col, format!("unknown name `{}`", name));
         match name {
             "continue" => return e.with_help("Lume spells it `next`: it skips to the next turn of the loop"),
@@ -6466,6 +6631,10 @@ impl Gen {
     }
 
     fn no_such_member(&self, tname: &str, name: &str, line: usize, col: usize) -> LumeError {
+        if self.fns.contains_key(&format!("{}.{}", tname, name)) {
+            return LumeError::new(line, col, format!("`{}` is a function of `{}` itself, not of one value", name, tname))
+                .with_help(format!("call it on the type: `{}.{}(...)`", tname.rsplit('.').next().unwrap_or(tname), name));
+        }
         let e = LumeError::new(line, col, format!("`{}` has no field or method named `{}`", tname, name));
         let fields: Vec<String> = self.structs.get(tname).map(|s| s.fields.iter().map(|(n, _)| n.clone()).collect()).unwrap_or_default();
         let methods: Vec<String> = self.methods_of(tname).map(|m| m.keys().cloned().collect()).unwrap_or_default();
@@ -8212,6 +8381,9 @@ impl Gen {
     }
 
     fn expr(&mut self, e: &Expr) -> Result<String> {
+        if let Some(ne) = self.static_rewrite(e) {
+            return self.expr(&ne);
+        }
         Ok(match &e.kind {
             ExprKind::Int(v) => format!("{}i64", v),
             ExprKind::Float(v) => {
@@ -8279,6 +8451,9 @@ impl Gen {
             ExprKind::SelfRef => {
                 if self.current_type.is_none() {
                     return Err(LumeError::new(e.line, e.col, "`self` is only meaningful inside a method"));
+                }
+                if self.current_self == SelfKind::Static {
+                    return Err(self.no_self_here("`self`", e.line, e.col));
                 }
                 // `extend Int with ...`: a method takes `self` by reference,
                 // so a copied target is read through it
@@ -8718,6 +8893,9 @@ impl Gen {
                 // free function of the same name
                 if let Some(tn) = self.current_type.clone() {
                     if self.lookup(name).is_none() && self.methods_of(&tn).map(|m| m.contains_key(name)).unwrap_or(false) {
+                        if self.current_self == SelfKind::Static {
+                            return Err(self.no_self_here(&format!("the method `{}`", name), e.line, e.col));
+                        }
                         let call = Expr::new(
                             ExprKind::Method { recv: Box::new(Expr::new(ExprKind::SelfRef, e.line, e.col)), name: name.clone(), args: args.clone() },
                             e.line,
@@ -8925,9 +9103,18 @@ impl Gen {
                                 _ => "Time has now (seconds), now_ms and sleep(ms)",
                             }));
                     }
-                    if self.lookup(tn).is_none() && self.structs.contains_key(tn) {
-                        return Err(LumeError::new(e.line, e.col, format!("`{}.{}` — static methods on a type are not supported yet", tn, name))
-                            .with_help(format!("construct a value with `{}(...)` and call the method on it", tn)));
+                    if self.lookup(tn).is_none() && self.structs.contains_key(&self.canon(tn)) {
+                        let key = self.canon(tn);
+                        if self.methods_of(&key).map(|m| m.contains_key(name)).unwrap_or(false) {
+                            return Err(LumeError::new(e.line, e.col, format!("`{}` works on one `{}`, so it is called on a value, not on the type", name, tn))
+                                .with_help(format!("make a value first, as in `{}(...).{}`, or make it a function of the type with `def self.{}`", tn, name, name)));
+                        }
+                        let statics: Vec<String> = self.structs[&key].statics.keys().cloned().collect();
+                        let err = LumeError::new(e.line, e.col, format!("`{}` has no function `{}`", tn, name));
+                        return Err(match self.suggest_from(name, statics.iter().cloned()) {
+                            Some(sug) => err.with_help(format!("did you mean `{}.{}`?", tn, sug)),
+                            None => err.with_help(format!("a function of the type is written inside it as `def self.{}(...)`; a value is made with `{}(...)`", name, tn)),
+                        });
                     }
                 }
                 if let Some(last) = args.last() {
@@ -9525,9 +9712,26 @@ impl Gen {
 
 
 impl Gen {
-    fn collect_methods(&self, methods: &[FnDef], owner: &str, fields: &HashSet<String>) -> Result<HashMap<String, Sig>> {
+    fn collect_methods(&self, methods: &[FnDef], owner: &str, fields: &HashSet<String>) -> Result<(HashMap<String, Sig>, HashMap<String, Sig>)> {
         let mut out = HashMap::new();
+        let mut statics = HashMap::new();
         for m in methods {
+            if m.self_kind == SelfKind::Static {
+                if fields.contains(&m.name) {
+                    return Err(LumeError::new(m.line, m.col, format!("`{}` is both a field and a function of `{}`", m.name, owner)));
+                }
+                if op_method_name(&m.name).is_some() {
+                    return Err(LumeError::new(m.line, m.col, format!("`def self.{}` cannot be an operator: an operator works on two values", m.name))
+                        .with_help(format!("write `def {}(other: {})` for an operator", m.name, owner)));
+                }
+                if out.contains_key(&m.name) || statics.insert(m.name.clone(), self.sig_of(m)).is_some() {
+                    return Err(LumeError::new(m.line, m.col, format!("method `{}` is defined twice in `{}`", m.name, owner)));
+                }
+                continue;
+            }
+            if statics.contains_key(&m.name) {
+                return Err(LumeError::new(m.line, m.col, format!("method `{}` is defined twice in `{}`", m.name, owner)));
+            }
             if fields.contains(&m.name) {
                 return Err(LumeError::new(m.line, m.col, format!("`{}` is both a field and a method of `{}`", m.name, owner)));
             }
@@ -9547,7 +9751,81 @@ impl Gen {
                 return Err(LumeError::new(m.line, m.col, format!("method `{}` is defined twice in `{}`", m.name, owner)));
             }
         }
-        Ok(out)
+        Ok((out, statics))
+    }
+
+    /// A type's `def self.` functions as callable functions: `Point.origin`
+    /// under the type's key, emitted as Rust's `Point::origin`. The type's
+    /// own parameters come first, so `Stack.empty` works out its `T` from
+    /// where the value goes, as a generic function does.
+    fn register_statics(&mut self, tkey: &str, rust_path: &str, type_generics: &[TypeParam], statics: &HashMap<String, Sig>) {
+        for (m, sg) in statics {
+            let key = format!("{}.{}", tkey, m);
+            let mut generics = type_generics.to_vec();
+            generics.extend(sg.generics.iter().cloned());
+            self.fns.insert(key.clone(), Sig { generics, ..sg.clone() });
+            self.paths.insert(key, format!("{}::{}", rust_path, rust_name(m)));
+        }
+    }
+
+    /// `Point.origin(...)`, `model.User.parse(line)`: a function of a type,
+    /// as the key it is filed under in `fns`.
+    fn static_ref(&self, e: &Expr) -> Option<Expr> {
+        let (recv, name, args) = match &e.kind {
+            ExprKind::Method { recv, name, args } => (recv, name, args),
+            _ => return None,
+        };
+        let tkey = match &recv.kind {
+            ExprKind::Ident(tn) if self.lookup(tn).is_none() => self.canon(tn),
+            ExprKind::Method { recv: r2, name: tname, args: a2 } if a2.is_empty() => match &r2.kind {
+                ExprKind::Ident(alias) if self.lookup(alias).is_none() && self.module_aliases.contains_key(alias) => self.canon(&format!("{}.{}", alias, tname)),
+                _ => return None,
+            },
+            _ => return None,
+        };
+        if !(self.structs.contains_key(&tkey) || self.enums.contains_key(&tkey)) {
+            return None;
+        }
+        let key = format!("{}.{}", tkey, name);
+        if !self.fns.contains_key(&key) {
+            return None;
+        }
+        Some(Expr::new(ExprKind::Call { name: key, args: args.clone() }, e.line, e.col))
+    }
+
+    /// A call of a type's function, in any of its spellings, as a plain call
+    /// of the key it is filed under.
+    fn static_rewrite(&self, e: &Expr) -> Option<Expr> {
+        match &e.kind {
+            ExprKind::Method { .. } => self.static_ref(e),
+            ExprKind::Call { name, args } if !name.contains('.') => {
+                let key = self.static_sibling(name)?;
+                Some(Expr::new(ExprKind::Call { name: key, args: args.clone() }, e.line, e.col))
+            }
+            ExprKind::Ident(name) if self.field_type(name).is_none() && self.bare_method(name).is_none() => {
+                let key = self.static_sibling(name)?;
+                Some(Expr::new(ExprKind::Call { name: key, args: Vec::new() }, e.line, e.col))
+            }
+            _ => None,
+        }
+    }
+
+    /// Inside a type, a bare `origin(...)` is its own `def self.origin`.
+    fn static_sibling(&self, name: &str) -> Option<String> {
+        let t = self.current_type.as_ref()?;
+        if self.lookup(name).is_some() {
+            return None;
+        }
+        let key = format!("{}.{}", t, name);
+        if self.fns.contains_key(&key) && (self.structs.contains_key(t) || self.enums.contains_key(t)) { Some(key) } else { None }
+    }
+
+    /// The error for a field, method or `self` reached from a `def self.`
+    /// function, which has no value to reach them through.
+    fn no_self_here(&self, what: &str, line: usize, col: usize) -> LumeError {
+        let t = self.current_type.clone().unwrap_or_default();
+        LumeError::new(line, col, format!("{} belongs to one `{}`, and `{}` is `def self.{}`, so there is no `self` here", what, t, self.current_fn, self.current_fn))
+            .with_help(format!("take the value as a parameter, or make it a method of one value: `def {}(...)`", self.current_fn))
     }
 }
 

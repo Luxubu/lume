@@ -1,0 +1,6 @@
+error: `origin` is a function of `Point` itself, not of one value
+  --> examples/errors/x.lume:9:9
+  |
+9 |   puts p.origin
+  |         ^
+  help: call it on the type: `Point.origin(...)`

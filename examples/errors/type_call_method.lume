@@ -1,0 +1,8 @@
+struct Point:
+  x: Int
+  y: Int
+
+  def self.norm -> Int = x + y
+
+def main:
+  puts Point.norm

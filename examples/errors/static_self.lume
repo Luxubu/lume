@@ -1,0 +1,8 @@
+struct Point:
+  x: Int
+  y: Int
+
+  def self.orgin -> Point = Point(x: 0, y: 0)
+
+def main:
+  puts Point.origin

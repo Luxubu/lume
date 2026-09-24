@@ -1,0 +1,6 @@
+error: cannot tell what `T` is in this call to `empty`
+  --> examples/errors/static_generic_unresolved.lume:7:7
+  |
+7 |   s = empty()
+  |       ^
+  help: say it in the binding's type, as in `xs: [Int] = ...`, or pass a value that fixes it

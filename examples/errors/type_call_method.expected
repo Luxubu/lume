@@ -1,0 +1,6 @@
+error: the field `x` belongs to one `Point`, and `norm` is `def self.norm`, so there is no `self` here
+  --> examples/errors/type_call_method.lume:5:26
+  |
+5 |   def self.norm -> Int = x + y
+  |                          ^
+  help: take the value as a parameter, or make it a method of one value: `def norm(...)`

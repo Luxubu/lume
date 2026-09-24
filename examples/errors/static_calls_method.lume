@@ -1,0 +1,8 @@
+struct Stack[T]:
+  items: [T]
+
+  def self.empty -> Stack[T] = Stack(items: [])
+
+def main:
+  s = Stack.empty
+  puts s

@@ -1,0 +1,6 @@
+error: `Red` is both a variant and a function of `Light`
+  --> examples/errors/static_typo.lume:5:3
+  |
+5 |   def self.Red -> Light = Green
+  |   ^
+  help: `Light.Red` would mean two things; rename one of them

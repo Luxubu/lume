@@ -1,0 +1,6 @@
+error: `def self.name` defines a function of a type, so it belongs inside a struct or enum
+  --> examples/errors/static_in_interface.lume:1:5
+  |
+1 | def self.make -> Int = 1
+  |     ^
+  help: a function of its own is written `def name(...)` at the top level

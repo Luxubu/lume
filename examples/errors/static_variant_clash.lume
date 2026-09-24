@@ -1,0 +1,5 @@
+interface Made:
+  def self.make -> Int
+
+def main:
+  puts 1

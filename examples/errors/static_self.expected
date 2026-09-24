@@ -1,0 +1,6 @@
+error: `Point` has no function `origin`
+  --> examples/errors/static_self.lume:8:13
+  |
+8 |   puts Point.origin
+  |             ^
+  help: did you mean `Point.orgin`?

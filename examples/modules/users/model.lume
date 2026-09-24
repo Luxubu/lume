@@ -10,6 +10,9 @@ pub struct User:
   email: Str
   role: Role
 
+  # a function of the type: `model.User.guest(...)` from another file
+  def self.guest(name: Str) -> User = User(name: name, email: "#{name.downcase}@guest", role: Guest(1))
+
   def admin? = match role:
     Admin -> true
     _     -> false

@@ -1,0 +1,9 @@
+struct Point:
+  x: Int
+  y: Int
+
+  def dist -> Int = x + y
+  def self.far -> Int = dist
+
+def main:
+  puts Point.far

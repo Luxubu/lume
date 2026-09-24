@@ -1,0 +1,65 @@
+# Functions of a type: `def self.name` inside a struct or enum has no value
+# to work on, and is called on the type — `Temp.from_f(212.0)`. It is Rust's
+# associated function (`impl Temp { fn from_f(..) }`, called `Temp::from_f`).
+
+struct Temp:
+  celsius: Float
+
+  # a constructor with a name that says what it takes
+  def self.from_f(f: Float) -> Temp = Temp(celsius: (f - 32.0) * 5.0 / 9.0)
+
+  # inside the type, another of its functions is called by bare name
+  def self.freezing = from_f(32.0)
+
+  def self.parse(s: Str) -> Temp or Error:
+    if s.ends_with?("F"):
+      return from_f(s.replace("F", "").to_float?)
+    Temp(celsius: s.replace("C", "").to_float?)
+
+  def show -> Str = "#{celsius.decimals(1)}C"
+
+struct Stack[T]:
+  items: [T]
+
+  # a generic type's function works out its `T` like a generic function
+  def self.empty -> Stack[T] = Stack(items: [])
+  def self.of(x: T) -> Stack[T] = Stack(items: [x])
+
+  def push(var self, x: T):
+    items.push(x)
+
+  def size -> Int = items.len
+
+enum Light:
+  Red
+  Amber
+  Green
+
+  def self.all -> [Light] = [Red, Amber, Green]
+
+  def self.parse(s: Str) -> Light? = match s:
+    "red"   -> Some(Red)
+    "amber" -> Some(Amber)
+    "green" -> Some(Green)
+    _       -> None
+
+def main -> () or Error:
+  puts Temp.from_f(212.0).show
+  puts Temp.freezing.show
+  puts Temp.from_f(f: 50.0).show
+  puts Temp.parse("98.6F")?.show
+  match Temp.parse("hot"):
+    Ok(t)    -> puts t.show
+    Error(e) -> puts e.message
+
+  var s: Stack[Int] = Stack.empty
+  s.push(4)
+  puts s.size
+  puts Stack.of("a").size
+
+  puts Light.all
+  puts Light.parse("amber")
+  puts Light.parse("blue")
+
+  # handed over as a block, like a function's name
+  puts [32.0, 212.0].map(Temp.from_f).map(_.show).join(" ")

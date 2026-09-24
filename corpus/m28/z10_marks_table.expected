@@ -1,6 +1,16 @@
-error: `num` takes `n: Int`, but this is a `T`
-  --> corpus/m28/z10_marks_table.lume:106:91
-    |
-106 |     puts "#{n.pad_right(7)}#{num(ages.at(i), 3)}  #{grades.at(i).pad_right(7)}#{num(scores.at(i), 5)}"
-    |                                                                                           ^
-exit: 1
+== marks ==
+name   age  grade  score
+ana     31  A         88
+bo      16  B         72
+cy      45  A         95
+di      12  C         61
+
+ages sum 104 avg 26
+scores sum 316 avg 79 max 95 min 61
+grades A=2 B=1 C=1
+adults: 2
+longest name: ana
+via read_two: 104 / 316
+missing column: true
+bad grade caught: bad grade `Z`
+exit: 0

@@ -83,6 +83,74 @@ def main:
 #! field defaults are not supported yet
 ```
 
+## Functions of a type: `def self.name`
+
+**A `def self.name` inside a struct or enum is a function of the type itself**
+— it has no value to work on, and is called on the type. It is the place for a
+constructor that takes something other than the fields, one that can fail, or
+a type's fixed values. In Rust it is an associated function:
+`impl Temp { pub fn from_f(..) }`, called as `Temp::from_f`.
+
+```lume
+struct Temp:
+  celsius: Float
+
+  def self.from_f(f: Float) -> Temp = Temp(celsius: (f - 32.0) * 5.0 / 9.0)
+  def self.freezing = from_f(32.0)
+
+  def show -> Str = "#{celsius.decimals(1)}C"
+
+enum Light:
+  Red
+  Green
+
+  def self.all -> [Light] = [Red, Green]
+
+def main:
+  puts Temp.from_f(212.0).show     #=> 100.0C
+  puts Temp.freezing.show          #=> 0.0C
+  puts Light.all                   #=> [Red, Green]
+  puts [50.0].map(Temp.from_f).map(_.show).join(" ")    #=> 10.0C
+```
+
+Inside the type, another of its functions is called by bare name, as
+`freezing` calls `from_f`. From another file it is `model.User.guest(...)`, or
+`User.guest(...)` after `import model.User`. It takes keyword arguments, and a
+generic type's function works out its `T` as a generic function does, from its
+arguments or from where the value goes: `s: Stack[Int] = Stack.empty`.
+
+There is no `self` in one, so it cannot read a field or call a method of one
+value:
+
+```lume-bad
+struct P:
+  x: Int
+
+  def self.twice -> Int = x * 2
+
+def main:
+  puts P.twice
+#! the field `x` belongs to one `P`, and `twice` is `def self.twice`
+```
+
+and each kind of function is called its own way — a method on a value, a
+function on the type:
+
+```lume-bad
+struct P:
+  x: Int
+
+  def self.origin -> P = P(x: 0)
+
+def main:
+  puts P(x: 1).origin
+#! `origin` is a function of `P` itself, not of one value
+```
+
+A function may not share its name with a field, a method or, in an enum, a
+variant. An interface cannot ask for one, and an `extend` cannot add one: both
+are about what a *value* can do.
+
 ## Changing a field
 
 `p.x = v` works when the binding is a `var`:

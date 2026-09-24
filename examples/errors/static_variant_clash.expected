@@ -1,0 +1,6 @@
+error: an interface says what a value can do, so `def self.make` does not belong in one
+  --> examples/errors/static_variant_clash.lume:2:7
+  |
+2 |   def self.make -> Int
+  |       ^
+  help: put the function in the struct or enum that has it

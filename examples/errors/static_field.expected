@@ -1,0 +1,6 @@
+error: `self` belongs to one `Point`, and `me` is `def self.me`, so there is no `self` here
+  --> examples/errors/static_field.lume:5:26
+  |
+5 |   def self.me -> Point = self
+  |                          ^
+  help: take the value as a parameter, or make it a method of one value: `def me(...)`

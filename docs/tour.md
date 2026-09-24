@@ -125,6 +125,9 @@ def main:
 
 Inside a method, a field is used by its bare name. A method that changes a
 field says so: `def move(var self, dx: Int)`. Printing and `==` come for free.
+A function of the type itself, with no value to work on, is `def self.name`
+and is called on the type: `Point.origin`. See
+[Structs and enums](reference/structs-and-enums.md#functions-of-a-type-def-selfname).
 
 ## Enums and `match`
 
