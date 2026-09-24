@@ -1,0 +1,6 @@
+error: `extend [(T, Str)] with Tagged` overlaps `extend [(Int, T)] with Tagged` from examples/errors/extend_tuple_overlap.lume:4
+  --> examples/errors/extend_tuple_overlap.lume:7:1
+  |
+7 | extend [(T, Str)] with Tagged:
+  | ^
+  help: both would apply to `[(Int, Str)]`, and a type has one `Tagged`: as in Rust, neither wins for being more specific. Remove one, or narrow them so no type fits both

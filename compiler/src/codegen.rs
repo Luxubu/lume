@@ -513,6 +513,19 @@ struct IfaceInfo {
     local: bool,
 }
 
+/// One `extend`, as the coherence check sees it: the interface, the
+/// target with its own parameters as `Var`s, and where it was written.
+#[derive(Clone)]
+struct ExtClaim {
+    iface: String,
+    target: Type,
+    file: String,
+    line: usize,
+    /// Written with bounds (`extend [T: Ordered]`): the message then says
+    /// why bounds do not keep two of them apart.
+    bounded: bool,
+}
+
 /// Why a type does or does not satisfy an interface.
 #[derive(Clone)]
 enum Conformance {
@@ -568,6 +581,9 @@ pub struct Exports {
     /// Where each `extend` was written, for the message when two of them
     /// claim the same type and interface.
     ext_where: HashMap<(String, String), (String, usize)>,
+    /// Every `extend` this module can see, its own and the ones that came
+    /// with its imports: what the coherence check compares.
+    ext_claims: Vec<ExtClaim>,
     /// The interfaces those extends name, already qualified, with their
     /// Rust paths. An `extend` is not a name, so it keeps travelling past
     /// the file that imported it — but it can only be honoured where the
@@ -641,6 +657,9 @@ pub struct Gen {
     /// Which file and line each `extend` was written on, so two that claim
     /// the same type and interface can name each other.
     ext_where: HashMap<(String, String), (String, usize)>,
+    /// Every `extend` in view, for the coherence check: two of them for one
+    /// interface may not both fit a type, as two Rust impls may not overlap.
+    ext_claims: Vec<ExtClaim>,
     /// This module's own file, as a program would name it.
     this_file: String,
     /// Traits an imported module owns. Rust only offers a trait's methods
@@ -754,6 +773,7 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, deps: &[Dep], t
         ext_method_target: HashMap::new(),
         ext_impl_generics: HashMap::new(),
         ext_where: HashMap::new(),
+        ext_claims: Vec::new(),
         this_file: file.to_string(),
         trait_uses: Vec::new(),
         local_types: HashSet::new(),
@@ -1652,6 +1672,22 @@ impl Gen {
     /// filled in by what this receiver holds: the methods of `[T]` seen by
     /// a `[Int]` talk about `Int`.
     fn methods_for(&self, t: &Type) -> Option<HashMap<String, Sig>> {
+        // a built-in: the methods of every `extend` it fits, each read with
+        // that extend's parameters filled in by this receiver
+        if Self::is_builtin_target(t) {
+            let found = self.builtin_exts(t);
+            if found.is_empty() {
+                return None;
+            }
+            let mut out: HashMap<String, Sig> = HashMap::new();
+            for (k, sub) in found {
+                for (n, v) in self.ext_methods.get(&k).cloned().unwrap_or_default() {
+                    let v = Sig { params: v.params.iter().map(|(pn, x)| (pn.clone(), Self::subst(x, &sub))).collect(), ret: Self::subst(&v.ret, &sub), ..v };
+                    out.entry(n).or_insert(v);
+                }
+            }
+            return Some(out);
+        }
         let key = self.type_key(t);
         let m = self.methods_of(&key)?;
         // reached through a bound that carries arguments — `P: Pairish[Int,
@@ -1986,17 +2022,89 @@ impl Gen {
                 Some(b) if !Self::is_builtin_bound(Self::bound_name(&b)) => self.type_key(&b),
                 _ => type_name(t),
             },
-            other => {
-                // a built-in container that a generic `extend` covers answers
-                // under its shape, so `[Int]` finds what `[T]` was given
-                if let Some(shape) = Self::shape_key(other) {
-                    if self.ext_generics.contains_key(&shape) {
-                        return shape;
-                    }
-                }
-                type_name(other)
+            // a built-in has no name of its own: its `extend`s are found by
+            // which targets it fits (`builtin_exts`), not by a key
+            other => type_name(other),
+        }
+    }
+
+    /// An `extend` of a built-in type — a list, a map, a tuple, `Str` — is
+    /// filed under a key of its own, one per `extend`, because a built-in
+    /// has no name to file it under and two of them may cover different
+    /// parts of one shape (`{K: [Int]}` and `{K: [Str]}`).
+    fn is_builtin_target(t: &Type) -> bool {
+        !matches!(t, Type::Named(_) | Type::App(..) | Type::Var(_))
+    }
+
+    /// The `extend`s of built-in types that `t` fits, each with what its own
+    /// parameters stand for here: `[Int]` fits `extend [T]` with `T = Int`.
+    fn builtin_exts(&self, t: &Type) -> Vec<(String, HashMap<String, Type>)> {
+        if !Self::is_builtin_target(t) || *t == Type::Unknown {
+            return Vec::new();
+        }
+        let mut keys: Vec<&String> = self.ext_targets.keys().filter(|k| k.starts_with("ext:")).collect();
+        keys.sort();
+        let mut out = Vec::new();
+        for k in keys {
+            let mut sub = HashMap::new();
+            if ext_fits(&self.ext_targets[k], t, &mut sub) {
+                out.push((k.clone(), sub));
             }
         }
+        out
+    }
+
+    /// Is `name` a method `t` has from an `extend`?
+    fn ext_method_here(&self, t: &Type, name: &str) -> bool {
+        if Self::is_builtin_target(t) {
+            return self.builtin_exts(t).iter().any(|(k, _)| self.ext_methods.get(k).map(|m| m.contains_key(name)).unwrap_or(false));
+        }
+        self.ext_methods.get(&self.type_key(t)).map(|m| m.contains_key(name)).unwrap_or(false)
+    }
+
+    /// Rust's coherence rule for `extend`: two of them for one interface may
+    /// not both fit a type. Bounds do not keep them apart, and the more
+    /// specific one does not win — Rust has no specialization, so Lume, which
+    /// becomes Rust impls, has none either. `claim` is the new one.
+    fn check_coherence(&self, claim: &ExtClaim, iface_shown: &str, line: usize, col: usize, at_import: bool) -> Result<()> {
+        for other in &self.ext_claims {
+            if other.iface != claim.iface || (other.file == claim.file && other.line == claim.line) {
+                continue;
+            }
+            let a = rename_ext_vars(&other.target, "a#");
+            let b = rename_ext_vars(&claim.target, "b#");
+            let mut sub = HashMap::new();
+            if !overlap_unify(&a, &b, &mut sub) {
+                continue;
+            }
+            let here = format!("{}:{}", claim.file, claim.line);
+            let there = format!("{}:{}", other.file, other.line);
+            let same = normalize_vars(&other.target) == normalize_vars(&claim.target);
+            if same && at_import {
+                return Err(LumeError::new(line, col, format!("`{}` is extended with `{}` twice", type_name(&claim.target), claim.iface))
+                    .with_help(format!("{} and {} both extend it, and an `extend` travels with the import, so this program would have two answers: remove one, or give one of them an interface of its own", there, here)));
+            }
+            if same && (claim.bounded || other.bounded) {
+                return Err(LumeError::new(line, col, format!("`{}` is already a `{}`", type_name(&claim.target), iface_shown))
+                    .with_help(format!("{} extends it too, and bounds do not keep two `extend`s apart: one type can meet both bounds, as in Rust. Remove one, or give one of them an interface of its own", there)));
+            }
+            if same {
+                return Err(LumeError::new(line, col, format!("`{}` is already a `{}`", type_name(&claim.target), iface_shown))
+                    .with_help(format!("{} extends it too, and an `extend` travels with the import, so only one of them can hold: remove one, or give one of them an interface of its own", there)));
+            }
+            let witness = type_name(&strip_ext_vars(&overlap_resolve(&b, &sub)));
+            // at an import both were written elsewhere, so name both places
+            let whose = if at_import { format!("from {} overlaps", here) } else { "overlaps".to_string() };
+            return Err(LumeError::new(line, col, format!(
+                "`extend {} with {}` {} `extend {} with {}` from {}",
+                type_name(&claim.target), iface_shown, whose, type_name(&other.target), iface_shown, there
+            ))
+            .with_help(format!(
+                "both would apply to `{}`, and a type has one `{}`: as in Rust, neither wins for being more specific. Remove one, or narrow them so no type fits both",
+                witness, iface_shown
+            )));
+        }
+        Ok(())
     }
 
     /// One `extend` block, with its type parameters already in scope.
@@ -2011,24 +2119,15 @@ impl Gen {
         if self.is_interface(&target) {
             return Err(LumeError::new(x.line, x.col, "an interface cannot be extended with another; extend the concrete types"));
         }
-        // A generic extend on a built-in has no name to register under, so
-        // it registers under the container's shape; a user's own generic
-        // type already keys by its name.
-        let key = match (gens.is_empty(), Self::shape_key(&target)) {
-            (false, Some(shape)) => shape,
-            _ => self.type_key(&target),
-        };
-        // An `extend` travels with the import, so two of them claiming the
-        // same type and interface would be two answers to one question.
-        if let Some((other_file, other_line)) = self.ext_where.get(&(key.clone(), iface.clone())) {
-            let here = format!("{}:{}", self.this_file, x.line);
-            let there = format!("{}:{}", other_file, other_line);
-            if here != there {
-                let _ = here;
-                return Err(LumeError::new(x.line, x.col, format!("`{}` is already a `{}`", type_name(&target), type_name(&x.iface)))
-                    .with_help(format!("{} extends it too, and an `extend` travels with the import, so only one of them can hold: remove one, or give one of them an interface of its own", there)));
-            }
-        }
+        // A built-in has no name to register under, so each of its extends
+        // gets a key of its own; a user's type keys by its name.
+        let builtin = Self::is_builtin_target(&target);
+        let key = if builtin { self.builtin_ext_key(x) } else { self.type_key(&target) };
+        // An `extend` travels with the import, so two of them that could
+        // both apply to one type would be two answers to one question.
+        let claim = ExtClaim { iface: iface.clone(), target: target.clone(), file: self.this_file.clone(), line: x.line, bounded: !x.bounds.is_empty() };
+        self.check_coherence(&claim, &type_name(&x.iface), x.line, x.col, false)?;
+        self.ext_claims.push(claim);
         self.ext_where.insert((key.clone(), iface.clone()), (self.this_file.clone(), x.line));
         if !gens.is_empty() {
             let all = self.ext_generics.entry(key.clone()).or_default();
@@ -2042,7 +2141,24 @@ impl Gen {
         if !matches!(target, Type::Named(_)) {
             self.ext_targets.insert(key.clone(), target.clone());
         }
-        let existing = self.methods_of(&key).unwrap_or_default();
+        // what the target already has: for a built-in, every extend that
+        // could apply to the same values, whatever interface it is for
+        let existing = if builtin {
+            let mut m: HashMap<String, Sig> = HashMap::new();
+            for (k, t) in &self.ext_targets {
+                if k.starts_with("ext:") && *k != key {
+                    let mut sub = HashMap::new();
+                    if overlap_unify(&rename_ext_vars(t, "a#"), &rename_ext_vars(&target, "b#"), &mut sub) {
+                        for (n, sg) in self.ext_methods.get(k).cloned().unwrap_or_default() {
+                            m.insert(n, sg);
+                        }
+                    }
+                }
+            }
+            m
+        } else {
+            self.methods_of(&key).unwrap_or_default()
+        };
         for m in &x.methods {
             if m.self_kind == SelfKind::Mutate {
                 return Err(LumeError::new(m.line, m.col, "methods in an `extend` block cannot take `var self`"));
@@ -2055,7 +2171,7 @@ impl Gen {
                 return Err(LumeError::new(m.line, m.col, format!("`{}` already has a `{}` method", type_name(&target), m.name)));
             }
             let sg = self.sig_of(m);
-            if !gens.is_empty() {
+            if !gens.is_empty() || builtin {
                 self.ext_method_target.insert((key.clone(), m.name.clone()), target.clone());
             }
             self.ext_methods.entry(key.clone()).or_default().insert(m.name.clone(), sg);
@@ -2087,16 +2203,16 @@ impl Gen {
 
     /// The key an `extend` block registers under, generic or not.
     fn ext_key_of(&self, x: &ExtendDef) -> String {
-        let mut names = Vec::new();
-        self.target_params(&x.target, false, &mut names);
-        if !names.is_empty() {
-            // the shape does not depend on what the target holds, so it can
-            // be read straight off the written type
-            if let Some(shape) = Self::shape_key(&x.target) {
-                return shape;
-            }
+        if !matches!(x.target, Type::Named(_) | Type::App(..)) {
+            return self.builtin_ext_key(x);
         }
         self.type_key(&self.ct(&x.target))
+    }
+
+    /// The key of one `extend` of a built-in, unique in the program: the
+    /// file and line it was written on.
+    fn builtin_ext_key(&self, x: &ExtendDef) -> String {
+        format!("ext:{}:{}", self.this_file, x.line)
     }
 
     /// `Chain<T>` names a type; `Chain::<T>` names it in a path, which is
@@ -2108,21 +2224,6 @@ impl Gen {
         }
     }
 
-    /// The shape of a built-in container, ignoring what it holds: `[Int]`
-    /// and `[T]` are both `[]`. A generic `extend` on a built-in registers
-    /// under this, because there is no name to register under. A user's own
-    /// generic type needs none — `Stack[Int]` already keys as `Stack`.
-    fn shape_key(t: &Type) -> Option<String> {
-        Some(match t {
-            Type::List(_) => "[]".to_string(),
-            Type::Set(_) => "{}".to_string(),
-            Type::Map(..) => "{:}".to_string(),
-            Type::Option(_) => "?".to_string(),
-            // a tuple's shape is how many parts it has
-            Type::Tuple(parts) => format!("({})", ",".repeat(parts.len().saturating_sub(1))),
-            _ => return None,
-        })
-    }
 
     /// The names a generic `extend` target introduces: a name inside the
     /// target that is not a type this program knows. Only names nested in a
@@ -2255,7 +2356,7 @@ impl Gen {
     /// parameters. An `extend` method is reached through the trait, so its
     /// arguments travel the way the trait says, not the way the `extend`
     /// block spelled them.
-    fn iface_decl_params(&self, key: &str, method: &str) -> Vec<Type> {
+    fn iface_decl_params(&self, t: &Type, method: &str) -> Vec<Type> {
         let mut names: Vec<&String> = self.interfaces.keys().collect();
         names.sort();
         for iname in names {
@@ -2264,7 +2365,7 @@ impl Gen {
                 continue;
             }
             if let Some(sig) = info.methods.get(method) {
-                if self.ext_methods.get(key).map(|m| m.contains_key(method)).unwrap_or(false) {
+                if self.ext_method_here(t, method) {
                     return sig.params.iter().map(|(_, t)| t.clone()).collect();
                 }
             }
@@ -2589,15 +2690,19 @@ impl Gen {
         for ((tkey, iname), w) in &ex.ext_where {
             let ik = if ex.interfaces.contains_key(iname) { format!("{}.{}", key_prefix, iname) } else { iname.clone() };
             let k = (requalify(tkey), ik);
-            // Two modules can each write an `extend` without ever seeing
-            // the other; where they meet is here.
-            if let Some(other) = self.ext_where.get(&k) {
-                if other.0 != w.0 {
-                    return Err(LumeError::new(line, col, format!("`{}` is extended with `{}` twice", k.0, k.1))
-                        .with_help(format!("{}:{} and {}:{} both extend it, and an `extend` travels with the import, so this program would have two answers: remove one, or give one of them an interface of its own", other.0, other.1, w.0, w.1)));
-                }
-            }
             self.ext_where.insert(k, w.clone());
+        }
+        // Two modules can each write an `extend` without ever seeing the
+        // other; where they meet is here, and the coherence rule holds
+        // there as it does inside one file.
+        for c in &ex.ext_claims {
+            let ik = if ex.interfaces.contains_key(&c.iface) { format!("{}.{}", key_prefix, c.iface) } else { c.iface.clone() };
+            let claim = ExtClaim { iface: ik.clone(), target: qualify_type(&c.target, id, ex), file: c.file.clone(), line: c.line, bounded: c.bounded };
+            if self.ext_claims.iter().any(|o| o.file == claim.file && o.line == claim.line) {
+                continue;
+            }
+            self.check_coherence(&claim, &ik, line, col, true)?;
+            self.ext_claims.push(claim);
         }
         // Types this module reached through its own imports, kept under the
         // ids they already have: a value handed across two boundaries is
@@ -2724,6 +2829,7 @@ impl Gen {
         ex.ext_method_target = self.ext_method_target.clone();
         ex.ext_impl_generics = self.ext_impl_generics.clone();
         ex.ext_where = self.ext_where.clone();
+        ex.ext_claims = self.ext_claims.clone();
         // Types from this module's own imports: an importer that never
         // imported them still has to be able to use what it is handed.
         for (k, v) in &self.structs {
@@ -3822,7 +3928,7 @@ impl Gen {
                         return Type::Str;
                     }
                 }
-                if self.ext_methods.get(&self.type_key(&rt)).map(|m| m.contains_key(name)).unwrap_or(false) {
+                if self.ext_method_here(&rt, name) {
                     // through `methods_for`, so a generic `extend`'s names
                     // are read as what this receiver holds
                     if let Some(m) = self.methods_for(&rt).and_then(|m| m.get(name).cloned()) {
@@ -4825,6 +4931,10 @@ impl Gen {
                 let type_local = self.local_types.contains(tkey) || self.ext_targets.contains_key(tkey);
                 let owns = info.local || (type_local && !tkey.contains('.'));
                 let has_extend = ext_bodies.contains_key(&(tkey.clone(), iname.clone()));
+                // one `extend` of a built-in is one impl, of its own interface
+                if tkey.starts_with("ext:") && !has_extend {
+                    continue;
+                }
                 // An `extend` travels with the import, but its impl is
                 // written once, in the file that wrote the `extend`.
                 if let Some((f, _)) = self.ext_where.get(&(tkey.clone(), iname.clone())) {
@@ -8958,16 +9068,15 @@ impl Gen {
                 }
                 // methods a built-in type gained through `extend`
                 if !matches!(rt, Type::Named(_)) {
-                    let key = self.type_key(&rt);
                     // through `methods_for`, so a generic `extend`'s names
                     // are read as what this receiver holds
-                    let ext_here = self.ext_methods.get(&key).map(|m| m.contains_key(name)).unwrap_or(false);
+                    let ext_here = self.ext_method_here(&rt, name);
                     let found = if ext_here { self.methods_for(&rt).and_then(|m| m.get(name).cloned()) } else { None };
                     if let Some(m) = found {
                         let bound = self.bind_args(&format!("`{}.{}`", type_name(&rt), name), &m.params, args, e.line, e.col)?;
                         let mut parts = Vec::new();
                         let callee = format!("{}.{}", type_name(&rt), name);
-                        let decl = self.iface_decl_params(&key, name);
+                        let decl = self.iface_decl_params(&rt, name);
                         for (i, (a, (pname, t))) in bound.iter().zip(&m.params).enumerate() {
                             let d = decl.get(i).unwrap_or(t);
                             parts.push(self.expr_arg_named_as(a, t, d, &callee, pname)?);
@@ -9502,6 +9611,162 @@ fn is_builtin_name(name: &str) -> bool {
             | "alnum?" | "upper?" | "lower?" | "code" | "to_char"
             | "trim_left" | "trim_right" | "decimals" | "at"
     )
+}
+
+/// An `extend` target's own parameters, renamed apart from another's so
+/// the two can be unified: `a#T` and `b#T` are different names.
+fn rename_ext_vars(t: &Type, prefix: &str) -> Type {
+    match t {
+        Type::Var(n) => Type::Var(format!("{}{}", prefix, n)),
+        Type::List(i) => Type::List(Box::new(rename_ext_vars(i, prefix))),
+        Type::Iter(i, b) => Type::Iter(Box::new(rename_ext_vars(i, prefix)), *b),
+        Type::Option(i) => Type::Option(Box::new(rename_ext_vars(i, prefix))),
+        Type::Set(i) => Type::Set(Box::new(rename_ext_vars(i, prefix))),
+        Type::Task(i) => Type::Task(Box::new(rename_ext_vars(i, prefix))),
+        Type::Map(a, b) => Type::Map(Box::new(rename_ext_vars(a, prefix)), Box::new(rename_ext_vars(b, prefix))),
+        Type::Result(a, b) => Type::Result(Box::new(rename_ext_vars(a, prefix)), Box::new(rename_ext_vars(b, prefix))),
+        Type::Tuple(ts) => Type::Tuple(ts.iter().map(|x| rename_ext_vars(x, prefix)).collect()),
+        Type::App(n, args) => Type::App(n.clone(), args.iter().map(|x| rename_ext_vars(x, prefix)).collect()),
+        other => other.clone(),
+    }
+}
+
+/// The renamed parameters back to the names the program wrote.
+fn strip_ext_vars(t: &Type) -> Type {
+    match t {
+        Type::Var(n) => Type::Var(n.split_once('#').map(|(_, x)| x.to_string()).unwrap_or_else(|| n.clone())),
+        Type::List(i) => Type::List(Box::new(strip_ext_vars(i))),
+        Type::Iter(i, b) => Type::Iter(Box::new(strip_ext_vars(i)), *b),
+        Type::Option(i) => Type::Option(Box::new(strip_ext_vars(i))),
+        Type::Set(i) => Type::Set(Box::new(strip_ext_vars(i))),
+        Type::Task(i) => Type::Task(Box::new(strip_ext_vars(i))),
+        Type::Map(a, b) => Type::Map(Box::new(strip_ext_vars(a)), Box::new(strip_ext_vars(b))),
+        Type::Result(a, b) => Type::Result(Box::new(strip_ext_vars(a)), Box::new(strip_ext_vars(b))),
+        Type::Tuple(ts) => Type::Tuple(ts.iter().map(strip_ext_vars).collect()),
+        Type::App(n, args) => Type::App(n.clone(), args.iter().map(strip_ext_vars).collect()),
+        other => other.clone(),
+    }
+}
+
+/// Parameters renamed in order of appearance, so `[T]` and `[U]` compare equal.
+fn normalize_vars(t: &Type) -> Type {
+    fn go(t: &Type, seen: &mut Vec<String>) -> Type {
+        match t {
+            Type::Var(n) => {
+                let i = match seen.iter().position(|x| x == n) {
+                    Some(i) => i,
+                    None => {
+                        seen.push(n.clone());
+                        seen.len() - 1
+                    }
+                };
+                Type::Var(format!("_{}", i))
+            }
+            Type::List(i) | Type::Iter(i, _) => Type::List(Box::new(go(i, seen))),
+            Type::Option(i) => Type::Option(Box::new(go(i, seen))),
+            Type::Set(i) => Type::Set(Box::new(go(i, seen))),
+            Type::Task(i) => Type::Task(Box::new(go(i, seen))),
+            Type::Map(a, b) => {
+                let a = go(a, seen);
+                Type::Map(Box::new(a), Box::new(go(b, seen)))
+            }
+            Type::Result(a, b) => {
+                let a = go(a, seen);
+                Type::Result(Box::new(a), Box::new(go(b, seen)))
+            }
+            Type::Tuple(ts) => Type::Tuple(ts.iter().map(|x| go(x, seen)).collect()),
+            Type::App(n, args) => Type::App(n.clone(), args.iter().map(|x| go(x, seen)).collect()),
+            other => other.clone(),
+        }
+    }
+    go(t, &mut Vec::new())
+}
+
+fn overlap_resolve(t: &Type, sub: &HashMap<String, Type>) -> Type {
+    match t {
+        Type::Var(n) => match sub.get(n) {
+            Some(x) => overlap_resolve(x, sub),
+            None => t.clone(),
+        },
+        Type::List(i) => Type::List(Box::new(overlap_resolve(i, sub))),
+        Type::Iter(i, b) => Type::Iter(Box::new(overlap_resolve(i, sub)), *b),
+        Type::Option(i) => Type::Option(Box::new(overlap_resolve(i, sub))),
+        Type::Set(i) => Type::Set(Box::new(overlap_resolve(i, sub))),
+        Type::Task(i) => Type::Task(Box::new(overlap_resolve(i, sub))),
+        Type::Map(a, b) => Type::Map(Box::new(overlap_resolve(a, sub)), Box::new(overlap_resolve(b, sub))),
+        Type::Result(a, b) => Type::Result(Box::new(overlap_resolve(a, sub)), Box::new(overlap_resolve(b, sub))),
+        Type::Tuple(ts) => Type::Tuple(ts.iter().map(|x| overlap_resolve(x, sub)).collect()),
+        Type::App(n, args) => Type::App(n.clone(), args.iter().map(|x| overlap_resolve(x, sub)).collect()),
+        other => other.clone(),
+    }
+}
+
+/// Could one type fit both targets? Unification where both sides'
+/// parameters may stand for anything — the question Rust asks of two impls.
+fn overlap_unify(a: &Type, b: &Type, sub: &mut HashMap<String, Type>) -> bool {
+    fn occurs(v: &str, t: &Type, sub: &HashMap<String, Type>) -> bool {
+        match overlap_resolve(t, sub) {
+            Type::Var(n) => n == v,
+            other => {
+                let mut kids: Vec<Type> = Vec::new();
+                match &other {
+                    Type::List(i) | Type::Iter(i, _) | Type::Option(i) | Type::Set(i) | Type::Task(i) => kids.push((**i).clone()),
+                    Type::Map(x, y) | Type::Result(x, y) => {
+                        kids.push((**x).clone());
+                        kids.push((**y).clone());
+                    }
+                    Type::Tuple(ts) | Type::App(_, ts) => kids.extend(ts.iter().cloned()),
+                    _ => {}
+                }
+                kids.iter().any(|k| occurs(v, k, sub))
+            }
+        }
+    }
+    let a = overlap_resolve(a, sub);
+    let b = overlap_resolve(b, sub);
+    match (&a, &b) {
+        (Type::Var(x), Type::Var(y)) if x == y => true,
+        (Type::Var(x), other) | (other, Type::Var(x)) if x.contains('#') => {
+            if occurs(x, other, sub) {
+                return false;
+            }
+            sub.insert(x.clone(), other.clone());
+            true
+        }
+        (Type::Unknown, _) | (_, Type::Unknown) => true,
+        (Type::List(x), Type::List(y)) | (Type::Iter(x, _), Type::List(y)) | (Type::List(x), Type::Iter(y, _)) | (Type::Iter(x, _), Type::Iter(y, _)) => overlap_unify(x, y, sub),
+        (Type::Option(x), Type::Option(y)) | (Type::Set(x), Type::Set(y)) | (Type::Task(x), Type::Task(y)) => overlap_unify(x, y, sub),
+        (Type::Map(a1, b1), Type::Map(a2, b2)) | (Type::Result(a1, b1), Type::Result(a2, b2)) => overlap_unify(a1, a2, sub) && overlap_unify(b1, b2, sub),
+        (Type::Tuple(xs), Type::Tuple(ys)) => xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| overlap_unify(x, y, sub)),
+        (Type::App(n, xs), Type::App(m, ys)) => n == m && xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| overlap_unify(x, y, sub)),
+        (x, y) => x == y,
+    }
+}
+
+/// Does the value type `t` fit an `extend`'s target? The target's
+/// parameters (`Var`s) stand for anything, consistently; a type parameter
+/// in `t` itself is one fixed type, so only a parameter of the target fits it.
+fn ext_fits(pat: &Type, t: &Type, sub: &mut HashMap<String, Type>) -> bool {
+    match (pat, t) {
+        (Type::Var(n), _) => match sub.get(n) {
+            Some(prev) => {
+                let prev = prev.clone();
+                prev == *t || *t == Type::Unknown || prev == Type::Unknown
+            }
+            None => {
+                sub.insert(n.clone(), t.clone());
+                true
+            }
+        },
+        (_, Type::Unknown) => true,
+        (_, Type::Shared(inner, _)) => ext_fits(pat, inner, sub),
+        (Type::List(x), Type::List(y)) | (Type::List(x), Type::Iter(y, _)) => ext_fits(x, y, sub),
+        (Type::Option(x), Type::Option(y)) | (Type::Set(x), Type::Set(y)) | (Type::Task(x), Type::Task(y)) => ext_fits(x, y, sub),
+        (Type::Map(a1, b1), Type::Map(a2, b2)) | (Type::Result(a1, b1), Type::Result(a2, b2)) => ext_fits(a1, a2, sub) && ext_fits(b1, b2, sub),
+        (Type::Tuple(xs), Type::Tuple(ys)) => xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| ext_fits(x, y, sub)),
+        (Type::App(n, xs), Type::App(m, ys)) => n == m && xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| ext_fits(x, y, sub)),
+        (x, y) => x == y,
+    }
 }
 
 /// Does `t` have a `Float` anywhere a comparison would reach?

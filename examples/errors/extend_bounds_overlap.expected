@@ -1,0 +1,6 @@
+error: `[T]` is already a `Tagged`
+  --> examples/errors/extend_bounds_overlap.lume:7:1
+  |
+7 | extend [T: Hashable] with Tagged:
+  | ^
+  help: examples/errors/extend_bounds_overlap.lume:4 extends it too, and bounds do not keep two `extend`s apart: one type can meet both bounds, as in Rust. Remove one, or give one of them an interface of its own

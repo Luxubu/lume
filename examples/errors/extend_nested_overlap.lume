@@ -1,0 +1,11 @@
+interface Tagged:
+  def tag -> Str
+
+extend [T] with Tagged:
+  def tag -> Str = "list"
+
+extend [[T]] with Tagged:
+  def tag -> Str = "nested"
+
+def main:
+  puts [[1]].tag

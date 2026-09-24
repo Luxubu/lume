@@ -1,0 +1,6 @@
+# Each module is fine alone; together they give [[Int]] two answers.
+import overlap.wide
+import overlap.narrow
+
+def main:
+  puts "unreachable"

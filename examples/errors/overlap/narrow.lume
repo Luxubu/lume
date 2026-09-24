@@ -1,0 +1,4 @@
+import overlap.tag
+
+extend [[T]] with tag.Tagged:
+  def tag -> Str = "nested"

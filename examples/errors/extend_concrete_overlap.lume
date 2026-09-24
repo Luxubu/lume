@@ -1,0 +1,11 @@
+interface Tagged:
+  def tag -> Str
+
+extend [Int] with Tagged:
+  def tag -> Str = "ints"
+
+extend [T] with Tagged:
+  def tag -> Str = "list"
+
+def main:
+  puts [1].tag

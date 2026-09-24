@@ -54,7 +54,7 @@ than once, which are the ones that shaped these pages.
 | 29 | Can a map be iterated with `for k, v in m`? | [collections](reference/collections.md#maps) |
 | 30 | Does an `extend` travel one hop or all the way? *(5 reviewers)* | shipped in milestone 30 — all the way |
 | 31 | Do interface defaults shadow a container's built-ins? | [interfaces](reference/interfaces.md) |
-| 32 | Are two extends with different *bounds* one clash or two claims? | open |
+| 32 | Are two extends with different *bounds* one clash or two claims? | one clash — [generics](reference/generics.md#two-extends-of-one-interface-the-rust-rule) |
 | 33 | Does a method on a `pub struct` need its own `pub`? | [interfaces](reference/interfaces.md) |
 | 34 | Are import paths program-absolute or relative to the file? | [modules](reference/modules.md) |
 | 35–42 | Module questions: aliases, namespaces, name collisions, re-export, `pub` fields, where an `extend` may live, dotted bounds, what the clash error prints | [modules](reference/modules.md) |
@@ -72,11 +72,10 @@ than once, which are the ones that shaped these pages.
 
 ## Still open
 
-These were asked and are not yet answered anywhere, because the answer is a
-decision rather than a fact:
-
-- Two `extend`s on one target with different bounds — one clash or two claims?
-- A specificity rule when `extend [T]` and `extend [[T]]` both match.
+Nothing. The last two were decided in milestone 38, by Rust's coherence rule:
+two `extend`s of one interface with different bounds are one clash, and when
+`extend [T]` and `extend [[T]]` both fit a type neither wins — the program is
+refused ([generics](reference/generics.md#two-extends-of-one-interface-the-rust-rule)).
 
 Decided in milestone 37: a module's function is a block by its qualified name
 (`xs.map(seq.shout)`, [functions and blocks](reference/functions-and-blocks.md#a-functions-name-as-a-block));

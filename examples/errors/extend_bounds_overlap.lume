@@ -1,0 +1,11 @@
+interface Tagged:
+  def tag -> Str
+
+extend [T: Ordered] with Tagged:
+  def tag -> Str = "ordered"
+
+extend [T: Hashable] with Tagged:
+  def tag -> Str = "hashable"
+
+def main:
+  puts [1].tag

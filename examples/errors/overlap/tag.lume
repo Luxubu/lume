@@ -1,0 +1,2 @@
+pub interface Tagged:
+  def tag -> Str

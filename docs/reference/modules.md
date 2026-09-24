@@ -381,9 +381,12 @@ for it. In the example above, `main.lume` imports `report`, `report` imports
 It goes up the chain of imports, not sideways: a file that imports neither
 `sizes` nor anything that imports it does not get `.size`.
 
-Two `extend`s of the same type with the same interface anywhere in one
-program is an error that names both files. See
-[Interfaces](interfaces.md) and `examples/travel/`.
+Two `extend`s of the same interface that some type fits both of — `[T]` and
+`[Int]`, or `[T]` and `[[T]]` — anywhere in one program is an error that names
+both files, reported at the import that brings the second in. It is Rust's
+rule for two impls of one trait; see
+[Generics](generics.md#two-extends-of-one-interface-the-rust-rule) and
+`examples/travel/`.
 
 ## Cycles
 

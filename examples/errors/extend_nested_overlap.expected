@@ -1,0 +1,6 @@
+error: `extend [[T]] with Tagged` overlaps `extend [T] with Tagged` from examples/errors/extend_nested_overlap.lume:4
+  --> examples/errors/extend_nested_overlap.lume:7:1
+  |
+7 | extend [[T]] with Tagged:
+  | ^
+  help: both would apply to `[[T]]`, and a type has one `Tagged`: as in Rust, neither wins for being more specific. Remove one, or narrow them so no type fits both

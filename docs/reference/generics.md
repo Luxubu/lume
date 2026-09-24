@@ -421,6 +421,77 @@ def main:
 #! `Int` is a type, so it takes no bound here
 ```
 
+## Two `extend`s of one interface: the Rust rule
+
+**A type has one implementation of an interface. Two `extend`s of the same
+interface may be written only when no type fits both targets** — Rust's rule
+for two impls of one trait, which is what they become.
+
+Targets that no type fits both of are fine, however alike they look:
+
+```lume
+interface Tagged:
+  def tag -> Str
+
+extend [Int] with Tagged:
+  def tag -> Str = "ints"
+
+extend [Str] with Tagged:
+  def tag -> Str = "strs"
+
+extend {K: [Int]} with Tagged:
+  def tag -> Str = "int lists"
+
+def main:
+  puts [1].tag            #=> ints
+  puts ["a"].tag          #=> strs
+  m: {Str: [Int]} = {"x": [1]}
+  puts m.tag              #=> int lists
+```
+
+When one type fits both, the program is refused, and the message names that
+type. **The more specific one does not win**: `[[Int]]` fits `[T]` and `[[T]]`
+alike, and as in Rust — which has no specialization — neither is chosen:
+
+```lume-bad
+interface Tagged:
+  def tag -> Str
+
+extend [T] with Tagged:
+  def tag -> Str = "list"
+
+extend [[T]] with Tagged:
+  def tag -> Str = "nested"
+
+def main:
+  puts [[1]].tag
+#! `extend [[T]] with Tagged` overlaps `extend [T] with Tagged`
+```
+
+**Bounds do not keep two `extend`s apart.** `extend [T: Ordered]` and
+`extend [T: Hashable]` both fit `[Int]`, since an `Int` meets both bounds, so
+they are one clash:
+
+```lume-bad
+interface Tagged:
+  def tag -> Str
+
+extend [T: Ordered] with Tagged:
+  def tag -> Str = "ordered"
+
+extend [T: Hashable] with Tagged:
+  def tag -> Str = "hashable"
+
+def main:
+  puts [1].tag
+#! `[T]` is already a `Tagged`
+```
+
+To give some types a different answer, give them a different interface, or
+put the difference in the one `extend` — `match` on what it holds, or call a
+helper that does. The same rule holds across modules: two files that each
+compile alone are refused together, at the import that brings the second in.
+
 ## What this costs
 
 Nothing at run time. A generic becomes an ordinary Rust generic — `lume emit`

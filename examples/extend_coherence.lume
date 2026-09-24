@@ -1,0 +1,34 @@
+# One `extend` per type and interface, as one Rust impl: two may coexist
+# only when no type fits both. Here none does, so each list finds its own.
+
+interface Tagged:
+  def tag -> Str
+
+interface Sized:
+  def size -> Int
+
+extend [Int] with Tagged:
+  def tag -> Str = "ints"
+
+extend [Str] with Tagged:
+  def tag -> Str = "strs"
+
+extend {K: [Int]} with Tagged:
+  def tag -> Str = "map of int lists"
+
+extend {K: [Str]} with Tagged:
+  def tag -> Str = "map of str lists"
+
+# a generic extend of another interface does not hide the ones above
+extend [T] with Sized:
+  def size -> Int = self.len * 10
+
+def main:
+  puts [1, 2].tag
+  puts ["a"].tag
+  a: {Str: [Int]} = {"x": [1]}
+  b: {Int: [Str]} = {1: ["y"]}
+  puts a.tag
+  puts b.tag
+  puts [1, 2].size
+  puts [[1], [2], [3]].size

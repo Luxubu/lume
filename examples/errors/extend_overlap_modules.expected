@@ -1,0 +1,6 @@
+error: `extend [[T]] with overlap.tag.Tagged` from examples/errors/overlap/narrow.lume:3 overlaps `extend [T] with overlap.tag.Tagged` from examples/errors/overlap/wide.lume:3
+  --> examples/errors/extend_overlap_modules.lume:3:1
+  |
+3 | import overlap.narrow
+  | ^
+  help: both would apply to `[[T]]`, and a type has one `overlap.tag.Tagged`: as in Rust, neither wins for being more specific. Remove one, or narrow them so no type fits both
