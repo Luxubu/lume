@@ -1,0 +1,11 @@
+F-apple $2.50 -> $2.25
+T-saw $19.99 -> $15.00
+F-bread $4.00 -> $3.60
+T-nail $0.05 -> $0.00
+total $20.85
+food 10%, tools $1 off, cap
+Rule(name: "cap", applies: <block>, adjust: <block>)
+500
+parsed Food
+None
+exit: 0

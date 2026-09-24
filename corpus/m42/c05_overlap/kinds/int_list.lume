@@ -1,0 +1,4 @@
+import kinds.tagged
+
+extend [Int] with tagged.Tagged:
+  def tag -> Str = "ints summing to #{self.sum}"

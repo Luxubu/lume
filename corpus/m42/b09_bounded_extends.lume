@@ -1,0 +1,53 @@
+# b09_bounded_extends.lume — two extends told apart only by their bounds
+#
+# Probes: a bound written inside a generic struct's target
+# (`extend Bag[T: Ordered]`), which the docs show only for a list target
+# (`extend [T: Ordered]`); and the rule that bounds do not keep two extends
+# of one interface apart. `Bag[Int]` meets both `Ordered` and `Hashable`, so
+# the pair is one clash, reported at the second extend (line 43).
+#
+# Meant to FAIL, with:
+#   error: `Bag[T]` is already a `Summary`
+#   help: corpus/m42/b09_bounded_extends.lume:36 extends it too, and bounds do
+#   not keep two `extend`s apart: one type can meet both bounds, as in Rust.
+#   Remove one, or give one of them an interface of its own
+#
+# EXPECTED OUTPUT:
+# (none: the program does not compile)
+#
+# (What I wanted: a bag of floats summarised by its range, a bag of bools
+# by how many distinct values it holds, a bag of ints by the range.)
+
+interface Summary:
+  def summary -> Str
+
+  def line -> Str = "- #{summary}"
+
+struct Bag[T]:
+  items: [T]
+
+  def self.of(xs: [T]) -> Bag[T] = Bag(items: xs)
+
+  def size -> Int = items.len
+  def add(var self, x: T):
+    items.push(x)
+
+# anything with an order can say where it starts and ends
+extend Bag[T: Ordered] with Summary:
+  def summary -> Str:
+    match items.min:
+      Some(lo) -> "#{size} items from #{lo} to #{items.max.or(lo)}"
+      None     -> "empty"
+
+# anything hashable can say how many different values it holds
+extend Bag[T: Hashable] with Summary:
+  def summary -> Str = "#{size} items, #{items.to_set.len} distinct"
+
+def main:
+  temps = Bag.of([21.5, 18.0, 23.0])
+  flags = Bag.of([true, false, true])
+  var ids = Bag.of([4, 1, 9])
+  ids.add(4)
+  puts temps.line
+  puts flags.line
+  puts ids.line

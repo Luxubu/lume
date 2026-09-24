@@ -1,0 +1,15 @@
+# geo/extends.lume — conformances for types this file does not own. Nothing
+# here is `pub`: the extends travel with any import of this module.
+
+import geo.sized.Sized
+import geo.point.Pt
+
+extend Pt with Sized:
+  def size -> Int = x.abs + y.abs
+
+extend Str with Sized:
+  def size -> Int = self.len
+  def describe -> Str = "text of #{self.len}"
+
+extend [T: Sized] with Sized:
+  def size -> Int = self.map(_.size).sum

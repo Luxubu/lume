@@ -1,0 +1,66 @@
+# a07 — a tiny event bus: register handlers, then fire events at them.
+# Probes: a `var self` method that keeps the block it is given in a field
+# of a struct in a list (`bus.on("login") { |who| ... }`), a kept block
+# handed over by name (`bus.on("alert", shout)`), a field block with a `()`
+# result called like a method (`h.run(payload)`), kept blocks that change a
+# `shared var` list in a plain `def main`, a zero-argument kept block written
+# with `do` that reads the `shared var` (and sees later changes), and
+# printing a struct that holds a block. The `shared var` warning goes to
+# standard error and is not part of the output below.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# welcome, ada
+# 2
+# 1
+# DISK FULL
+# 1
+# 0
+# ["login:ada", "logout:ada"]
+# 2
+# welcome, bo
+# 2
+# 3
+# 4
+# Handler(event: "alert", run: <block>)
+
+struct Handler:
+  event: Str
+  run: (Str) -> ()
+
+struct Bus:
+  handlers: [Handler]
+
+  def on(var self, event: Str, f: (Str) -> ()):
+    handlers.push(Handler(event: event, run: f))
+
+  # runs every handler for the event, and says how many ran
+  def emit(event: Str, payload: Str) -> Int:
+    var n = 0
+    for h in handlers where h.event == event:
+      h.run(payload)
+      n += 1
+    n
+
+def main:
+  shared var log: [Str] = []
+  var bus = Bus(handlers: [])
+  bus.on("login") { |who| puts "welcome, #{who}" }
+  bus.on("login") { |who| log.push("login:#{who}") }
+  bus.on("logout") { |who| log.push("logout:#{who}") }
+  shout: (Str) -> () = { |s| puts s.upcase }
+  bus.on("alert", shout)
+
+  puts bus.emit("login", "ada")
+  puts bus.emit("logout", "ada")
+  puts bus.emit("alert", "disk full")
+  puts bus.emit("nothing", "x")
+  puts log
+
+  entries: () -> Int = do
+    log.len
+  puts entries()
+  puts bus.emit("login", "bo")
+  puts entries()
+
+  puts bus.handlers.len
+  puts bus.handlers.at(3)

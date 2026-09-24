@@ -1,0 +1,9 @@
+# lib/text.lume — small text helpers, meant to be handed around as blocks.
+
+pub def shout(s: Str) -> Str = s.upcase + "!"
+
+pub def long?(s: Str) -> Bool = s.len > 3
+
+pub def initial(s: Str) -> Str = s[0..0]
+
+pub def banner -> Str = "== words =="

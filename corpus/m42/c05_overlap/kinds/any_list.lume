@@ -1,0 +1,4 @@
+import kinds.tagged
+
+extend [T] with tagged.Tagged:
+  def tag -> Str = "a list of #{self.len}"

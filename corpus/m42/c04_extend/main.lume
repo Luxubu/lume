@@ -1,0 +1,45 @@
+# c04_extend — `extend` across modules, and two extends of one interface
+# in two files that the coherence rule allows.
+# Probes: an extend reaching main.lume up a chain of imports
+# (main -> report -> geo.extends) when main imports neither the interface
+# nor the file with the extends; an extend of another module's struct; a
+# generic extend with a bound (`[T: Sized]`) that makes a `[Pt]` and a
+# `[Str]` Sized; a `[Pt]` passed where the interface type `Sized` is the
+# parameter; an interface default overridden in one extend (Str.describe)
+# and not in another; `extend [Int]` and `extend [Str]` of one interface
+# from two different modules, which no type fits both of.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 7
+# text of 5
+# origin: size 0
+# p: size 7
+# word: text of 13 (big)
+# 14
+# true
+# pts: size 14 (big)
+# size 5
+# ints
+# strs
+
+import report
+import geo.point.Pt
+import geo.tag_ints
+import geo.tag_strs
+
+def main:
+  p = Pt(3, 0 - 4)
+  puts p.size
+  puts "hello".describe
+  puts report.line("origin", Pt.origin)
+  puts report.line("p", p)
+  puts report.line("word", "extraordinary")
+
+  pts = [Pt(1, 1), Pt(5, 5), Pt(0 - 2, 0)]
+  puts pts.size
+  puts pts.big?
+  puts report.line("pts", pts)
+  puts ["ab", "cde"].describe
+
+  puts [1, 2].tag
+  puts ["x"].tag

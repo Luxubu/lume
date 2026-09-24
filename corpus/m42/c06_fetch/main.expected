@@ -1,0 +1,11 @@
+https://solo.dev (160b)
+3 fetched
+https://a.io (120b)
+https://bb.io (130b)
+failed: refused http://c.io: not https
+total 250b
+https://late.dev (160b)
+about:blank (0b)
+before the last await
+error: refused ftp://x: not https
+exit: 1

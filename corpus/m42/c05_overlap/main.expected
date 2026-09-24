@@ -1,0 +1,7 @@
+error: `extend [Int] with kinds.tagged.Tagged` from corpus/m42/c05_overlap/kinds/int_list.lume:3 overlaps `extend [T] with kinds.tagged.Tagged` from corpus/m42/c05_overlap/kinds/any_list.lume:3
+  --> corpus/m42/c05_overlap/main.lume:23:1
+   |
+23 | import kinds.int_list
+   | ^
+  help: both would apply to `[Int]`, and a type has one `kinds.tagged.Tagged`: as in Rust, neither wins for being more specific. Remove one, or narrow them so no type fits both
+exit: 1

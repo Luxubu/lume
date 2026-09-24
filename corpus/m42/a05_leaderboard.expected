@@ -1,0 +1,13 @@
+bad line: `x` is not an integer
+bad line: expected 3 fields in `fay,90`
+1. bo   150 130s
+2. eve  150 130s
+3. cy   120 80s
+4. ana  120 95s
+true
+false
+true
+leader: bo
+Some((-150, 130, "bo"))
+ana,cy
+exit: 0

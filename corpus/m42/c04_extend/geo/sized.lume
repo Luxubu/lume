@@ -1,0 +1,7 @@
+# geo/sized.lume — the interface, and nothing else.
+
+pub interface Sized:
+  def size -> Int
+
+  def big? -> Bool = size > 10
+  def describe -> Str = "size #{size}"

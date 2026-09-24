@@ -161,7 +161,7 @@ an `Int`. See [numbers](numbers.md) for how floats print and sort.
 | `contains?` | `T` | `Bool` | whether an equal item is there |
 | `max`, `min` | | `T?` | the largest, smallest item |
 | `max_by`, `min_by` | block | `T?` | the item with the largest, smallest key; the **first** one on a tie |
-| `sum` | | `T` | the total; `0` when empty |
+| `sum` | block, optional | `T` | the total — of the items, or of what the block gives each; `0` when empty |
 | `avg` | | `Float` | the mean, of an `[Int]` or a `[Float]`; `0.0` when empty |
 | `fold` | start, block | the start's type | a running total: the block takes the total and an item |
 | `join` | `Str` | `Str` | the items as text with the separator between |
@@ -465,9 +465,15 @@ puts [(2, "b"), (1, "z"), (2, "a")].sort   #=> [(1, "z"), (2, "a"), (2, "b")]
 puts [(2, "b"), (2, "a")].max              #=> Some((2, "b"))
 ```
 
-Two things do not work on tuples yet. `<` and `>` between two tuples are
-refused, so compare them by sorting or with `max`. Sorting tuples that hold a
-`Float` does not compile. Use `sort_by` with the `Float` as the key.
+`<`, `<=`, `>` and `>=` compare two tuples in the same order, part by part
+([operators](operators.md#comparison)), and a tuple holding a `Float` sorts
+like any other:
+
+```lume
+puts [(2.5, "b"), (0.5, "a")].sort         #=> [(0.5, "a"), (2.5, "b")]
+p = (1, "a")
+puts p < (1, "b")                          #=> true
+```
 
 A tuple is taken apart by `(a, b) = t`, by a block with two names, or by
 `match` ([patterns](patterns.md)).

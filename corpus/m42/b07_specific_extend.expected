@@ -1,0 +1,7 @@
+error: `extend Cell[Str] with Show` overlaps `extend Cell[T] with Show` from corpus/m42/b07_specific_extend.lume:41
+  --> corpus/m42/b07_specific_extend.lume:45:1
+   |
+45 | extend Cell[Str] with Show:
+   | ^
+  help: both would apply to `Cell[Str]`, and a type has one `Show`: as in Rust, neither wins for being more specific. Remove one, or narrow them so no type fits both
+exit: 1

@@ -1,0 +1,13 @@
+[HELLO THERE!]
+tidy -> shout -> bracket
+tidy    ok
+shout   OK!
+bracket [ok]
+up: LUME
+rev: emuL
+both: LUME!
+nope: unknown command
+<HI!>
+[x]
+Step(name: "tidy", run: <block>)
+exit: 0

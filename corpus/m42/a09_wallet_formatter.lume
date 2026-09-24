@@ -1,0 +1,45 @@
+# a09 — a wallet that formats its own amounts.
+# Probes: a method that hands back a kept block which reads a field of the
+# value (`currency`). The docs say a kept block inside a method cannot use
+# `self` or its fields, because it may outlive the value; a newcomer
+# writing a "formatter factory" method would reach for exactly this.
+# The rest of the program (a type function `Wallet.empty`, a `var self`
+# method, handing a kept block to `map`) is meant to be fine.
+# Meant to FAIL. Expected compile error, at the `{` of the block in
+# `formatter`:
+#   error: a block that is kept cannot use `self` or its fields
+#   help: it may outlive this value; bind what it needs to a name before the block, and use that
+# EXPECTED OUTPUT:
+# (none — it does not compile)
+
+struct Wallet:
+  owner: Str
+  currency: Str
+  amounts: [Int]
+
+  def self.empty(owner: Str, currency: Str) -> Wallet =
+    Wallet(owner: owner, currency: currency, amounts: [])
+
+  def add(var self, cents: Int):
+    amounts.push(cents)
+
+  # a block that prints an amount the way this wallet does
+  def formatter -> (Int) -> Str = { |c| "#{currency} #{(c.to_float / 100.0).decimals(2)}" }
+
+  def report -> Str:
+    fmt = formatter
+    "#{owner}: #{amounts.map(fmt).join(", ")}"
+
+def main:
+  var w = Wallet.empty("ada", "EUR")
+  w.add(1250)
+  w.add(99)
+  w.add(40000)
+  puts w.report
+  show = w.formatter
+  puts show(5)
+  puts [1, 2, 3].map(show).join(" | ")
+  puts "#{w.amounts.len} amounts"
+  puts w.amounts.sum
+  total = w.amounts.sum
+  puts show(total)

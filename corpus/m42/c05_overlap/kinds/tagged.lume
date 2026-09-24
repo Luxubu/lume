@@ -1,0 +1,6 @@
+# kinds/tagged.lume — the interface both extends are for.
+
+pub interface Tagged:
+  def tag -> Str
+
+  def shout -> Str = tag.upcase

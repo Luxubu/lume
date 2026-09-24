@@ -1,0 +1,11 @@
+# work/job.lume — a job is a name, an input, and a step kept in a field.
+
+pub struct Job:
+  name: Str
+  input: Int
+  step: (Int) -> Int
+
+  # a function of the type that keeps the block it is given
+  def self.of(name: Str, input: Int, step: (Int) -> Int) -> Job = Job(name: name, input: input, step: step)
+
+  def run -> Int = step(input)

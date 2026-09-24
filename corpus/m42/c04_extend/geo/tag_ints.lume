@@ -1,0 +1,6 @@
+# geo/tag_ints.lume — one of two files extending lists with `Tagged`.
+
+import geo.labels
+
+extend [Int] with labels.Tagged:
+  def tag -> Str = "ints"

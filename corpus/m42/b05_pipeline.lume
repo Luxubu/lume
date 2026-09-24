@@ -1,0 +1,80 @@
+# b05_pipeline.lume — a generic pipeline of kept blocks
+#
+# Probes: a generic struct holding `[(T) -> T]`; `def self.named` on it with
+# `T` read off the typed binding; a `var self` method that keeps the block it
+# is given by pushing it into the field; handing that method an inline
+# block, a `_` shorthand, a function name and a returned block; `fold` over
+# the kept blocks; calling one straight out of the list (`steps.at(1)(10)`);
+# a generic function that returns a kept block made of two others; printing
+# a struct holding a list of blocks.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# 3
+# 14
+# [2, 6, 7, 14]
+# 11
+# Pipeline(name: "nums", steps: [<block>, <block>, <block>])
+# HI!
+# ["A!", "B!"]
+# 30
+# LUME?
+# [32, 10]
+
+struct Pipeline[T]:
+  name: Str
+  steps: [(T) -> T]
+
+  def self.named(label: Str) -> Pipeline[T] = Pipeline(name: label, steps: [])
+
+  def add(var self, step: (T) -> T):
+    steps.push(step)
+
+  def run(x: T) -> T = steps.fold(x) { |acc, step| step(acc) }
+
+  def trace(x: T) -> [T]:
+    var out: [T] = [x]
+    var cur = x
+    for step in steps:
+      cur = step(cur)
+      out.push(cur)
+    out
+
+  def len -> Int = steps.len
+
+def double(n: Int) -> Int = n * 2
+
+def times(k: Int) -> (Int) -> Int = { |x| x * k }
+
+def suffix(s: Str) -> (Str) -> Str = { |x| x + s }
+
+def then[T](f: (T) -> T, g: (T) -> T) -> (T) -> T = { |x| g(f(x)) }
+
+def run_all[T](ps: [Pipeline[T]], x: T) -> [T] = ps.map { |p| p.run(x) }.to_list
+
+def main:
+  var nums: Pipeline[Int] = Pipeline.named("nums")
+  nums.add(times(3))
+  nums.add { |x| x + 1 }
+  nums.add(double)
+  puts nums.len
+  puts nums.run(2)
+  puts nums.trace(2)
+  puts nums.steps.at(1)(10)
+  puts nums
+
+  var text: Pipeline[Str] = Pipeline.named("text")
+  text.add(_.trim)
+  text.add(suffix("!"))
+  text.add { |s| s.upcase }
+  puts text.run("  hi ")
+  puts [" a", "b "].map { |s| text.run(s) }.to_list
+
+  both = then(times(2), times(5))
+  puts both(3)
+  shout = then(suffix("?"), { |s| s.upcase })
+  puts shout("lume")
+
+  short: Pipeline[Int] = Pipeline(name: "short", steps: [double])
+  puts run_all([nums, short], 5)

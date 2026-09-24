@@ -1,0 +1,54 @@
+# b07_specific_extend.lume — a general extend plus a "better" one for text
+#
+# Probes: the coherence rule on a generic struct of my own. `extend Cell[T]`
+# covers every cell; `extend Cell[Str]` was added afterwards to print text
+# cells differently. `Cell[Str]` fits both targets, and the docs say the more
+# specific one does not win, so the second extend is refused.
+#
+# Meant to FAIL, at the second `extend` (line 45), with:
+#   error: `extend Cell[Str] with Show` overlaps `extend Cell[T] with Show` from corpus/m42/b07_specific_extend.lume:41
+#   help: both would apply to `Cell[Str]`, and a type has one `Show`: as in
+#   Rust, neither wins for being more specific. Remove one, or narrow them so
+#   no type fits both
+#
+# EXPECTED OUTPUT:
+# (none: the program does not compile)
+#
+# (Had it compiled with only the first extend, it would print
+#   [ 3 (count) ]
+#   [ ada (name) ]
+#   2 cells
+# — the shape I was after, recorded for comparison.)
+
+interface Show:
+  def show -> Str
+
+  def framed -> Str = "[ #{show} ]"
+
+struct Cell[T]:
+  value: T
+  note: Str
+
+  def self.of(v: T) -> Cell[T] = Cell(value: v, note: "")
+
+  def noted(n: Str) -> Cell[T] = Cell(value: value, note: n)
+
+struct Row:
+  cells: [Str]
+
+  def count -> Int = cells.len
+
+extend Cell[T] with Show:
+  def show -> Str = "#{value} (#{note})"
+
+# text cells read better without the brackets around the note
+extend Cell[Str] with Show:
+  def show -> Str = value + " / " + note
+
+def main:
+  a = Cell.of(3).noted("count")
+  b = Cell.of("ada").noted("name")
+  puts a.framed
+  puts b.framed
+  row = Row(cells: [a.show, b.show])
+  puts "#{row.count} cells"

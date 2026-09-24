@@ -1,0 +1,53 @@
+# b08_button_equality.lume — comparing two structs that each hold a block
+#
+# Probes: a struct with a kept-block field (`action`), built with inline
+# blocks and with a `def self.` constructor; a menu that finds a button by
+# label and calls its block like a method; then `==` between two `Button`s.
+# The docs say `==` on a struct holding a block is refused, but show the
+# message only for `==` between two blocks. I expect the same message,
+# pointed at the `==` on line 50.
+#
+# Meant to FAIL, with:
+#   error: `==` cannot compare blocks
+#   help: a block has no `==`: whether two do the same thing cannot be
+#   checked; compare the other fields, or give the type its own `def ==`
+#
+# EXPECTED OUTPUT:
+# (none: the program does not compile)
+#
+# (Comparing labels instead — `chosen.label == greet.label` — is the fix the
+# help suggests; with it the program would print
+#   hello ada
+#   goodbye bo
+#   no button help
+#   the first button is the greeting)
+
+struct Button:
+  label: Str
+  action: (Str) -> Str
+
+  def self.echo(label: Str) -> Button = Button(label: label, action: { |u| "#{u}?" })
+
+struct Menu:
+  buttons: [Button]
+
+  def press(wanted: Str, user: Str) -> Str:
+    match buttons.find { |b| b.label == wanted }:
+      Some(b) -> b.action(user)
+      None    -> "no button #{wanted}"
+
+  def labels -> [Str] = buttons.map(_.label).to_list
+
+def main:
+  greet = Button(label: "hi", action: { |u| "hello #{u}" })
+  quit = Button(label: "bye", action: { |u| "goodbye #{u}" })
+  menu = Menu(buttons: [greet, quit, Button.echo("what")])
+  puts menu.press("hi", "ada")
+  puts menu.press("bye", "bo")
+  puts menu.press("help", "cy")
+
+  chosen = menu.buttons.first.or(quit)
+  if chosen == greet:
+    puts "the first button is the greeting"
+  else:
+    puts "something else is first"

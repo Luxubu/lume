@@ -1,0 +1,9 @@
+# report.lume — uses `Sized` as a parameter type. It imports geo.extends
+# only for the extends it brings; the name `extends` is never written.
+
+import geo.extends
+import geo.sized.Sized
+
+pub def line(label: Str, s: Sized) -> Str:
+  tail = if s.big?: " (big)" else: ""
+  "#{label}: #{s.describe}#{tail}"

@@ -95,6 +95,15 @@ for. Those are now [modules](reference/modules.md),
 [patterns](reference/patterns.md) and [input and output](reference/io.md).
 See `corpus/m36/REPORT.md`.
 
+## Round eight
+
+`corpus/m42/` measured milestones 37–41: three reviewers, thirty programs,
+**88 guesses** — the first round whose count fell. The guesses clustered
+where two new features meet (a block in a map or a tuple, a block in a
+generic container, an `extend` of the program's own generic type) and on four
+pages that contradicted each other about tuples and module functions; those
+are fixed. See `corpus/m42/REPORT.md`.
+
 ## What writing the answers found
 
 Four programs that the compiler accepted and then could not generate Rust for:

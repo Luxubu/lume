@@ -1,0 +1,19 @@
+# shop/pricing.lume — price rules: a struct holding two blocks, and
+# functions that hand blocks back for other files to keep.
+
+import shop.item
+import shop.item.Item
+
+pub struct Rule:
+  name: Str
+  applies: (Item) -> Bool
+  adjust: (Int) -> Int
+
+  # the blocks in the fields, called by bare name inside the type
+  def run(i: Item, cents: Int) -> Int = if applies(i): adjust(cents) else: cents
+
+pub def percent_off(pct: Int) -> (Int) -> Int = { |c| c - c * pct / 100 }
+
+pub def flat_off(off: Int) -> (Int) -> Int = { |c| (c - off).max(0) }
+
+pub def of_kind(k: item.Kind) -> (Item) -> Bool = { |i| i.kind == k }

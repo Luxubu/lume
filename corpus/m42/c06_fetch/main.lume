@@ -1,0 +1,62 @@
+# c06_fetch — `async def main -> () or Error`, an `async def` of another
+# module awaited through its prefix, `spawn:`, and `await t?`.
+# Probes: `await fetcher.fetch(..)?` (the `?` belongs to the await);
+# `spawn: await fetcher.fetch(..)` pushed into a `[Task[Page or Error]]`;
+# reading `tasks.len` before the `await` takes the list; results coming back
+# in start order although the sleeps make them finish in reverse; a type
+# function of an imported type inside a one-line `spawn:`; `await t?`
+# passing a task's failure up out of main at the end.
+# Deterministic because: every result is printed by main after an await,
+# the list of tasks gives results in the order the tasks were started, and
+# t1/t2/bad are awaited one at a time in a fixed order.
+# Meant to RUN, and then stop at the last `await bad?`: exit status 1 with
+# the failure on standard error (I expect `error: refused ftp://x: not https`
+# there; its exact shape is a guess). Standard output is:
+# EXPECTED OUTPUT:
+# https://solo.dev (160b)
+# 3 fetched
+# https://a.io (120b)
+# https://bb.io (130b)
+# failed: refused http://c.io: not https
+# total 250b
+# https://late.dev (160b)
+# about:blank (0b)
+# before the last await
+
+import net.fetcher
+import net.fetcher.Page
+
+URLS = ["https://a.io", "https://bb.io", "http://c.io"]
+
+async def main -> () or Error:
+  one = await fetcher.fetch("https://solo.dev", 5)?
+  puts one.show
+
+  # the first starts last to finish: 30ms, 20ms, 10ms
+  var tasks: [Task[Page or Error]] = []
+  for i, u in URLS.enumerate:
+    tasks.push(spawn: await fetcher.fetch(u, 30 - i * 10))
+  count = tasks.len
+  results = await tasks
+  puts "#{count} fetched"
+
+  var total = 0
+  for r in results:
+    match r:
+      Ok(p)    ->
+        puts p.show
+        total += p.bytes
+      Error(e) -> puts "failed: #{e.message}"
+  puts "total #{total}b"
+
+  t1 = spawn: await fetcher.fetch("https://late.dev", 1)
+  t2 = spawn: Page.blank("about:blank")
+  a = await t1?
+  b = await t2
+  puts a.show
+  puts b.show
+
+  bad = spawn: await fetcher.fetch("ftp://x", 1)
+  puts "before the last await"
+  c = await bad?
+  puts c.show

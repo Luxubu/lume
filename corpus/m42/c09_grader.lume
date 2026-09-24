@@ -1,0 +1,62 @@
+# c09_grader — a grader built from kept blocks and functions of types.
+# Probes: `def self.at_least(n)` building a struct whose field is a block
+# that keeps `n`; a no-argument type function (`Check.even`) in a list
+# literal; a field block called like a method (`c.rule(s)`); a list of
+# kept blocks mixing returned blocks and a literal one, folded over; a
+# returned block called at once (`curve(10)(95)`), and one taken from a
+# list and called at once (`boosts.at(1)(30)`); an enum's type function
+# handed over as a block (`.map(Grade.from_score)`) and called with a
+# returned block's result as its argument; tuples sorted part by part and
+# compared with `<` (milestone 41's tuple ordering).
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ana 72 Pass [">= 50", "even"]
+# bo 45 Fail []
+# cy 90 Merit [">= 50", "even"]
+# dee 45 Fail []
+# eli 49 Fail []
+# 100
+# 60
+# 90
+# Merit
+# [Fail, Pass, Merit]
+# cy, ana, eli, bo, dee
+# true
+
+enum Grade:
+  Pass
+  Merit
+  Fail
+
+  def self.from_score(n: Int) -> Grade = if n >= 80: Merit elif n >= 50: Pass else: Fail
+
+struct Check:
+  label: Str
+  rule: (Int) -> Bool
+
+  def self.at_least(n: Int) -> Check = Check(label: ">= #{n}", rule: { |x| x >= n })
+  def self.even -> Check = Check(label: "even", rule: { |x| x.even? })
+
+def curve(by: Int) -> (Int) -> Int = { |n| (n + by).min(100) }
+
+def main:
+  scores = [("ana", 72), ("bo", 45), ("cy", 90), ("dee", 45), ("eli", 49)]
+  checks: [Check] = [Check.at_least(50), Check.even]
+
+  for name, s in scores:
+    passed = checks.filter { |c| c.rule(s) }.map(_.label).to_list
+    puts "#{name} #{s} #{Grade.from_score(s)} #{passed}"
+
+  boosts: [(Int) -> Int] = [curve(5), { |n| n * 2 }, curve(0)]
+  puts curve(10)(95)
+  puts boosts.at(1)(30)
+  boosted = boosts.fold(40) { |acc, f| f(acc) }
+  puts boosted
+  puts Grade.from_score(curve(3)(boosted))
+  puts [30, 60, 85].map(Grade.from_score).to_list
+
+  ranked = scores.map { |name, s| (0 - s, name) }.to_list.sort
+  puts ranked.map { |neg, name| name }.join(", ")
+  a = ("bo", 45)
+  b = ("dee", 45)
+  puts a < b

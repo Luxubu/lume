@@ -1,0 +1,16 @@
+# net/fetcher.lume — a pretend fetcher: an `async def` that can fail, and
+# the type it hands back.
+
+pub struct Page:
+  url: Str
+  bytes: Int
+
+  def self.blank(url: Str) -> Page = Page(url: url, bytes: 0)
+
+  def show -> Str = "#{url} (#{bytes}b)"
+
+pub async def fetch(url: Str, ms: Int) -> Page or Error:
+  await Time.sleep(ms)
+  if not url.starts_with?("https://"):
+    return Error("refused #{url}: not https")
+  Page(url: url, bytes: url.len * 10)

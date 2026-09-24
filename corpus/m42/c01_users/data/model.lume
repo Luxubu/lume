@@ -1,0 +1,28 @@
+# data/model.lume — users read from "name: age" lines.
+# Imported by main.lume as `data.model` (the module) and `data.model.User`
+# (one type by name).
+
+pub enum Tier:
+  Junior
+  Senior
+
+  # a function of the enum, used by User.parse below
+  def self.for_age(age: Int) -> Tier = if age >= 40: Senior else: Junior
+
+pub struct User:
+  name: Str
+  age: Int
+  tier: Tier
+
+  # a constructor that can fail: the reason `def self` exists
+  def self.parse(line: Str) -> User or Error:
+    match line.split(":"):
+      [name, age] ->
+        n = age.trim.to_int?
+        User(name: name.trim, age: n, tier: Tier.for_age(n))
+      parts -> Error("expected name:age, got #{parts.len} parts in `#{line}`")
+
+  # a fixed value of the type, no arguments
+  def self.guest -> User = User(name: "guest", age: 0, tier: Junior)
+
+  def label -> Str = "#{name} (#{age}, #{tier})"

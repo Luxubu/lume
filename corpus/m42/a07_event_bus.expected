@@ -1,0 +1,20 @@
+warning: `log` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/m42/a07_event_bus.lume:45:3
+   |
+45 |   shared var log: [Str] = []
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+welcome, ada
+2
+1
+DISK FULL
+1
+0
+["login:ada", "logout:ada"]
+2
+welcome, bo
+2
+3
+4
+Handler(event: "alert", run: <block>)
+exit: 0

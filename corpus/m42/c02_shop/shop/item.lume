@@ -1,0 +1,25 @@
+# shop/item.lume — what the shop sells.
+
+pub enum Kind:
+  Food
+  Tool
+
+  def self.parse(s: Str) -> Kind? = match s:
+    "food" -> Some(Food)
+    "tool" -> Some(Tool)
+    _      -> None
+
+pub struct Item:
+  sku: Str
+  cents: Int
+  kind: Kind
+
+  # a constructor that works the kind out from the sku, using a private
+  # helper of this module
+  def self.make(sku: Str, cents: Int) -> Item = Item(sku: sku, cents: cents, kind: guess_kind(sku))
+
+  def show -> Str = "#{sku} #{money(cents)}"
+
+def guess_kind(sku: Str) -> Kind = if sku.starts_with?("F"): Food else: Tool
+
+pub def money(cents: Int) -> Str = "$#{(cents.to_float / 100.0).decimals(2)}"

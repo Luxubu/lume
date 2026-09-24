@@ -1,0 +1,59 @@
+# c02_shop — `import shop.item.Item` then `Item.make(...)`; blocks made in
+# one module, kept in a struct field of a second, called from a third.
+# Probes: a type function through an imported type name and through the
+# module prefix with keyword arguments (`item.Item.make(sku: .., cents: ..)`);
+# a type function calling a private helper of its own module; a `pub`
+# function returning a block (`pricing.percent_off(10)`), stored in a field
+# of another module's struct; a local kept block stored in that field
+# beside them; a returned block called at once (`pricing.percent_off(50)(999)`);
+# a bare variant as an argument whose parameter is `item.Kind`; printing a
+# struct that holds blocks; a type function of an imported enum
+# (`item.Kind.parse`).
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# F-apple $2.50 -> $2.25
+# T-saw $19.99 -> $15.00
+# F-bread $4.00 -> $3.60
+# T-nail $0.05 -> $0.00
+# total $20.85
+# food 10%, tools $1 off, cap
+# Rule(name: "cap", applies: <block>, adjust: <block>)
+# 500
+# parsed Food
+# None
+
+import shop.item
+import shop.item.Item
+import shop.pricing
+import shop.pricing.Rule
+
+def main:
+  basket = [
+    Item.make("F-apple", 250),
+    Item.make("T-saw", 1999),
+    Item.make("F-bread", 400),
+    item.Item.make(sku: "T-nail", cents: 5),
+  ]
+
+  cap: (Int) -> Int = { |c| c.min(1500) }
+  rules: [Rule] = [
+    Rule(name: "food 10%", applies: pricing.of_kind(item.Kind.Food), adjust: pricing.percent_off(10)),
+    Rule(name: "tools $1 off", applies: pricing.of_kind(Tool), adjust: pricing.flat_off(100)),
+    Rule(name: "cap", applies: { |i| true }, adjust: cap),
+  ]
+
+  var total = 0
+  for it in basket:
+    final = rules.fold(it.cents) { |c, r| r.run(it, c) }
+    puts "#{it.show} -> #{item.money(final)}"
+    total += final
+  puts "total #{item.money(total)}"
+
+  puts rules.map(_.name).join(", ")
+  puts rules.at(2)
+  puts pricing.percent_off(50)(999)
+
+  match item.Kind.parse("food"):
+    Some(k) -> puts "parsed #{k}"
+    None    -> puts "no kind"
+  puts item.Kind.parse("gem")

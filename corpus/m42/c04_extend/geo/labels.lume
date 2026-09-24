@@ -1,0 +1,4 @@
+# geo/labels.lume — a second interface, extended from two other files.
+
+pub interface Tagged:
+  def tag -> Str

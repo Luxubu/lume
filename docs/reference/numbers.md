@@ -269,8 +269,8 @@ The exception is `NaN`, which is neither smaller nor larger than anything. A
 list holding one does not come out sorted, and `max` and `min` over it are
 unreliable. Keep `NaN` out of anything you sort.
 
-A tuple that holds a `Float` cannot be sorted with `sort` yet. Sort it with
-`sort_by` and the `Float` as the key, as above.
+A tuple that holds a `Float` sorts, and compares with `<`, part by part like
+any other tuple; the `NaN` caution above applies to its `Float` part.
 
 A `Float` cannot go in a set or be a map key, because floats have no exact
 equality. Use an `Int` (cents, thousandths) or a `Str`.

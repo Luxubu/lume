@@ -1,0 +1,7 @@
+error: `Bag[T]` is already a `Summary`
+  --> corpus/m42/b09_bounded_extends.lume:43:1
+   |
+43 | extend Bag[T: Hashable] with Summary:
+   | ^
+  help: corpus/m42/b09_bounded_extends.lume:36 extends it too, and bounds do not keep two `extend`s apart: one type can meet both bounds, as in Rust. Remove one, or give one of them an interface of its own
+exit: 1

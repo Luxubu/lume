@@ -1,0 +1,58 @@
+# a03 — building number transforms at run time.
+# Probes: functions that return blocks and keep what they were given
+# (`adder`, `scaler`, `twice`, `chain` — `chain` keeps a whole list of
+# blocks inside the block it returns); calling a returned block straight
+# away, nested (`scaler(3)(adder(1)(4))`, `twice(adder(10))(1)`); `return`
+# of a block literal from a function declared `-> (Int) -> Int`; a kept block
+# handed to `map`; blocks inside tuples in a typed list
+# (`[(Str, (Int) -> Int)]`) taken apart by `for name, f in ...`; a negative
+# literal in a list; printing a block.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 5
+# 15
+# 21
+# 17
+# [8, 11, 14]
+# [0, 5, 10]
+# 99
+# inc(7) = 8
+# triple(7) = 21
+# pipeline(7) = 26
+# <block>
+
+def adder(n: Int) -> (Int) -> Int = { |x| x + n }
+
+def scaler(k: Int) -> (Int) -> Int = { |x| x * k }
+
+def twice(f: (Int) -> Int) -> (Int) -> Int = { |x| f(f(x)) }
+
+# every step in order, as one block
+def chain(fs: [(Int) -> Int]) -> (Int) -> Int = { |x| fs.fold(x) { |acc, f| f(acc) } }
+
+def clamp_to(lo: Int, hi: Int) -> (Int) -> Int:
+  if lo > hi:
+    return { |x| x }
+  { |x| x.clamp(lo, hi) }
+
+def main:
+  puts adder(2)(3)
+  puts scaler(3)(adder(1)(4))
+  puts twice(adder(10))(1)
+
+  inc = adder(1)
+  triple = scaler(3)
+  pipeline = chain([inc, triple, twice(inc)])
+  puts pipeline(4)
+  puts [1, 2, 3].map(pipeline).to_list
+
+  limit = clamp_to(0, 10)
+  puts [-5, 5, 50].map(limit).to_list
+  backwards = clamp_to(5, 1)
+  puts backwards(99)
+
+  named: [(Str, (Int) -> Int)] = [("inc", inc), ("triple", triple), ("pipeline", pipeline)]
+  for name, f in named:
+    puts "#{name}(7) = #{f(7)}"
+
+  puts inc

@@ -1,0 +1,99 @@
+# b01_units.lume — lengths in several units
+#
+# Probes: `def self.` on an enum and a struct; one type's function calling
+# another's (`Unit.parse` in `Length.parse`) with `?` on a result and on
+# `or_error`; an interface default met by an enum and a struct; a bound on
+# it; `map(Length.meters)`; an operator method on a struct.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# [Meters, Centimeters, Millimeters]
+# [m] [cm] [mm]
+# Some(Centimeters)
+# None
+# [0.0 m]
+# 1.7 m
+# 200.0 mm
+# Ok(Length(value: 250.0, unit: Millimeters))
+# 250.0 mm = 0.25 m
+# error: unknown unit yd
+# error: expected a number and a unit: abc
+# error: `x` is not a number
+# 1.0 m, 2.5 m
+# [0.0 m] [1.7 m]
+
+interface Labeled:
+  def label -> Str
+
+  def tagged -> Str = "[#{label}]"
+
+enum Unit:
+  Meters
+  Centimeters
+  Millimeters
+
+  def self.all -> [Unit] = [Meters, Centimeters, Millimeters]
+
+  def self.parse(s: Str) -> Unit? = match s:
+    "m"  -> Some(Meters)
+    "cm" -> Some(Centimeters)
+    "mm" -> Some(Millimeters)
+    _    -> None
+
+  def per_meter -> Float:
+    match self:
+      Meters      -> 1.0
+      Centimeters -> 100.0
+      Millimeters -> 1000.0
+
+  def label -> Str:
+    match self:
+      Meters      -> "m"
+      Centimeters -> "cm"
+      Millimeters -> "mm"
+
+struct Length:
+  value: Float
+  unit: Unit
+
+  def self.zero -> Length = Length(value: 0.0, unit: Meters)
+  def self.meters(v: Float) -> Length = Length(value: v, unit: Meters)
+
+  def self.parse(s: Str) -> Length or Error:
+    parts = s.split.to_list
+    if parts.len != 2:
+      return Error("expected a number and a unit: #{s}")
+    v = parts.at(0).to_float?
+    u = Unit.parse(parts.at(1)).or_error("unknown unit #{parts.at(1)}")?
+    Length(value: v, unit: u)
+
+  def in_meters -> Float = value / unit.per_meter
+  def convert(u: Unit) -> Length = Length(value: in_meters * u.per_meter, unit: u)
+  def label -> Str = "#{value} #{unit.label}"
+
+  def +(o: Length) -> Length = Length(value: value + o.convert(unit).value, unit: unit)
+
+def show(r: Length or Error) -> Str:
+  match r:
+    Ok(got)  -> "#{got.label} = #{got.in_meters} m"
+    Error(e) -> "error: #{e.message}"
+
+def tag_all[T: Labeled](xs: [T]) -> Str = xs.map(_.tagged).join(" ")
+
+def main:
+  puts Unit.all
+  puts tag_all(Unit.all)
+  puts Unit.parse("cm")
+  puts Unit.parse("yd")
+  puts Length.zero.tagged
+  a = Length.meters(1.5)
+  b = Length(value: 20.0, unit: Centimeters)
+  total = a + b
+  puts total.label
+  puts b.convert(Millimeters).label
+  puts Length.parse("250 mm")
+  for s in ["250 mm", "3 yd", "abc", "x m"]:
+    puts show(Length.parse(s))
+  puts [1.0, 2.5].map(Length.meters).map(_.label).join(", ")
+  puts tag_all([Length.zero, total])

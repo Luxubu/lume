@@ -1,0 +1,14 @@
+3
+Some(5)
+Some(5)
+Stack(items: [3, 7])
+["c", "b", "a"]
+0
+2
+Stack(items: [Stack(items: [1, 2]), Stack(items: [])])
+Some(7)
+Some(Money(cents: 900))
+[Money(cents: 900), Money(cents: 500)]
+["pear", "fig", "apple"]
+1.25 9.00
+exit: 0

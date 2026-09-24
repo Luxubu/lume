@@ -1,0 +1,73 @@
+# c08_ledger — one task per account replaying its moves, with a kept block
+# that records problems into a `shared var`, handed to a plain helper that
+# runs inside each task.
+# Probes: `def self.open` and `def self.parse_move` (a type function giving
+# a `(Str, Int) or Error`, with `?` inside a tuple); a kept block
+# `note: (Str) -> ()` that changes a `shared var` list, called directly
+# from main and passed as a block argument to `replay` inside a `spawn:`;
+# `shared var total += ..` inside the task; writing through a missing map
+# key (`by_owner[m.0].push(m.1)`); an assignment as a `match` arm; a method
+# giving back a new value or an Error.
+# Deterministic because: `await tasks` gives the accounts in start order
+# (the map's order: ana, bo); problems arrive from main and from tasks in
+# any order, so they are printed sorted; `total` is a sum.
+# Sorting: "`" is code point 96, before "a" (97) and "b" (98).
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ana   600
+# bo    150
+# total 750
+# problem: `x` is not an integer
+# problem: ana would go to -200
+# problem: bad move `bo`
+
+struct Account:
+  owner: Str
+  cents: Int
+
+  def self.open(owner: Str) -> Account = Account(owner: owner, cents: 0)
+
+  def self.parse_move(line: Str) -> (Str, Int) or Error:
+    match line.split(" "):
+      [who, amount] -> (who, amount.to_int?)
+      _             -> Error("bad move `#{line}`")
+
+  def apply(n: Int) -> Account or Error:
+    if cents + n < 0:
+      return Error("#{owner} would go to #{cents + n}")
+    Account(owner: owner, cents: cents + n)
+
+MOVES = ["ana 500", "bo 200", "ana -700", "cy x", "bo -50", "ana 100", "bo"]
+
+def replay(owner: Str, amounts: [Int], on_error: (Str) -> ()) -> Account:
+  var acct = Account.open(owner)
+  for n in amounts:
+    match acct.apply(n):
+      Ok(updated) -> acct = updated
+      Error(e)    -> on_error(e.message)
+  acct
+
+async def main:
+  shared var problems: [Str] = []
+  shared var total = 0
+  note: (Str) -> () = { |m| problems.push(m) }
+
+  var by_owner: {Str: [Int]} = {}
+  for line in MOVES:
+    match Account.parse_move(line):
+      Ok(m)    -> by_owner[m.0].push(m.1)
+      Error(e) -> note(e.message)
+
+  var tasks: [Task[Account]] = []
+  for owner, amounts in by_owner:
+    t = spawn:
+      acct = replay(owner, amounts, note)
+      total += acct.cents
+      acct
+    tasks.push(t)
+
+  for a in await tasks:
+    puts "#{a.owner.pad_right(4)}#{a.cents.pad(5)}"
+  puts "total #{total}"
+  for p in problems.sort:
+    puts "problem: #{p}"

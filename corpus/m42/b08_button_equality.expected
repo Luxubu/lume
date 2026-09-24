@@ -1,0 +1,7 @@
+error: `==` cannot compare `Button` values: they hold a block
+  --> corpus/m42/b08_button_equality.lume:50:13
+   |
+50 |   if chosen == greet:
+   |             ^
+  help: a block has no `==`: whether two do the same thing cannot be checked; compare the other fields, or give the type its own `def ==`
+exit: 1

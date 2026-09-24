@@ -1,0 +1,7 @@
+error: `ops[op]` is a `((Int, Int) -> Int)?`, not a block, so it cannot be called
+  --> corpus/m42/a10_calculator_table.lume:38:36
+   |
+38 |           puts "#{line} = #{ops[op](a, b)}"
+   |                                    ^
+  help: it may be absent: unwrap it first, as in `ops[op]!(...)` or with `match`
+exit: 1

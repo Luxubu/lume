@@ -1,0 +1,14 @@
+short: at least 8 chars
+correcthorse: ok
+Correct-horse: at most 12 chars; lowercase; not contains -
+open-sesame: not contains -
+passwords: ok
+4
+not contains -
+false
+true
+Rule(name: "lowercase", check: <block>)
+["no spaces"]
+["not admin"]
+[]
+exit: 0

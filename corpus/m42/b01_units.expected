@@ -1,0 +1,15 @@
+[Meters, Centimeters, Millimeters]
+[m] [cm] [mm]
+Some(Centimeters)
+None
+[0.0 m]
+1.7 m
+200.0 mm
+Ok(Length(value: 250.0, unit: Millimeters))
+250.0 mm = 0.25 m
+error: unknown unit yd
+error: expected a number and a unit: abc
+error: `x` is not a number
+1.0 m, 2.5 m
+[0.0 m] [1.7 m]
+exit: 0

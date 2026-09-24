@@ -1,0 +1,99 @@
+# b10_event_log.lume — log handlers: a struct, a kept block, a generic
+#
+# Probes: an enum with `def self.parse` / `def self.all`, a method, and its
+# own `<` (so `>=`, `filter` by order and `max` follow); a struct
+# `def self.parse` returning `T?` that uses `?` on optionals; a generic
+# interface `Handler[T]` met by a plain struct and by a generic struct
+# holding a block (`FnHandler[T]`); a field typed `[Handler[Event]]` built
+# from a mixed list; a block giving `Str?` that writes its `Some` out; a map
+# whose values are kept blocks, walked with `for k, v`.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# Info: disk at 80%
+# Alert: disk full!
+# DISK FULL!
+# skipped: nonsense here
+# Info: backup done!
+# BACKUP DONE!
+# [Info, Alert]
+# Some(Alert)
+# Some(Alert)
+# short: fan stopped
+# long: [Alert] fan stopped
+
+enum Level:
+  Trace
+  Info
+  Alert
+
+  def self.all -> [Level] = [Trace, Info, Alert]
+
+  def self.parse(s: Str) -> Level? = match s.downcase:
+    "trace" -> Some(Trace)
+    "info"  -> Some(Info)
+    "alert" -> Some(Alert)
+    _       -> None
+
+  def rank -> Int:
+    match self:
+      Trace -> 0
+      Info  -> 1
+      Alert -> 2
+
+  def <(o: Level) -> Bool = rank < o.rank
+
+struct Event:
+  level: Level
+  text: Str
+
+  def self.parse(line: Str) -> Event?:
+    words = line.split.to_list
+    first = words[0]?
+    lvl = Level.parse(first)?
+    Event(level: lvl, text: words.skip(1).join(" "))
+
+interface Handler[T]:
+  def handle(x: T) -> Str?
+
+struct Threshold:
+  at_least: Level
+
+  def handle(x: Event) -> Str? =
+    if x.level >= at_least: Some("#{x.level}: #{x.text}") else: None
+
+struct FnHandler[T]:
+  f: (T) -> Str?
+
+  def handle(x: T) -> Str? = f(x)
+
+struct Log:
+  handlers: [Handler[Event]]
+
+  def emit(e: Event) -> [Str]:
+    var out: [Str] = []
+    for h in handlers:
+      match h.handle(e):
+        Some(s) -> out.push(s)
+        None    -> ()
+    out
+
+def main:
+  shout: FnHandler[Event] = FnHandler(f: { |e| if e.text.ends_with?("!"): Some(e.text.upcase) else: None })
+  log = Log(handlers: [Threshold(at_least: Info), shout])
+  for line in ["info disk at 80%", "trace tick", "alert disk full!", "nonsense here", "INFO backup done!"]:
+    match Event.parse(line):
+      Some(e) ->
+        for s in log.emit(e):
+          puts s
+      None -> puts "skipped: #{line}"
+
+  puts Level.all.filter { |l| l >= Info }.to_list
+  puts Level.all.max
+  puts Level.parse("ALERT")
+
+  formats: {Str: (Event) -> Str} = {"short": { |e| e.text }, "long": { |e| "[#{e.level}] #{e.text}" }}
+  sample = Event(level: Alert, text: "fan stopped")
+  for name, fmt in formats:
+    puts "#{name}: #{fmt(sample)}"

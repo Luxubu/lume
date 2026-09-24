@@ -1,0 +1,65 @@
+# a05 — a race leaderboard: most points first, then fastest, then by name.
+# Probes: tuple comparison with `<`, `<=` and `>` on tuples of Int and Str
+# (including a 3-tuple returned by a method), `sort_by` and `min` with
+# tuple keys, a type function that parses one line and can fail
+# (`Entry.parse`), a trailing `if` on an assignment inside a loop, and
+# `pad`/`pad_right` for a column.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# bad line: `x` is not an integer
+# bad line: expected 3 fields in `fay,90`
+# 1. bo   150 130s
+# 2. eve  150 130s
+# 3. cy   120 80s
+# 4. ana  120 95s
+# true
+# false
+# true
+# leader: bo
+# Some((-150, 130, "bo"))
+# ana,cy
+
+struct Entry:
+  player: Str
+  points: Int
+  seconds: Int
+
+  def self.parse(line: Str) -> Entry or Error:
+    parts = line.split(",").map(_.trim).to_list
+    if parts.len != 3:
+      return Error("expected 3 fields in `#{line}`")
+    pts = parts.at(1).to_int?
+    secs = parts.at(2).to_int?
+    Entry(player: parts.at(0), points: pts, seconds: secs)
+
+  # more points is better, so the points go in negated
+  def key -> (Int, Int, Str) = (0 - points, seconds, player)
+
+def beats?(a: Entry, b: Entry) -> Bool = a.key < b.key
+
+def main:
+  lines = ["ana, 120, 95", "bo, 150, 130", "cy, 120, 80", "dee, x, 10", "eve, 150, 130", "fay,90"]
+  var board: [Entry] = []
+  for line in lines:
+    match Entry.parse(line):
+      Ok(e)    -> board.push(e)
+      Error(e) -> puts "bad line: #{e.message}"
+
+  ranked = board.sort_by(_.key)
+  for i, e in ranked.enumerate:
+    puts "#{i + 1}. #{e.player.pad_right(4)}#{e.points.pad(4)} #{e.seconds}s"
+
+  ana = board.at(0)
+  cy = board.at(2)
+  puts beats?(cy, ana)
+  puts beats?(ana, cy)
+  puts((2, "a") > (1, "z"))
+
+  var best = board.at(0)
+  for e in board:
+    best = e if e.key < best.key
+  puts "leader: #{best.player}"
+
+  puts board.map(_.key).min
+  fast = board.filter { |e| (e.seconds, e.player) <= (95, "ana") }.map(_.player)
+  puts fast.join(",")

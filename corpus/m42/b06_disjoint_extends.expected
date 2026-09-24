@@ -1,0 +1,18 @@
+warning: `things` holds values of different types behind `Describe`, so calls on its items go through a pointer
+  --> corpus/m42/b06_disjoint_extends.lume:82:3
+   |
+82 |   things: [Describe] = [Box(item: 1), Box(item: "one"), Pair(left: 2, right: "two")]
+   |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+box of the number 7
+box of the word fig
+BOX OF THE NUMBER 7
+1 then a
+a before 1
+2 number boxes
+2
+1
+1
+BOX OF THE NUMBER 3 | BOX OF THE NUMBER 4
+box of the number 1; box of the word one; 2 then two
+exit: 0

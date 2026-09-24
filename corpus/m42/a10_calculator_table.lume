@@ -1,0 +1,41 @@
+# a10 — a two-number calculator driven by a table of operations.
+# Probes: a map whose values are two-argument blocks
+# (`{Str: (Int, Int) -> Int}`), a function of the program handed in as one
+# of them (`power`), and then calling a looked-up block straight away:
+# `ops[name](a, b)`. A map lookup gives a `T?`, and the docs say a value
+# that may be absent must be unwrapped before it is called (as with
+# `steps.first!(3)`); a newcomer used to Ruby hashes or JS objects would
+# write the call directly anyway.
+# Meant to FAIL. Expected compile error, on the `(` after `ops[op]`:
+#   error: `ops[...]` is a `((Int, Int) -> Int)?`, not a block, so it cannot be called
+#   help: it may be absent: unwrap it first, as in `...!(...)` or with `match`
+# (the exact spelling of the expression in the first line is a guess; the
+# `((Int, Int) -> Int)?`, "not a block, so it cannot be called" and the
+# "unwrap it first" help are what I expect for sure).
+# EXPECTED OUTPUT:
+# (none — it does not compile)
+
+def power(a: Int, b: Int) -> Int = a.pow(b)
+
+def parse_line(line: Str) -> (Str, Int, Int) or Error:
+  words = line.split.to_list
+  if words.len != 3:
+    return Error("need `op a b`, got `#{line}`")
+  (words.at(0), words.at(1).to_int?, words.at(2).to_int?)
+
+def main:
+  ops: {Str: (Int, Int) -> Int} = {
+    "add": { |a, b| a + b },
+    "sub": { |a, b| a - b },
+    "mul": { |a, b| a * b },
+    "pow": power,
+  }
+  for line in ["add 2 3", "mul 4 5", "pow 2 10", "sub 1", "div 8 2"]:
+    match parse_line(line):
+      Error(e) -> puts "error: #{e.message}"
+      Ok((op, a, b)) ->
+        if ops.contains?(op):
+          puts "#{line} = #{ops[op](a, b)}"
+        else:
+          puts "unknown op `#{op}`"
+  puts ops.keys.join(" ")

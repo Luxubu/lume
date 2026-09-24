@@ -1,0 +1,9 @@
+first order: $7.00
+order 0: $7.00
+order 1: $4.25
+order 2: `x` is not an integer
+order 3: expected item:qty, got `pie`
+total: $11.25
+cake again: $4.25
+error: `x` is not an integer
+exit: 1

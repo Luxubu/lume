@@ -1,0 +1,13 @@
+ana 72 Pass [">= 50", "even"]
+bo 45 Fail []
+cy 90 Merit [">= 50", "even"]
+dee 45 Fail []
+eli 49 Fail []
+100
+60
+90
+Merit
+[Fail, Pass, Merit]
+cy, ana, eli, bo, dee
+true
+exit: 0

@@ -1,0 +1,83 @@
+# b06_disjoint_extends.lume — one interface, several extends that never meet
+#
+# Probes: the coherence rule's allowed side on types of my own. `extend` of a
+# generic struct at concrete arguments (`Box[Int]`, `Box[Str]`), of a
+# two-parameter struct at two disjoint argument pairs, and of a list of a
+# concrete box (`[Box[Int]]`) — all of one interface, none overlapping. A
+# second interface extended generically on `Box[T]` and `[T]` alongside.
+# Fields bare inside an extend of a generic struct; the interface default
+# (`loud`) reaching each extended type; a bound on the interface; a mixed
+# `[Describe]` list of two instantiations of one generic struct.
+#
+# Meant to RUN. (stderr should also carry:
+#   warning: `things` holds values of different types behind `Describe`, so
+#   calls on its items go through a pointer)
+#
+# EXPECTED OUTPUT:
+# box of the number 7
+# box of the word fig
+# BOX OF THE NUMBER 7
+# 1 then a
+# a before 1
+# 2 number boxes
+# 2
+# 1
+# 1
+# BOX OF THE NUMBER 3 | BOX OF THE NUMBER 4
+# box of the number 1; box of the word one; 2 then two
+
+interface Describe:
+  def describe -> Str
+
+  def loud -> Str = describe.upcase
+
+interface Weigh:
+  def weight -> Int
+
+struct Box[T]:
+  item: T
+
+struct Pair[A, B]:
+  left: A
+  right: B
+
+extend Box[Int] with Describe:
+  def describe -> Str = "box of the number #{item}"
+
+extend Box[Str] with Describe:
+  def describe -> Str = "box of the word #{item}"
+
+extend Pair[Int, Str] with Describe:
+  def describe -> Str = "#{left} then #{right}"
+
+extend Pair[Str, Int] with Describe:
+  def describe -> Str = "#{left} before #{right}"
+
+extend [Box[Int]] with Describe:
+  def describe -> Str = "#{self.len} number boxes"
+
+# a different interface, so these do not meet the ones above
+extend Box[T] with Weigh:
+  def weight -> Int = 1
+
+extend [T] with Weigh:
+  def weight -> Int = self.len
+
+def all_loud[D: Describe](xs: [D]) -> Str = xs.map(_.loud).join(" | ")
+
+def main:
+  puts Box(item: 7).describe
+  puts Box(item: "fig").describe
+  puts Box(item: 7).loud
+  puts Pair(left: 1, right: "a").describe
+  puts Pair(left: "a", right: 1).describe
+
+  boxes = [Box(item: 1), Box(item: 2)]
+  puts boxes.describe
+  puts boxes.weight
+  puts Box(item: 2.5).weight
+  puts [Box(item: true)].weight
+  puts all_loud([Box(item: 3), Box(item: 4)])
+
+  things: [Describe] = [Box(item: 1), Box(item: "one"), Pair(left: 2, right: "two")]
+  puts things.map(_.describe).join("; ")

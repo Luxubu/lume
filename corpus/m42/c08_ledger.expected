@@ -1,0 +1,19 @@
+warning: `problems` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/m42/c08_ledger.lume:51:3
+   |
+51 |   shared var problems: [Str] = []
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+warning: `total` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/m42/c08_ledger.lume:52:3
+   |
+52 |   shared var total = 0
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+ana   600
+bo    150
+total 750
+problem: `x` is not an integer
+problem: ana would go to -200
+problem: bad move `bo`
+exit: 0

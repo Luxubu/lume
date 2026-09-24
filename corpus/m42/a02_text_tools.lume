@@ -1,0 +1,60 @@
+# a02 — a small text-cleaning tool: named steps and a table of commands.
+# Probes: a block kept in a binding, in a struct field and in a list of
+# structs; a map whose values are blocks (`{Str: (Str) -> Str}`), written as
+# a multi-line literal; a block taken out of `Some(f)` and called; functions
+# that return blocks (`wrap`, `compose`); calling a returned block straight
+# away (`compose(...)("hi")`); a field block called like a method
+# (`steps.at(2).run("x")`); `fold` over kept blocks; printing a struct that
+# holds a block.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# [HELLO THERE!]
+# tidy -> shout -> bracket
+# tidy    ok
+# shout   OK!
+# bracket [ok]
+# up: LUME
+# rev: emuL
+# both: LUME!
+# nope: unknown command
+# <HI!>
+# [x]
+# Step(name: "tidy", run: <block>)
+
+struct Step:
+  name: Str
+  run: (Str) -> Str
+
+def shout(s: Str) -> Str = s.upcase + "!"
+
+def compose(f: (Str) -> Str, g: (Str) -> Str) -> (Str) -> Str = { |s| g(f(s)) }
+
+def wrap(left: Str, right: Str) -> (Str) -> Str = { |s| left + s + right }
+
+def apply_all(steps: [Step], s: Str) -> Str = steps.fold(s) { |acc, st| st.run(acc) }
+
+def main:
+  tidy: (Str) -> Str = { |s| s.trim.downcase }
+  steps: [Step] = [
+    Step(name: "tidy", run: tidy),
+    Step(name: "shout", run: shout),
+    Step(name: "bracket", run: wrap("[", "]")),
+  ]
+  puts apply_all(steps, "  Hello There ")
+  puts steps.map(_.name).join(" -> ")
+  for st in steps:
+    puts "#{st.name.pad_right(8)}#{st.run("ok")}"
+
+  commands: {Str: (Str) -> Str} = {
+    "up": { |s| s.upcase },
+    "rev": { |s| s.reverse },
+    "both": compose(tidy, shout),
+  }
+  for cmd in ["up", "rev", "both", "nope"]:
+    match commands[cmd]:
+      Some(f) -> puts "#{cmd}: #{f("Lume")}"
+      None    -> puts "#{cmd}: unknown command"
+
+  puts compose(shout, wrap("<", ">"))("hi")
+  puts steps.at(2).run("x")
+  puts steps.at(0)

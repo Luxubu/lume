@@ -1,0 +1,66 @@
+# a06 — pricing café orders that arrive over a slow line.
+# Probes: `await f()?` inside an `async def` that returns `Int or Error`
+# and inside `async def main -> () or Error`; a type function that can fail
+# (`Order.parse`) returned as-is from an async function; a constant map;
+# `.or_error(...)?` on a map lookup; spawning one task per order and
+# awaiting the list; a `match` arm with an indented body. The last
+# `await price(2)?` fails, so the program stops there: the message goes to
+# standard error and the exit status is 1, and nothing after it prints.
+# Meant to RUN (and end with a failure from `main`).
+# EXPECTED OUTPUT:
+# first order: $7.00
+# order 0: $7.00
+# order 1: $4.25
+# order 2: `x` is not an integer
+# order 3: expected item:qty, got `pie`
+# total: $11.25
+# cake again: $4.25
+
+PRICES = {"tea": 350, "cake": 425, "soup": 600}
+
+struct Order:
+  id: Int
+  item: Str
+  qty: Int
+
+  def self.parse(id: Int, line: Str) -> Order or Error:
+    parts = line.split(":").to_list
+    if parts.len != 2:
+      return Error("expected item:qty, got `#{line}`")
+    Order(id: id, item: parts.at(0), qty: parts.at(1).to_int?)
+
+async def fetch_line(id: Int) -> Str:
+  await Time.sleep(10 - id)
+  lines = ["tea:2", "cake:1", "soup:x", "pie"]
+  lines[id].or("")
+
+async def load(id: Int) -> Order or Error:
+  line = await fetch_line(id)
+  Order.parse(id, line)
+
+async def price(id: Int) -> Int or Error:
+  o = await load(id)?
+  cents = PRICES[o.item].or_error("no price for #{o.item}")?
+  cents * o.qty
+
+def money(cents: Int) -> Str = "$" + (cents.to_float / 100.0).decimals(2)
+
+async def main -> () or Error:
+  first = await price(0)?
+  puts "first order: #{money(first)}"
+
+  tasks = (0..3).map { |i| spawn: await price(i) }.to_list
+  results = await tasks
+  var total = 0
+  for i, r in results.enumerate:
+    match r:
+      Ok(c) ->
+        total += c
+        puts "order #{i}: #{money(c)}"
+      Error(e) -> puts "order #{i}: #{e.message}"
+  puts "total: #{money(total)}"
+
+  again = await price(1)?
+  puts "cake again: #{money(again)}"
+  soup = await price(2)?
+  puts "never printed: #{soup}"

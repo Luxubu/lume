@@ -1,0 +1,57 @@
+# c01_users — functions of a type used across a module boundary.
+# Probes: `model.User.parse(line)?` through the module prefix; `User.parse`
+# after `import data.model.User`; a type function handed over as a block
+# both ways (`LINES.map(User.parse)`, `LINES.map(model.User.parse)`); a
+# no-argument type function called bare through an imported name
+# (`User.guest`) and with `()` through the prefix (`model.User.guest()`);
+# a type function of one type calling one of another type in its module
+# (`Tier.for_age` from `User.parse`); a qualified variant of an imported
+# enum in an expression (`model.Tier.Senior`).
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# Zed (51, Senior)
+# Ana (44, Senior)
+# Bo (29, Junior)
+# skip: expected name:age, got 1 parts in `Cy`
+# skip: `old` is not an integer
+# Eli (40, Senior)
+# 3 parsed
+# 2 bad lines
+# seniors: ["Ana", "Eli"]
+# guest (0, Junior)
+# guest (0, Junior)
+# oldest: Ana
+
+import data.model
+import data.model.User
+
+LINES = ["Ana: 44", "Bo:29", "Cy", "Dee: old", "Eli : 40"]
+
+def main -> () or Error:
+  first = model.User.parse("Zed: 51")?
+  puts first.label
+
+  # the type's function handed over where a block is wanted
+  results = LINES.map(User.parse).to_list
+  var users: [User] = []
+  for r in results:
+    match r:
+      Ok(u)    ->
+        puts u.label
+        users.push(u)
+      Error(e) -> puts "skip: #{e.message}"
+  puts "#{users.len} parsed"
+
+  # the same, through the module prefix
+  bad = LINES.map(model.User.parse).count { |r| r.error? }
+  puts "#{bad} bad lines"
+
+  seniors = users.filter { |u| u.tier == model.Tier.Senior }.map(_.name).to_list
+  puts "seniors: #{seniors}"
+
+  puts User.guest.label
+  puts model.User.guest().label
+
+  match users.max_by(_.age):
+    Some(u) -> puts "oldest: #{u.name}"
+    None    -> puts "nobody"

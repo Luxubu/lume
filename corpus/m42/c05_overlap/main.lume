@@ -1,0 +1,27 @@
+# c05_overlap — the coherence rule across imports: two library files, each
+# fine on its own, that together give `[Int]` two `Tagged`s.
+# kinds/any_list.lume has `extend [T] with tagged.Tagged`; kinds/int_list.lume
+# has `extend [Int] with tagged.Tagged`. The more specific one does not win.
+# Probes: that the clash is found between two modules neither of which
+# imports the other; which of the two message forms it takes ("overlaps"
+# rather than "is already a", since the targets differ); that it is
+# reported at the import in main.lume that brings the second one in
+# (line 23 below), naming both files with their lines.
+# Meant to FAIL, with (paths relative to this directory):
+#   error: `extend [Int] with kinds.tagged.Tagged` from kinds/int_list.lume:3 overlaps `extend [T] with kinds.tagged.Tagged` from kinds/any_list.lume:3
+#     --> main.lume:23:1
+#      |
+#   23 | import kinds.int_list
+#      | ^
+#     help: both would apply to `[Int]`, and a type has one `kinds.tagged.Tagged`: as in Rust, neither wins for being more specific. Remove one, or narrow them so no type fits both
+# Without kinds.int_list it would print "a list of 2" then "A LIST OF 2".
+# EXPECTED OUTPUT: none; it does not compile.
+
+# The first import is fine alone; the second brings in the clash.
+
+import kinds.any_list
+import kinds.int_list
+
+def main:
+  puts [1, 2].tag
+  puts [1, 2].shout

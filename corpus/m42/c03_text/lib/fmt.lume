@@ -1,0 +1,9 @@
+# lib/fmt.lume — layout helpers. Passes `text` on to its importers.
+
+pub import lib.text
+
+# a block parameter handed straight on to a built-in
+pub def each_line(xs: [Str], f: (Str) -> Str) -> Str = xs.map(f).join(" | ")
+
+# a block parameter kept in the block handed back
+pub def twice(f: (Str) -> Str) -> (Str) -> Str = { |s| f(f(s)) }

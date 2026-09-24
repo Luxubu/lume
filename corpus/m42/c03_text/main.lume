@@ -1,0 +1,44 @@
+# c03_text — a module's function handed over as a block: `xs.map(text.shout)`.
+# Probes: `text` arriving through `pub import lib.text` in fmt.lume, so
+# main.lume never imports it; `text.shout` / `text.long?` / `text.initial`
+# handed to built-ins, to a block parameter of this file, and to a function
+# of another module; a module function kept in a typed binding and in a
+# list literal beside a literal block; a returned block called at once
+# (`fmt.twice(text.shout)("hi")`); a no-argument module function through
+# the prefix being a call (`text.banner`).
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# == words ==
+# ["OX!", "LUME!", "TEA!", "RIVERS!"]
+# ["lume", "rivers"]
+# ["o", "l", "t", "r"]
+# OX! | LUME! | TEA! | RIVERS!
+# HEY!
+# HI!!
+# ["LUME!", "l", "emul"]
+# LUME!,TEA!,RIVERS!
+
+import lib.fmt
+
+def apply_all(xs: [Str], f: (Str) -> Str) -> [Str]:
+  var out: [Str] = []
+  for x in xs:
+    out.push(f(x))
+  out
+
+def main:
+  words = ["ox", "lume", "tea", "rivers"]
+  puts text.banner
+  puts words.map(text.shout).to_list
+  puts words.filter(text.long?).to_list
+  puts apply_all(words, text.initial)
+  puts fmt.each_line(words, text.shout)
+
+  loud: (Str) -> Str = text.shout
+  puts loud("hey")
+  puts fmt.twice(text.shout)("hi")
+
+  steps: [(Str) -> Str] = [text.shout, text.initial, { |s| s.reverse }]
+  puts steps.map { |f| f("lume") }.to_list
+
+  puts words.map(text.shout).filter(text.long?).join(",")

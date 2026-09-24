@@ -1,0 +1,13 @@
+Zed (51, Senior)
+Ana (44, Senior)
+Bo (29, Junior)
+skip: expected name:age, got 1 parts in `Cy`
+skip: `old` is not an integer
+Eli (40, Senior)
+3 parsed
+2 bad lines
+seniors: ["Ana", "Eli"]
+guest (0, Junior)
+guest (0, Junior)
+oldest: Ana
+exit: 0

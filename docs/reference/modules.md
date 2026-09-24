@@ -209,8 +209,10 @@ holds:** a function of your own file, or one imported by name
 A function *with* arguments always needs them. `items.make` for a function
 that takes a `sku` is ``missing an argument: sku``.
 
-A module function reached through its prefix is always a call, never a
-function value.
+A module function reached through its prefix is a call when it takes no
+arguments. One that takes arguments, written without them where a block is
+wanted — `words.map(text.shout)` — is handed over as the block
+([Functions and blocks](functions-and-blocks.md#a-functions-name-as-a-block)).
 
 ## Constants
 

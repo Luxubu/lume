@@ -423,8 +423,8 @@ def main:
 
 ## Blocks as values
 
-**A block can be kept: put in a binding, a field or a list, or handed back
-from a function.** Its type says what it takes and gives, and where it goes
+**A block can be kept: put in a binding, a field, a list, a map or a tuple,
+or handed back from a function.** Its type says what it takes and gives, and where it goes
 has to say it, because a block on its own names no types:
 
 ```lume

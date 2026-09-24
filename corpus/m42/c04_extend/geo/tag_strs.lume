@@ -1,0 +1,7 @@
+# geo/tag_strs.lume — the other. No type is both `[Int]` and `[Str]`, so
+# the two may live in one program.
+
+import geo.labels
+
+extend [Str] with labels.Tagged:
+  def tag -> Str = "strs"

@@ -1,0 +1,92 @@
+# b02_stacks.lume — a generic stack and a ranked list of my own
+#
+# Probes: a generic struct with `def self.empty` / `def self.of`, its `T`
+# read off a typed binding, off an argument, and off a method parameter
+# (`nested.push(Stack.empty)`); a method `empty?` next to a function `empty`;
+# a `var` parameter of a generic type; a bounded generic struct
+# (`Ranked[T: Ordered]`) with a `def self.` that relies on the bound; a
+# struct that meets `Ordered` by writing `<`; generics nested two deep.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# 3
+# Some(5)
+# Some(5)
+# Stack(items: [3, 7])
+# ["c", "b", "a"]
+# 0
+# 2
+# Stack(items: [Stack(items: [1, 2]), Stack(items: [])])
+# Some(7)
+# Some(Money(cents: 900))
+# [Money(cents: 900), Money(cents: 500)]
+# ["pear", "fig", "apple"]
+# 1.25 9.00
+
+struct Stack[T]:
+  items: [T]
+
+  def self.empty -> Stack[T] = Stack(items: [])
+  def self.of(xs: [T]) -> Stack[T] = Stack(items: xs)
+
+  def push(var self, x: T):
+    items.push(x)
+
+  def pop(var self) -> T? = items.pop
+  def peek -> T? = items.last
+  def size -> Int = items.len
+  def empty? -> Bool = items.empty?
+
+struct Money:
+  cents: Int
+
+  def <(o: Money) -> Bool = cents < o.cents
+  def show -> Str = (cents.to_float / 100.0).decimals(2)
+
+struct Ranked[T: Ordered]:
+  items: [T]
+
+  def self.from(xs: [T]) -> Ranked[T] = Ranked(items: xs.sort)
+
+  def best -> T? = items.last
+  def worst -> T? = items.first
+  def top(n: Int) -> [T] = items.reverse.take(n).to_list
+
+# empties the caller's stack, top first
+def drain[T](var s: Stack[T]) -> [T]:
+  var out: [T] = []
+  while not s.empty?:
+    match s.pop:
+      Some(x) -> out.push(x)
+      None    -> ()
+  out
+
+def largest_of[T: Ordered](s: Stack[T]) -> T? = s.items.max
+
+def main:
+  var s: Stack[Int] = Stack.empty
+  s.push(3)
+  s.push(7)
+  s.push(5)
+  puts s.size
+  puts s.peek
+  puts s.pop
+  puts s
+
+  var words = Stack.of(["a", "b", "c"])
+  puts drain(words)
+  puts words.size
+
+  var nested: Stack[Stack[Int]] = Stack.empty
+  nested.push(Stack.of([1, 2]))
+  nested.push(Stack.empty)
+  puts nested.size
+  puts nested
+  puts largest_of(s)
+
+  r = Ranked.from([Money(500), Money(125), Money(900)])
+  puts r.best
+  puts r.top(2)
+  puts Ranked.from(["pear", "fig", "apple"]).top(5)
+  puts "#{r.worst.or(Money(0)).show} #{r.best.or(Money(0)).show}"

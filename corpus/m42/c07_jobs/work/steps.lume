@@ -1,0 +1,8 @@
+# work/steps.lume — functions that hand back blocks for other files to keep.
+
+pub def scale(k: Int) -> (Int) -> Int = { |n| n * k }
+
+pub def add(k: Int) -> (Int) -> Int = { |n| n + k }
+
+# keeps both blocks it is given in the block it hands back
+pub def chain(f: (Int) -> Int, g: (Int) -> Int) -> (Int) -> Int = { |n| g(f(n)) }

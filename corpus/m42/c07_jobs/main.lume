@@ -1,0 +1,60 @@
+# c07_jobs — kept blocks from another module, called inside tasks, and a
+# kept block that changes a `shared var`, called from inside tasks.
+# Probes: `Job.of(..)`, a type function of an imported type that keeps a
+# block argument in a field; blocks built by `steps.scale`/`steps.add`/
+# `steps.chain` in work/steps.lume, kept in work/job.lume's struct, and
+# called in main.lume's tasks (`j.run` calls the field `step`); a struct
+# holding a block copied into a `spawn:`; `record`, a kept block of this
+# file whose body pushes to a `shared var` list, copied into every task and
+# still changing the one list; `shared var done += 1` in a task; `await
+# Time.sleep(..)` inside a `spawn:` body; a block kept in a binding whose
+# parameter is a list of tuples, taking pairs apart with two names.
+# Deterministic because: the tasks' results are read from `await tasks`,
+# which keeps start order; the shared log fills in finishing order
+# (bump, square, triple, both), so it is printed sorted; `done` and the sum
+# do not depend on order.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# triple: 21
+# bump: 42
+# both: 60
+# square: 81
+# 4 done
+# 4
+# ["both", "bump", "square", "triple"]
+# 204
+
+import work.steps
+import work.job.Job
+
+async def main:
+  jobs = [
+    Job.of("triple", 7, steps.scale(3)),
+    Job.of("bump", 40, steps.add(2)),
+    Job(name: "both", input: 5, step: steps.chain(steps.add(1), steps.scale(10))),
+    Job.of("square", 9, { |n| n * n }),
+  ]
+
+  shared var done = 0
+  shared var log: [Str] = []
+  record: (Str) -> () = { |name| log.push(name) }
+
+  var tasks: [Task[(Str, Int)]] = []
+  for j in jobs:
+    t = spawn:
+      await Time.sleep(40 - j.input)
+      out = j.run
+      done += 1
+      record(j.name)
+      (j.name, out)
+    tasks.push(t)
+  results = await tasks
+
+  for name, value in results:
+    puts "#{name}: #{value}"
+  puts "#{done} done"
+  puts log.len
+  puts log.sort
+
+  total_of: ([(Str, Int)]) -> Int = { |rs| rs.map { |n, v| v }.sum }
+  puts total_of(results)

@@ -1,0 +1,17 @@
+warning: `deals` holds values of different types behind `Pricing`, so calls on its items go through a pointer
+  --> corpus/m42/b04_pricing.lume:64:3
+   |
+64 |   deals: [Pricing] = [Flat(off: 150), Percent(pct: 20), ByRule(rule: half_over_1000)]
+   |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+flat 150 off: 1200 -> 1050
+20% off: 1200 -> 960
+custom: 1200 -> 1100
+20% off: 1200 -> 960
+flat 150 off: 500 -> 350
+0
+[50, 150]
+7
+ByRule(rule: <block>)
+[1000, 1050, 1100]
+exit: 0

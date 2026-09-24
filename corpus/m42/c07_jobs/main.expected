@@ -1,0 +1,21 @@
+warning: `done` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/m42/c07_jobs/main.lume:38:3
+   |
+38 |   shared var done = 0
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+warning: `log` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/m42/c07_jobs/main.lume:39:3
+   |
+39 |   shared var log: [Str] = []
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+triple: 21
+bump: 42
+both: 60
+square: 81
+4 done
+4
+["both", "bump", "square", "triple"]
+204
+exit: 0

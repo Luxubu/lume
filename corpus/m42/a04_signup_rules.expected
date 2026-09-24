@@ -1,0 +1,13 @@
+ok: ada
+no: `bo`: at least 3 characters
+no: `9lives`: starts with a letter
+no: `grace hopper`: at most 10 characters, no spaces
+no: `lovelace_ada`: at most 10 characters
+
+Ok(["ada", "linus"])
+Error("`x`: at least 3 characters")
+at least 3 characters; at most 10 characters; no spaces; starts with a letter
+Error("`root`: not reserved")
+5
+4
+exit: 0

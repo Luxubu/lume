@@ -1,0 +1,78 @@
+# b03_rules.lume — password rules as kept blocks
+#
+# Probes: a struct whose field is a block; `def self.` constructors that
+# build such a struct around a block that copies in their parameter; a
+# method that makes a new kept block from the field (binding the field to a
+# name first, since a kept block may not use `self`); a function's name and
+# a `?`-named function as a kept block; a list of such structs held in
+# another struct; calling the field like a method (`r.check(s)`) and by bare
+# name inside the type; printing a struct that holds a block.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# short: at least 8 chars
+# correcthorse: ok
+# Correct-horse: at most 12 chars; lowercase; not contains -
+# open-sesame: not contains -
+# passwords: ok
+# 4
+# not contains -
+# false
+# true
+# Rule(name: "lowercase", check: <block>)
+# ["no spaces"]
+# ["not admin"]
+# []
+
+struct Rule:
+  name: Str
+  check: (Str) -> Bool
+
+  def self.min_len(n: Int) -> Rule = Rule(name: "at least #{n} chars", check: { |s| s.len >= n })
+  def self.max_len(n: Int) -> Rule = Rule(name: "at most #{n} chars", check: { |s| s.len <= n })
+  def self.has(piece: Str) -> Rule = Rule(name: "contains #{piece}", check: { |s| s.contains?(piece) })
+  def self.lower -> Rule = Rule(name: "lowercase", check: { |s| s == s.downcase })
+
+  def passes?(s: Str) -> Bool = check(s)
+
+  def negated -> Rule:
+    inner = check
+    Rule(name: "not #{name}", check: { |s| not inner(s) })
+
+struct Validator:
+  rules: [Rule]
+
+  def self.password -> Validator =
+    Validator(rules: [Rule.min_len(8), Rule.max_len(12), Rule.lower, Rule.has("-").negated])
+
+  def failures(s: Str) -> [Str] = rules.reject { |r| r.check(s) }.map(_.name).to_list
+  def ok?(s: Str) -> Bool = rules.all? { |r| r.passes?(s) }
+
+def no_spaces?(s: Str) -> Bool = not s.contains?(" ")
+
+def main:
+  v = Validator.password
+  for w in ["short", "correcthorse", "Correct-horse", "open-sesame", "passwords"]:
+    fails = v.failures(w)
+    if fails.empty?:
+      puts "#{w}: ok"
+    else:
+      joined = fails.join("; ")
+      puts "#{w}: #{joined}"
+
+  puts v.rules.len
+  puts v.rules.at(3).name
+  puts v.rules.at(0).check("abc")
+  puts v.ok?("passwords")
+  puts Rule.lower
+
+  banned = "admin"
+  custom = Validator(rules: [
+    Rule(name: "no spaces", check: no_spaces?),
+    Rule(name: "not admin", check: { |s| s != banned }),
+    Rule.min_len(3),
+  ])
+  puts custom.failures("admin x")
+  puts custom.failures("admin")
+  puts custom.failures("guest")

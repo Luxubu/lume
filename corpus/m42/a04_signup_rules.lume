@@ -1,0 +1,64 @@
+# a04 — checking usernames against a list of rules.
+# Probes: functions of a type that build values holding kept blocks
+# (`Rule.min_len(3)` keeps its `n` in the block it stores), a zero-argument
+# type function called without `()` (`Rule.no_spaces`), a `def self` whose
+# `= expr` breaks onto the next line, a field block called by bare name
+# inside a method (`check(s)`), a block built in `main` that closes over a
+# local set, `?` over a `T or Error` in a loop, and printing Ok/Error lists.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ok: ada
+# no: `bo`: at least 3 characters
+# no: `9lives`: starts with a letter
+# no: `grace hopper`: at most 10 characters, no spaces
+# no: `lovelace_ada`: at most 10 characters
+#
+# Ok(["ada", "linus"])
+# Error("`x`: at least 3 characters")
+# at least 3 characters; at most 10 characters; no spaces; starts with a letter
+# Error("`root`: not reserved")
+# 5
+# 4
+
+struct Rule:
+  label: Str
+  check: (Str) -> Bool
+
+  def self.min_len(n: Int) -> Rule = Rule(label: "at least #{n} characters", check: { |s| s.len >= n })
+  def self.max_len(n: Int) -> Rule = Rule(label: "at most #{n} characters", check: { |s| s.len <= n })
+  def self.no_spaces -> Rule = Rule(label: "no spaces", check: { |s| not s.contains?(" ") })
+  def self.starts_with_letter -> Rule =
+    Rule(label: "starts with a letter", check: { |s| s[0].map(_.alpha?).or(false) })
+
+  def passes?(s: Str) -> Bool = check(s)
+
+def validate(name: Str, rules: [Rule]) -> Str or Error:
+  broken = rules.reject { |r| r.passes?(name) }.map(_.label).to_list
+  if broken.empty?:
+    return name
+  Error("`#{name}`: #{broken.join(", ")}")
+
+def register(names: [Str], rules: [Rule]) -> [Str] or Error:
+  var out: [Str] = []
+  for n in names:
+    out.push(validate(n, rules)?)
+  out
+
+def main:
+  rules: [Rule] = [Rule.min_len(3), Rule.max_len(10), Rule.no_spaces, Rule.starts_with_letter]
+  for name in ["ada", "bo", "9lives", "grace hopper", "lovelace_ada"]:
+    match validate(name, rules):
+      Ok(n)    -> puts "ok: #{n}"
+      Error(e) -> puts "no: #{e.message}"
+  puts ""
+
+  puts register(["ada", "linus"], rules)
+  puts register(["ada", "x", "y"], rules)
+  puts rules.map(_.label).join("; ")
+
+  reserved = {"admin", "root"}
+  var strict: [Rule] = rules.to_list
+  strict.push(Rule(label: "not reserved", check: { |s| not reserved.contains?(s) }))
+  puts validate("root", strict)
+  puts strict.len
+  puts rules.len

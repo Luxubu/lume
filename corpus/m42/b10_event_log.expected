@@ -1,0 +1,12 @@
+Info: disk at 80%
+Alert: disk full!
+DISK FULL!
+skipped: nonsense here
+Info: backup done!
+BACKUP DONE!
+[Info, Alert]
+Some(Alert)
+Some(Alert)
+short: fan stopped
+long: [Alert] fan stopped
+exit: 0

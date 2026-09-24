@@ -1,0 +1,28 @@
+# c10_limits — a method that hands back a block built from the value's own
+# fields: the natural way to write a "checker factory", and refused.
+# Probes: that a kept block made inside a method (here, the block a method
+# returns) may not use the fields bare; that the error is the kept-block
+# one, reported at the block's `{`, rather than a type error; that a
+# `def self` constructor beside it is not involved.
+# Meant to FAIL, with:
+#   error: a block that is kept cannot use `self` or its fields
+#     --> c10_limits.lume:24:34
+#      |
+#   24 |   def checker -> (Str) -> Bool = { |s| s.len <= max_len and not banned.contains?(s) }
+#      |                                  ^
+#     help: it may outlive this value; bind what it needs to a name before the block, and use that
+# The fix the help asks for: `limit = max_len` and `no = banned` on their
+# own lines, then `{ |s| s.len <= limit and not no.contains?(s) }`; that
+# version prints ["ada"].
+# EXPECTED OUTPUT: none; it does not compile.
+
+struct Limits:
+  max_len: Int
+  banned: [Str]
+
+  def self.default -> Limits = Limits(max_len: 8, banned: ["root"])
+  def checker -> (Str) -> Bool = { |s| s.len <= max_len and not banned.contains?(s) }
+
+def main:
+  ok = Limits.default.checker
+  puts ["ada", "root", "averylongname"].filter(ok).to_list

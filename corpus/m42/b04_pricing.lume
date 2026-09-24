@@ -1,0 +1,77 @@
+# b04_pricing.lume — a discount strategy as an interface and as a block
+#
+# Probes: an interface with a required method and two defaults, met by two
+# plain structs and by a struct whose only field is a block (its method
+# calls the field); that struct taking the interface's default `name`; a
+# mixed `[Pricing]` list; a bound `[P: Pricing]` on a list of one concrete
+# type; turning an interface value into a kept block (`as_block`), which
+# copies the interface value in; calling a returned block straight away.
+#
+# Meant to RUN. (stderr should also carry the mixed-list warning:
+#   warning: `deals` holds values of different types behind `Pricing`, so
+#   calls on its items go through a pointer)
+#
+# EXPECTED OUTPUT:
+# flat 150 off: 1200 -> 1050
+# 20% off: 1200 -> 960
+# custom: 1200 -> 1100
+# 20% off: 1200 -> 960
+# flat 150 off: 500 -> 350
+# 0
+# [50, 150]
+# 7
+# ByRule(rule: <block>)
+# [1000, 1050, 1100]
+
+interface Pricing:
+  def price(base: Int) -> Int
+
+  def name -> Str = "custom"
+
+  def quote(base: Int) -> Str = "#{name}: #{base} -> #{price(base)}"
+
+struct Flat:
+  off: Int
+
+  def price(base: Int) -> Int = (base - off).max(0)
+  def name -> Str = "flat #{off} off"
+
+struct Percent:
+  pct: Int
+
+  def price(base: Int) -> Int = base * (100 - pct) / 100
+  def name -> Str = "#{pct}% off"
+
+# the strategy is whatever block the caller hands in
+struct ByRule:
+  rule: (Int) -> Int
+
+  def price(base: Int) -> Int = rule(base)
+
+def best_deal(ps: [Pricing], base: Int) -> Str:
+  var best = ps.at(0)
+  for p in ps:
+    if p.price(base) < best.price(base):
+      best = p
+  best.quote(base)
+
+def cheapest[P: Pricing](ps: [P], base: Int) -> Int = ps.map { |p| p.price(base) }.min.or(base)
+
+def as_block(p: Pricing) -> (Int) -> Int = { |b| p.price(b) }
+
+def main:
+  half_over_1000: (Int) -> Int = { |b| if b > 1000: b - (b - 1000) / 2 else: b }
+  deals: [Pricing] = [Flat(off: 150), Percent(pct: 20), ByRule(rule: half_over_1000)]
+  for d in deals:
+    puts d.quote(1200)
+  puts best_deal(deals, 1200)
+  puts best_deal(deals, 500)
+  puts cheapest([Flat(off: 100), Flat(off: 250)], 200)
+
+  half = as_block(Percent(pct: 50))
+  puts [100, 300].map(half).to_list
+  puts as_block(Flat(off: 5))(12)
+  puts ByRule(rule: half_over_1000)
+
+  # the same rule, used as a plain block with no struct around it
+  puts [1000, 1100, 1200].map(half_over_1000).to_list

@@ -1,0 +1,9 @@
+skip: no unit on `hot`
+skip: no unit on `12.5`
+20.0C, 25.0C, 35.0C, 30.0C
+hot days: 2
+0.0C 100.0C 37.0C
+warmest: 35.0C
+average: 27.50
+50.0
+exit: 0

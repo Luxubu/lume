@@ -1,0 +1,7 @@
+# geo/point.lume — a type that knows nothing about `Sized`.
+
+pub struct Pt:
+  x: Int
+  y: Int
+
+  def self.origin -> Pt = Pt(0, 0)

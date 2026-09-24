@@ -1,0 +1,7 @@
+error: a block that is kept cannot use `self` or its fields
+  --> corpus/m42/a09_wallet_formatter.lume:27:35
+   |
+27 |   def formatter -> (Int) -> Str = { |c| "#{currency} #{(c.to_float / 100.0).decimals(2)}" }
+   |                                   ^
+  help: it may outlive this value; bind what it needs to a name before the block, and use that
+exit: 1

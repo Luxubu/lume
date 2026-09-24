@@ -1,0 +1,11 @@
+skipped: `x` is not an integer
+skipped: unknown category `sky`
+skipped: bad line `ball|200`
+apple (1.20), bread (2.50), hammer (15.99), yo-yo (3.50)
+Food: 2
+Tool: 1
+Toy: 1
+Some((120, "apple"))
+hammer
+card (0.00), bow (0.00)
+exit: 0

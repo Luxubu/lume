@@ -1,0 +1,75 @@
+# a08 — reading a shop inventory from `name|cents|category` lines.
+# Probes: functions of an enum (`Category.parse -> Category?`,
+# `Category.all`), a struct's type function calling another type's function
+# (`Category.parse(...)` inside `Item.parse`), `.or_error(...)?` inside a
+# type function, a failing type function handed to `map` as a block
+# (`lines.map(Item.parse)`, giving a list of results), a plain one handed to
+# `map` (`names.map(Item.free)`), a method returning a 3-tuple used as a
+# `sort_by` key, `min` over a list of tuples, and an enum in interpolation.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# skipped: `x` is not an integer
+# skipped: unknown category `sky`
+# skipped: bad line `ball|200`
+# apple (1.20), bread (2.50), hammer (15.99), yo-yo (3.50)
+# Food: 2
+# Tool: 1
+# Toy: 1
+# Some((120, "apple"))
+# hammer
+# card (0.00), bow (0.00)
+
+enum Category:
+  Food
+  Tool
+  Toy
+
+  def self.parse(s: Str) -> Category? = match s.downcase:
+    "food" -> Some(Food)
+    "tool" -> Some(Tool)
+    "toy"  -> Some(Toy)
+    _      -> None
+
+  def self.all -> [Category] = [Food, Tool, Toy]
+
+  def rank -> Int = match self:
+    Food -> 0
+    Tool -> 1
+    Toy  -> 2
+
+struct Item:
+  name: Str
+  cents: Int
+  kind: Category
+
+  def self.parse(line: Str) -> Item or Error:
+    fields = line.split("|").to_list
+    if fields.len != 3:
+      return Error("bad line `#{line}`")
+    cat = Category.parse(fields.at(2)).or_error("unknown category `#{fields.at(2)}`")?
+    Item(name: fields.at(0), cents: fields.at(1).to_int?, kind: cat)
+
+  def self.free(name: Str) -> Item = Item(name: name, cents: 0, kind: Toy)
+
+  def sort_key -> (Int, Int, Str) = (kind.rank, cents, name)
+  def label -> Str = "#{name} (#{(cents.to_float / 100.0).decimals(2)})"
+
+def main:
+  lines = ["apple|120|food", "hammer|1599|tool", "yo-yo|350|toy", "bread|250|Food", "saw|x|tool", "kite|900|sky", "ball|200"]
+  results = lines.map(Item.parse).to_list
+  var items: [Item] = []
+  for r in results:
+    match r:
+      Ok(item) -> items.push(item)
+      Error(e) -> puts "skipped: #{e.message}"
+
+  puts items.sort_by(_.sort_key).map(_.label).join(", ")
+  for c in Category.all:
+    n = items.count { |i| i.kind == c }
+    puts "#{c}: #{n}"
+
+  puts items.map { |i| (i.cents, i.name) }.min
+  puts items.max_by(_.cents).map(_.name).or("none")
+
+  gifts = ["card", "bow"].map(Item.free).to_list
+  puts gifts.map(_.label).join(", ")
