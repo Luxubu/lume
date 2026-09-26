@@ -1,0 +1,15 @@
+warning: `held` holds values of different types behind `feeds.source.Source`, so calls on its items go through a pointer
+  --> corpus/m45/c01_feeds/main.lume:55:3
+   |
+55 |   held: [Source] = [a, b, c]
+   |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+alpha: HELLO
+beta: BETA AFTER 30MS
+failed: gamma is down
+delta: DELTA AFTER 1MS
+alpha: HELLO | delta: DELTA AFTER 1MS
+Error("gamma is down")
+<source gamma>
+["source alpha", "source beta", "source gamma"]
+exit: 0

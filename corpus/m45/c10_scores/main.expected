@@ -1,0 +1,8 @@
+[("ada", 91), ("bo", 47), ("cyd", 78)]
+ada leads with 91
+pass: ["ada", "cyd"]
+fail: ["bo"]
+top: ["ada"]
+[true, false, false]
+no total: no score for zed
+exit: 0

@@ -1,0 +1,16 @@
+# shelf/store.lume — a conforming struct, and a struct whose field holds
+# the interface (allowed: the interface can be held, its plain methods
+# called through it).
+
+import shelf.api.Mappable
+
+pub struct Crate:
+  items: [Int]
+
+  def map_all[V](f: (Int) -> V) -> [V] = items.map { |x| f(x) }.to_list
+  def size -> Int = items.len
+
+pub struct Shelf:
+  slots: [Mappable[Int]]
+
+  def sizes -> [Int] = slots.map { |s| s.size }.to_list

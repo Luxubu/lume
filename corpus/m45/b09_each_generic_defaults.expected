@@ -1,0 +1,17 @@
+warning: `held` holds values of different types behind `Each`, so calls on its items go through a pointer
+  --> corpus/m45/b09_each_generic_defaults.lume:83:3
+   |
+83 |   held: [Each[Int]] = [r, [2, 4], {7}]
+   |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+[3, 4, 1, 2]
+[30, 40, 10, 20]
+10
+2
+1
+["(b)", "(a)"]
+["(y)", "(x)"]
+[false, true]
+[3, 2, 1]
+[4, 2, 1]
+exit: 0

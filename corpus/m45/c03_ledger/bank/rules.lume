@@ -1,0 +1,8 @@
+# bank/rules.lume — turns `who: amount` into a pair, or says why not.
+
+pub def parse_move(line: Str) -> (Str, Int) or Error:
+  match line.split(":"):
+    [who, amount] ->
+      n = amount.trim.to_int?
+      (who.trim, n)
+    _ -> Error("bad move `#{line}`")

@@ -1,0 +1,73 @@
+# c02_pipeline — kept blocks crossing module boundaries and going into
+# tasks: blocks made by flow/steps.lume, stored in a struct field of a type
+# from flow/stage.lume, in a map returned from another module, and in a
+# tuple; a struct holding blocks copied into several tasks; a block taken
+# out of a map inside a task; a returned block called straight away.
+# Output is deterministic: results come back by `await` on a list, in
+# the order the tasks were started, and the map keeps insertion order.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# x3 > +4 > cap > less
+# [-42, 18]
+# 1 -> -36
+# 5 -> -12
+# 20 -> 50
+# 70
+# 42
+# double,inc
+# {"double": <block>, "inc": <block>}
+# 11
+# 12
+# half 4
+
+import flow.steps
+import flow.stage.Stage
+import flow.stage.Plan
+
+def run_all(p: Plan, xs: [Int]) -> [Int] = xs.map { |x| p.apply(x) }.to_list
+
+async def main:
+  cap = 50
+  plan = Plan(stages: [
+    Stage(name: "x3", run: steps.scale(3)),
+    Stage(name: "+4", run: steps.shift(4)),
+    Stage(name: "cap", run: steps.clamp_to(cap)),
+    Stage(name: "less", run: { |x| x * 2 - cap }),
+  ])
+  puts plan.names
+  puts run_all(plan, [0, 10])
+
+  # the whole plan, blocks and all, is copied into each task
+  inputs = [1, 5, 20]
+  var tasks: [Task[Int]] = []
+  for n in inputs:
+    tasks.push(spawn: plan.apply(n))
+  results = await tasks
+  for n, r in inputs.zip(results):
+    puts "#{n} -> #{r}"
+
+  # a returned block, bound without an annotation, called inside a task
+  f = steps.scale(10)
+  t = spawn: f(7)
+  puts await t
+
+  # a map of kept blocks from another module, read inside a task
+  ops = steps.named
+  u = spawn:
+    match ops["inc"]:
+      Some(g) -> g(41)
+      None    -> 0
+  puts await u
+  puts ops.keys.join(",")
+  puts ops
+
+  both = steps.then(steps.scale(2), steps.shift(1))
+  puts both(5)
+  puts steps.then(steps.shift(1), steps.scale(2))(5)
+
+  # a block kept in a tuple, taken apart, and sent to a task
+  pair: (Str, (Int) -> Int) = ("half", { |x| x / 2 })
+  (label, h) = pair
+  v = spawn: h(9)
+  hv = await v
+  puts "#{label} #{hv}"

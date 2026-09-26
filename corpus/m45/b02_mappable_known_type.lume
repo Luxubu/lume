@@ -1,0 +1,74 @@
+# Probes: an interface method with a type parameter of its own
+# (`map_all[U]`), called everywhere the docs say it may be: on a parameter
+# typed as the interface, through a bound `[M: Mappable[Int]]`, through a
+# bound whose element type is itself a parameter (`[T, M: Mappable[T]]`),
+# and on the concrete value directly. A parameter typed as the interface is
+# handed on to another such parameter. The same interface is then held in a
+# list and a field, where only its other methods (`size`, the default
+# `summary`) are called. The type's method names its parameter `V`, the
+# extend's names it `U`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# [2, 4, 6]
+# [10]
+# [2, 4, 6]
+# ["n1", "n2", "n3"]
+# ["n7"]
+# [2, 3]
+# [1.5, 3.0, 4.5]
+# ["<1>", "<2>"]
+# 3 item(s)
+# [3, 2]
+# ["3 item(s)", "2 item(s)"]
+# 1
+
+interface Mappable[T]:
+  def map_all[U](f: (T) -> U) -> [U]
+  def size -> Int
+
+  def summary -> Str = "#{size} item(s)"
+
+struct Box[T]:
+  items: [T]
+
+  def map_all[V](f: (T) -> V) -> [V] = items.map { |x| f(x) }.to_list
+  def size -> Int = items.len
+
+extend [T] with Mappable[T]:
+  def map_all[U](f: (T) -> U) -> [U] = self.map { |x| f(x) }.to_list
+  def size -> Int = self.len
+
+struct Holder:
+  name: Str
+  m: Mappable[Int]
+
+# a parameter typed as the interface
+def doubled(m: Mappable[Int]) -> [Int] = m.map_all { |x| x * 2 }
+
+# ...handed on to another parameter typed as the interface
+def doubled_again(m: Mappable[Int]) -> [Int] = doubled(m)
+
+# a bound
+def labels[M: Mappable[Int]](m: M) -> [Str] = m.map_all { |n| "n#{n}" }
+
+# a bound whose own argument is worked out from the value
+def lengths[T, M: Mappable[T]](m: M, show: (T) -> Str) -> [Int] =
+  m.map_all { |x| show(x).len }
+
+def main:
+  b = Box(items: [1, 2, 3])
+  puts doubled(b)
+  puts doubled([5])
+  puts doubled_again(b)
+  puts labels(b)
+  puts labels([7])
+  puts lengths(Box(items: ["ab", "cde"])) { |s| s }
+  puts b.map_all { |x| x.to_float * 1.5 }
+  puts [1, 2].map_all { |x| "<#{x}>" }
+  puts b.summary
+
+  held: [Mappable[Int]] = [b, [4, 5]]
+  puts held.map { |m| m.size }.to_list
+  puts held.map { |m| m.summary }.to_list
+  h = Holder(name: "one", m: [9])
+  puts h.m.size

@@ -1,0 +1,18 @@
+warning: `walks` holds values of different types behind `Walk`, so calls on its items go through a pointer
+  --> corpus/m45/b01_walk_defaults.lume:86:3
+   |
+86 |   walks: [Walk] = [Bag(xs: [4, 0, 6]), Countdown(start: 3), {5, 1}]
+   |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+[10, 6, 6]
+[2, 1, 1]
+[Some(6), Some(3), Some(5)]
+10
+6 over 2
+None
+0 over 0
+6
+5
+10
+2
+exit: 0

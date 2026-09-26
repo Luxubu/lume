@@ -1,0 +1,7 @@
+# jobs/report.lume — how a reading is shown.
+
+import jobs.parse.Reading
+
+pub def line(r: Reading) -> Str = "#{r.station}: #{r.temp}C"
+
+pub def warmest(rs: [Reading]) -> Reading? = rs.max_by { |r| r.temp }

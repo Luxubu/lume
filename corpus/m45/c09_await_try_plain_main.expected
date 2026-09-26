@@ -1,0 +1,7 @@
+error: `?` returns the error early, but `main` does not return `T or E`
+  --> corpus/m45/c09_await_try_plain_main.lume:21:13
+   |
+21 |   n = await t?
+   |             ^
+  help: write `def main(...) -> Type or Error`, or handle the error with `match` or `.or(default)`
+exit: 1

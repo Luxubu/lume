@@ -1,0 +1,41 @@
+# Probes: the "known type" rule when the interface value sits in a struct
+# field and the generic method is called from inside the struct's own
+# method, by the field's bare name. The `size` call on the field is fine;
+# the `map_all` call inside `lines` is the one the docs refuse ("refused on a
+# value held through a pointer — a list item, a field, a binding of the
+# interface's type"). The error should point at `map_all` in `lines`, not at
+# `main`, and the interface's parameter `U` should be named even though
+# `Box` calls its own `V`.
+# Meant to FAIL, with (interfaces.md, "Methods that take a block, have type
+# parameters, or are `async`"):
+#   `map_all` has type parameters of its own (`U`), so it cannot be called on a `Mappable[Int]` held in a list, a field or a binding
+# EXPECTED OUTPUT:
+# (none: refused at compile time)
+
+interface Mappable[T]:
+  def map_all[U](f: (T) -> U) -> [U]
+  def size -> Int
+
+struct Box[T]:
+  items: [T]
+
+  def map_all[V](f: (T) -> V) -> [V] = items.map { |x| f(x) }.to_list
+  def size -> Int = items.len
+
+struct Report:
+  title: Str
+  source: Mappable[Int]
+
+  def count -> Int = source.size
+
+  def lines -> [Str] = source.map_all { |n| "#{title}: #{n}" }
+
+def show_all[M: Mappable[Int]](m: M) -> [Str] = m.map_all { |n| "#{n}" }
+
+def main:
+  box = Box(items: [1, 2])
+  puts show_all(box)
+  r = Report(title: "t", source: box)
+  puts r.count
+  for line in r.lines:
+    puts line

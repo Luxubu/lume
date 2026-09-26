@@ -1,0 +1,52 @@
+# a05_event_bus.lume — reviewer A, round nine
+# Probes: a map of lists of kept blocks, `{Str: [(Str) -> ()]}`, as a struct
+# field; a function of the type (`Bus.new`) building the empty value; a
+# `var self` method that keeps the block it is handed, pushing it through a
+# missing key (`handlers[topic].push(h)`, which starts from an empty list);
+# reading a list of blocks back with `.or([])` and calling each; kept blocks
+# that change a `shared var` list in a plain (not async) `main`; `map` over a
+# map with a two-name block.
+# (The `shared var` warning goes to stderr and is not part of the output.)
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# email: order A1 received
+# (nobody listens to ship)
+# email: refund for B7
+# email: order C3 received
+# log: ["order:A1", "refund:B7", "order:C3"]
+# order:2 refund:2
+# 6 handler calls
+
+struct Bus:
+  handlers: {Str: [(Str) -> ()]}
+
+  def self.new -> Bus = Bus(handlers: {})
+
+  def on(var self, topic: Str, h: (Str) -> ()):
+    handlers[topic].push(h)
+
+  def emit(topic: Str, msg: Str) -> Int:
+    hs = handlers[topic].or([])
+    for h in hs:
+      h(msg)
+    hs.len
+
+def main:
+  shared var log: [Str] = []
+  var bus = Bus.new
+  bus.on("order") { |m| puts "email: order #{m} received" }
+  bus.on("order") { |m| log.push("order:#{m}") }
+  bus.on("refund") { |m| puts "email: refund for #{m}" }
+  bus.on("refund") { |m| log.push("refund:#{m}") }
+
+  events = [("order", "A1"), ("ship", "A1"), ("refund", "B7"), ("order", "C3")]
+  var calls = 0
+  for topic, msg in events:
+    n = bus.emit(topic, msg)
+    if n == 0:
+      puts "(nobody listens to #{topic})"
+    calls += n
+
+  puts "log: #{log}"
+  puts bus.handlers.map { |topic, hs| "#{topic}:#{hs.len}" }.join(" ")
+  puts "#{calls} handler calls"

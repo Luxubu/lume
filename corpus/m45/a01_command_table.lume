@@ -1,0 +1,63 @@
+# a01_command_table.lume — reviewer A, round nine
+# Probes: a map of kept blocks used as a command table,
+# `{Str: (Int, Int) -> Int or Error}`; a lookup in it gives an optional
+# block, turned into a failure with `.or_error(...)?` and then called like a
+# function; a block literal whose result is `Int or Error`, with an inline
+# `if` giving `Error(...)` on one side and a bare `Int` (the implied `Ok`) on
+# the other; a helper returning a tuple `or Error`, destructured with `?`;
+# a multi-line map literal with a trailing comma.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# commands: add, sub, mul, div
+# add 2 3    = 5
+# mul 4 5    = 20
+# div 9 2    = 4
+# div 1 0    ! division by zero
+# pow 2 8    ! unknown command `pow`
+# sub 10     ! want 3 words, got 2
+# sub 10 x   ! `x` is not an integer
+# sub 1 10   = -9
+# 4 of 8 lines worked
+
+def parse_args(parts: [Str]) -> (Int, Int) or Error:
+  if parts.len != 3:
+    return Error("want 3 words, got #{parts.len}")
+  a = parts.at(1).to_int?
+  b = parts.at(2).to_int?
+  (a, b)
+
+def run_line(line: Str, ops: {Str: (Int, Int) -> Int or Error}) -> Int or Error:
+  parts = line.split.to_list
+  name = parts.at(0)
+  op = ops[name].or_error("unknown command `#{name}`")?
+  (a, b) = parse_args(parts)?
+  op(a, b)
+
+def main:
+  ops: {Str: (Int, Int) -> Int or Error} = {
+    "add": { |a, b| a + b },
+    "sub": { |a, b| a - b },
+    "mul": { |a, b| a * b },
+    "div": { |a, b| if b == 0: Error("division by zero") else: a / b },
+  }
+  puts "commands: #{ops.keys.join(", ")}"
+
+  lines = [
+    "add 2 3",
+    "mul 4 5",
+    "div 9 2",
+    "div 1 0",
+    "pow 2 8",
+    "sub 10",
+    "sub 10 x",
+    "sub 1 10",
+  ]
+  var worked = 0
+  for line in lines:
+    shown = line.pad_right(10)
+    match run_line(line, ops):
+      Ok(n) ->
+        worked += 1
+        puts "#{shown} = #{n}"
+      Error(e) -> puts "#{shown} ! #{e.message}"
+  puts "#{worked} of #{lines.len} lines worked"

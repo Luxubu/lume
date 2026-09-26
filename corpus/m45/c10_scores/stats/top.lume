@@ -1,0 +1,10 @@
+# stats/top.lume — the one module main imports. It passes the other two
+# on: `fetch` under its own name, `checks` as `ck`.
+
+pub import stats.fetch
+pub import stats.checks as ck
+
+pub def headline(scored: [(Str, Int)]) -> Str:
+  match scored.max_by { |n, s| s }:
+    Some((n, s)) -> "#{n} leads with #{s}"
+    None         -> "nobody"

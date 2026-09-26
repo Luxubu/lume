@@ -1,0 +1,22 @@
+# c09_await_try_plain_main — `await t?` written in an `async def main` that
+# does not declare `-> () or Error`. The `?` belongs to the `await`, and
+# the failure it would pass up has nowhere to go: the same mistake as `?`
+# in a plain `main`, made in the async shape. The task itself is fine.
+# Meant to FAIL, at compile time, with (the plain-`main` message; for an
+# async `main` the help may instead suggest `async def main(...)`):
+#   error: `?` returns the error early, but `main` does not return `T or E`
+#     --> c09_await_try_plain_main.lume:21:14
+#   help: write `def main(...) -> Type or Error`, or handle the error with `match` or `.or(default)`
+# EXPECTED OUTPUT:
+# (none; the program does not compile)
+
+def half(n: Int) -> Int or Error:
+  if n % 2 == 1:
+    return Error("#{n} is odd")
+  n / 2
+
+async def main:
+  t = spawn: half(10)
+  puts "started"
+  n = await t?
+  puts n

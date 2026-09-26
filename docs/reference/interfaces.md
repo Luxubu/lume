@@ -337,6 +337,12 @@ def main:
 Passing such a held value to a parameter typed as the interface is refused
 for the same reason: the function could call `map_all` on it.
 
+Why a parameter and a binding written the same way differ: a parameter
+`m: Mappable[Int]` is compiled as a generic, so inside the function `m` is
+the caller's own value with its own type; a binding, a field or a list item
+of that type holds a value of some conforming type behind a pointer, and
+the pointer only knows the methods every such type shares.
+
 An `async` method is written `async def fetch -> Str` in the interface, and
 awaited as any other: `await source.fetch()`. It has no default body yet —
 each type gives its own.

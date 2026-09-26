@@ -1,0 +1,7 @@
+error: `fetch` is `async`, so it cannot be called on a `Source` held in a list, a field or a binding
+  --> corpus/m45/b05_async_on_held_item.lume:35:17
+   |
+35 |     puts await s.fetch
+   |                 ^
+  help: call it where the value's own type is known: take it as a parameter, `def f(x: Source)`, or a bound, `[T: Source]`
+exit: 1

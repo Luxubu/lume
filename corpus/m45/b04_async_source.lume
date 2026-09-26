@@ -1,0 +1,73 @@
+# Probes: an `async` interface method, given by two structs and by an
+# `extend Int` (an extend supplying an `async def`). It is awaited through a
+# parameter typed as the interface, and through a bound on the items of a
+# list (`[S: Source](xs: [S])` — a list item, but of a known type). The same
+# interface is also held in a `[Source]`, where only the plain method and a
+# default that calls it are used. `await s.fetch` with and without `()`,
+# and inside `spawn:`.
+# Meant to RUN.
+# (standard error may carry the "holds values of different types behind
+# `Source`" warning for `sources`)
+# EXPECTED OUTPUT:
+# [fixed] hi/hi
+# [slow] slept 2/slept 2
+# [int] int 3/int 3
+# ["slept 3", "slept 1"]
+# ["[fixed]", "[slow]", "[int]"]
+# task
+# [slow] slept 1/slept 1
+# direct
+
+interface Source:
+  async def fetch -> Str
+  def name -> Str
+
+  def label -> Str = "[#{name}]"
+
+struct Fixed:
+  text: Str
+
+  async def fetch -> Str = text
+  def name -> Str = "fixed"
+
+struct Slow:
+  ms: Int
+
+  async def fetch -> Str:
+    await Time.sleep(ms)
+    "slept #{ms}"
+
+  def name -> Str = "slow"
+
+extend Int with Source:
+  async def fetch -> Str:
+    await Time.sleep(self)
+    "int #{self}"
+
+  def name -> Str = "int"
+
+async def read_twice(s: Source) -> Str:
+  a = await s.fetch
+  b = await s.fetch()
+  "#{s.label} #{a}/#{b}"
+
+async def read_all[S: Source](xs: [S]) -> [Str]:
+  var out: [Str] = []
+  for x in xs:
+    out.push(await x.fetch)
+  out
+
+async def main:
+  puts await read_twice(Fixed(text: "hi"))
+  puts await read_twice(Slow(ms: 2))
+  puts await read_twice(3)
+  puts await read_all([Slow(ms: 3), Slow(ms: 1)])
+
+  sources: [Source] = [Fixed(text: "x"), Slow(ms: 1), 7]
+  puts sources.map { |s| s.label }.to_list
+
+  t = spawn: await Fixed(text: "task").fetch
+  u = spawn: await read_twice(Slow(ms: 1))
+  puts await t
+  puts await u
+  puts await Fixed(text: "direct").fetch

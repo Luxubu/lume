@@ -1,0 +1,23 @@
+warning: `walks` holds values of different types behind `walk.api.Walk`, so calls on its items go through a pointer
+  --> corpus/m45/c05_walkers/main.lume:39:3
+   |
+39 |   walks: [api.Walk] = [b, c, [5]]
+   |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+warning: `held` holds values of different types behind `walk.api.Mappable`, so calls on its items go through a pointer
+  --> corpus/m45/c05_walkers/main.lume:43:3
+   |
+43 |   held: [api.Mappable[Int]] = [b, [1, 2, 3, 4]]
+   |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+6
+10
+30
+total 10, big 2
+["n1", "n2", "n3"]
+["n7", "n8"]
+12
+[2, 2, 1]
+total 5, big 1
+[3, 4]
+exit: 0

@@ -1,0 +1,26 @@
+warning: `!` stops the program if the value is missing or an error
+  --> corpus/m45/b08_blocks_in_generic_types.lume:60:13
+   |
+60 |   puts s.top!(10)
+   |             ^
+  help: fine in tests and quick scripts; elsewhere use `match`, `?` or `.or(default)`
+warning: `!` stops the program if the value is missing or an error
+  --> corpus/m45/b08_blocks_in_generic_types.lume:64:20
+   |
+64 |   puts table["inc"]!(9)
+   |                    ^
+  help: fine in tests and quick scripts; elsewhere use `match`, `?` or `.or(default)`
+10
+12
+3
+[8, 7, 16]
+Some(<block>)
+100
+25
+10
+101
+hundred
+Box(item: <block>)
+11
+hi!
+exit: 0

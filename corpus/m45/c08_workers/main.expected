@@ -1,0 +1,33 @@
+warning: `sources` holds values of different types behind `pool.source.Source`, so calls on its items go through a pointer
+  --> corpus/m45/c08_workers/main.lume:33:3
+   |
+33 |   sources: [Source] = [jobs.Span(lo: 1, hi: 4), jobs.Picks(xs: [10, 20])]
+   |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+warning: `pending` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/m45/c08_workers/main.lume:48:3
+   |
+48 |   shared var pending = everything
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+warning: `total` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/m45/c08_workers/main.lume:49:3
+   |
+49 |   shared var total = 0
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+warning: `log` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/m45/c08_workers/main.lume:50:3
+   |
+50 |   shared var log: [Str] = []
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+span 1..4: 4 jobs
+picks: 2 jobs
+[1, 2, 3, 4, 10, 20]
+5
+4
+handled 6 jobs
+sum of squares 530
+6
+exit: 0

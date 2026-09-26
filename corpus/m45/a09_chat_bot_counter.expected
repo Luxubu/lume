@@ -1,0 +1,7 @@
+error: `calls` was copied into this block when the block was made, so changing it here would not be seen outside
+  --> corpus/m45/a09_chat_bot_counter.lume:26:5
+   |
+26 |     calls += 1
+   |     ^
+  help: declare it `shared var calls` before the block if the block is meant to change it, or have the block give back the new value
+exit: 1

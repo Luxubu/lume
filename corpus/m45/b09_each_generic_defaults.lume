@@ -1,0 +1,85 @@
+# Probes: a generic interface `Each[T]` whose one required method takes a
+# block, with three defaults that call it — one of them (`mapped[U]`) a
+# default with a type parameter of its own. Conformance by a user's generic
+# struct (`Ring[T]`), and by `extend [T]` and `extend {T}`. `Ring[Int]` alone
+# is extended with a second interface. `mapped` is called on concrete values
+# and through a bound whose element type is worked out (`[T, E: Each[T]]`);
+# the list of `Each[Int]` uses only the non-generic defaults.
+# Meant to RUN.
+# (standard error may carry the "holds values of different types behind
+# `Each[Int]`" warning for `held`)
+# EXPECTED OUTPUT:
+# [3, 4, 1, 2]
+# [30, 40, 10, 20]
+# 10
+# 2
+# 1
+# ["(b)", "(a)"]
+# ["(y)", "(x)"]
+# [false, true]
+# [3, 2, 1]
+# [4, 2, 1]
+
+interface Each[T]:
+  def each_of(f: (T) -> ()) -> ()
+
+  def count_where(ok: (T) -> Bool) -> Int:
+    var n = 0
+    each_of do |x|
+      if ok(x):
+        n += 1
+    n
+
+  def items -> [T]:
+    var out: [T] = []
+    each_of { |x| out.push(x) }
+    out
+
+  def mapped[U](f: (T) -> U) -> [U]:
+    var out: [U] = []
+    each_of { |x| out.push(f(x)) }
+    out
+
+interface Summed:
+  def total -> Int
+
+struct Ring[T]:
+  slots: [T]
+  start: Int
+
+  def each_of(f: (T) -> ()) -> ():
+    var i = 0
+    while i < slots.len:
+      f(slots.at((start + i) % slots.len))
+      i += 1
+
+extend [T] with Each[T]:
+  def each_of(f: (T) -> ()) -> ():
+    for x in self:
+      f(x)
+
+extend {T} with Each[T]:
+  def each_of(f: (T) -> ()) -> ():
+    for x in self:
+      f(x)
+
+extend Ring[Int] with Summed:
+  def total -> Int = slots.sum
+
+def evens[E: Each[Int]](e: E) -> Int = e.count_where { |n| n % 2 == 0 }
+
+def shown[T, E: Each[T]](e: E) -> [Str] = e.mapped { |x| "(#{x})" }
+
+def main:
+  r = Ring(slots: [1, 2, 3, 4], start: 2)
+  puts r.items
+  puts r.mapped { |n| n * 10 }
+  puts r.total
+  puts evens(r)
+  puts evens([1, 3, 5, 6])
+  puts shown({"b", "a"})
+  puts shown(Ring(slots: ["x", "y"], start: 1))
+  puts [5, 6].mapped { |n| n > 5 }
+  held: [Each[Int]] = [r, [2, 4], {7}]
+  puts held.map { |e| e.count_where { |n| n > 1 } }.to_list
+  puts held.map { |e| e.items.len }.to_list

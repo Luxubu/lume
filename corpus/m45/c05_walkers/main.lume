@@ -1,0 +1,44 @@
+# c05_walkers — interfaces in walk/api.lume, implementations in
+# walk/impls.lume, generic helpers in walk/tools.lume, used from main.
+# Probes: block-taking interface methods and their defaults across files;
+# a `pub interface`'s generic method called through a bound in another
+# file, on a struct and on a list that conforms by an imported `extend`;
+# the extend travelling to main; the interfaces held in lists (only the
+# plain methods called there); a held `Walk` passed to a parameter typed
+# as the interface (allowed, since `Walk` has no generic or async method).
+# No concurrency; single-threaded, so the output is fixed.
+# (Two held-behind-a-pointer warnings may go to stderr, not shown.)
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 6
+# 10
+# 30
+# total 10, big 2
+# ["n1", "n2", "n3"]
+# ["n7", "n8"]
+# 12
+# [2, 2, 1]
+# total 5, big 1
+# [3, 4]
+
+import walk.api
+import walk.impls
+import walk.tools
+
+def main:
+  b = impls.Bag(xs: [1, 2, 3])
+  c = impls.Countdown(from: 4)
+  puts b.total
+  puts c.total
+  puts [10, 20].total
+  puts tools.describe(c)
+  puts tools.labels(b)
+  puts tools.labels([7, 8])
+  puts tools.doubled_sum(b)
+
+  walks: [api.Walk] = [b, c, [5]]
+  puts walks.map { |w| w.count_if { |x| x % 2 == 1 } }.to_list
+  puts tools.describe(walks.at(2))
+
+  held: [api.Mappable[Int]] = [b, [1, 2, 3, 4]]
+  puts held.map { |m| m.size }.to_list

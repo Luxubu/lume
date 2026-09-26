@@ -1,0 +1,18 @@
+warning: `mixed` holds values of different types behind `Tagged`, so calls on its items go through a pointer
+  --> corpus/m45/b06_extend_chosen_args.lume:80:3
+   |
+80 |   mixed: [Tagged] = [Box.of(7), Box.of("xy"), Pair(left: 3, right: "z")]
+   |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+int box 5
+str box 5
+list box of 3
+1-a
+2~b
+INT BOX 5!
+1
+2
+["int box 1", "int box 2"]
+2
+["INT BOX 7!", "STR BOX 2!", "3-Z!"]
+exit: 0

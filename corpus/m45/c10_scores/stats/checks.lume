@@ -1,0 +1,11 @@
+# stats/checks.lume — rules as kept blocks: in tuples in a list, and one
+# handed back on its own.
+
+pub def rules(limit: Int) -> [(Str, (Int) -> Bool)]:
+  [
+    ("pass", { |s| s >= limit }),
+    ("fail", { |s| s < limit }),
+    ("top", { |s| s >= 90 }),
+  ]
+
+pub def at_least(limit: Int) -> (Int) -> Bool = { |s| s >= limit }

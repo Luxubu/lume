@@ -1,0 +1,10 @@
+# feeds/collect.lume — calls the async interface method through a bound,
+# and a default through a parameter typed as the interface.
+
+import feeds.source.Source
+
+pub async def pull[S: Source](s: S) -> Str or Error:
+  text = await s.fetch()?
+  "#{s.name}: #{text.upcase}"
+
+pub def tag(s: Source) -> Str = "<#{s.describe}>"

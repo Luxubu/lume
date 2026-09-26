@@ -1,0 +1,14 @@
+# bank/account.lume — a ledger whose `var self` method can fail.
+
+pub struct Book:
+  balances: {Str: Int}
+
+  def apply(var self, who: Str, cents: Int) -> () or Error:
+    now = balances[who].or(0)
+    if now + cents < 0:
+      return Error("#{who} would go below zero")
+    balances[who] = now + cents
+
+  def total -> Int = balances.values.sum
+
+pub def opening -> Book = Book({"ana": 500, "bo": 100})

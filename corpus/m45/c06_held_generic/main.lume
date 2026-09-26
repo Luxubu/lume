@@ -1,0 +1,24 @@
+# c06_held_generic — a `pub interface` from another module whose generic
+# method is fine through a bound (`labels`) but is then called on a value
+# held in a list field of a struct from a third module. Everything before
+# the last line is legal; the last line is the mistake.
+# Meant to FAIL, at compile time, with (my best reading of the message; the
+# interface may be named `shelf.api.Mappable[Int]` rather than
+# `Mappable[Int]`, since messages name imported types by their path):
+#   error: `map_all` has type parameters of its own (`U`), so it cannot be called on a `Mappable[Int]` held in a list, a field or a binding
+#     --> main.lume:24:21
+#   help: call it where the value's own type is known: take it as a parameter, `def f(x: Mappable[Int])`, or a bound, `[T: Mappable[Int]]`
+# EXPECTED OUTPUT:
+# (none; the program does not compile)
+
+import shelf.store
+import shelf.api.Mappable
+
+def labels[M: Mappable[Int]](m: M) -> [Str] = m.map_all { |n| "#{n}!" }
+
+def main:
+  c = store.Crate(items: [1, 2])
+  puts labels(c)
+  s = store.Shelf(slots: [c, store.Crate(items: [3])])
+  puts s.sizes
+  puts s.slots.at(0).map_all { |n| n * 10 }

@@ -1,3 +1,9 @@
+warning: `bags` holds values of different types behind `Bag`, so calls on its items go through a pointer
+  --> corpus/m28/x08_interface_values.lume:63:3
+   |
+63 |   bags: [Bag[Int]] = [[1, 2, 3], {4, 5}, {"a": 6}, Crate(contents: [7, 8])]
+   |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
 3 -> 1+2+3
 2 -> 4+5
 1 -> 6

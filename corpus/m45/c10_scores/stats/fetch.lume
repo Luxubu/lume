@@ -1,0 +1,7 @@
+# stats/fetch.lume — a slow lookup that can fail.
+
+SCORES = {"ada": 91, "bo": 47, "cyd": 78, "dee": 12}
+
+pub async def score(name: Str) -> Int or Error:
+  await Time.sleep(name.len * 5)
+  SCORES[name].or_error("no score for #{name}")

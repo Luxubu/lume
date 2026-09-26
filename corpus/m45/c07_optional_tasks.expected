@@ -1,0 +1,18 @@
+warning: `done` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/m45/c07_optional_tasks.lume:61:3
+   |
+61 |   shared var done = 0
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+Some(30)
+None
+Some(70)
+None
+16
+Some(6)
+None
+[1]
+[2, 4]
+[3, 6, 9]
+done 6
+exit: 0

@@ -1,0 +1,72 @@
+# Probes: kept blocks inside generic containers of your own and built-in
+# ones. `Box[(Int) -> Int]` built by a type function from a function's name;
+# a block in a generic field called like a method (`b.item(6)`) and through a
+# method that hands it back (`b.get()(5)`); a `Stack[(Int) -> Int]` made by
+# `Stack.empty` with the type said on the binding; `T?` of a block unwrapped
+# and called (`s.top!(10)`); a map and a tuple holding blocks; a generic
+# function whose `T` must come from the plain argument, not from a block
+# literal in a list.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 10
+# 12
+# 3
+# [8, 7, 16]
+# Some(<block>)
+# 100
+# 25
+# 10
+# 101
+# hundred
+# Box(item: <block>)
+# 11
+# hi!
+
+struct Box[T]:
+  item: T
+
+  def self.of(v: T) -> Box[T] = Box(item: v)
+  def get -> T = item
+
+struct Stack[T]:
+  items: [T]
+
+  def self.empty -> Stack[T] = Stack(items: [])
+
+  def push(var self, x: T):
+    items.push(x)
+
+  def size -> Int = items.len
+  def top -> T? = items.last
+
+def double(n: Int) -> Int = n * 2
+
+def adder(n: Int) -> (Int) -> Int = { |x| x + n }
+
+def apply_all[T](fs: [(T) -> T], x: T) -> T = fs.fold(x) { |acc, f| f(acc) }
+
+def main:
+  b: Box[(Int) -> Int] = Box.of(double)
+  puts b.get()(5)
+  puts b.item(6)
+
+  var s: Stack[(Int) -> Int] = Stack.empty
+  s.push(double)
+  s.push(adder(3))
+  s.push({ |x| x * x })
+  puts s.size
+  puts s.items.map { |f| f(4) }.to_list
+  puts s.top
+  puts s.top!(10)
+  puts s.items.fold(1) { |acc, f| f(acc) }
+
+  table: {Str: (Int) -> Int} = {"dbl": double, "inc": adder(1)}
+  puts table["inc"]!(9)
+
+  pair: ((Int) -> Int, Str) = (adder(100), "hundred")
+  puts pair.0(1)
+  puts pair.1
+  puts b
+
+  puts apply_all([double, adder(1)], 5)
+  puts apply_all([{ |w| w + "!" }], "hi")

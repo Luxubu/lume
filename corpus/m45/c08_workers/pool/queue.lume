@@ -1,0 +1,9 @@
+# pool/queue.lume — helpers that work on a caller's `shared var`.
+
+pub def take(q: shared var [Int]) -> Int? = q.pop
+
+pub def bump(n: shared var Int, by: Int):
+  n += by
+
+pub def record(log: shared var [Str], line: Str):
+  log.push(line)

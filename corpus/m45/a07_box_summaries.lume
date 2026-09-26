@@ -1,0 +1,60 @@
+# a07_box_summaries.lume — reviewer A, round nine
+# Probes: `extend` of your own generic type at chosen arguments —
+# `extend Box[Int] with Summary` and `extend Box[Str] with Summary`, each
+# using what only that element type has (`sum`, `join` of words); a generic
+# method whose `U` is worked out from the block (`map_items`), so a
+# `Box[Int]` becomes a `Box[Str]` and picks up the other summary; a
+# generic function of the type (`Box.single(7)`) working out `T` from its
+# argument; a `[Summary]` list holding both; a `[S: Summary]` bound.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ints 4+5+6 = 15
+# words red green (2)
+# [ints 4+5+6 = 15]
+# words n4 n5 n6 (3)
+# ints 3+5 = 8
+# ints 7 = 7
+# WORDS RED GREEN (2)
+# - ints 4+5+6 = 15
+# - words red green (2)
+# - ints 10 = 10
+# sizes: 3 2 1
+
+interface Summary:
+  def summary -> Str
+
+struct Box[T]:
+  items: [T]
+
+  def self.single(x: T) -> Box[T] = Box(items: [x])
+
+  def size -> Int = items.len
+
+  def map_items[U](f: (T) -> U) -> Box[U] =
+    Box(items: items.map { |x| f(x) }.to_list)
+
+extend Box[Int] with Summary:
+  def summary -> Str = "ints #{items.join("+")} = #{items.sum}"
+
+extend Box[Str] with Summary:
+  def summary -> Str = "words #{items.join(" ")} (#{items.len})"
+
+def show(s: Summary) -> Str = "[" + s.summary + "]"
+
+def loud[S: Summary](s: S) -> Str = s.summary.upcase
+
+def main:
+  nums = Box(items: [4, 5, 6])
+  words = Box(items: ["red", "green"])
+  puts nums.summary
+  puts words.summary
+  puts show(nums)
+  puts nums.map_items { |n| "n#{n}" }.summary
+  puts words.map_items { |w| w.len }.summary
+  puts Box.single(7).summary
+  puts loud(words)
+
+  board: [Summary] = [nums, words, Box(items: [10])]
+  for s in board:
+    puts "- #{s.summary}"
+  puts "sizes: #{nums.size} #{words.size} #{Box.single("x").size}"

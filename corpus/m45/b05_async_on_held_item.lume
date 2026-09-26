@@ -1,0 +1,35 @@
+# Probes: an `async` interface method awaited on an item of a `[Source]`.
+# interfaces.md puts `async` methods under the same rule as ones with type
+# parameters: "it is called through a parameter typed as the interface or a
+# bound, and refused on a value held through a pointer — a list item, a
+# field, a binding of the interface's type". The plain method `name` on the
+# same items is fine, and so is the helper that awaits through a parameter;
+# the `await s.fetch` in the `for` loop is what should be refused. Every item
+# is really a `Fixed`, but the list's type says `Source`, so that should not
+# matter.
+# Meant to FAIL. The docs quote the message only for a method with type
+# parameters; by analogy I expect something like:
+#   `fetch` is `async`, so it cannot be called on a `Source` held in a list, a field or a binding
+# with help pointing at a parameter or a bound.
+# EXPECTED OUTPUT:
+# (none: refused at compile time)
+
+interface Source:
+  async def fetch -> Str
+  def name -> Str
+
+struct Fixed:
+  text: Str
+
+  async def fetch -> Str = text
+  def name -> Str = "fixed #{text}"
+
+async def via_param(s: Source) -> Str = await s.fetch
+
+async def main:
+  one = Fixed(text: "solo")
+  puts await via_param(one)
+  sources: [Source] = [Fixed(text: "a"), Fixed(text: "b")]
+  puts sources.map { |s| s.name }.to_list
+  for s in sources:
+    puts await s.fetch

@@ -496,6 +496,10 @@ struct Sig {
     /// block it hands back. Those arrive as kept blocks (`LumeFn`), not as
     /// generics compiled into the call, since they outlive it.
     kept_params: Vec<bool>,
+    /// The function calls itself with a block written in its body, wrapping
+    /// the block it was given. Each level would be a new closure type, which
+    /// Rust cannot compile without end; its blocks are `&mut dyn FnMut`.
+    dyn_blocks: bool,
 }
 
 #[derive(Clone)]
@@ -600,6 +604,9 @@ pub struct Exports {
     /// Every `extend` this module can see, its own and the ones that came
     /// with its imports: what the coherence check compares.
     ext_claims: Vec<ExtClaim>,
+    /// Every `(type, interface)` impl written so far in the program, by
+    /// global ids: this module's and its imports'.
+    emitted_impls: HashSet<(String, String)>,
     /// The interfaces those extends name, already qualified, with their
     /// Rust paths. An `extend` is not a name, so it keeps travelling past
     /// the file that imported it — but it can only be honoured where the
@@ -676,6 +683,13 @@ pub struct Gen {
     /// Every `extend` in view, for the coherence check: two of them for one
     /// interface may not both fit a type, as two Rust impls may not overlap.
     ext_claims: Vec<ExtClaim>,
+    /// This module's id (`feeds.kinds`), for global ids of its own items.
+    module_id: String,
+    /// `(type, interface)` impls written so far, this module's and those that
+    /// came with its imports. The entry file writes any a conforming pair
+    /// still lacks — when neither the type's module nor the interface's
+    /// sees the other, nobody else can.
+    emitted_impls: HashSet<(String, String)>,
     /// Block parameters of the function being emitted: generics compiled
     /// into the call, called directly. Every other block is a kept one, a
     /// `LumeFn`, called through the pointer it holds.
@@ -782,7 +796,7 @@ pub struct Gen {
 
 /// Compiles one module. `rust_mod` is `Some(name)` for an imported file,
 /// which is emitted as `mod name { ... }`; `None` for the entry file.
-pub fn generate_module(program: &[Item], rust_mod: Option<&str>, deps: &[Dep], test_mode: bool, src: &str, file: &str) -> Result<(Output, Exports)> {
+pub fn generate_module(program: &[Item], rust_mod: Option<&str>, module_id: &str, deps: &[Dep], test_mode: bool, src: &str, file: &str) -> Result<(Output, Exports)> {
     let mut g = Gen {
         out: String::new(),
         indent: 0,
@@ -803,6 +817,8 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, deps: &[Dep], t
         ext_impl_generics: HashMap::new(),
         ext_where: HashMap::new(),
         ext_claims: Vec::new(),
+        module_id: module_id.to_string(),
+        emitted_impls: HashSet::new(),
         param_blocks: HashSet::new(),
         kept_captured: HashSet::new(),
         annotate_params: false,
@@ -953,6 +969,7 @@ fn qualify_sig(sig: &Sig, id: &str, ex: &Exports) -> Sig {
         // a bound names an interface of the module it came from
         generics: sig.generics.iter().map(|g| qualify_param(g, id, ex)).collect(),
         kept_params: sig.kept_params.clone(),
+        dyn_blocks: sig.dyn_blocks,
     }
 }
 
@@ -1171,6 +1188,7 @@ impl Gen {
             is_async: f.is_async,
             generics: self.norm_generics(&f.generics),
             kept_params: f.params.iter().map(|p| matches!(p.ty, Type::Fn(..)) && keeps_name(&f.body, &p.name, self)).collect(),
+            dyn_blocks: f.params.iter().any(|p| matches!(p.ty, Type::Fn(..))) && calls_self_with_block(&f.body, &f.name),
         }
     }
 
@@ -1780,6 +1798,7 @@ impl Gen {
             is_async: sig.is_async,
             generics: Vec::new(),
             kept_params: sig.kept_params.clone(),
+            dyn_blocks: sig.dyn_blocks,
         })
     }
 
@@ -2776,7 +2795,8 @@ impl Gen {
         fn boxed_iface<'a>(g: &'a Gen, t: &'a Type) -> Option<&'a str> {
             match t {
                 Type::List(i) | Type::Option(i) | Type::Iter(i, _) => match &**i {
-                    Type::Named(n) if g.is_interface(i) => Some(n.as_str()),
+                    // a generic interface too: `[Mappable[Int]]`
+                    Type::Named(n) | Type::App(n, _) if g.is_interface(i) => Some(n.as_str()),
                     other => boxed_iface(g, other),
                 },
                 Type::Map(_, v) => boxed_iface(g, v),
@@ -2972,6 +2992,7 @@ impl Gen {
             let k = (requalify(tkey), ik);
             self.ext_where.insert(k, w.clone());
         }
+        self.emitted_impls.extend(ex.emitted_impls.iter().cloned());
         // Two modules can each write an `extend` without ever seeing the
         // other; where they meet is here, and the coherence rule holds
         // there as it does inside one file.
@@ -3120,6 +3141,7 @@ impl Gen {
         ex.ext_impl_generics = self.ext_impl_generics.clone();
         ex.ext_where = self.ext_where.clone();
         ex.ext_claims = self.ext_claims.clone();
+        ex.emitted_impls = self.emitted_impls.clone();
         // Types from this module's own imports: an importer that never
         // imported them still has to be able to use what it is handed.
         for (k, v) in &self.structs {
@@ -4482,6 +4504,16 @@ impl Gen {
                         let t = ty.as_ref().map(|t| self.ct(t)).unwrap_or_else(|| self.ty_of(value).materialized());
                         self.declare(name, true, false, t, *line);
                     }
+                    // and the parts a tuple was taken apart into
+                    if let Stmt::Destructure { names, value, line, .. } = st {
+                        if let Type::Tuple(ts) = self.ty_of(value).materialized() {
+                            for (n, t) in names.iter().zip(ts) {
+                                if n != "_" {
+                                    self.declare(n, true, false, t, *line);
+                                }
+                            }
+                        }
+                    }
                 }
                 let t = self.ty_of(e).materialized();
                 let t = match t {
@@ -5629,7 +5661,10 @@ impl Gen {
                         continue;
                     }
                 }
-                if !(owns || has_extend) {
+                // the entry file writes a conforming pair nobody else could
+                let orphan = self.is_entry && tkey.contains('.') && iname.contains('.') && !tkey.starts_with("ext:")
+                    && !self.emitted_impls.contains(&(tkey.clone(), iname.clone()));
+                if !(owns || has_extend || orphan) {
                     continue;
                 }
                 if !done.insert((tkey.clone(), iname.clone())) {
@@ -5727,6 +5762,10 @@ impl Gen {
                         .collect();
                     format!("<{}>", parts.join(", "))
                 };
+                // written here, once for the whole program
+                let global = |k: &str, g: &Self| if k.contains('.') || k.starts_with("ext:") { k.to_string() } else { format!("{}.{}", g.module_id, k) };
+                let pair = (global(tkey, self), global(iname, self));
+                self.emitted_impls.insert(pair);
                 for target in targets {
                     self.line(&format!("impl{} {} for {} {{", impl_gen, iface_rust, target));
                     self.indent += 1;
@@ -6047,6 +6086,9 @@ impl Gen {
         let mut names = HashSet::new();
         let saved_lent = std::mem::take(&mut self.lent_names);
         let saved_param_blocks = std::mem::take(&mut self.param_blocks);
+        // which names are interface parameters is a fact about this function
+        // alone: a binding of the same name elsewhere is held through a pointer
+        let saved_iface_params = std::mem::take(&mut self.iface_params);
         let mut lent_params: HashMap<String, bool> = HashMap::new();
         for p in &f.params {
             if !names.insert(p.name.clone()) {
@@ -6066,7 +6108,7 @@ impl Gen {
                 parts.push(format!("{}: {}", rust_name(&p.name), self.rt(&pty)));
                 continue;
             }
-            if let (Type::Fn(ins, out), true) = (&pty, self.in_trait_impl) {
+            if let (Type::Fn(ins, out), true) = (&pty, self.in_trait_impl || sig.dyn_blocks) {
                 // inside a trait, as the trait declares it: lent `&mut dyn`
                 parts.push(format!("{}: &mut dyn {}", rust_name(&p.name), self.rust_fn_bound(ins, out)));
                 self.param_blocks.insert(p.name.clone());
@@ -6152,6 +6194,7 @@ impl Gen {
         self.pop_generics(saved_gs);
         self.lent_names = saved_lent;
         self.param_blocks = saved_param_blocks;
+        self.iface_params = saved_iface_params;
         self.current_type = None;
         self.current_self_ty = None;
         self.indent -= 1;
@@ -7739,7 +7782,9 @@ impl Gen {
             let unwrap = lent && t.is_copy();
             let pat = if unwrap { format!("&{}", rust_name(p)) } else { rust_name(p) };
             pattern.push(if annotate { format!("{}: {}", pat, self.kept_block_param(t)) } else { pat });
-            self.declare(p, false, lent && !unwrap, t.clone(), at.line);
+            // text arrives borrowed (`&str`, or `&String` in a kept block),
+            // so keeping it makes a copy
+            self.declare(p, false, (lent && !unwrap) || *t == Type::Str, t.clone(), at.line);
         }
         let saved_loop = self.loop_depth;
         let saved_in_block = self.in_block;
@@ -9074,7 +9119,8 @@ impl Gen {
                 // `[{ |x| ... }, ...]` says nothing of its own; `[(Int) -> Int]` does
                 if !type_is_known(&et) {
                     if let Some(Type::List(w)) = self.want.last().cloned() {
-                        if matches!(*w, Type::Fn(..)) {
+                        // `[(Str, (Int) -> Bool)]` too: a block anywhere in the item
+                        if mentions_fn(&w) {
                             et = *w;
                         }
                     }
@@ -9174,7 +9220,9 @@ impl Gen {
                         return Err(LumeError::new(e.line, e.col, format!("`?` needs an optional value or a `T or E`, but this is a `{}`", type_name(other))));
                     }
                 }
-                format!("({})?", self.expr(x)?)
+                // `?` takes its value: a borrowed one (a list item, a
+                // parameter) is copied first, an owned one moves if it can
+                format!("({})?", self.expr_owned(x)?)
             }
             ExprKind::Unwrap(x) => {
                 let xt = self.ty_of(x);
@@ -9556,7 +9604,8 @@ impl Gen {
                             if decl.kept_params.get(i).copied().unwrap_or(false) {
                                 parts.push(self.kept_arg(a, t, name)?);
                             } else {
-                                parts.push(self.expr_arg_named_as(a, t, &decl.params[i].1, name, pname)?);
+                                let v = self.expr_arg_named_as(a, t, &decl.params[i].1, name, pname)?;
+                                parts.push(if decl.dyn_blocks { Self::trait_arg(v, t) } else { v });
                             }
                         }
                     }
@@ -9892,7 +9941,7 @@ impl Gen {
                         // interface value, a type parameter, or an `extend`
                         let own = self.structs.get(tname).map(|x| x.methods.contains_key(name)).unwrap_or(false)
                             || self.enums.get(tname).map(|x| x.methods.contains_key(name)).unwrap_or(false);
-                        let through_trait = self.is_interface(&rt) || matches!(rt, Type::Var(_)) || !own;
+                        let through_trait = self.is_interface(&rt) || matches!(rt, Type::Var(_)) || !own || decl.dyn_blocks;
                         if self.is_interface(&rt) && Self::static_only(&decl) && !self.is_static_iface_value(recv) {
                             return Err(self.static_only_refusal(&rt, name, &decl, e));
                         }
@@ -10827,6 +10876,46 @@ fn ext_fits(pat: &Type, t: &Type, sub: &mut HashMap<String, Type>) -> bool {
         (Type::App(n, xs), Type::App(m, ys)) => n == m && xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| ext_fits(x, y, sub)),
         (x, y) => x == y,
     }
+}
+
+/// Does this body call the function `name` — by name, or as a method —
+/// handing it a block written right there?
+fn calls_self_with_block(body: &Block, name: &str) -> bool {
+    fn ex(e: &Expr, name: &str) -> bool {
+        let lam = |args: &[Arg]| args.iter().any(|a| matches!(a.value.kind, ExprKind::Lambda { .. }));
+        let here = match &e.kind {
+            ExprKind::Call { name: n, args } => n == name && lam(args),
+            ExprKind::Method { name: n, args, .. } => n == name && lam(args),
+            _ => false,
+        };
+        here || sub(e, name)
+    }
+    fn sub(e: &Expr, name: &str) -> bool {
+        let blk = |b: &Block| b.stmts.iter().any(|st| st_(st, name));
+        match &e.kind {
+            ExprKind::Call { args, .. } => args.iter().any(|a| ex(&a.value, name)),
+            ExprKind::Method { recv, args, .. } => ex(recv, name) || args.iter().any(|a| ex(&a.value, name)),
+            ExprKind::Lambda { body, .. } | ExprKind::Spawn(body) => blk(body),
+            ExprKind::If { branches, else_block } => branches.iter().any(|(c, b)| ex(c, name) || blk(b)) || else_block.as_ref().map(blk).unwrap_or(false),
+            ExprKind::Match { scrutinee, arms } => ex(scrutinee, name) || arms.iter().any(|a| blk(&a.body)),
+            ExprKind::Binary { lhs, rhs, .. } => ex(lhs, name) || ex(rhs, name),
+            ExprKind::Unary { expr: x, .. } | ExprKind::Try(x) | ExprKind::Unwrap(x) | ExprKind::Await(x) | ExprKind::Puts(x) | ExprKind::Some(x) | ExprKind::Ok(x) => ex(x, name),
+            ExprKind::List(xs) | ExprKind::Tuple(xs) => xs.iter().any(|x| ex(x, name)),
+            _ => false,
+        }
+    }
+    fn st_(s: &Stmt, name: &str) -> bool {
+        match s {
+            Stmt::Bind { value, .. } | Stmt::Var { value, .. } | Stmt::OpAssign { value, .. } | Stmt::Destructure { value, .. } | Stmt::Shared { value, .. } => ex(value, name),
+            Stmt::Expr(e) => ex(e, name),
+            Stmt::Return { value, .. } => value.as_ref().map(|v| ex(v, name)).unwrap_or(false),
+            Stmt::While { cond, body } => ex(cond, name) || body.stmts.iter().any(|st| st_(st, name)),
+            Stmt::For { iter, body, .. } => ex(iter, name) || body.stmts.iter().any(|st| st_(st, name)),
+            Stmt::FieldAssign { value, .. } | Stmt::IndexAssign { value, .. } => ex(value, name),
+            _ => false,
+        }
+    }
+    body.stmts.iter().any(|st| st_(st, name))
 }
 
 /// The first `x?` a statement runs, outside any block or task inside it:

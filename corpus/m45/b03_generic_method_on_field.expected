@@ -1,0 +1,7 @@
+error: `map_all` has type parameters of its own (`U`), so it cannot be called on a `Mappable[Int]` held in a list, a field or a binding
+  --> corpus/m45/b03_generic_method_on_field.lume:31:30
+   |
+31 |   def lines -> [Str] = source.map_all { |n| "#{title}: #{n}" }
+   |                              ^
+  help: call it where the value's own type is known: take it as a parameter, `def f(x: Mappable[Int])`, or a bound, `[T: Mappable[Int]]`
+exit: 1

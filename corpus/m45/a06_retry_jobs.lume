@@ -1,0 +1,71 @@
+# a06_retry_jobs.lume — reviewer A, round nine
+# Probes: an interface with an `async` method that takes an argument and
+# gives `Int or Error` (`async def run(attempt: Int)`), called with `await`
+# through a parameter typed as the interface (allowed: the value's own type
+# is known there); `match await ...` inside a `for` with `return` from an
+# arm; tasks whose bodies use `await f(...)?` and so are
+# `Task[Str or Error]`; `await` on a list literal of tasks.
+# Deterministic: each task only computes a string; all printing happens in
+# `main` after `await [a, b, c]`, which gives results in start order.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# Ok(100)
+# fetch -> 200
+# error: parse gave up after 3 tries: parse failed on try 3
+# error: upload gave up after 2 tries: upload is broken
+# 1 of 3 jobs done
+
+interface Job:
+  def name -> Str
+  async def run(attempt: Int) -> Int or Error
+
+struct Flaky:
+  label: Str
+  works_on: Int
+
+  def name -> Str = label
+
+  async def run(attempt: Int) -> Int or Error:
+    await Time.sleep(2)
+    if attempt < works_on:
+      return Error("#{label} failed on try #{attempt}")
+    attempt * 100
+
+struct Broken:
+  label: Str
+
+  def name -> Str = label
+
+  async def run(attempt: Int) -> Int or Error:
+    await Time.sleep(1)
+    Error("#{label} is broken")
+
+async def with_retry(j: Job, tries: Int) -> Int or Error:
+  var last = "never tried"
+  for i in 1..tries:
+    match await j.run(i):
+      Ok(v) -> return v
+      Error(e) -> last = e.message
+  Error("#{j.name} gave up after #{tries} tries: #{last}")
+
+async def main:
+  puts await Flaky(label: "direct", works_on: 1).run(1)
+
+  a = spawn:
+    v = await with_retry(Flaky(label: "fetch", works_on: 2), 3)?
+    "fetch -> #{v}"
+  b = spawn:
+    v = await with_retry(Flaky(label: "parse", works_on: 5), 3)?
+    "parse -> #{v}"
+  c = spawn:
+    v = await with_retry(Broken(label: "upload"), 2)?
+    "upload -> #{v}"
+
+  var done = 0
+  for r in await [a, b, c]:
+    match r:
+      Ok(line) ->
+        done += 1
+        puts line
+      Error(e) -> puts "error: #{e.message}"
+  puts "#{done} of 3 jobs done"

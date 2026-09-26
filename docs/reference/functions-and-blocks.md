@@ -406,9 +406,9 @@ def main:
 
 Note the last line of that block: a bare value where `T or Error` is wanted is
 the implied `Ok`, exactly as in a function. **A block whose result is a `T?`
-has no matching implied `Some` — write it out.** A bare value there passes
-`lume check` and then fails to build, so the compiler is no help; this is a
-gap rather than a rule.
+has the matching implied `Some`**: its last line may be the bare value, and
+`?` on an optional value leaves the block with `None`. Writing `Some(...)` out,
+as below, means the same.
 
 ```lume
 def pick(f: (Int) -> Str?) -> Str:
@@ -439,6 +439,18 @@ def main:
   steps: [(Int) -> Int] = [f, g, add10]
   puts steps.map { |s| s(1) }.to_list    #=> [3, 2, 11]
   puts add10                             #=> <block>
+```
+
+A block kept in a map is found by its key and called at once, `ops["add"]!(2,
+3)`; one in a tuple is called by its part, `rule.1(7)`:
+
+```lume
+def main:
+  ops: {Str: (Int, Int) -> Int} = {"add": { |a, b| a + b }, "mul": { |a, b| a * b }}
+  rule: (Str, (Int) -> Bool) = ("even", { |n| n % 2 == 0 })
+  puts ops["mul"]!(6, 7)             #=> 42
+  puts "#{rule.0}: #{rule.1(4)}"     #=> even: true
+  puts ops                           #=> {"add": <block>, "mul": <block>}
 ```
 
 A kept block is called like a function, `f(1)`. One in a field is called like

@@ -1,0 +1,7 @@
+error: `extend Box[T] with Tagged` overlaps `extend Box[Int] with Tagged` from corpus/m45/b07_overlap_own_generic.lume:26
+  --> corpus/m45/b07_overlap_own_generic.lume:29:1
+   |
+29 | extend Box[T] with Tagged:
+   | ^
+  help: both would apply to `Box[Int]`, and a type has one `Tagged`: as in Rust, neither wins for being more specific. Remove one, or narrow them so no type fits both
+exit: 1

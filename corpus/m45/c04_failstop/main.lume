@@ -1,0 +1,53 @@
+# c04_failstop — a program that deliberately stops with the error of a
+# failed task. Three tasks start at once; the first two call an `async def`
+# that uses `?`, the third uses `?` inside `spawn:` itself. `await t?` in an
+# `async def main -> () or Error` passes the second batch's failure straight
+# up, so the last `puts` never runs.
+# Output is deterministic: each task is awaited on its own, in a fixed
+# order, and the failure sits in the task until it is awaited — it does not
+# stop the program when it happens, only when `await second?` meets it.
+# Meant to RUN, and to end with exit status 1.
+# EXPECTED OUTPUT:
+# lima: 19C
+# oslo: 4C
+# cairo: 31C
+# warmest: cairo
+# batch one has 3 readings
+# waiting for the second batch
+# STANDARD ERROR (after the output above; nothing from the compiler):
+#   error: `cold` is not an integer
+# EXIT STATUS: 1
+
+import jobs.parse
+import jobs.report
+
+BATCH_ONE = ["lima = 19", "oslo = 4", "cairo = 31"]
+BATCH_TWO = ["quito = 14", "oslo = cold", "perth = 22"]
+
+async def load(lines: [Str]) -> [parse.Reading] or Error:
+  var out: [parse.Reading] = []
+  for l in lines:
+    await Time.sleep(1)
+    out.push(parse.reading(l)?)
+  out
+
+async def main -> () or Error:
+  first = spawn: await load(BATCH_ONE)
+  second = spawn: await load(BATCH_TWO)
+  count = spawn:
+    xs = await load(BATCH_ONE)?
+    xs.len
+
+  rs = await first?
+  for r in rs:
+    puts report.line(r)
+  match report.warmest(rs):
+    Some(r) -> puts "warmest: #{r.station}"
+    None    -> puts "no readings"
+
+  n = await count?
+  puts "batch one has #{n} readings"
+
+  puts "waiting for the second batch"
+  more = await second?
+  puts "never printed: #{more.len}"

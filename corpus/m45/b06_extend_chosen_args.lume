@@ -1,0 +1,81 @@
+# Probes: `extend` of your own generic types at chosen arguments —
+# `Box[Int]`, `Box[Str]`, `Box[[Int]]`, `Pair[Int, Str]`, `Pair[Str, Int]` —
+# all with one interface, which the coherence rule should allow because no
+# type fits two of them. Beside them, `extend Box[T]` and `extend Pair[A, B]`
+# with a *different* interface. Inside a chosen-argument extend the field
+# (`value`, `left`, `right`) is bare and has the chosen type, so `.len` works
+# on a `Box[Str]`'s value. Also: a default (`shout`) reaching the chosen
+# types, a bound, a mixed `[Tagged]`, and a type function `Box.of` whose `T`
+# comes from its argument.
+# Meant to RUN.
+# (standard error may carry the "holds values of different types behind
+# `Tagged`" warning for `mixed`)
+# EXPECTED OUTPUT:
+# int box 5
+# str box 5
+# list box of 3
+# 1-a
+# 2~b
+# INT BOX 5!
+# 1
+# 2
+# ["int box 1", "int box 2"]
+# 2
+# ["INT BOX 7!", "STR BOX 2!", "3-Z!"]
+
+interface Tagged:
+  def tag -> Str
+
+  def shout -> Str = tag.upcase + "!"
+
+interface Sized:
+  def size -> Int
+
+struct Box[T]:
+  value: T
+
+  def self.of(v: T) -> Box[T] = Box(value: v)
+  def get -> T = value
+
+struct Pair[A, B]:
+  left: A
+  right: B
+
+extend Box[Int] with Tagged:
+  def tag -> Str = "int box #{value}"
+
+extend Box[Str] with Tagged:
+  def tag -> Str = "str box #{value.len}"
+
+extend Box[[Int]] with Tagged:
+  def tag -> Str = "list box of #{value.len}"
+
+extend Pair[Int, Str] with Tagged:
+  def tag -> Str = "#{left}-#{right}"
+
+extend Pair[Str, Int] with Tagged:
+  def tag -> Str = "#{right}~#{left}"
+
+extend Box[T] with Sized:
+  def size -> Int = 1
+
+extend Pair[A, B] with Sized:
+  def size -> Int = 2
+
+def tags[X: Tagged](xs: [X]) -> [Str] = xs.map(_.tag).to_list
+
+def total_size[S: Sized](xs: [S]) -> Int = xs.map(_.size).sum
+
+def main:
+  puts Box(value: 5).tag
+  puts Box.of("hello").tag
+  puts Box(value: [1, 2, 3]).tag
+  puts Pair(left: 1, right: "a").tag
+  puts Pair(left: "b", right: 2).tag
+  puts Box(value: 5).shout
+  puts Box(value: true).size
+  puts Pair(left: 1.5, right: [1]).size
+  puts tags([Box.of(1), Box.of(2)])
+  puts total_size([Box.of("x"), Box.of("y")])
+  mixed: [Tagged] = [Box.of(7), Box.of("xy"), Pair(left: 3, right: "z")]
+  puts mixed.map { |t| t.shout }.to_list

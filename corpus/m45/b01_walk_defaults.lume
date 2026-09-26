@@ -1,0 +1,100 @@
+# Probes: an interface method that takes a block (`each_item`), and defaults
+# that call it (`total`, `count_if`, `biggest`, `describe`) — including one
+# default that calls another default that takes a block. Each is called
+# through every holder the docs name: a list item, a struct field, a typed
+# binding, a parameter typed as the interface, and a bound. Conformance comes
+# from a struct's own method and from `extend {Int} with Walk`. A held value
+# is passed on to a parameter typed `Walk`, which should be fine because
+# `Walk` has no generic or `async` method.
+# Meant to RUN.
+# (a "different types behind `Walk`" warning may go to standard error)
+# EXPECTED OUTPUT:
+# [10, 6, 6]
+# [2, 1, 1]
+# [Some(6), Some(3), Some(5)]
+# 10
+# 6 over 2
+# None
+# 0 over 0
+# 6
+# 5
+# 10
+# 2
+
+interface Walk:
+  def each_item(f: (Int) -> ()) -> ()
+
+  def total -> Int:
+    var t = 0
+    each_item { |x| t += x }
+    t
+
+  def count_if(ok: (Int) -> Bool) -> Int:
+    var n = 0
+    each_item do |x|
+      if ok(x):
+        n += 1
+    n
+
+  def biggest -> Int?:
+    var best: Int? = None
+    each_item do |x|
+      best = match best:
+        Some(b) -> Some(b.max(x))
+        None    -> Some(x)
+    best
+
+  def describe -> Str:
+    nonzero = count_if { |x| x != 0 }
+    "#{total} over #{nonzero}"
+
+struct Bag:
+  xs: [Int]
+
+  def each_item(f: (Int) -> ()) -> ():
+    for x in xs:
+      f(x)
+
+struct Countdown:
+  start: Int
+
+  def each_item(f: (Int) -> ()) -> ():
+    var i = start
+    while i > 0:
+      f(i)
+      i -= 1
+
+extend {Int} with Walk:
+  def each_item(f: (Int) -> ()) -> ():
+    for x in self:
+      f(x)
+
+struct Shelf:
+  label: Str
+  lead: Walk
+  others: [Walk]
+
+def sum_of(w: Walk) -> Int = w.total
+
+def biggest_total[W: Walk](ws: [W]) -> Int:
+  var best = 0
+  for w in ws:
+    best = best.max(w.total)
+  best
+
+def main:
+  walks: [Walk] = [Bag(xs: [4, 0, 6]), Countdown(start: 3), {5, 1}]
+  puts walks.map { |w| w.total }.to_list
+  puts walks.map { |w| w.count_if { |x| x > 2 } }.to_list
+  puts walks.map { |w| w.biggest }.to_list
+  shelf = Shelf(label: "top", lead: Countdown(start: 4), others: walks)
+  puts shelf.lead.total
+  puts shelf.others.at(2).describe
+  one: Walk = Bag(xs: [])
+  puts one.biggest
+  puts one.describe
+  puts sum_of(walks.at(1))
+  puts sum_of({2, 2, 3})
+  puts biggest_total([Bag(xs: [1, 2]), Bag(xs: [10])])
+  big: (Int) -> Bool = { |x| x >= 4 }
+  puts Countdown(start: 5).count_if(big)

@@ -1,0 +1,56 @@
+# c01_feeds — a `pub interface` with an `async` method (returning
+# `Str or Error`) declared in feeds/source.lume, implemented by structs in
+# feeds/kinds.lume, and called through a generic bound in feeds/collect.lume.
+# Tasks await that generic async call; one task uses `?` twice and succeeds,
+# one uses `?` and fails, and a list of tasks is matched result by result.
+# The interface is also held in a list (its plain methods only).
+# Output is deterministic: every task is awaited, and a list of tasks gives
+# its results in the order the tasks were started, whatever the sleeps.
+# (A `[Source]` of mixed types also writes a pointer warning to stderr.)
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# alpha: HELLO
+# beta: BETA AFTER 30MS
+# failed: gamma is down
+# delta: DELTA AFTER 1MS
+# alpha: HELLO | delta: DELTA AFTER 1MS
+# Error("gamma is down")
+# <source gamma>
+# ["source alpha", "source beta", "source gamma"]
+
+import feeds.kinds
+import feeds.collect
+import feeds.source.Source
+
+async def main:
+  a = kinds.Fixed(label: "alpha", text: "hello")
+  b = kinds.Slow(label: "beta", ms: 30)
+  c = kinds.Broken(label: "gamma")
+  d = kinds.Slow(label: "delta", ms: 1)
+
+  var tasks: [Task[Str or Error]] = []
+  tasks.push(spawn: await collect.pull(a))
+  tasks.push(spawn: await collect.pull(b))
+  tasks.push(spawn: await collect.pull(c))
+  tasks.push(spawn: await collect.pull(d))
+  for r in await tasks:
+    match r:
+      Ok(line) -> puts line
+      Error(e) -> puts "failed: #{e.message}"
+
+  both = spawn:
+    x = await collect.pull(a)?
+    y = await collect.pull(d)?
+    "#{x} | #{y}"
+  match await both:
+    Ok(s)    -> puts s
+    Error(e) -> puts "both failed: #{e.message}"
+
+  either = spawn:
+    x = await collect.pull(c)?
+    x.len
+  puts await either
+
+  puts collect.tag(c)
+  held: [Source] = [a, b, c]
+  puts held.map { |s| s.describe }.to_list

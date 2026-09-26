@@ -1,0 +1,8 @@
+skipped: cy: `x` is not an integer
+skipped: no `:` in `dee 80`
+averages: ada 91.3, bo 68.5, eve 59.7
+letter: ada=A bo=F eve=F
+pass: ada=pass bo=pass eve=fail
+curve: no such policy
+best: ada
+exit: 0

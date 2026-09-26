@@ -1,0 +1,41 @@
+# Probes: the coherence rule on a user's own generic type. `extend Box[Int]
+# with Tagged` is written first, then `extend Box[T] with Tagged`, meant as a
+# "fallback for every other box". generics.md: "The more specific one does
+# not win" and "Two `extend`s of the same interface may be written only when
+# no type fits both targets" — `Box[Int]` fits both. The `Named` extend at a
+# chosen argument is a different interface and should be no part of the
+# error. The message should name the later extend first, as the `[T]` /
+# `[Int]` example in examples/errors/extend_concrete_overlap does.
+# Meant to FAIL, with (generics.md, "Two `extend`s of one interface"):
+#   `extend Box[T] with Tagged` overlaps `extend Box[Int] with Tagged`
+# and help saying both would apply to `Box[Int]`.
+# EXPECTED OUTPUT:
+# (none: refused at compile time)
+
+interface Tagged:
+  def tag -> Str
+
+interface Named:
+  def name -> Str
+
+struct Box[T]:
+  value: T
+
+  def get -> T = value
+
+extend Box[Int] with Tagged:
+  def tag -> Str = "int box #{value}"
+
+extend Box[T] with Tagged:
+  def tag -> Str = "some box"
+
+extend Box[Str] with Named:
+  def name -> Str = value.upcase
+
+def tags[X: Tagged](xs: [X]) -> [Str] = xs.map(_.tag).to_list
+
+def main:
+  puts Box(value: 1).tag
+  puts Box(value: "s").tag
+  puts Box(value: "s").name
+  puts tags([Box(value: true)])

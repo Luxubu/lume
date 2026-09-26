@@ -1,0 +1,6 @@
+# pool/source.lume — where jobs come from: an interface whose required
+# method takes a block. Implemented in pool/jobs.lume.
+
+pub interface Source:
+  def each_job(f: (Int) -> ()) -> ()
+  def label -> Str

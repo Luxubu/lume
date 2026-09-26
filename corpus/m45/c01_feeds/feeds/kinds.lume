@@ -1,0 +1,29 @@
+# feeds/kinds.lume — three types that are `Source`s by having the methods.
+# This file never imports feeds.source: conformance is structural.
+
+pub struct Fixed:
+  label: Str
+  text: Str
+
+  def name -> Str = label
+
+  async def fetch -> Str or Error = text
+
+pub struct Slow:
+  label: Str
+  ms: Int
+
+  def name -> Str = label
+
+  async def fetch -> Str or Error:
+    await Time.sleep(ms)
+    "#{label} after #{ms}ms"
+
+pub struct Broken:
+  label: Str
+
+  def name -> Str = label
+
+  async def fetch -> Str or Error:
+    await Time.sleep(1)
+    Error("#{label} is down")

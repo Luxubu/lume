@@ -1,0 +1,12 @@
+# flow/stage.lume — a struct holding a kept block, and a plan of them.
+
+pub struct Stage:
+  name: Str
+  run: (Int) -> Int
+
+pub struct Plan:
+  stages: [Stage]
+
+  def apply(x: Int) -> Int = stages.fold(x) { |acc, s| s.run(acc) }
+
+  def names -> Str = stages.map(_.name).join(" > ")

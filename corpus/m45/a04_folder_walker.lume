@@ -1,0 +1,86 @@
+# a04_folder_walker.lume — reviewer A, round nine
+# Probes: an interface whose required method takes a two-argument block,
+# `walk(visit: (Str, Int) -> ())`, with defaults (`count`, `total_size`,
+# `largest`) that call `walk` by bare name with a block that changes local
+# `var`s; a recursive struct (`Folder` holds `[Folder]`) whose `walk` hands
+# its own `visit` on inside another block; `extend {Str: Int} with Walkable`;
+# a `[Walkable]` list mixing a struct, another struct and a map, calling the
+# block-taking method and the defaults on its items; a `do |a, b|` block on
+# a method call from `main`.
+# (The mixed `[Walkable]` list also gives a pointer warning on stderr.)
+# Meant to RUN.
+# EXPECTED OUTPUT:
+#   1200  src/main.lume
+#    300  src/util.lume
+#    800  src/lib/text.lume
+# big: ["src/main.lume", "src/lib/text.lume"]
+# 3 files, 2300 bytes, largest src/main.lume
+# 1 files, 50 bytes, largest notes.txt
+# 2 files, 43 bytes, largest b.txt
+# [3, 1, 2]
+
+interface Walkable:
+  def walk(visit: (Str, Int) -> ()) -> ()
+
+  def count -> Int:
+    var n = 0
+    walk { |path, size| n += 1 }
+    n
+
+  def total_size -> Int:
+    var t = 0
+    walk { |path, size| t += size }
+    t
+
+  def largest -> Str:
+    var best = "(none)"
+    var best_size = -1
+    walk do |path, size|
+      if size > best_size:
+        best = path
+        best_size = size
+    best
+
+struct Doc:
+  name: Str
+  bytes: Int
+
+  def walk(visit: (Str, Int) -> ()) -> ():
+    visit(name, bytes)
+
+struct Folder:
+  name: Str
+  docs: [Doc]
+  subs: [Folder]
+
+  def walk(visit: (Str, Int) -> ()) -> ():
+    for d in docs:
+      visit("#{name}/#{d.name}", d.bytes)
+    for sub in subs:
+      sub.walk { |path, size| visit("#{name}/#{path}", size) }
+
+extend {Str: Int} with Walkable:
+  def walk(visit: (Str, Int) -> ()) -> ():
+    for k, v in self:
+      visit(k, v)
+
+def report(w: Walkable) -> Str =
+  "#{w.count} files, #{w.total_size} bytes, largest #{w.largest}"
+
+def main:
+  lib = Folder(name: "lib", docs: [Doc("text.lume", 800)], subs: [])
+  empty = Folder(name: "empty", docs: [], subs: [])
+  root = Folder("src", [Doc("main.lume", 1200), Doc("util.lume", 300)], [lib, empty])
+
+  root.walk { |path, size| puts "#{size.pad(6)}  #{path}" }
+
+  var big: [Str] = []
+  root.walk do |path, size|
+    if size > 500:
+      big.push(path)
+  puts "big: #{big}"
+
+  things: [Walkable] = [root, Doc("notes.txt", 50), {"a.txt": 3, "b.txt": 40}]
+  for w in things:
+    puts report(w)
+  puts things.map { |w| w.count }.to_list

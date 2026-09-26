@@ -1,0 +1,34 @@
+# walk/impls.lume — implementations, in a different file from the
+# interfaces: two structs that conform by having the methods, and two
+# `extend`s of the built-in list, which travel to whoever imports this file.
+
+import walk.api.Walk
+import walk.api.Mappable
+
+pub struct Bag:
+  xs: [Int]
+
+  def each_item(f: (Int) -> ()) -> ():
+    for x in xs:
+      f(x)
+
+  def map_all[V](f: (Int) -> V) -> [V] = xs.map { |x| f(x) }.to_list
+  def size -> Int = xs.len
+
+pub struct Countdown:
+  from: Int
+
+  def each_item(f: (Int) -> ()) -> ():
+    var i = from
+    while i > 0:
+      f(i)
+      i = i - 1
+
+extend [Int] with Walk:
+  def each_item(f: (Int) -> ()) -> ():
+    for x in self:
+      f(x)
+
+extend [T] with Mappable[T]:
+  def map_all[U](f: (T) -> U) -> [U] = self.map { |x| f(x) }.to_list
+  def size -> Int = self.len

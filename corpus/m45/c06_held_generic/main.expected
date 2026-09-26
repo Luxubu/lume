@@ -1,0 +1,7 @@
+error: `map_all` has type parameters of its own (`U`), so it cannot be called on a `shelf.api.Mappable[Int]` held in a list, a field or a binding
+  --> corpus/m45/c06_held_generic/main.lume:24:21
+   |
+24 |   puts s.slots.at(0).map_all { |n| n * 10 }
+   |                     ^
+  help: call it where the value's own type is known: take it as a parameter, `def f(x: shelf.api.Mappable[Int])`, or a bound, `[T: shelf.api.Mappable[Int]]`
+exit: 1

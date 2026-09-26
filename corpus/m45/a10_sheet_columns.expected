@@ -1,0 +1,7 @@
+error: `map_rows` has type parameters of its own (`U`), so it cannot be called on a `Sheet` held in a list, a field or a binding
+  --> corpus/m45/a10_sheet_columns.lume:51:15
+   |
+51 |     counts = s.map_rows { |r| r.len }
+   |               ^
+  help: call it where the value's own type is known: take it as a parameter, `def f(x: Sheet)`, or a bound, `[T: Sheet]`
+exit: 1

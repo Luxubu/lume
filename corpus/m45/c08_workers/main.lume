@@ -1,0 +1,67 @@
+# c08_workers — a worker pool. Jobs are gathered through a block-taking
+# interface method (interface in pool/source.lume, types in pool/jobs.lume)
+# on values held in a `[Source]`; three workers then pull from one
+# `shared var` queue through helpers in pool/queue.lume that take
+# `shared var` parameters. An interface value taken from the list is also
+# copied into a task.
+# Output is deterministic: which worker takes which job varies, so nothing
+# printed depends on it — only the sum of the per-worker counts (6), a sum
+# of squares built by `+=` under the lock (order does not matter), and the
+# length of the shared log.
+# (Three `shared var` warnings and a pointer warning go to stderr.)
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# span 1..4: 4 jobs
+# picks: 2 jobs
+# [1, 2, 3, 4, 10, 20]
+# 5
+# 4
+# handled 6 jobs
+# sum of squares 530
+# 6
+
+import pool.queue
+import pool.jobs
+import pool.source.Source
+
+def gather(s: Source) -> [Int]:
+  var out: [Int] = []
+  s.each_job { |j| out.push(j) }
+  out
+
+async def main:
+  sources: [Source] = [jobs.Span(lo: 1, hi: 4), jobs.Picks(xs: [10, 20])]
+  var everything: [Int] = []
+  for s in sources:
+    puts "#{s.label}: #{gather(s).len} jobs"
+    for j in gather(s):
+      everything.push(j)
+  puts everything
+
+  st = spawn: gather(jobs.Span(lo: 2, hi: 3)).sum
+  puts await st
+
+  s0 = sources.at(0)
+  u = spawn: gather(s0).len
+  puts await u
+
+  shared var pending = everything
+  shared var total = 0
+  shared var log: [Str] = []
+  var workers: [Task[Int]] = []
+  for w in 1..3:
+    t = spawn:
+      var handled = 0
+      while true:
+        match queue.take(pending):
+          Some(j) ->
+            queue.bump(total, j * j)
+            queue.record(log, "w#{w}:#{j}")
+            handled += 1
+          None -> break
+      handled
+    workers.push(t)
+  counts = await workers
+  puts "handled #{counts.sum} jobs"
+  puts "sum of squares #{total}"
+  puts log.len

@@ -1,0 +1,61 @@
+# c03_ledger — `async def main -> () or Error`; a `shared var` of a struct
+# from another module; tasks that use `?` (on a function from a third module
+# and on the struct's own `() or Error` method) and so give `T or Error`;
+# `await t?` on a task that succeeds; `?` applied to each item of an awaited
+# list; a failed task matched rather than passed up.
+# Output is deterministic: the four moves touch four different names, so
+# the order the tasks take the lock in cannot change any outcome; results
+# are printed in start order; the map's keys are sorted before printing.
+# (One `shared var` warning goes to stderr, not shown.)
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ana -200
+# cy 50
+# refused: bo would go below zero
+# dee 20
+# ana+5
+# risky: zed would go below zero
+# Error("bad move `nobody`")
+# 470
+# ["ana", "bo", "cy", "dee"]
+# 300
+
+import bank.account
+import bank.rules
+
+MOVES = ["ana: -200", "cy: 50", "bo: -300", "dee: 20"]
+
+async def main -> () or Error:
+  shared var book = account.opening
+  var tasks: [Task[Str or Error]] = []
+  for line in MOVES:
+    t = spawn:
+      (who, cents) = rules.parse_move(line)?
+      match book.apply(who, cents):
+        Ok(_)    -> "#{who} #{cents}"
+        Error(e) -> "refused: #{e.message}"
+    tasks.push(t)
+  for r in await tasks:
+    puts r?
+
+  check = spawn:
+    (who, cents) = rules.parse_move("ana: 5")?
+    "#{who}+#{cents}"
+  first = await check?
+  puts first
+
+  risky = spawn:
+    book.apply("zed", 0 - 1)?
+    "zed moved"
+  match await risky:
+    Ok(s)    -> puts s
+    Error(e) -> puts "risky: #{e.message}"
+
+  bad = spawn:
+    (who, cents) = rules.parse_move("nobody")?
+    cents
+  puts await bad
+
+  puts book.total
+  puts book.balances.keys.sort
+  puts book.balances["ana"].or(0)

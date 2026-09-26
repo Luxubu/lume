@@ -487,6 +487,30 @@ def main:
 #! `[T]` is already a `Tagged`
 ```
 
+The rule holds for your own generic types too. `extend Box[Int]` and
+`extend Box[Str]` of one interface cannot both fit a type, so both may be
+written — each is Rust's `impl` for `Box<i64>` or `Box<String>` — and inside
+each the fields have the chosen types. `extend Box[T]` of the same interface
+beside them would overlap both:
+
+```lume
+interface Summary:
+  def summary -> Str
+
+struct Box[T]:
+  item: T
+
+extend Box[Int] with Summary:
+  def summary -> Str = "number #{item + 1}"
+
+extend Box[Str] with Summary:
+  def summary -> Str = "word #{item.upcase}"
+
+def main:
+  puts Box(item: 41).summary       #=> number 42
+  puts Box(item: "hi").summary     #=> word HI
+```
+
 To give some types a different answer, give them a different interface, or
 put the difference in the one `extend` — `match` on what it holds, or call a
 helper that does. The same rule holds across modules: two files that each

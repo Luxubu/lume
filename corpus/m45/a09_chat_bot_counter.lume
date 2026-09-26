@@ -1,0 +1,43 @@
+# a09_chat_bot_counter.lume — reviewer A, round nine
+# Probes: the mistake a person makes first with a command table of kept
+# blocks: one handler counts how often it is called by changing a plain
+# `var` from `main`. A kept block copies in what it uses when it is made,
+# so it may not change a `var` it copied (docs/reference/
+# functions-and-blocks.md, "Blocks as values"). The fix is
+# `shared var calls = 0`. Everything else here is meant to be fine: a map
+# of blocks with a named block among its values, a lookup with `match`.
+# Meant to FAIL.
+# EXPECTED ERROR (compile time, first line of the message):
+#   `calls` was copied into this block when the block was made
+# EXPECTED OUTPUT:
+#   (none: the program does not build)
+# Had it been written with `shared var calls = 0`, it would print:
+#   hello there
+#   HELLO!
+#   call 1: stats
+#   ? nope
+#   call 2: again
+#   2 counted calls
+
+def main:
+  var calls = 0
+
+  tally: (Str) -> Str = do |arg|
+    calls += 1
+    "call #{calls}: #{arg}"
+
+  commands: {Str: (Str) -> Str} = {
+    "echo": { |arg| arg },
+    "shout": { |arg| arg.upcase + "!" },
+    "count": tally,
+  }
+
+  inputs = ["echo hello there", "shout hello", "count stats", "nope", "count again"]
+  for line in inputs:
+    match line.split:
+      [cmd, ..rest] ->
+        match commands[cmd]:
+          Some(run) -> puts run(rest.join(" "))
+          None -> puts "? #{cmd}"
+      [] -> puts "(blank)"
+  puts "#{calls} counted calls"

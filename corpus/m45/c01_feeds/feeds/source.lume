@@ -1,0 +1,7 @@
+# feeds/source.lume — the interface only. No implementations live here.
+
+pub interface Source:
+  def name -> Str
+  async def fetch -> Str or Error
+
+  def describe -> Str = "source #{name}"

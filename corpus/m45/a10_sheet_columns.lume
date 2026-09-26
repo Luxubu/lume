@@ -1,0 +1,52 @@
+# a10_sheet_columns.lume — reviewer A, round nine
+# Probes: an interface method with a type parameter of its own
+# (`map_rows[U]`) is callable only where the value's own type is known.
+# Through a bound (`widths[S: Sheet]`) with a concrete value it is fine; on
+# an item of a `[Sheet]` list — the loop variable `s` below — it is refused
+# (docs/reference/interfaces.md, "Methods that take a block, have type
+# parameters, or are `async`"). The natural thing to write is the loop, and
+# that is what fails.
+# Meant to FAIL.
+# EXPECTED ERROR (compile time):
+#   `map_rows` has type parameters of its own (`U`), so it cannot be called on a `Sheet` held in a list, a field or a binding
+# EXPECTED OUTPUT:
+#   (none: the program does not build)
+# The fix is a non-generic method for the list case, e.g.
+# `def widths -> [Int]` on each type, or calling `widths(...)` on each
+# concrete value instead of through the list.
+
+interface Sheet:
+  def title -> Str
+  def rows -> [[Str]]
+  def map_rows[U](f: ([Str]) -> U) -> [U]
+
+  def row_count -> Int = rows.len
+
+struct Csv:
+  name: Str
+  text: Str
+
+  def title -> Str = name
+  def rows -> [[Str]] = text.lines.map { |l| l.split(",").to_list }.to_list
+  def map_rows[U](f: ([Str]) -> U) -> [U] = rows.map { |r| f(r) }.to_list
+
+struct Grid:
+  name: Str
+  cells: [[Str]]
+
+  def title -> Str = name
+  def rows -> [[Str]] = cells
+  def map_rows[U](f: ([Str]) -> U) -> [U] = cells.map { |r| f(r) }.to_list
+
+def widths[S: Sheet](s: S) -> [Int] = s.map_rows { |r| r.len }
+
+def main:
+  people = Csv(name: "people", text: "ada,36\nbo,41,extra\ncy")
+  board = Grid(name: "board", cells: [["x", "o"], ["o", "x"]])
+  puts widths(people)
+  puts widths(board)
+
+  sheets: [Sheet] = [people, board]
+  for s in sheets:
+    counts = s.map_rows { |r| r.len }
+    puts "#{s.title}: #{s.row_count} rows, widths #{counts}"

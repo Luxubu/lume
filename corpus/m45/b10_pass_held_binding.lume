@@ -1,0 +1,31 @@
+# Probes: a binding of the interface's type (`m: Mappable[Int] = [3, 4]`)
+# handed to a parameter typed `Mappable[Int]`. interfaces.md: "Passing such
+# a held value to a parameter typed as the interface is refused for the same
+# reason: the function could call `map_all` on it." The first function it is
+# passed to, `count`, never calls `map_all` — only `size` — so this checks
+# that the refusal is about the parameter's type, not about what the
+# function body happens to do. Calling `m.size` on the binding directly is
+# fine, and so is passing the literal list to `doubled`.
+# Meant to FAIL, at `count(m)`, with (examples/errors/iface_pass_held_value):
+#   this `Mappable[Int]` is held through a pointer, and `Mappable[Int]` has methods only a known type can call (`map_all`)
+# EXPECTED OUTPUT:
+# (none: refused at compile time)
+
+interface Mappable[T]:
+  def map_all[U](f: (T) -> U) -> [U]
+  def size -> Int
+
+extend [T] with Mappable[T]:
+  def map_all[U](f: (T) -> U) -> [U] = self.map { |x| f(x) }.to_list
+  def size -> Int = self.len
+
+def doubled(m: Mappable[Int]) -> [Int] = m.map_all { |x| x * 2 }
+
+def count(m: Mappable[Int]) -> Int = m.size
+
+def main:
+  puts doubled([1, 2])
+  m: Mappable[Int] = [3, 4]
+  puts m.size
+  puts count(m)
+  puts doubled(m)

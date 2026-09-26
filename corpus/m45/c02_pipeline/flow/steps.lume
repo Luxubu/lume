@@ -1,0 +1,17 @@
+# flow/steps.lume — functions that hand back kept blocks.
+
+pub def scale(k: Int) -> (Int) -> Int = { |x| x * k }
+
+pub def shift(k: Int) -> (Int) -> Int = { |x| x + k }
+
+pub def clamp_to(hi: Int) -> (Int) -> Int = { |x| x.min(hi) }
+
+# keeps both blocks it is given
+pub def then(f: (Int) -> Int, g: (Int) -> Int) -> (Int) -> Int = { |x| g(f(x)) }
+
+# kept blocks in a map, built in this module and read in another
+pub def named -> {Str: (Int) -> Int}:
+  var out: {Str: (Int) -> Int} = {}
+  out["double"] = scale(2)
+  out["inc"] = shift(1)
+  out

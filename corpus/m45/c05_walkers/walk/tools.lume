@@ -1,0 +1,13 @@
+# walk/tools.lume — generic helpers written against the interfaces only.
+# It imports neither the structs nor the extends.
+
+import walk.api.Walk
+import walk.api.Mappable
+
+pub def labels[M: Mappable[Int]](m: M) -> [Str] = m.map_all { |n| "n#{n}" }
+
+pub def doubled_sum[M: Mappable[Int]](m: M) -> Int = m.map_all { |n| n * 2 }.sum
+
+pub def describe(w: Walk) -> Str:
+  big = w.count_if { |x| x > 2 }
+  "total #{w.total}, big #{big}"

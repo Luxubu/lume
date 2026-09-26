@@ -1,0 +1,8 @@
+lima: 19C
+oslo: 4C
+cairo: 31C
+warmest: cairo
+batch one has 3 readings
+waiting for the second batch
+error: `cold` is not an integer
+exit: 1

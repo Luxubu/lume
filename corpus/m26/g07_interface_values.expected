@@ -1,3 +1,15 @@
+warning: `mixed` holds values of different types behind `Renders`, so calls on its items go through a pointer
+  --> corpus/m26/g07_interface_values.lume:82:3
+   |
+82 |   mixed: [Renders[Str]] = [Bracket(open: "(", close: ")"), Shouty(extra: "!")]
+   |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+warning: `ints` holds values of different types behind `Renders`, so calls on its items go through a pointer
+  --> corpus/m26/g07_interface_values.lume:94:3
+   |
+94 |   ints: [Renders[Int]] = [Times(n: 2), "="]
+   |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
 [hi]
 [a],[b]
 [LOUD]

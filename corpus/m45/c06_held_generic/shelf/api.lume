@@ -1,0 +1,5 @@
+# shelf/api.lume — an interface with a generic method.
+
+pub interface Mappable[T]:
+  def map_all[U](f: (T) -> U) -> [U]
+  def size -> Int

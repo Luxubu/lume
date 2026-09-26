@@ -1,0 +1,11 @@
+commands: add, sub, mul, div
+add 2 3    = 5
+mul 4 5    = 20
+div 9 2    = 4
+div 1 0    ! division by zero
+pow 2 8    ! unknown command `pow`
+sub 10     ! want 3 words, got 2
+sub 10 x   ! `x` is not an integer
+sub 1 10   = -9
+4 of 8 lines worked
+exit: 0

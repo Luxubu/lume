@@ -1,0 +1,64 @@
+# a08_grade_report.lume — reviewer A, round nine
+# Probes: a function of a type that can fail (`Student.parse -> Student or
+# Error`) handed to `map` by its qualified name; `?` inside a `for` inside a
+# match arm of that function; a helper that adds context to a failure
+# (`Error(e) -> Error("...#{e.message}")`); a map of grading policies kept
+# as blocks, `{Str: (Float) -> Str}`, one written with a one-line
+# `if/elif/else`; looking a policy up with `match` on `Some(grade)`/`None`
+# and calling the kept block inside another block; `max_by` on a `Float`
+# key and `.map(_.name)` on the optional it gives.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# skipped: cy: `x` is not an integer
+# skipped: no `:` in `dee 80`
+# averages: ada 91.3, bo 68.5, eve 59.7
+# letter: ada=A bo=F eve=F
+# pass: ada=pass bo=pass eve=fail
+# curve: no such policy
+# best: ada
+
+def read_score(who: Str, piece: Str) -> Int or Error:
+  match piece.trim.to_int:
+    Ok(n) -> n
+    Error(e) -> Error("#{who}: #{e.message}")
+
+struct Student:
+  name: Str
+  scores: [Int]
+
+  def self.parse(line: Str) -> Student or Error:
+    match line.split(":"):
+      [who, rest] ->
+        var found: [Int] = []
+        for piece in rest.split(","):
+          found.push(read_score(who.trim, piece)?)
+        Student(name: who.trim, scores: found)
+      _ -> Error("no `:` in `#{line}`")
+
+  def avg -> Float = scores.avg
+
+def main:
+  policies: {Str: (Float) -> Str} = {
+    "letter": { |a| if a >= 90.0: "A" elif a >= 80.0: "B" elif a >= 70.0: "C" else: "F" },
+    "pass": { |a| if a >= 60.0: "pass" else: "fail" },
+  }
+
+  lines = ["ada: 95, 88, 91", "bo: 72, 65", "cy: 50, x", "dee 80", "eve: 59, 60, 60"]
+  var students: [Student] = []
+  for r in lines.map(Student.parse):
+    match r:
+      Ok(s) -> students.push(s)
+      Error(e) -> puts "skipped: #{e.message}"
+
+  averages = students.map { |s| "#{s.name} #{s.avg.decimals(1)}" }.join(", ")
+  puts "averages: #{averages}"
+
+  for mode in ["letter", "pass", "curve"]:
+    match policies[mode]:
+      Some(grade) ->
+        marks = students.map { |s| "#{s.name}=#{grade(s.avg)}" }.join(" ")
+        puts "#{mode}: #{marks}"
+      None -> puts "#{mode}: no such policy"
+
+  best = students.max_by { |s| s.avg }.map(_.name).or("nobody")
+  puts "best: #{best}"

@@ -1,0 +1,15 @@
+warning: `sources` holds values of different types behind `Source`, so calls on its items go through a pointer
+  --> corpus/m45/b04_async_source.lume:66:3
+   |
+66 |   sources: [Source] = [Fixed(text: "x"), Slow(ms: 1), 7]
+   |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+[fixed] hi/hi
+[slow] slept 2/slept 2
+[int] int 3/int 3
+["slept 3", "slept 1"]
+["[fixed]", "[slow]", "[int]"]
+task
+[slow] slept 1/slept 1
+direct
+exit: 0

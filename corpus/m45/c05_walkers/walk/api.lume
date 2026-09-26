@@ -1,0 +1,19 @@
+# walk/api.lume — two public interfaces: one whose methods take blocks
+# (with defaults built on the required one), and one with a generic method.
+
+pub interface Walk:
+  def each_item(f: (Int) -> ()) -> ()
+
+  def total -> Int:
+    var t = 0
+    each_item { |x| t += x }
+    t
+
+  def count_if(ok: (Int) -> Bool) -> Int:
+    var n = 0
+    each_item { |x| n += if ok(x): 1 else: 0 }
+    n
+
+pub interface Mappable[T]:
+  def map_all[U](f: (T) -> U) -> [U]
+  def size -> Int

@@ -104,6 +104,14 @@ generic container, an `extend` of the program's own generic type) and on four
 pages that contradicted each other about tuples and module functions; those
 are fixed. See `corpus/m42/REPORT.md`.
 
+## Round nine
+
+`corpus/m45/` measured milestones 42–44: thirty programs, **115 guesses**,
+most of them asking for an example of a feature that had one sentence — a
+block in a map or a tuple, `extend Box[Int]` — and two pages that disagreed
+(a block returning `T?`, a space before `{`). Those are now answered with
+checked examples. See `corpus/m45/REPORT.md`.
+
 ## What writing the answers found
 
 Four programs that the compiler accepted and then could not generate Rust for:

@@ -1,0 +1,46 @@
+# c10_scores — `pub import` passing on a module whose `pub async def` is
+# awaited through the passed-on prefix inside tasks started from a block
+# (`names.map { |n| spawn: ... }`); `?` on each awaited result in an
+# `async def main -> () or Error`; kept blocks in tuples in a list, from
+# another module, walked with `for label, ok in ...` and called; a kept
+# block copied into several tasks; a task using `?` on two async calls,
+# the second failing, matched.
+# Output is deterministic: results come from `await` on lists (start
+# order) or on one task; the sleeps only change finishing order.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# [("ada", 91), ("bo", 47), ("cyd", 78)]
+# ada leads with 91
+# pass: ["ada", "cyd"]
+# fail: ["bo"]
+# top: ["ada"]
+# [true, false, false]
+# no total: no score for zed
+
+import stats.top
+
+async def main -> () or Error:
+  names = ["ada", "bo", "cyd"]
+  tasks = names.map { |n| spawn: await fetch.score(n) }.to_list
+  results = await tasks
+  var scored: [(Str, Int)] = []
+  for n, r in names.zip(results):
+    scored.push((n, r?))
+  puts scored
+  puts top.headline(scored)
+
+  for label, ok in ck.rules(50):
+    passing = scored.filter { |n, s| ok(s) }.map { |n, s| n }.to_list
+    puts "#{label}: #{passing}"
+
+  best = ck.at_least(80)
+  flags = await scored.map { |n, s| spawn: best(s) }.to_list
+  puts flags
+
+  t = spawn:
+    a = await fetch.score("ada")?
+    b = await fetch.score("zed")?
+    a + b
+  match await t:
+    Ok(sum)  -> puts sum
+    Error(e) -> puts "no total: #{e.message}"

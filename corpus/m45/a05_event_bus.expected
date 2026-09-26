@@ -1,0 +1,14 @@
+warning: `log` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/m45/a05_event_bus.lume:35:3
+   |
+35 |   shared var log: [Str] = []
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+email: order A1 received
+(nobody listens to ship)
+email: refund for B7
+email: order C3 received
+log: ["order:A1", "refund:B7", "order:C3"]
+order:2 refund:2
+6 handler calls
+exit: 0

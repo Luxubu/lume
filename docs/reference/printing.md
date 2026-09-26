@@ -38,11 +38,13 @@ A `Float` keeps its point: `2.0` prints as `2.0`, not `2`. An empty list is
 `[]`; an empty set and an empty map are both `{}`, because both are written
 `{}`.
 
-### A space before `(` or `{`
+### A space before `(`
 
-`puts` is a keyword, not a function, and **a space before an opening bracket
-is ambiguous** — `puts (a, b)` could be a call with two arguments or one
-tuple. Lume refuses to guess. Give the value a name, or close the space up:
+`puts` is a keyword, not a function, and **a space before `(` is
+ambiguous** — `puts (a, b)` could be a call with two arguments or one
+tuple. Lume refuses to guess. Give the value a name, or close the space up.
+A `{` is not ambiguous — it can only start a map or a set — so
+`puts {"x": 1}` prints the map:
 
 ```lume
 pair = (1, "two", true)

@@ -1,0 +1,20 @@
+# pool/jobs.lume — two kinds of job source.
+
+pub struct Span:
+  lo: Int
+  hi: Int
+
+  def each_job(f: (Int) -> ()) -> ():
+    for i in lo..hi:
+      f(i)
+
+  def label -> Str = "span #{lo}..#{hi}"
+
+pub struct Picks:
+  xs: [Int]
+
+  def each_job(f: (Int) -> ()) -> ():
+    for x in xs:
+      f(x)
+
+  def label -> Str = "picks"

@@ -1,0 +1,18 @@
+warning: `board` holds values of different types behind `Summary`, so calls on its items go through a pointer
+  --> corpus/m45/a07_box_summaries.lume:57:3
+   |
+57 |   board: [Summary] = [nums, words, Box(items: [10])]
+   |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+ints 4+5+6 = 15
+words red green (2)
+[ints 4+5+6 = 15]
+words n4 n5 n6 (3)
+ints 3+5 = 8
+ints 7 = 7
+WORDS RED GREEN (2)
+- ints 4+5+6 = 15
+- words red green (2)
+- ints 10 = 10
+sizes: 3 2 1
+exit: 0

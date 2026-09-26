@@ -1,0 +1,15 @@
+warning: `things` holds values of different types behind `Walkable`, so calls on its items go through a pointer
+  --> corpus/m45/a04_folder_walker.lume:83:3
+   |
+83 |   things: [Walkable] = [root, Doc("notes.txt", 50), {"a.txt": 3, "b.txt": 40}]
+   |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+  1200  src/main.lume
+   300  src/util.lume
+   800  src/lib/text.lume
+big: ["src/main.lume", "src/lib/text.lume"]
+3 files, 2300 bytes, largest src/main.lume
+1 files, 50 bytes, largest notes.txt
+2 files, 43 bytes, largest b.txt
+[3, 1, 2]
+exit: 0

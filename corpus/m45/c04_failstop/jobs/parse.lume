@@ -1,0 +1,10 @@
+# jobs/parse.lume — `station = temperature`, or a reason it is not.
+
+pub struct Reading:
+  station: Str
+  temp: Int
+
+pub def reading(line: Str) -> Reading or Error:
+  match line.split("="):
+    [name, value] -> Reading(station: name.trim, temp: value.trim.to_int?)
+    _             -> Error("no `=` in `#{line}`")

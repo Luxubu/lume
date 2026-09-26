@@ -1,0 +1,72 @@
+# c07_optional_tasks — `?` on optional values inside `spawn:`, which makes
+# the task give back `T?`; `return None` and a bare last value in such a
+# task; a task that starts and awaits a task of its own; fresh lists of
+# tasks started in a `while`, with a `shared var` counter bumped from each.
+# Output is deterministic: every result is read by `await` on a list (start
+# order) or on one task; the counter only ever has `+= 1` done to it, which
+# is one use of the lock each, so it ends at 6 whatever the interleaving.
+# (One `shared var` warning goes to stderr, not shown.)
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# Some(30)
+# None
+# Some(70)
+# None
+# 16
+# Some(6)
+# None
+# [1]
+# [2, 4]
+# [3, 6, 9]
+# done 6
+
+INVENTORY = {"apple": 3, "pear": 0, "fig": 7}
+
+def stock(name: Str) -> Int? = INVENTORY[name]
+
+def halve_even(n: Int) -> Int?:
+  if n % 2 == 0:
+    return n / 2
+  None
+
+async def main:
+  names = ["apple", "kiwi", "fig", "pear"]
+  var tasks: [Task[Int?]] = []
+  for name in names:
+    t = spawn:
+      n = stock(name)?
+      if n == 0:
+        return None
+      n * 10
+    tasks.push(t)
+  for r in await tasks:
+    puts r
+
+  outer = spawn:
+    inner = spawn: stock("fig").or(0) + 1
+    got = await inner
+    got * 2
+  puts await outer
+
+  q = spawn:
+    a = halve_even(stock("fig").or(0) + 1)?
+    b = halve_even(a)?
+    a + b
+  puts await q
+
+  r = spawn:
+    halve_even(stock("apple").or(0))? + 1
+  puts await r
+
+  shared var done = 0
+  var round = 1
+  while round <= 3:
+    var ts: [Task[Int]] = []
+    for k in 1..round:
+      w = spawn:
+        done += 1
+        k * round
+      ts.push(w)
+    puts await ts
+    round += 1
+  puts "done #{done}"

@@ -1,0 +1,75 @@
+# a03_config_tasks.lume — reviewer A, round nine
+# Probes: `?` inside `spawn:` — each task reads one config text, uses `?`
+# on a `T or Error`, and so is a `Task[Config or Error]` kept in a typed
+# `var` list; a top-level constant (a list of tuples) read inside `spawn:`;
+# `await` on the list and `match` on each result. Then two tasks that use
+# `?` on an optional (`Str?`) and so give back a `Str?`, with a bare last
+# line taken as the implied `Some`.
+# Deterministic: the tasks sleep for different times so they finish out of
+# order, but nothing prints inside a task, and `await tasks` gives results
+# in the order the tasks were started (docs/reference/concurrency.md).
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# web    port 8080, workers 4
+# db     port 5432, workers 1
+# cache  port 6379, workers 1
+# failed: queue: `port` must be positive, got -1
+# failed: mail: no `port`
+# 3 of 5 up
+# Some("EXAMPLE")
+# None
+
+SOURCES = [
+  ("web", "port=8080\nworkers=4"),
+  ("db", "port=5432\nworkers=x"),
+  ("cache", "port=6379"),
+  ("queue", "workers=2\nport=-1"),
+  ("mail", "workers=3"),
+]
+
+struct Config:
+  name: Str
+  port: Int
+  workers: Int
+
+def field(text: Str, key: Str) -> Str?:
+  for line in text.lines:
+    match line.split("="):
+      [k, v] if k == key -> return v
+      _ -> ()
+  None
+
+def need(name: Str, text: Str, key: Str) -> Int or Error:
+  raw = field(text, key).or_error("#{name}: no `#{key}`")?
+  n = raw.to_int?
+  if n <= 0:
+    return Error("#{name}: `#{key}` must be positive, got #{n}")
+  n
+
+async def main:
+  var tasks: [Task[Config or Error]] = []
+  for name, text in SOURCES:
+    t = spawn:
+      await Time.sleep(40 - name.len * 5)
+      port = need(name, text, "port")?
+      workers = need(name, text, "workers").or(1)
+      Config(name: name, port: port, workers: workers)
+    tasks.push(t)
+
+  var up = 0
+  for r in await tasks:
+    match r:
+      Ok(c) ->
+        up += 1
+        puts "#{c.name.pad_right(6)} port #{c.port}, workers #{c.workers}"
+      Error(e) -> puts "failed: #{e.message}"
+  puts "#{up} of #{SOURCES.len} up"
+
+  found = spawn:
+    raw = field("host=example\nport=80", "host")?
+    raw.upcase
+  missing = spawn:
+    raw = field("port=80", "host")?
+    raw.upcase
+  puts await found
+  puts await missing
