@@ -1,0 +1,8 @@
+interface Source:
+  async def fetch -> Str
+  async def twice -> Str:
+    x = await fetch()
+    x + x
+
+def main:
+  puts 1

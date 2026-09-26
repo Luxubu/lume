@@ -2679,7 +2679,15 @@ impl Gen {
         }
         let mut missing = Vec::new();
         for (name, want) in &info.methods {
-            let want = Sig { params: want.params.iter().map(|(n, x)| (n.clone(), Self::subst(x, &sub))).collect(), ret: Self::subst(&want.ret, &sub), ..want.clone() };
+            let mut want = Sig { params: want.params.iter().map(|(n, x)| (n.clone(), Self::subst(x, &sub))).collect(), ret: Self::subst(&want.ret, &sub), ..want.clone() };
+            // a method's own type parameters are matched by position, not
+            // by name: `map_all[V]` is the interface's `map_all[U]`
+            if let Some(got) = have.get(name) {
+                if got.generics.len() == want.generics.len() && !want.generics.is_empty() {
+                    let ren: HashMap<String, Type> = want.generics.iter().zip(&got.generics).map(|(w, g)| (w.name.clone(), Type::Var(g.name.clone()))).collect();
+                    want = Sig { params: want.params.iter().map(|(n, x)| (n.clone(), Self::subst(x, &ren))).collect(), ret: Self::subst(&want.ret, &ren), ..want };
+                }
+            }
             match have.get(name) {
                 None => {
                     if info.required.contains(name) {
@@ -3348,9 +3356,9 @@ impl Gen {
                     self.check_generics_used(&e.generics, e.variants.iter().flat_map(|v| v.fields.iter().map(|f| &f.ty)), &format!("enum `{}`", e.name))?;
                 }
                 Item::Interface(i) => {
-                    if !i.required.iter().chain(&i.defaults).all(|m| m.generics.is_empty()) {
-                        return Err(LumeError::new(i.line, i.col, format!("interface `{}` has a method with type parameters, which is not supported yet", i.name))
-                            .with_help("an interface method takes concrete types; a generic function can take the interface instead"));
+                    if let Some(m) = i.defaults.iter().find(|m| m.is_async) {
+                        return Err(LumeError::new(m.line, m.col, format!("`{}` is `async` and has a body, which an interface cannot give yet", m.name))
+                            .with_help("leave it as a signature, `async def name -> T`, and let each type give the body"));
                     }
                     self.check_generics(&i.generics, &format!("`{}`", i.name))?;
                     let sig_types: Vec<Type> = i
@@ -5439,7 +5447,7 @@ impl Gen {
         self.line(&format!("fn lume_box(&self) -> ::std::boxed::Box<dyn {}{}>;", i.name, gargs));
         for m in &i.required {
             let sg = &info.methods[&m.name];
-            self.line(&format!("fn {}({}) -> {};", rust_name(&m.name), self.sig_params_rust(sg, true), self.rt(&sg.ret)));
+            self.line(&format!("{};", self.trait_header(&m.name, sg, None)));
         }
         self.in_trait_impl = true;
         for m in &i.defaults {
@@ -5459,14 +5467,16 @@ impl Gen {
         self.line(&format!("fn lume_box(&self) -> ::std::boxed::Box<dyn {}{}> {{ (**self).lume_box() }}", i.name, gargs));
         for (name, sg) in &info.methods {
             let args: Vec<String> = sg.params.iter().map(|(n, _)| rust_name(n)).collect();
-            self.line(&format!(
-                "fn {}({}) -> {} {{ (**self).{}({}) }}",
-                rust_name(name),
-                self.sig_params_rust(sg, true),
-                self.rt(&sg.ret),
-                rust_name(name),
-                args.join(", ")
-            ));
+            // a method only a generic can call is never reached through a
+            // pointer: Lume refuses that call, so this body cannot run
+            let body = if sg.is_async {
+                "async { unreachable!(\"refused by Lume: a static-only interface method through a pointer\") }".to_string()
+            } else if Self::static_only(sg) {
+                "unreachable!(\"refused by Lume: a static-only interface method through a pointer\")".to_string()
+            } else {
+                format!("(**self).{}({})", rust_name(name), args.join(", "))
+            };
+            self.line(&format!("{} {{ {} }}", self.trait_header(name, sg, None), body));
         }
         self.indent -= 1;
         self.line("}");
@@ -5493,14 +5503,58 @@ impl Gen {
         self.sig_params_rust_as(sg, None, with_self)
     }
 
+    /// A block handed to an interface's method is lent `&mut`, as the trait
+    /// takes it.
+    fn trait_arg(v: String, t: &Type) -> String {
+        if matches!(t, Type::Fn(..)) { format!("&mut ({})", v) } else { v }
+    }
+
+    /// Is this interface value one a generic holds — a parameter typed as
+    /// the interface, which Lume makes a generic — rather than one held
+    /// through a pointer (a list item, a field, a binding)?
+    fn is_static_iface_value(&self, e: &Expr) -> bool {
+        matches!(&e.kind, ExprKind::Ident(n) if self.iface_params.contains(n) && self.lookup(n).map(|b| self.is_interface(&b.ty)).unwrap_or(false))
+    }
+
+    /// Calling, on an interface value held through a pointer, a method only
+    /// a generic can call. Rust refuses the same call on a `dyn` value.
+    fn static_only_refusal(&self, rt: &Type, name: &str, sg: &Sig, e: &Expr) -> LumeError {
+        let why = if sg.is_async { "is `async`".to_string() } else { format!("has type parameters of its own (`{}`)", sg.generics.iter().map(|g| g.name.clone()).collect::<Vec<_>>().join("`, `")) };
+        LumeError::new(e.line, e.col, format!("`{}` {}, so it cannot be called on a `{}` held in a list, a field or a binding", name, why, type_name(rt)))
+            .with_help(format!("call it where the value's own type is known: take it as a parameter, `def f(x: {})`, or a bound, `[T: {}]`", type_name(rt), type_name(rt)))
+    }
+
+    /// A method only a generic can call: one with type parameters of its
+    /// own, or an `async` one. Rust marks it `where Self: Sized`, which keeps
+    /// the interface usable as a value; Lume refuses the call on one.
+    fn static_only(sg: &Sig) -> bool {
+        !sg.generics.is_empty() || sg.is_async
+    }
+
+    /// The Rust signature of an interface method, the same in the trait, in
+    /// the boxed value's forwarding impl and in each type's impl.
+    fn trait_header(&self, name: &str, sg: &Sig, decl: Option<&[Type]>) -> String {
+        let gen = self.rust_generics(&sg.generics);
+        let params = self.sig_params_rust_as(sg, decl, true);
+        let ret = if sg.is_async { format!("impl std::future::Future<Output = {}> + Send", self.rt(&sg.ret)) } else { self.rt(&sg.ret) };
+        let wh = if Self::static_only(sg) { " where Self: Sized" } else { "" };
+        format!("fn {}{}({}) -> {}{}", rust_name(name), gen, params, ret, wh)
+    }
+
     fn sig_params_rust_as(&self, sg: &Sig, decl: Option<&[Type]>, with_self: bool) -> String {
         let mut parts: Vec<String> = Vec::new();
         if with_self {
             parts.push("&self".into());
         }
         for (i, (n, t)) in sg.params.iter().enumerate() {
-            // a block parameter stays a generic, compiled into the call
-            let rt = if matches!(t, Type::Fn(..)) { rust_type(t) } else { self.rt(t) };
+            // a block given to an interface method is lent as `&mut dyn
+            // FnMut`, as Rust does for a trait that must stay usable as a
+            // value; a generic here would make it one only generics can use
+            if let Type::Fn(ins, out) = t {
+                parts.push(format!("{}: &mut dyn {}", rust_name(n), self.rust_fn_bound(ins, out)));
+                continue;
+            }
+            let rt = self.rt(t);
             let lent = decl.and_then(|d| d.get(i)).map(|d| matches!(d, Type::Var(_))).unwrap_or(false);
             let rt = if sg.var_params.get(i).copied().unwrap_or(false) {
                 format!("&mut {}", rt)
@@ -5701,7 +5755,7 @@ impl Gen {
                                 // same trait, so its arguments travel as the
                                 // trait declared them
                                 let same: Vec<String> = sg.params.iter().map(|(n, _)| rust_name(n)).collect();
-                                self.line(&format!("fn {}({}) -> {} {{ self.as_str().{}({}) }}", rust_name(mname), self.sig_params_rust_as(sg, Some(&decl_tys), true), self.rt(&sg.ret), rust_name(mname), same.join(", ")));
+                                self.line(&format!("{} {{ self.as_str().{}({}) }}", self.trait_header(mname, sg, Some(&decl_tys)), rust_name(mname), same.join(", ")));
                             } else {
                                 self.in_trait_impl = true;
                                 self.trait_decl = Some(decl_tys.clone());
@@ -5712,10 +5766,8 @@ impl Gen {
                         } else if inherent.contains_key(mname) && !self.ext_methods.get(tkey).map(|m| m.contains_key(mname)).unwrap_or(false) {
                             let args: Vec<String> = pass.clone();
                             self.line(&format!(
-                                "fn {}({}) -> {} {{ {}::{}(self{}{}) }}",
-                                rust_name(mname),
-                                self.sig_params_rust_as(sg, Some(&decl_tys), true),
-                                self.rt(&sg.ret),
+                                "{} {{ {}::{}(self{}{}) }}",
+                                self.trait_header(mname, sg, Some(&decl_tys)),
                                 Self::turbofish(&self.rt(t)),
                                 rust_name(mname),
                                 if args.is_empty() { "" } else { ", " },
@@ -6014,6 +6066,12 @@ impl Gen {
                 parts.push(format!("{}: {}", rust_name(&p.name), self.rt(&pty)));
                 continue;
             }
+            if let (Type::Fn(ins, out), true) = (&pty, self.in_trait_impl) {
+                // inside a trait, as the trait declares it: lent `&mut dyn`
+                parts.push(format!("{}: &mut dyn {}", rust_name(&p.name), self.rust_fn_bound(ins, out)));
+                self.param_blocks.insert(p.name.clone());
+                continue;
+            }
             if let Type::Fn(ins, out) = &pty {
                 // `f: (T) -> U` — the block is its own generic parameter, so
                 // the caller's closure is compiled straight into this function
@@ -6055,6 +6113,10 @@ impl Gen {
         let mut header = format!("{}{}fn {}{}({})", vis, if f.is_async { "async " } else { "" }, fn_name, gen, parts.join(", "));
         if sig.ret != Type::Unit {
             header.push_str(&format!(" -> {}", self.rt(&sig.ret)));
+        }
+        // a method only a generic can call, as the trait declares it
+        if self.in_trait_impl && Self::static_only(&sig) {
+            header.push_str(" where Self: Sized");
         }
         header.push_str(" {");
         self.line(&header);
@@ -7355,6 +7417,16 @@ impl Gen {
             if at != Type::Unknown && !self.is_interface(&at) {
                 self.require_conforms(&at, t, e.line, e.col)?;
             }
+            // a value held through a pointer reaches only the methods a
+            // pointer can call; a parameter may call the rest
+            if self.is_interface(&at) && !self.is_static_iface_value(e) {
+                let key = self.type_key(t);
+                let only: Vec<String> = self.interfaces.get(&key).map(|i| i.methods.iter().filter(|(_, sg)| Self::static_only(sg)).map(|(n, _)| n.clone()).collect()).unwrap_or_default();
+                if !only.is_empty() {
+                    return Err(LumeError::new(e.line, e.col, format!("this `{}` is held through a pointer, and `{}` has methods only a known type can call (`{}`)", type_name(&at), type_name(t), only.join("`, `")))
+                        .with_help("pass the value itself, where its own type is known, rather than one taken from a list, a field or a binding of the interface's type"));
+                }
+            }
         }
         if let Type::Iter(elem, by_ref) = self.ty_of(e) {
             let s = self.expr(e)?;
@@ -7565,13 +7637,21 @@ impl Gen {
     /// Then the block belongs to that method, not to the built-in of the
     /// same name.
     fn user_block_method(&self, rt: &Type, name: &str) -> bool {
+        // a built-in given a block method by an `extend`: `xs.map_all { ... }`
         if !matches!(rt, Type::Named(_) | Type::App(..) | Type::Var(_)) {
-            return false;
+            let takes_block = |s: &Sig| s.params.iter().any(|(_, t)| matches!(t, Type::Fn(..)));
+            if self.ext_method_here(rt, name) {
+                return self.methods_for(rt).and_then(|m| m.get(name).cloned()).map(|s| takes_block(&s)).unwrap_or(false);
+            }
+            // or an interface's default the built-in has by conforming
+            return self.iface_default(rt, name).map(|s| takes_block(&s)).unwrap_or(false);
         }
-        self.methods_of(&self.type_key(rt))
-            .and_then(|m| m.get(name).cloned())
-            .map(|s| s.params.iter().any(|(_, t)| matches!(t, Type::Fn(..))))
-            .unwrap_or(false)
+        let takes_block = |s: &Sig| s.params.iter().any(|(_, t)| matches!(t, Type::Fn(..)));
+        match self.methods_for(rt).and_then(|m| m.get(name).cloned()) {
+            Some(s) => takes_block(&s),
+            // a default of an interface the type conforms to
+            None => self.iface_default(rt, name).map(|s| takes_block(&s)).unwrap_or(false),
+        }
     }
 
     /// The argument for a `(A, B) -> C` parameter: a block, a `_`
@@ -9808,6 +9888,14 @@ impl Gen {
                             ret: Self::subst(&decl.ret, &sub),
                             ..decl.clone()
                         };
+                        // through the trait, not the type's own method: an
+                        // interface value, a type parameter, or an `extend`
+                        let own = self.structs.get(tname).map(|x| x.methods.contains_key(name)).unwrap_or(false)
+                            || self.enums.get(tname).map(|x| x.methods.contains_key(name)).unwrap_or(false);
+                        let through_trait = self.is_interface(&rt) || matches!(rt, Type::Var(_)) || !own;
+                        if self.is_interface(&rt) && Self::static_only(&decl) && !self.is_static_iface_value(recv) {
+                            return Err(self.static_only_refusal(&rt, name, &decl, e));
+                        }
                         let m = self.instantiate(&m, args, &format!("`{}.{}`", tname, name), e.line, e.col)?;
                         let bound = self.bind_args(&format!("`{}.{}`", tname, name), &m.params, args, e.line, e.col)?;
                         let mut parts = Vec::new();
@@ -9820,7 +9908,8 @@ impl Gen {
                                 if decl.kept_params.get(i).copied().unwrap_or(false) {
                                     parts.push(self.kept_arg(a, t, &callee)?);
                                 } else {
-                                    parts.push(self.expr_arg_named_as(a, t, &decl.params[i].1, &callee, pname)?);
+                                    let v = self.expr_arg_named_as(a, t, &decl.params[i].1, &callee, pname)?;
+                                    parts.push(if through_trait { Self::trait_arg(v, t) } else { v });
                                 }
                             }
                         }
@@ -9831,11 +9920,13 @@ impl Gen {
                     }
                     self.check_default_recursion(&rt, name, e.line, e.col)?;
                     if let Some((m, decl)) = self.iface_default_ex(&rt, name) {
+                        let m = self.instantiate(&m, args, &format!("`{}.{}`", tname, name), e.line, e.col)?;
                         let bound = self.bind_args(&format!("`{}.{}`", tname, name), &m.params, args, e.line, e.col)?;
                         let mut parts = Vec::new();
                         for (i, (a, (pname, t))) in bound.iter().zip(&m.params).enumerate() {
                             let d = decl.get(i).unwrap_or(t);
-                            parts.push(self.expr_arg_named_as(a, t, d, &format!("{}.{}", tname, name), pname)?);
+                            let v = self.expr_arg_named_as(a, t, d, &format!("{}.{}", tname, name), pname)?;
+                            parts.push(Self::trait_arg(v, t));
                         }
                         return Ok(format!("{}.{}({})", r, rust_name(name), parts.join(", ")));
                     }
@@ -9843,10 +9934,12 @@ impl Gen {
                     if self.ext_method_here(&rt, name) {
                         if let Some(m) = self.methods_for(&rt).and_then(|ms| ms.get(name).cloned()) {
                             let callee = format!("{}.{}", type_name(&rt), name);
+                            let m = self.instantiate(&m, args, &format!("`{}`", callee), e.line, e.col)?;
                             let bound = self.bind_args(&format!("`{}`", callee), &m.params, args, e.line, e.col)?;
                             let mut parts = Vec::new();
                             for (a, (pname, t)) in bound.iter().zip(&m.params) {
-                                parts.push(self.expr_arg_named_as(a, t, t, &callee, pname)?);
+                                let v = self.expr_arg_named_as(a, t, t, &callee, pname)?;
+                                parts.push(Self::trait_arg(v, t));
                             }
                             return Ok(format!("({}).{}({})", r, rust_name(name), parts.join(", ")));
                         }
@@ -9860,23 +9953,28 @@ impl Gen {
                     let ext_here = self.ext_method_here(&rt, name);
                     let found = if ext_here { self.methods_for(&rt).and_then(|m| m.get(name).cloned()) } else { None };
                     if let Some(m) = found {
+                        // a method with type parameters of its own works them out here
+                        let m = self.instantiate(&m, args, &format!("`{}.{}`", type_name(&rt), name), e.line, e.col)?;
                         let bound = self.bind_args(&format!("`{}.{}`", type_name(&rt), name), &m.params, args, e.line, e.col)?;
                         let mut parts = Vec::new();
                         let callee = format!("{}.{}", type_name(&rt), name);
                         let decl = self.iface_decl_params(&rt, name);
                         for (i, (a, (pname, t))) in bound.iter().zip(&m.params).enumerate() {
                             let d = decl.get(i).unwrap_or(t);
-                            parts.push(self.expr_arg_named_as(a, t, d, &callee, pname)?);
+                            let v = self.expr_arg_named_as(a, t, d, &callee, pname)?;
+                            parts.push(Self::trait_arg(v, t));
                         }
                         return Ok(format!("({}).{}({})", r, rust_name(name), parts.join(", ")));
                     }
                     self.check_default_recursion(&rt, name, e.line, e.col)?;
                     if let Some((m, decl)) = self.iface_default_ex(&rt, name) {
+                        let m = self.instantiate(&m, args, &format!("`{}.{}`", type_name(&rt), name), e.line, e.col)?;
                         let bound = self.bind_args(&format!("`{}.{}`", type_name(&rt), name), &m.params, args, e.line, e.col)?;
                         let mut parts = Vec::new();
                         for (i, (a, (pname, t))) in bound.iter().zip(&m.params).enumerate() {
                             let d = decl.get(i).unwrap_or(t);
-                            parts.push(self.expr_arg_named_as(a, t, d, &format!("{}.{}", type_name(&rt), name), pname)?);
+                            let v = self.expr_arg_named_as(a, t, d, &format!("{}.{}", type_name(&rt), name), pname)?;
+                            parts.push(Self::trait_arg(v, t));
                         }
                         return Ok(format!("({}).{}({})", r, rust_name(name), parts.join(", ")));
                     }

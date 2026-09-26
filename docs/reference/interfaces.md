@@ -260,6 +260,87 @@ def main:
 #! the items of a list must all be the same type
 ```
 
+## Methods that take a block, have type parameters, or are `async`
+
+**An interface method may take a block**, and is written as any other:
+
+```lume
+interface Walk:
+  def each_item(f: (Int) -> ()) -> ()
+  def total -> Int:
+    var t = 0
+    each_item { |x| t += x }
+    t
+
+struct Bag:
+  xs: [Int]
+
+  def each_item(f: (Int) -> ()) -> ():
+    for x in xs:
+      f(x)
+
+extend [Int] with Walk:
+  def each_item(f: (Int) -> ()) -> ():
+    for x in self:
+      f(x)
+
+def main:
+  walks: [Walk] = [Bag(xs: [1, 2, 3]), [10, 20]]
+  puts walks.map { |w| w.total }.to_list    #=> [6, 30]
+```
+
+In Rust the block is lent as a `&mut dyn FnMut`, which keeps the interface
+usable in every place above — a list, a field, a binding.
+
+**An interface method may have type parameters of its own, or be `async`.**
+Rust calls such a method one that only a known type can call, and so does
+Lume: it is called through a parameter typed as the interface or a bound, and
+refused on a value held through a pointer — a list item, a field, a binding
+of the interface's type. The interface itself can still be held that way,
+and its other methods called:
+
+```lume
+interface Mappable[T]:
+  def map_all[U](f: (T) -> U) -> [U]
+  def size -> Int
+
+struct Box[T]:
+  items: [T]
+
+  def map_all[V](f: (T) -> V) -> [V] = items.map { |x| f(x) }.to_list
+  def size -> Int = items.len
+
+def labels[M: Mappable[Int]](m: M) -> [Str] = m.map_all { |n| "n#{n}" }
+
+def main:
+  puts labels(Box(items: [1, 2]))    #=> ["n1", "n2"]
+  held: [Mappable[Int]] = [Box(items: [3, 4])]
+  puts held.map { |m| m.size }.to_list    #=> [2]
+```
+
+The type's own method may name its parameter differently (`V` for `U`): they
+are matched by position.
+
+```lume-bad
+interface Mappable[T]:
+  def map_all[U](f: (T) -> U) -> [U]
+
+extend [T] with Mappable[T]:
+  def map_all[U](f: (T) -> U) -> [U] = self.map { |x| f(x) }.to_list
+
+def main:
+  held: [Mappable[Int]] = [[1, 2]]
+  puts held.at(0).map_all { |x| x * 2 }
+#! `map_all` has type parameters of its own (`U`), so it cannot be called on a `Mappable[Int]` held in a list, a field or a binding
+```
+
+Passing such a held value to a parameter typed as the interface is refused
+for the same reason: the function could call `map_all` on it.
+
+An `async` method is written `async def fetch -> Str` in the interface, and
+awaited as any other: `await source.fetch()`. It has no default body yet —
+each type gives its own.
+
 ## `pub` and methods
 
 **A method of a `pub struct` needs no `pub` of its own.** Visibility is

@@ -402,10 +402,7 @@ impl Parser {
         let mut required = Vec::new();
         let mut defaults = Vec::new();
         while !matches!(self.peek(), Tok::Dedent | Tok::Eof) {
-            if self.at_kw("async") {
-                return Err(self.err("an interface method cannot be `async` yet").with_help("give the interface a plain method and do the awaiting in the caller"));
-            }
-            if !self.at_kw("def") {
+            if !self.at_kw("def") && !(self.at_kw("async") && matches!(self.peek_at(1), Tok::Ident(d) if d == "def")) {
                 return Err(self.err(format!("expected `def` inside `interface {}`, found {}", name, self.describe())));
             }
             let (dl, dc) = self.here();
@@ -443,6 +440,7 @@ impl Parser {
                 // retry as a bare signature
                 self.pos = save;
                 let (line, col) = self.here();
+                let is_async = self.eat_kw("async");
                 self.advance(); // def
                 if self.at_kw("self") && matches!(self.peek_at(1), Tok::Sym(".")) {
                     let n = match self.peek_at(2) { Tok::Ident(n) => n.clone(), _ => "name".to_string() };
@@ -450,6 +448,7 @@ impl Parser {
                         .with_help("put the function in the struct or enum that has it"));
                 }
                 let (name, _, _) = self.ident("a method name")?;
+                let generics = self.generic_params("def name")?;
                 let mut params = Vec::new();
                 if self.eat_sym("(") {
                     while !self.at_sym(")") {
@@ -471,7 +470,7 @@ impl Parser {
                     return Err(e);
                 }
                 self.end_stmt()?;
-                Ok((FnDef { name, public: true, is_async: false, generics: Vec::new(), params, ret, self_kind: SelfKind::Read, body: Block::default(), line, col }, false))
+                Ok((FnDef { name, public: true, is_async, generics, params, ret, self_kind: SelfKind::Read, body: Block::default(), line, col }, false))
             }
         }
     }

@@ -1,0 +1,6 @@
+error: `twice` is `async` and has a body, which an interface cannot give yet
+  --> examples/errors/iface_async_default.lume:3:3
+  |
+3 |   async def twice -> Str:
+  |   ^
+  help: leave it as a signature, `async def name -> T`, and let each type give the body

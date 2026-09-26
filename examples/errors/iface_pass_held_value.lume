@@ -1,0 +1,11 @@
+interface Mappable[T]:
+  def map_all[U](f: (T) -> U) -> [U]
+
+extend [T] with Mappable[T]:
+  def map_all[U](f: (T) -> U) -> [U] = self.map { |x| f(x) }.to_list
+
+def doubled(m: Mappable[Int]) -> [Int] = m.map_all { |x| x * 2 }
+
+def main:
+  held: [Mappable[Int]] = [[1, 2]]
+  puts doubled(held.at(0))

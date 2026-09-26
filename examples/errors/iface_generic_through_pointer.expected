@@ -1,0 +1,6 @@
+error: `map_all` has type parameters of its own (`U`), so it cannot be called on a `Mappable[Int]` held in a list, a field or a binding
+  --> examples/errors/iface_generic_through_pointer.lume:9:16
+  |
+9 |   puts held[0]!.map_all { |x| x * 2 }
+  |                ^
+  help: call it where the value's own type is known: take it as a parameter, `def f(x: Mappable[Int])`, or a bound, `[T: Mappable[Int]]`

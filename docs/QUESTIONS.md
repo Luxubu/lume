@@ -60,7 +60,7 @@ than once, which are the ones that shaped these pages.
 | 35–42 | Module questions: aliases, namespaces, name collisions, re-export, `pub` fields, where an `extend` may live, dotted bounds, what the clash error prints | [modules](reference/modules.md) |
 | 43 | Does `?` inside a block leave the block or the function? | [functions and blocks](reference/functions-and-blocks.md) |
 | 44 | Can you chain onto a call that ends in a trailing block? | [functions and blocks](reference/functions-and-blocks.md) |
-| 45 | Can an interface method take a block? | [interfaces](reference/interfaces.md) |
+| 45 | Can an interface method take a block? | yes, since milestone 44: [interfaces](reference/interfaces.md#methods-that-take-a-block-have-type-parameters-or-are-async) |
 | 46 | May a method add its own type parameters? | [generics](reference/generics.md) |
 | 47 | Is there a block form of `unless`, and do two block `if`s parse? | [control flow](reference/control-flow.md) |
 | 48 | Must a zero-argument *function* be called with `()` while a method need not? | [functions and blocks](reference/functions-and-blocks.md) |

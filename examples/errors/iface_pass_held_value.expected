@@ -1,0 +1,6 @@
+error: this `Mappable[Int]` is held through a pointer, and `Mappable[Int]` has methods only a known type can call (`map_all`)
+  --> examples/errors/iface_pass_held_value.lume:11:20
+   |
+11 |   puts doubled(held.at(0))
+   |                    ^
+  help: pass the value itself, where its own type is known, rather than one taken from a list, a field or a binding of the interface's type

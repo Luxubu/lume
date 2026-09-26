@@ -1,0 +1,95 @@
+# Interface methods that take a block, have type parameters of their own,
+# or are `async` — each as Rust has it. A block is lent to the trait as
+# `&mut dyn FnMut`, so the interface can still be held in a list; a method
+# with type parameters, or an `async` one, is called only where the value's
+# own type is known (a parameter, a bound), as a Rust `where Self: Sized`
+# method is.
+
+interface Walk:
+  def each_item(f: (Int) -> ()) -> ()
+
+  def total -> Int:
+    var t = 0
+    each_item { |x| t += x }
+    t
+
+  def count_if(ok: (Int) -> Bool) -> Int:
+    var n = 0
+    each_item { |x| n += if ok(x): 1 else: 0 }
+    n
+
+struct Bag:
+  xs: [Int]
+
+  def each_item(f: (Int) -> ()) -> ():
+    for x in xs:
+      f(x)
+
+struct Range2:
+  lo: Int
+  hi: Int
+
+  def each_item(f: (Int) -> ()) -> ():
+    var i = lo
+    while i <= hi:
+      f(i)
+      i += 1
+
+extend [Int] with Walk:
+  def each_item(f: (Int) -> ()) -> ():
+    for x in self:
+      f(x)
+
+interface Mappable[T]:
+  def map_all[U](f: (T) -> U) -> [U]
+  def size -> Int
+
+struct Box[T]:
+  items: [T]
+
+  def map_all[V](f: (T) -> V) -> [V] = items.map { |x| f(x) }.to_list
+  def size -> Int = items.len
+
+extend [T] with Mappable[T]:
+  def map_all[U](f: (T) -> U) -> [U] = self.map { |x| f(x) }.to_list
+  def size -> Int = self.len
+
+def sum_all(w: Walk) -> Int = w.total
+
+def labels[M: Mappable[Int]](m: M) -> [Str] = m.map_all { |n| "n#{n}" }
+
+interface Source:
+  async def fetch -> Str
+
+struct Fixed:
+  text: Str
+
+  async def fetch -> Str = text
+
+struct Slow:
+  ms: Int
+
+  async def fetch -> Str:
+    await Time.sleep(ms)
+    "slept #{ms}"
+
+async def read_twice(s: Source) -> Str:
+  a = await s.fetch
+  b = await s.fetch
+  "#{a}/#{b}"
+
+async def main:
+  walks: [Walk] = [Bag(xs: [1, 2, 3]), Range2(lo: 1, hi: 4), [10, 20]]
+  puts walks.map { |w| w.total }.to_list
+  puts walks.map { |w| w.count_if { |x| x > 2 } }.to_list
+  puts sum_all(Bag(xs: [5]))
+  puts sum_all(walks.at(0))
+  double: (Int) -> Bool = { |x| x % 2 == 0 }
+  puts walks.at(1).count_if(double)
+  puts labels(Box(items: [1, 2]))
+  puts labels([7, 8, 9])
+  puts [1, 2].map_all { |x| x * 1.5.round.to_int }
+  held: [Mappable[Int]] = [Box(items: [3]), [4, 5]]
+  puts held.map { |m| m.size }.to_list
+  puts await read_twice(Fixed(text: "hi"))
+  puts await read_twice(Slow(ms: 1))

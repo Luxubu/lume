@@ -1,0 +1,17 @@
+warning: `walks` holds values of different types behind `Walk`, so calls on its items go through a pointer
+  --> examples/interface_methods.lume:82:3
+   |
+82 |   walks: [Walk] = [Bag(xs: [1, 2, 3]), Range2(lo: 1, hi: 4), [10, 20]]
+   |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+[6, 10, 30]
+[1, 2, 2]
+5
+6
+2
+["n1", "n2"]
+["n7", "n8", "n9"]
+[2, 4]
+[1, 2]
+hi/hi
+slept 1/slept 1

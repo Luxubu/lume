@@ -1,0 +1,9 @@
+interface Mappable[T]:
+  def map_all[U](f: (T) -> U) -> [U]
+
+extend [T] with Mappable[T]:
+  def map_all[U](f: (T) -> U) -> [U] = self.map { |x| f(x) }.to_list
+
+def main:
+  held: [Mappable[Int]] = [[1, 2]]
+  puts held[0]!.map_all { |x| x * 2 }
