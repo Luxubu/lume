@@ -1,0 +1,6 @@
+error: `?` on an optional value returns `None`, but this task returns `Int or Error`
+  --> examples/errors/task_try_mixed.lume:6:12
+  |
+6 |     y = [1].first?
+  |            ^
+  help: turn the absence into an error first: `.or_error("what went wrong")?`

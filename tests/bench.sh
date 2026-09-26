@@ -47,7 +47,9 @@ best() {
   echo "$lo"
 }
 
-declare -A RATIO
+# "name ratio" lines for --update; a plain list, since macOS ships bash 3.2,
+# which has no associative arrays
+RATIOS=""
 fail=0
 printf '%-22s %8s %8s %7s %8s\n' benchmark lume rust ratio baseline
 for row in $BENCHES; do
@@ -65,7 +67,8 @@ for row in $BENCHES; do
   else
     rms=0; ratio=0
   fi
-  RATIO[$name]=$ratio
+  [ "$ratio" -gt 0 ] && RATIOS="${RATIOS}${name} ${ratio}
+"
 
   base=$(grep "^$name " bench/BASELINE 2>/dev/null | awk '{print $2}')
   if [ -n "${base:-}" ] && [ "$ratio" -gt 0 ]; then
@@ -84,9 +87,7 @@ if [ $UPDATE -eq 1 ]; then
   {
     echo "# lume time as a percentage of the same program in Rust, best of $RUNS."
     echo "# tests/bench.sh fails a benchmark that is more than $(( SLACK - 100 ))% over its number here."
-    for name in "${!RATIO[@]}"; do
-      [ "${RATIO[$name]}" -gt 0 ] && echo "$name ${RATIO[$name]}"
-    done | sort
+    printf '%s' "$RATIOS" | sort
   } > bench/BASELINE
   echo "wrote bench/BASELINE"
   exit 0

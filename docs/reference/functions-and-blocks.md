@@ -496,6 +496,20 @@ def main:
   puts total    #=> 7
 ```
 
+Because a `shared var` is not copied, a kept block that reads one sees the
+value as it is when the block runs, not when it was made:
+
+```lume
+def main:
+  shared var total = 0
+  report: () -> Int = do
+    total
+  total += 5
+  puts report()    #=> 5
+  total += 1
+  puts report()    #=> 6
+```
+
 A kept block inside a method cannot use `self` or its fields — it may outlive
 the value — so bind what it needs to a name first.
 

@@ -18,6 +18,11 @@ async def slow_sum(xs: [Int]) -> Int:
 
 def square(n: Int) -> Int = n * n
 
+def parse(s: Str) -> Int or Error:
+  if s.empty?:
+    return Error("empty input")
+  s.to_int
+
 async def main:
   # one at a time
   puts await fetch(1)
@@ -59,3 +64,16 @@ async def main:
   shared greeting = "hello"
   hellos = await (1..3).map { |i| spawn: "#{greeting} #{i}" }.to_list
   puts hellos
+
+  # `?` inside a task leaves the task: its value becomes `T or Error`, and
+  # the failure waits until the task is awaited
+  sums = ["2", "x", ""].map { |s| spawn: parse(s)? * 10 }.to_list
+  for r in await sums:
+    match r:
+      Ok(n)    -> puts "ten times: #{n}"
+      Error(e) -> puts "failed: #{e.message}"
+  both = spawn:
+    a = parse("4")?
+    b = parse("5")?
+    a * b
+  puts await both

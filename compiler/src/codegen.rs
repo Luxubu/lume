@@ -4476,14 +4476,55 @@ impl Gen {
                     }
                 }
                 let t = self.ty_of(e).materialized();
-                self.pop_scope();
-                match t {
+                let t = match t {
                     Type::Future(_) => Type::Unknown,
                     other => other,
+                };
+                let r = self.task_try_result(body, t);
+                self.pop_scope();
+                r
+            }
+            _ => {
+                self.push_scope();
+                let r = self.task_try_result(body, Type::Unit);
+                self.pop_scope();
+                r
+            }
+        }
+    }
+
+    /// A task whose body uses `?` gives back what `?` can carry, as an
+    /// `async` block does in Rust: its value `T` becomes `T or E` (or `T?`),
+    /// and the failure waits in the task until it is awaited.
+    fn task_try_result(&mut self, body: &Block, value: Type) -> Type {
+        if matches!(value, Type::Result(..) | Type::Option(_)) {
+            // already a result: `?` goes out through the one it has
+            return value;
+        }
+        for st in &body.stmts {
+            if let Some(tried) = stmt_first_try(st) {
+                let tt = self.ty_of(tried).materialized();
+                return match tt {
+                    Type::Result(_, err) => Type::Result(Box::new(value), err),
+                    Type::Option(_) => Type::Option(Box::new(value)),
+                    _ => value,
+                };
+            }
+            // names bound before the `?` shape its operand's type
+            if let Stmt::Bind { name, ty, value: v, line, .. } | Stmt::Var { name, ty, value: v, line, .. } = st {
+                let t = ty.as_ref().map(|t| self.ct(t)).unwrap_or_else(|| self.ty_of(v).materialized());
+                if self.lookup(name).is_none() {
+                    self.declare(name, true, false, t, *line);
                 }
             }
-            _ => Type::Unit,
         }
+        value
+    }
+
+    /// How a message names what is being returned from: a function by its
+    /// name, a task as a task.
+    fn who(&self) -> String {
+        if self.current_fn == "this task" { "this task".to_string() } else { format!("`{}`", self.current_fn) }
     }
 
     /// The rules of the binary operators: arithmetic needs two `Int`s or two
@@ -5082,6 +5123,7 @@ impl Gen {
         let saved_ret = std::mem::replace(&mut self.current_ret, ret.clone());
         let saved_async = self.in_async;
         let saved_captured = std::mem::take(&mut self.spawn_captured);
+        let saved_fn = std::mem::replace(&mut self.current_fn, "this task".to_string());
         self.loop_depth = 0;
         self.in_block = false;
         self.tail_of_fn = true;
@@ -5094,13 +5136,36 @@ impl Gen {
         let saved_out = std::mem::take(&mut self.out);
         let base = self.indent;
         self.out.push_str("tokio::spawn(async move {\n");
-        let r = self.nested_block(body, ret != Type::Unit);
+        // a task that can fail says its type, so `?` inside knows what to
+        // return: the async block's value is this annotated binding
+        let tries = body.stmts.iter().any(|st| stmt_first_try(st).is_some()) && matches!(ret, Type::Result(..) | Type::Option(_));
+        let r = if tries {
+            let unit_ok = match &ret {
+                Type::Result(t, _) if **t == Type::Unit => Some("Ok(())"),
+                Type::Option(t) if **t == Type::Unit => Some("Some(())"),
+                _ => None,
+            };
+            self.indent += 1;
+            let rt = self.rt(&ret);
+            self.line(&format!("let lume_task: {} = {{", rt));
+            let r = self.nested_block(body, unit_ok.is_none());
+            if let Some(ok) = unit_ok {
+                self.line(&format!("    {}", ok));
+            }
+            self.line("};");
+            self.line("lume_task");
+            self.indent -= 1;
+            r
+        } else {
+            self.nested_block(body, ret != Type::Unit)
+        };
         self.out.push_str(&"    ".repeat(base));
         self.out.push_str("})");
         let text = std::mem::take(&mut self.out);
         self.out = saved_out;
         self.pop_scope();
         self.spawn_captured = saved_captured;
+        self.current_fn = saved_fn;
         self.in_async = saved_async;
         self.current_ret = saved_ret;
         self.loop_depth = saved_loop;
@@ -6102,8 +6167,8 @@ impl Gen {
         if ret != Type::Unknown && ret != Type::Unit {
             let what = if self.current_fn.starts_with("test ") {
                 format!("{} produces nothing", self.current_fn)
-            } else if self.current_fn == "this block" {
-                format!("this block gives back a `{}`", type_name(&ret))
+            } else if self.current_fn == "this block" || self.current_fn == "this task" {
+                format!("{} gives back a `{}`", self.current_fn, type_name(&ret))
             } else {
                 format!("`{}` returns `{}`", self.current_fn, type_name(&ret))
             };
@@ -9010,19 +9075,19 @@ impl Gen {
                 match (&xt, &self.current_ret) {
                     (Type::Option(_), Type::Option(_)) | (Type::Result(..), Type::Result(..)) | (Type::Unknown, _) => {}
                     (Type::Option(_), Type::Result(..)) => {
-                        return Err(LumeError::new(e.line, e.col, format!("`?` on an optional value returns `None`, but `{}` returns `{}`", self.current_fn, type_name(&self.current_ret)))
+                        return Err(LumeError::new(e.line, e.col, format!("`?` on an optional value returns `None`, but {} returns `{}`", self.who(), type_name(&self.current_ret)))
                             .with_help("turn the absence into an error first: `.or_error(\"what went wrong\")?`"));
                     }
                     (Type::Result(..), Type::Option(_)) => {
-                        return Err(LumeError::new(e.line, e.col, format!("`?` on a `{}` returns the error, but `{}` returns `{}`", type_name(&xt), self.current_fn, type_name(&self.current_ret)))
+                        return Err(LumeError::new(e.line, e.col, format!("`?` on a `{}` returns the error, but {} returns `{}`", type_name(&xt), self.who(), type_name(&self.current_ret)))
                             .with_help("make the function return `T or Error`, or handle the error with `match` or `.or(default)`"));
                     }
                     (Type::Option(_), _) => {
-                        return Err(LumeError::new(e.line, e.col, format!("`?` returns `None` early, but `{}` does not return an optional value", self.current_fn))
+                        return Err(LumeError::new(e.line, e.col, format!("`?` returns `None` early, but {} does not return an optional value", self.who()))
                             .with_help("make the function return `T?`, or handle the `None` case with `match` or `.or(default)`"));
                     }
                     (Type::Result(..), _) => {
-                        return Err(LumeError::new(e.line, e.col, format!("`?` returns the error early, but `{}` does not return `T or E`", self.current_fn))
+                        return Err(LumeError::new(e.line, e.col, format!("`?` returns the error early, but {} does not return `T or E`", self.who()))
                             .with_help(format!("write `def {}(...) -> Type or Error`, or handle the error with `match` or `.or(default)`", self.current_fn)));
                     }
                     (other, _) => {
@@ -10663,6 +10728,42 @@ fn ext_fits(pat: &Type, t: &Type, sub: &mut HashMap<String, Type>) -> bool {
         (Type::Tuple(xs), Type::Tuple(ys)) => xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| ext_fits(x, y, sub)),
         (Type::App(n, xs), Type::App(m, ys)) => n == m && xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| ext_fits(x, y, sub)),
         (x, y) => x == y,
+    }
+}
+
+/// The first `x?` a statement runs, outside any block or task inside it:
+/// the one whose failure would leave from here.
+fn stmt_first_try(s: &Stmt) -> Option<&Expr> {
+    fn blk(b: &Block) -> Option<&Expr> {
+        b.stmts.iter().find_map(stmt_first_try)
+    }
+    fn ex(e: &Expr) -> Option<&Expr> {
+        match &e.kind {
+            ExprKind::Try(x) => ex(x).or(Some(x)),
+            ExprKind::Lambda { .. } | ExprKind::Spawn(_) => None,
+            ExprKind::Str(ps) => ps.iter().find_map(|p| match p { StrPiece::Expr(x) => ex(x), _ => None }),
+            ExprKind::List(xs) | ExprKind::Tuple(xs) | ExprKind::SetLit(xs) => xs.iter().find_map(ex),
+            ExprKind::MapLit(ps) => ps.iter().find_map(|(k, v)| ex(k).or_else(|| ex(v))),
+            ExprKind::Range { lo, hi, .. } | ExprKind::Binary { lhs: lo, rhs: hi, .. } => ex(lo).or_else(|| ex(hi)),
+            ExprKind::Unary { expr: x, .. } | ExprKind::Some(x) | ExprKind::Ok(x) | ExprKind::Unwrap(x) | ExprKind::Await(x) | ExprKind::Puts(x) | ExprKind::Warn(x) | ExprKind::TupleIndex { recv: x, .. } => ex(x),
+            ExprKind::Index { recv, index } => ex(recv).or_else(|| ex(index)),
+            ExprKind::Call { args, .. } => args.iter().find_map(|a| ex(&a.value)),
+            ExprKind::Method { recv, args, .. } => ex(recv).or_else(|| args.iter().find_map(|a| ex(&a.value))),
+            ExprKind::If { branches, else_block } => branches.iter().find_map(|(c, b)| ex(c).or_else(|| blk(b))).or_else(|| else_block.as_ref().and_then(blk)),
+            ExprKind::Match { scrutinee, arms } => ex(scrutinee).or_else(|| arms.iter().find_map(|a| blk(&a.body))),
+            _ => None,
+        }
+    }
+    match s {
+        Stmt::Bind { value, .. } | Stmt::Var { value, .. } | Stmt::OpAssign { value, .. } | Stmt::Destructure { value, .. } | Stmt::Shared { value, .. } => ex(value),
+        Stmt::FieldAssign { recv, value, .. } => ex(recv).or_else(|| ex(value)),
+        Stmt::IndexAssign { recv, index, value, .. } => ex(recv).or_else(|| ex(index)).or_else(|| ex(value)),
+        Stmt::Expr(e) => ex(e),
+        Stmt::Return { value, .. } => value.as_ref().and_then(ex),
+        Stmt::While { cond, body } => ex(cond).or_else(|| body.stmts.iter().find_map(stmt_first_try)),
+        Stmt::For { iter, filter, body, .. } => ex(iter).or_else(|| filter.as_ref().and_then(ex)).or_else(|| body.stmts.iter().find_map(stmt_first_try)),
+        Stmt::Assert { cond, .. } => ex(cond),
+        Stmt::Break { .. } | Stmt::Next { .. } => None,
     }
 }
 

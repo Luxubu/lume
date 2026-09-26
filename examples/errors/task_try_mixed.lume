@@ -1,0 +1,8 @@
+def f -> Int or Error = 1
+
+async def main:
+  t = spawn:
+    x = f()?
+    y = [1].first?
+    x + y
+  puts await t

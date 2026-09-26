@@ -58,6 +58,9 @@ async def main:
 #! write `await` in front of the call
 ```
 
+An `async def` another module may call is written `pub async def`, in that
+order, and awaited through the prefix like any call: `await shop.price(sku)`.
+
 ```lume-bad
 async def f -> Int:
   1
@@ -196,11 +199,35 @@ async def main:
   puts await t    #=> 5
 ```
 
-**`?` cannot be used directly inside `spawn:`.** It is refused with a
-message saying `` `main` does not return `T or E` `` — even when it does. Put
-the work that can fail in a function that returns `T or Error`, and spawn a
-call to it. The failure then comes home in the task; see
-[below](#a-failure-inside-a-task).
+**`?` inside `spawn:` leaves the task, not the function around it.** A task
+whose body uses `?` gives back `T or Error` — the value its last line gives,
+or the failure `?` met — as an `async` block does in Rust. The failure waits
+in the task until it is awaited, where `?` or `match` handles it:
+
+```lume
+def half(n: Int) -> Int or Error:
+  if n % 2 == 1:
+    return Error("#{n} is odd")
+  n / 2
+
+async def main:
+  t = spawn:
+    a = half(20)?
+    b = half(a)?
+    a + b
+  u = spawn:
+    half(3)? * 2
+  puts await t    #=> Ok(15)
+  match await u:
+    Ok(v)    -> puts v
+    Error(e) -> puts "failed: #{e.message}"    #=> failed: 3 is odd
+```
+
+`?` on an optional value makes the task give back a `T?` the same way. A
+task that uses `?` on both an optional value and a `T or Error` is refused,
+as a function would be. Inside a block within the task — `.map { ... }` — `?`
+is refused as it is in any block; see
+[Functions and blocks](functions-and-blocks.md#-inside-a-block).
 
 ## What a task sees: copies
 

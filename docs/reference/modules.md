@@ -200,7 +200,8 @@ name, a bare one needs its type to be known, and the error says so:
 
 **Through a module prefix, a function with no arguments may be called with
 or without `()`.** `st.empty` and `st.empty()` are the same call. `lume fmt`
-writes it without.
+writes it without. The same holds for a function of an imported type:
+`items.Item.blank` and `items.Item.blank()` are one call.
 
 **Everywhere else the rule in [Functions and blocks](functions-and-blocks.md)
 holds:** a function of your own file, or one imported by name
