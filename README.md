@@ -83,7 +83,7 @@ work itself rather than the process start or the file read.
 | benchmark | Lume | Rust | |
 | --- | --- | --- | --- |
 | generic helpers taking blocks, ten rounds over 2M ints | 44 ms | 37 ms | 118% |
-| 4M interface values, dispatched in a loop | 22 ms | 21 ms | 104% |
+| 4M interface values, dispatched in a loop, ten rounds | 55 ms | 56 ms | 98% |
 | counting a million words into a `{Str: Int}` | 41 ms | 36 ms | 113% |
 | building 200k lines with interpolation and `join` | 28 ms | 28 ms | 100% |
 | printing 200k lines | 87 ms | 84 ms | 103% |

@@ -7,7 +7,7 @@ five, and compares the ratio against `BASELINE`.
 | | Lume | Rust | measures |
 |---|---|---|---|
 | `b1_generic_blocks` | `.lume` | `b1.rs` | generic helpers taking blocks, ten rounds over 2M ints |
-| `b2_interface_values` | `.lume` | `b2.rs` | 4M interface values dispatched in a loop |
+| `b2_interface_values` | `.lume` | `b2.rs` | 4M interface values dispatched in a loop, ten rounds |
 | `b3_wordcount` | `.lume` | `b3b.rs` | a million words into a `{Str: Int}` |
 | `b4_text` | `.lume` | `b4.rs` | 200k lines built with interpolation and `join` |
 | `b5_printing` | `.lume` | `b5.rs` | 200k lines printed |

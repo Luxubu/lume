@@ -20,16 +20,20 @@ struct Rect:
 
 def main:
   var shapes: [Shape] = []
-  for i in 0..4000000:
+  # three dots: 0 up to but not including 4000000, as Rust's `0..4000000`
+  for i in 0...4000000:
     if i % 2 == 0:
       shapes.push(Sq(side: i % 100))
     else:
       shapes.push(Rect(w: i % 50, h: 3))
 
+  # ten rounds, each adding its own number, so the timed work is long enough
+  # to measure (a few milliseconds is mostly timer noise)
   t0 = Time.now_ms
   var total = 0
-  for s in shapes:
-    total += s.area
+  for round in 0...10:
+    for s in shapes:
+      total += s.area + round
   t1 = Time.now_ms
 
   puts "#{total}"
