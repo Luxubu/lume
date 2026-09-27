@@ -82,16 +82,22 @@ work itself rather than the process start or the file read.
 
 | benchmark | Lume | Rust | |
 | --- | --- | --- | --- |
-| generic helpers taking blocks, over 2M ints | 19 ms | 19 ms | 100% |
+| generic helpers taking blocks, ten rounds over 2M ints | 44 ms | 37 ms | 118% |
 | 4M interface values, dispatched in a loop | 22 ms | 21 ms | 104% |
 | counting a million words into a `{Str: Int}` | 41 ms | 36 ms | 113% |
 | building 200k lines with interpolation and `join` | 28 ms | 28 ms | 100% |
 | printing 200k lines | 87 ms | 84 ms | 103% |
 
-The one above parity is word count, and the reason is a deliberate trade:
-Lume's map keeps insertion order, which Rust's `HashMap` does not, so a
-lookup reads a key-to-position index and then the ordered entries. That is
-one hash and one compare, the same as Rust's, plus one indirection.
+Two are above parity. Word count is a deliberate trade: Lume's map keeps
+insertion order, which Rust's `HashMap` does not, so a lookup reads a
+key-to-position index and then the ordered entries. That is one hash and one
+compare, the same as Rust's, plus one indirection.
+
+Generic helpers taking blocks read 100% until milestone 46's follow-up, when
+the benchmark was found to finish in 3–5 ms — too short to measure, so its
+ratio was timer noise. At ten times the work it reads about 118%, the same
+with the compiler of milestone 36, so nothing since has slowed it; where the
+difference comes from is not yet known.
 
 ```sh
 tests/bench.sh            # build both sides, best of five, compare to bench/BASELINE

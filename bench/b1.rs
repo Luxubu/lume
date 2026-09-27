@@ -17,10 +17,15 @@ fn fold_all<T, A, F: FnMut(A, &T) -> A>(xs: &Vec<T>, start: A, mut f: F) -> A {
 fn main() {
     let mut xs: Vec<i64> = Vec::new();
     for i in 0..2000000i64 { xs.push(i); }
+    // ten rounds, each with its own factor, as in the Lume program
     let t0 = Instant::now();
-    let doubled = map_all(&xs, |n| n * 2);
-    let evens = keep(&doubled, |n| n % 3 == 0);
-    let total = fold_all(&evens, 0i64, |a, n| a + n);
+    let mut total = 0i64;
+    for round in 0..10i64 {
+        let k = round + 2;
+        let scaled = map_all(&xs, |n| n * k);
+        let kept = keep(&scaled, |n| n % 3 == 0);
+        total += fold_all(&kept, 0i64, |a, n| a + n);
+    }
     let ms = t0.elapsed().as_millis();
     println!("{}", total);
     println!("{} ms", ms);
