@@ -44,7 +44,12 @@ lume fmt   file.lume                rewrite in the canonical layout
 lume emit  file.lume                print the generated Rust
 lume crate file.lume <crate>        what a Rust crate offers, in Lume types
 lume clean file.lume                remove build output
+lume new   name [--lib]             make a package: a folder with lume.toml
 ```
+
+Inside a package the file can be left out: `lume run`, `lume test` and the
+rest use the package the current folder is in. See
+[Packages](reference/packages.md).
 
 `lume run` trades some of the program's optimisation for compile speed, so
 edit-and-run takes about 0.2 s. `lume build` is the one to measure.

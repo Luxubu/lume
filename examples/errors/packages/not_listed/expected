@@ -1,0 +1,6 @@
+error: `tally` is not a dependency of `app`
+  --> examples/errors/packages/not_listed/app/main.lume:2:1
+  |
+2 | import tally
+  | ^
+  help: `tally` is a dependency of `mid`; to use it here, add `tally = { path = "…" }` under `[dependencies]` in `examples/errors/packages/not_listed/app/lume.toml` (it is at `examples/errors/packages/not_listed/tally`)

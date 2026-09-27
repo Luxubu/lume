@@ -1,0 +1,6 @@
+error: in a package, the version of `regex` goes in `lume.toml`
+  --> examples/errors/packages/crate_version/app/main.lume:1:1
+  |
+1 | import rust.regex = "1"
+  | ^
+  help: write `import rust.regex` here, and `regex = "1"` under `[rust]` in `examples/errors/packages/crate_version/app/lume.toml`

@@ -1,0 +1,1 @@
+pub def loud(s: Str) -> Str = s.upcase

@@ -1,0 +1,6 @@
+error: `examples/errors/packages/wrong_name/tally` is the package `tally`, not `counter`
+  --> examples/errors/packages/wrong_name/app/lume.toml:6:1
+  |
+6 | counter = { path = "../tally" }
+  | ^
+  help: name it by its own name: `tally = { path = "…" }`

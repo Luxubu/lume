@@ -1,0 +1,6 @@
+error: `tally` is both a dependency and a module of this package
+  --> examples/errors/packages/shadow/app/main.lume:1:1
+  |
+1 | import tally
+  | ^
+  help: `import tally` always means the package, so the module can never be imported: rename `examples/errors/packages/shadow/app/tally.lume`

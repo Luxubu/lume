@@ -1,0 +1,4 @@
+pub interface Sized:
+  def size -> Int
+
+pub def total(xs: [Int]) -> Int = xs.len

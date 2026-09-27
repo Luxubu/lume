@@ -24,6 +24,7 @@ it claims by `tests/docs.sh`. If an answer here is wrong, the build fails.
 | [Interfaces](reference/interfaces.md) | structural conformance, defaults, `extend` |
 | [Generics](reference/generics.md) | type parameters, bounds, generic `extend` |
 | [Modules](reference/modules.md) | `import` paths and forms, `pub`, constants, `pub import`, where `extend` reaches |
+| [Packages](reference/packages.md) | `lume.toml`, `lib.lume`, importing another package, the orphan rule, `[rust]` |
 | [Concurrency](reference/concurrency.md) | `async def`, `spawn:`, `await`, `shared var`, what a lock covers |
 | [Input and output](reference/io.md) | `File`, `Dir`, `Path`, `Env`, `Time`: every function, and what a failure looks like |
 

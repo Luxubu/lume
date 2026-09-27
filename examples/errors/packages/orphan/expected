@@ -1,0 +1,6 @@
+error: package `app` cannot extend `[T]` with `tally.Sized`: neither is its own
+  --> examples/errors/packages/orphan/app/main.lume:4:1
+  |
+4 | extend [T] with tally.Sized:
+  | ^
+  help: as in Rust, an `extend` goes in the package that defines the interface or the type; `tally.Sized` is from `tally` and `[T]` is built in. Wrap the type in a struct of your own and extend that

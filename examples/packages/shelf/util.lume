@@ -1,0 +1,3 @@
+# shelf/util.lume — this package's `util`, not tally's.
+
+pub def greet(who: Str) -> Str = "hello from #{who}"

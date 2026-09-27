@@ -1,0 +1,9 @@
+# tally/counts.lume — passed on by lib.lume, so `import tally.counts` works.
+
+pub struct Count:
+  name: Str
+  n: Int
+
+  def line -> Str = "#{name}: #{n}"
+
+pub def count(name: Str, xs: [Int]) -> Count = Count(name: name, n: xs.len)

@@ -1,0 +1,6 @@
+error: package `tool` has no `lib.lume`, so nothing can be imported from it
+  --> examples/errors/packages/no_lib/app/main.lume:1:1
+  |
+1 | import tool
+  | ^
+  help: a library's root is `lib.lume` next to its `lume.toml`: `examples/errors/packages/no_lib/tool/lib.lume`

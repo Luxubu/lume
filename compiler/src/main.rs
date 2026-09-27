@@ -8,6 +8,9 @@
 //!   lume fmt   <file.lume> [--check|--stdout]  rewrite in the canonical layout
 //!   lume crate <file.lume> <crate>         what a crate offers, in Lume types
 //!   lume clean <file.lume>                 remove the program's build directory
+//!   lume new   <name> [--lib]              make a package
+//!
+//! In a package (a folder with `lume.toml`) the file may be left out.
 //!
 //! Builds go to `.lume/` next to the source file. Crates and async programs
 //! are built through cargo into one shared cache for the whole machine
@@ -20,6 +23,7 @@ mod error;
 mod fmt;
 mod lexer;
 mod loader;
+mod manifest;
 mod parser;
 
 use std::env;
@@ -38,7 +42,10 @@ fn help_text() -> String {
          lume fmt   <file.lume> [--check | --stdout]   rewrite in the canonical layout\n  \
          lume emit  <file.lume>                  print the generated Rust\n  \
          lume crate <file.lume> <crate>          what a Rust crate offers, in Lume types\n  \
-         lume clean <file.lume> [--cache]        remove build output\n\n\
+         lume clean <file.lume> [--cache]        remove build output\n  \
+         lume new   <name> [--lib]               make a package: a folder with lume.toml\n\n\
+         In a package, leave out the file: the command uses the package the\n\
+         current folder is in (main.lume, or lib.lume for test and check).\n\n\
          docs: docs/README.md   a tour: docs/tour.md",
         env!("CARGO_PKG_VERSION")
     )
@@ -68,22 +75,14 @@ fn rustc_failed_banner(has_rust_blocks: bool, file: &Path, tool: &str, err: &str
 /// order, and concatenates the Rust: imported modules as `mod` blocks, then
 /// the entry file's items.
 fn compile_to_rust(path: &Path, test_mode: bool) -> Result<Compiled, String> {
-    let modules = loader::load(path)?;
-    // Crate imports: the cargo project must exist first, so rustdoc can
-    // describe each crate's signatures to the compiler.
-    let mut crate_imports: Vec<(String, String, String)> = Vec::new(); // (crate, version, alias)
+    let loaded = loader::load(path)?;
+    let modules = loaded.modules;
+    let crate_imports = crate_requirements(&modules, &loaded.packages)?;
     let mut any_async = false;
     for m in &modules {
-        for item in &m.items {
-            if let ast::Item::Import(imp) = item {
-                if imp.is_rust {
-                    let alias = imp.alias.clone().unwrap_or_else(|| imp.krate().to_string());
-                    crate_imports.push((imp.krate().to_string(), imp.version.clone().unwrap_or_else(|| "*".into()), alias));
-                }
-            }
-        }
         any_async |= m.src.contains("async ") || m.src.contains("spawn:") || m.src.contains("await ");
     }
+    let package_of: std::collections::HashMap<String, String> = modules.iter().filter_map(|m| m.package.clone().map(|p| (m.id.clone(), p))).collect();
     let mut crate_infos: std::collections::HashMap<(String, String), bridge::CrateInfo> = std::collections::HashMap::new();
     if !crate_imports.is_empty() {
         let mut pre_deps: Vec<(String, String)> = crate_imports.iter().map(|(k, v, _)| (k.clone(), v.clone())).collect();
@@ -207,7 +206,7 @@ fn compile_to_rust(path: &Path, test_mode: bool) -> Result<Compiled, String> {
             }
         }
         let rust_mod = if is_entry { None } else { Some(m.rust_mod()) };
-        let (out, ex) = codegen::generate_module(&m.items, rust_mod.as_deref(), &m.id, &dep_list, test_mode, &m.src, &file).map_err(|e| e.render(&file, &m.src))?;
+        let (out, ex) = codegen::generate_module(&m.items, rust_mod.as_deref(), &m.id, &package_of, &dep_list, test_mode, &m.src, &file).map_err(|e| e.render(&file, &m.src))?;
         for w in out.warnings {
             eprint!("{}", w.render(&file, &m.src).replacen("error:", "warning:", 1));
         }
@@ -218,7 +217,11 @@ fn compile_to_rust(path: &Path, test_mode: bool) -> Result<Compiled, String> {
             rust.push_str(&out.rust);
             rust.push('\n');
         }
-        for d in out.deps {
+        for mut d in out.deps {
+            // in a package the version is `lume.toml`'s, not the file's
+            if let Some((_, v, _)) = crate_imports.iter().find(|(k, v, _)| *k == d.0 && !v.is_empty()) {
+                d.1 = v.clone();
+            }
             if !deps.contains(&d) {
                 deps.push(d);
             }
@@ -227,14 +230,116 @@ fn compile_to_rust(path: &Path, test_mode: bool) -> Result<Compiled, String> {
         exports.insert(m.id.clone(), ex);
     }
     if test_mode {
-        rust.push_str(&test_runner(&modules));
+        // a package's tests, not its dependencies', as `cargo test` does
+        let own: Vec<&loader::Module> = modules.iter().filter(|m| !m.from_dependency).collect();
+        rust.push_str(&test_runner(&own));
     }
     Ok(Compiled { rust, deps, has_rust_blocks })
 }
 
+/// Every `import rust.x` in the program, as (crate, requirement, alias).
+/// Without a `lume.toml` the file names the version. In a package the
+/// version lives in `[rust]` of `lume.toml`, as in `Cargo.toml`, and two
+/// packages asking for one crate must agree on a version Cargo can give both.
+fn crate_requirements(modules: &[loader::Module], packages: &[manifest::Manifest]) -> Result<Vec<(String, String, String)>, String> {
+    let mut out: Vec<(String, String, String)> = Vec::new();
+    // crate -> (requirement, package, lume.toml line) of the first package asking
+    let mut chosen: std::collections::HashMap<String, (String, usize, usize)> = std::collections::HashMap::new();
+    for m in modules {
+        let pkg = m.package.as_ref().and_then(|p| packages.iter().position(|x| x.name == *p));
+        for item in &m.items {
+            let imp = match item {
+                ast::Item::Import(imp) if imp.is_rust => imp,
+                _ => continue,
+            };
+            let krate = imp.krate().to_string();
+            let alias = imp.alias.clone().unwrap_or_else(|| krate.clone());
+            let k = match pkg {
+                None => {
+                    out.push((krate, imp.version.clone().unwrap_or_else(|| "*".into()), alias));
+                    continue;
+                }
+                Some(k) => k,
+            };
+            let man = &packages[k];
+            let file = m.path.display().to_string();
+            if let Some(v) = &imp.version {
+                let e = error::LumeError::new(imp.line, imp.col, format!("in a package, the version of `{}` goes in `lume.toml`", krate))
+                    .with_help(format!("write `import rust.{}` here, and `{} = \"{}\"` under `[rust]` in `{}`", krate, krate, v, man.path.display()));
+                return Err(e.render(&file, &m.src));
+            }
+            let (req, line) = match man.rust.iter().find(|(c, _, _)| *c == krate) {
+                Some((_, r, l)) => (r.clone(), *l),
+                None => {
+                    let e = error::LumeError::new(imp.line, imp.col, format!("crate `{}` is not in `[rust]` of `{}`", krate, man.path.display()))
+                        .with_help(format!("add `{} = \"<version>\"` under `[rust]` there", krate));
+                    return Err(e.render(&file, &m.src));
+                }
+            };
+            match chosen.get(&krate).cloned() {
+                None => {
+                    chosen.insert(krate.clone(), (req.clone(), k, line));
+                }
+                Some((prev, pk, pline)) if prev != req => match merge_requirements(&prev, &req) {
+                    Some(r) => {
+                        let (pk2, l2) = if r == req { (k, line) } else { (pk, pline) };
+                        chosen.insert(krate.clone(), (r, pk2, l2));
+                    }
+                    None => {
+                        let e = error::LumeError::new(line, 1, format!("`{}` asks for crate `{}` at \"{}\", and `{}` at \"{}\"", man.name, krate, req, packages[pk].name, prev))
+                            .with_help("a program is one Rust crate, so it has one version of each crate: make the two requirements ones Cargo can meet together, such as \"1\" and \"1.5\"");
+                        return Err(e.render(&man.path.display().to_string(), &man.src));
+                    }
+                },
+                _ => {}
+            }
+            out.push((krate, String::new(), alias));
+        }
+    }
+    for (k, v, _) in out.iter_mut() {
+        if let Some((r, _, _)) = chosen.get(k) {
+            *v = r.clone();
+        }
+    }
+    Ok(out)
+}
+
+/// Two semver requirements Cargo would meet with one version (`"1"` and
+/// `"1.5"`: both allow 1.5.x), as the tighter of them; `None` when they
+/// cannot share one, or are not plain versions.
+fn merge_requirements(a: &str, b: &str) -> Option<String> {
+    fn parse(r: &str) -> Option<Vec<u64>> {
+        let v = r.trim().trim_start_matches('^');
+        if v.is_empty() || v.starts_with('{') {
+            return None;
+        }
+        v.split('.').map(|p| p.parse::<u64>().ok()).collect()
+    }
+    // semver-compatible: the same numbers up to and including the first
+    // that is not zero
+    fn compat(v: &[u64]) -> Vec<u64> {
+        let mut out = Vec::new();
+        for &n in v {
+            out.push(n);
+            if n != 0 {
+                break;
+            }
+        }
+        out
+    }
+    let (x, y) = (parse(a)?, parse(b)?);
+    let (cx, cy) = (compat(&x), compat(&y));
+    let n = cx.len().min(cy.len());
+    if cx[..n] != cy[..n] || (cx.last() != Some(&0) && cy.last() != Some(&0) && cx.len() != cy.len()) {
+        return None;
+    }
+    let pad = |v: &[u64]| (0..3).map(|i| v.get(i).copied().unwrap_or(0)).collect::<Vec<_>>();
+    Some(if pad(&x) >= pad(&y) { a.to_string() } else { b.to_string() })
+}
+
 /// `fn main` for `lume test`: runs every `test` block of every module,
 /// catching failures so the rest still run, and reports a summary.
-fn test_runner(modules: &[loader::Module]) -> String {
+fn test_runner(modules: &[&loader::Module]) -> String {
     let n = modules.len();
     let mut entries = Vec::new();
     for (i, m) in modules.iter().enumerate() {
@@ -469,6 +574,128 @@ fn build(path: &Path, out: Option<PathBuf>, quiet: bool, test_mode: bool, mode: 
     Ok(bin)
 }
 
+/// Formats one file; false when it could not, or `--check` found it
+/// needs formatting.
+fn fmt_file(file: &Path, mode: &str) -> bool {
+    let src = match fs::read_to_string(file) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: cannot read `{}`: {}", file.display(), e);
+            return false;
+        }
+    };
+    let formatted = match fmt::format_source(&src) {
+        Ok(f) => f,
+        Err(e) => {
+            eprint!("{}", e.render(&file.display().to_string(), &src));
+            return false;
+        }
+    };
+    match mode {
+        "--stdout" => print!("{}", formatted),
+        "--check" => {
+            if formatted != src {
+                eprintln!("would reformat {}", file.display());
+                return false;
+            }
+        }
+        _ => {
+            if formatted != src {
+                if let Err(e) = fs::write(file, &formatted) {
+                    eprintln!("error: cannot write `{}`: {}", file.display(), e);
+                    return false;
+                }
+                eprintln!("formatted {}", file.display());
+            }
+        }
+    }
+    true
+}
+
+/// Every `.lume` file of the package at `dir`: not build output, and not a
+/// package kept inside it (a folder with a `lume.toml` of its own).
+fn package_files(dir: &Path, out: &mut Vec<PathBuf>) {
+    // the package in the current folder has the root `` (so paths print as `main.lume`)
+    let entries = match fs::read_dir(if dir.as_os_str().is_empty() { Path::new(".") } else { dir }) {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+    for e in entries.flatten() {
+        let p = dir.join(e.file_name());
+        let name = e.file_name().to_string_lossy().to_string();
+        if p.is_dir() {
+            if !name.starts_with('.') && !p.join(manifest::FILE).exists() {
+                package_files(&p, out);
+            }
+        } else if p.extension().map(|x| x == "lume").unwrap_or(false) {
+            out.push(p);
+        }
+    }
+}
+
+/// `lume run` and the rest with no file: the package the current folder is
+/// in, and the file of it the command means.
+fn package_entry(cmd: &str) -> Result<(PathBuf, PathBuf), String> {
+    let toml = match manifest::find(Path::new(".")) {
+        Some(t) => t,
+        None => {
+            return Err(format!(
+                "error: `lume {}` needs a file, or a package: no `lume.toml` here or in a folder above\n  help: name the file, as in `lume {} main.lume`, or make a package with `lume new <name>`\n",
+                cmd, cmd
+            ))
+        }
+    };
+    let m = manifest::read(&toml)?;
+    let (main, lib) = (m.root.join("main.lume"), m.root.join("lib.lume"));
+    let pick = match cmd {
+        // a library is imported, not run
+        "run" | "build" => main.is_file().then_some(main),
+        _ => [main, lib].into_iter().find(|f| f.is_file()),
+    };
+    match pick {
+        Some(f) => Ok((f, m.root.clone())),
+        None if cmd == "fmt" || cmd == "clean" => Ok((m.root.join("main.lume"), m.root.clone())),
+        None if cmd == "run" || cmd == "build" => Err(format!(
+            "error: package `{}` has no `main.lume` to {}\n  help: a library is imported by other packages, not run; `lume test` runs its tests\n",
+            m.name, cmd
+        )),
+        None => Err(format!("error: package `{}` has neither `main.lume` nor `lib.lume`\n  help: a program starts at `main.lume`, a library at `lib.lume`, both next to `lume.toml`\n", m.name)),
+    }
+}
+
+/// `lume new <name> [--lib]`: a folder with a `lume.toml` and a first file.
+fn new_package(args: &[String]) -> Result<(), String> {
+    let mut name = None;
+    let mut lib = false;
+    for a in args {
+        match a.as_str() {
+            "--lib" => lib = true,
+            _ if name.is_none() && !a.starts_with('-') => name = Some(a.clone()),
+            _ => return Err("usage: lume new <name> [--lib]\n".into()),
+        }
+    }
+    let path = PathBuf::from(name.ok_or("usage: lume new <name> [--lib]\n")?);
+    let pkg = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    if let Some(m) = manifest::check_name(&pkg) {
+        return Err(format!("error: {}\n", m));
+    }
+    if path.exists() {
+        return Err(format!("error: `{}` already exists\n", path.display()));
+    }
+    fs::create_dir_all(&path).map_err(|e| format!("error: cannot create `{}`: {}\n", path.display(), e))?;
+    let toml = format!("[package]\nname = \"{}\"\nversion = \"0.1.0\"\n\n[dependencies]\n", pkg);
+    let (file, body) = if lib {
+        ("lib.lume", format!("# The package `{p}`: what is `pub` here, other packages can use.\n\npub def greeting(name: Str) -> Str = \"Hello, #{{name}}!\"\n\ntest \"greeting\":\n  assert greeting(\"{p}\") == \"Hello, {p}!\"\n", p = pkg))
+    } else {
+        ("main.lume", "def main:\n  puts \"Hello, world!\"\n".to_string())
+    };
+    for (f, text) in [(manifest::FILE, toml), (file, body)] {
+        fs::write(path.join(f), text).map_err(|e| format!("error: cannot write `{}`: {}\n", path.join(f).display(), e))?;
+    }
+    eprintln!("made {} `{}` in {}", if lib { "library" } else { "program" }, pkg, path.display());
+    Ok(())
+}
+
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
     if args.is_empty() {
@@ -488,14 +715,37 @@ fn main() {
         _ => {}
     }
     let cmd = args[0].as_str();
-    let file = match args.get(1) {
-        Some(f) if !f.starts_with('-') => PathBuf::from(f),
-        _ => usage(),
-    };
-    if file.extension().map(|e| e != "lume").unwrap_or(true) {
-        eprintln!("error: `{}` is not a .lume file", file.display());
-        process::exit(2);
+    if cmd == "new" {
+        if let Err(e) = new_package(&args[1..]) {
+            eprint!("{}", e);
+            process::exit(1);
+        }
+        return;
     }
+    // A file, or — with none — the package the current folder is in.
+    let named = args.get(1).filter(|f| !f.starts_with('-') && !(cmd == "crate" && !f.ends_with(".lume") && args.len() == 2));
+    let (file, pkg_root, args): (PathBuf, Option<PathBuf>, Vec<String>) = match named {
+        Some(f) => {
+            let file = PathBuf::from(f);
+            if file.extension().map(|e| e != "lume").unwrap_or(true) {
+                eprintln!("error: `{}` is not a .lume file", file.display());
+                process::exit(2);
+            }
+            (file, None, args.clone())
+        }
+        None => match package_entry(cmd) {
+            Ok((file, root)) => {
+                // the commands below read their options from `args[2..]`
+                let mut a = vec![args[0].clone(), file.display().to_string()];
+                a.extend(args[1..].iter().cloned());
+                (file, Some(root), a)
+            }
+            Err(e) => {
+                eprint!("{}", e);
+                process::exit(2);
+            }
+        },
+    };
 
     match cmd {
         "emit" => match compile_to_rust(&file, false) {
@@ -553,42 +803,33 @@ fn main() {
                 });
             process::exit(status.code().unwrap_or(1));
         }
+        "fmt" if pkg_root.is_some() => {
+            let mode = args.get(2).map(|s| s.as_str()).unwrap_or("");
+            if !matches!(mode, "" | "--check") {
+                if mode == "--stdout" {
+                    eprintln!("error: `--stdout` formats one file: name it, as in `lume fmt main.lume --stdout`");
+                    process::exit(2);
+                }
+                usage();
+            }
+            let mut files = Vec::new();
+            package_files(pkg_root.as_deref().unwrap(), &mut files);
+            files.sort();
+            let mut failed = false;
+            for f in &files {
+                failed |= !fmt_file(f, mode);
+            }
+            if failed {
+                process::exit(1);
+            }
+        }
         "fmt" => {
             let mode = args.get(2).map(|s| s.as_str()).unwrap_or("");
             if !matches!(mode, "" | "--check" | "--stdout") {
                 usage();
             }
-            let src = match fs::read_to_string(&file) {
-                Ok(s) => s,
-                Err(e) => {
-                    eprintln!("error: cannot read `{}`: {}", file.display(), e);
-                    process::exit(1);
-                }
-            };
-            let formatted = match fmt::format_source(&src) {
-                Ok(f) => f,
-                Err(e) => {
-                    eprint!("{}", e.render(&file.display().to_string(), &src));
-                    process::exit(1);
-                }
-            };
-            match mode {
-                "--stdout" => print!("{}", formatted),
-                "--check" => {
-                    if formatted != src {
-                        eprintln!("would reformat {}", file.display());
-                        process::exit(1);
-                    }
-                }
-                _ => {
-                    if formatted != src {
-                        if let Err(e) = fs::write(&file, &formatted) {
-                            eprintln!("error: cannot write `{}`: {}", file.display(), e);
-                            process::exit(1);
-                        }
-                        eprintln!("formatted {}", file.display());
-                    }
-                }
+            if !fmt_file(&file, mode) {
+                process::exit(1);
             }
         }
         "clean" => {
@@ -618,26 +859,20 @@ fn main() {
                 None => usage(),
             };
             // make sure the project (and so the crate) exists, then describe it
-            let modules = match loader::load(&file) {
-                Ok(m) => m,
+            let deps: Vec<(String, String)> = match loader::load(&file).and_then(|l| crate_requirements(&l.modules, &l.packages)) {
+                Ok(c) => c.into_iter().map(|(k, v, _)| (k, v)).collect(),
                 Err(e) => {
                     eprint!("{}", e);
                     process::exit(1);
                 }
             };
-            let mut deps: Vec<(String, String)> = Vec::new();
-            for m in &modules {
-                for item in &m.items {
-                    if let ast::Item::Import(imp) = item {
-                        if imp.is_rust {
-                            deps.push((imp.krate().to_string(), imp.version.clone().unwrap_or_else(|| "*".into())));
-                        }
-                    }
-                }
-            }
             if !deps.iter().any(|(k, _)| *k == krate) {
                 eprintln!("error: `{}` does not import crate `{}`", file.display(), krate);
-                eprintln!("  help: add `import rust.{} = \"<version>\"` to the file first", krate);
+                if pkg_root.is_some() {
+                    eprintln!("  help: add `{} = \"<version>\"` under `[rust]` in lume.toml, and `import rust.{}` to a file", krate, krate);
+                } else {
+                    eprintln!("  help: add `import rust.{} = \"<version>\"` to the file first", krate);
+                }
                 process::exit(1);
             }
             let proj = match write_cargo_project(&file, &deps) {

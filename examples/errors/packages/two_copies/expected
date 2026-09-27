@@ -1,0 +1,6 @@
+error: package `tally` comes from two places: `examples/errors/packages/two_copies/tally` and `examples/errors/packages/two_copies/vendor/tally`
+  --> examples/errors/packages/two_copies/mid/lume.toml:6:1
+  |
+6 | tally = { path = "../vendor/tally" }
+  | ^
+  help: a program has one copy of each package: point every `lume.toml` at the same folder

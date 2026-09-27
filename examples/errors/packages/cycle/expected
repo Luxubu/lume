@@ -1,0 +1,6 @@
+error: packages depend on each other: a -> b -> a
+  --> examples/errors/packages/cycle/b/lume.toml:6:1
+  |
+6 | a = { path = "../a" }
+  | ^
+  help: move what they share into a third package that both depend on

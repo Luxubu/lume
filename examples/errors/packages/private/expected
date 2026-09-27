@@ -1,0 +1,6 @@
+error: module `util` of package `tally` is private
+  --> examples/errors/packages/private/app/main.lume:1:1
+  |
+1 | import tally.util
+  | ^
+  help: only what `examples/errors/packages/private/tally/lib.lume` makes public can be reached from outside the package; it would need `pub import util`

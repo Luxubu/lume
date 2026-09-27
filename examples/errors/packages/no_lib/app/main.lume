@@ -1,0 +1,4 @@
+import tool
+
+def main:
+  puts 1

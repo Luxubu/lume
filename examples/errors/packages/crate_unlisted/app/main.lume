@@ -1,0 +1,4 @@
+import rust.regex
+
+def main:
+  puts 1

@@ -1,0 +1,4 @@
+import a
+
+def main:
+  puts a.one

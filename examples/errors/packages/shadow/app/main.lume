@@ -1,0 +1,4 @@
+import tally
+
+def main:
+  puts tally.total([1])

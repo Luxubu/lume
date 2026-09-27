@@ -55,6 +55,9 @@ error: no module `items.Item`: neither `items/Item.lume` nor `items.lume` exists
 
 "The file that holds `main`" means the file you run.
 
+In a package — a folder with a `lume.toml` — paths start at the package
+root instead, whichever file you run; see [Packages](packages.md).
+
 One consequence: a module is found through the program that uses it. Running
 `shop/stock.lume` on its own would look for `shop/shop/items.lume`.
 
@@ -368,10 +371,6 @@ error: `core` is passed on by two modules and means something different in each
 
 A crate cannot be passed on: `pub import rust.regex` is
 ``a crate import cannot be `pub` ``.
-
-**A warning about `lume fmt`:** it currently rewrites `pub import` as a plain
-`import`, which stops passing the module on. Until that is fixed, do not run
-`lume fmt` on a file that has a `pub import`, or put the `pub` back after.
 
 ## `extend` travels with the import
 

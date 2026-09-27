@@ -1,0 +1,29 @@
+# tally/lib.lume — the root of the library. What is `pub` here, and what
+# it passes on with `pub import`, is the package; every other module stays
+# inside it.
+
+pub import counts
+import util
+
+pub interface Sized:
+  def size -> Int
+
+  def empty? -> Bool = size == 0
+
+# `Sized` is tally's own, so tally may extend a built-in type with it.
+extend [T] with Sized:
+  def size -> Int = self.len
+
+pub def total(xs: [Int]) -> Int:
+  var t = 0
+  for x in xs:
+    t += x
+  t
+
+pub def shout(s: Str) -> Str = util.loud(s)
+
+test "total adds":
+  assert total([1, 2, 3]) == 6
+
+test "shout":
+  assert shout("hi") == "HI!"

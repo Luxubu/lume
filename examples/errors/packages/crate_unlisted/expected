@@ -1,0 +1,6 @@
+error: crate `regex` is not in `[rust]` of `examples/errors/packages/crate_unlisted/app/lume.toml`
+  --> examples/errors/packages/crate_unlisted/app/main.lume:1:1
+  |
+1 | import rust.regex
+  | ^
+  help: add `regex = "<version>"` under `[rust]` there

@@ -1,0 +1,5 @@
+import mid
+import tally
+
+def main:
+  puts mid.twice([1, 2])

@@ -1,0 +1,3 @@
+import tally
+
+pub def twice(xs: [Int]) -> Int = tally.total(xs) * 2

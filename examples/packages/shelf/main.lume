@@ -1,0 +1,19 @@
+# shelf/main.lume — a program that uses two packages. Its lume.toml names
+# them; each is imported by that name, and means its lib.lume.
+
+import tally
+import tally.counts
+import labels
+import util
+
+def main:
+  xs = [4, 8, 9]
+  puts tally.total(xs)
+  puts xs.size          # tally's `extend [T] with Sized` came with the import
+  puts counts.count("xs", xs).line
+
+  l = labels.label("jam")
+  puts l.size           # labels made `Label` a `tally.Sized`
+  puts l.empty?
+
+  puts tally.shout(util.greet("shelf"))

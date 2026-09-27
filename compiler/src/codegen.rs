@@ -685,6 +685,9 @@ pub struct Gen {
     ext_claims: Vec<ExtClaim>,
     /// This module's id (`feeds.kinds`), for global ids of its own items.
     module_id: String,
+    /// The package of every module in the program, by module id; empty
+    /// without a `lume.toml`. The orphan rule reads it.
+    package_of: HashMap<String, String>,
     /// `(type, interface)` impls written so far, this module's and those that
     /// came with its imports. The entry file writes any a conforming pair
     /// still lacks — when neither the type's module nor the interface's
@@ -801,7 +804,8 @@ pub struct Gen {
 
 /// Compiles one module. `rust_mod` is `Some(name)` for an imported file,
 /// which is emitted as `mod name { ... }`; `None` for the entry file.
-pub fn generate_module(program: &[Item], rust_mod: Option<&str>, module_id: &str, deps: &[Dep], test_mode: bool, src: &str, file: &str) -> Result<(Output, Exports)> {
+#[allow(clippy::too_many_arguments)]
+pub fn generate_module(program: &[Item], rust_mod: Option<&str>, module_id: &str, package_of: &HashMap<String, String>, deps: &[Dep], test_mode: bool, src: &str, file: &str) -> Result<(Output, Exports)> {
     let mut g = Gen {
         out: String::new(),
         indent: 0,
@@ -823,6 +827,7 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, module_id: &str
         ext_where: HashMap::new(),
         ext_claims: Vec::new(),
         module_id: module_id.to_string(),
+        package_of: package_of.clone(),
         emitted_impls: HashSet::new(),
         param_blocks: HashSet::new(),
         kept_captured: HashSet::new(),
@@ -2385,6 +2390,43 @@ impl Gen {
         Ok(())
     }
 
+    /// The package a global id (`tally.counts.Count`) or a local name
+    /// belongs to.
+    fn package_of_key(&self, key: &str) -> Option<String> {
+        let module = key.rsplit_once('.').map(|(m, _)| m).unwrap_or(&self.module_id);
+        self.package_of.get(module).cloned()
+    }
+
+    /// Rust's orphan rule, between packages: an `extend` goes in the package
+    /// that defines the interface or the one that defines the type, so no
+    /// two packages that know nothing of each other can both write one, and
+    /// adding a dependency never breaks a build. Inside one package every
+    /// `extend` is allowed, as between modules.
+    fn check_orphan(&self, x: &ExtendDef, target: &Type, iface: &str) -> Result<()> {
+        let here = match self.package_of.get(&self.module_id) {
+            Some(p) => p.clone(),
+            None => return Ok(()),
+        };
+        let iface_pkg = self.package_of_key(iface);
+        let type_pkg = match target {
+            Type::Named(n) | Type::App(n, _) => self.package_of_key(n),
+            _ => None,
+        };
+        if iface_pkg.as_deref() == Some(here.as_str()) || type_pkg.as_deref() == Some(here.as_str()) {
+            return Ok(());
+        }
+        let whose_type = match &type_pkg {
+            Some(p) => format!("`{}` is from `{}`", type_name(&x.target), p),
+            None => format!("`{}` is built in", type_name(&x.target)),
+        };
+        Err(LumeError::new(x.line, x.col, format!("package `{}` cannot extend `{}` with `{}`: neither is its own", here, type_name(&x.target), type_name(&x.iface))).with_help(format!(
+            "as in Rust, an `extend` goes in the package that defines the interface or the type; `{}` is from `{}` and {}. Wrap the type in a struct of your own and extend that",
+            type_name(&x.iface),
+            iface_pkg.unwrap_or_default(),
+            whose_type
+        )))
+    }
+
     /// One `extend` block, with its type parameters already in scope.
     fn register_extend(&mut self, x: &ExtendDef, gens: &[TypeParam]) -> Result<()> {
         let target = self.ct(&x.target);
@@ -2397,6 +2439,7 @@ impl Gen {
         if self.is_interface(&target) {
             return Err(LumeError::new(x.line, x.col, "an interface cannot be extended with another; extend the concrete types"));
         }
+        self.check_orphan(x, &target, &iface)?;
         // A built-in has no name to register under, so each of its extends
         // gets a key of its own; a user's type keys by its name.
         let builtin = Self::separate_target(&target);

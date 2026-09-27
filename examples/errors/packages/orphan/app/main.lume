@@ -1,0 +1,8 @@
+import tally
+
+# neither `Sized` nor `[T]` is this package's own
+extend [T] with tally.Sized:
+  def size -> Int = self.len
+
+def main:
+  puts [1, 2].size

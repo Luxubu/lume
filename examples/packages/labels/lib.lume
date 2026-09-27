@@ -1,0 +1,13 @@
+# labels/lib.lume — a library that uses another. `Label` is its own type,
+# so it may make `Label` a `tally.Sized`; `Sized` is not its own, so it may
+# not extend a built-in type with it.
+
+import tally
+
+pub struct Label:
+  text: Str
+
+extend Label with tally.Sized:
+  def size -> Int = text.len
+
+pub def label(text: Str) -> Label = Label(text: text)

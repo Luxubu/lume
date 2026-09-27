@@ -1,0 +1,4 @@
+import tally.util
+
+def main:
+  puts util.loud("x")

@@ -1,0 +1,1 @@
+pub def total(xs: [Int]) -> Int = 0

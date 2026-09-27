@@ -55,7 +55,7 @@ check() {  # name, expected-file, actual-text
   fi
 }
 
-for f in examples/*.lume examples/port/*.lume examples/modules/*.lume examples/json/json.lume examples/mini/main.lume examples/lib/report.lume examples/travel/main.lume examples/shipping/main.lume examples/match/main.lume; do
+for f in examples/*.lume examples/port/*.lume examples/modules/*.lume examples/json/json.lume examples/mini/main.lume examples/lib/report.lume examples/travel/main.lume examples/shipping/main.lume examples/match/main.lume examples/packages/shelf/main.lume; do
   name=$(basename "$(dirname "$f")")/$(basename "$f" .lume); name=${name#examples/}
   [ "$(dirname "$f")" = "examples" ] && name=$(basename "$f" .lume)
   out=$("$LUME" run "$f" 2>&1); code=$?
@@ -84,6 +84,31 @@ for f in examples/errors/*.lume examples/errors/travel/main.lume examples/errors
   case "$f" in examples/errors/reexport/*) exp="examples/errors/reexport/main.expected" ;; esac
   check "$name" "$exp" "$out"
 done
+
+# packages: each refusal is one folder, the program that trips it in `app/`
+for d in examples/errors/packages/*/; do
+  d=${d%/}; name="errors/packages/$(basename "$d")"
+  out=$("$LUME" check "$d/app/main.lume" 2>&1); code=$?
+  if [ $code -eq 0 ]; then
+    echo "FAIL $name: expected a compile error, but it compiled"
+    fail=$((fail+1)); failed+=("$name"); continue
+  fi
+  check "$name" "$d/expected" "$out"
+done
+
+# a library's tests, run from inside the package with no file named
+# (these `cd`, so the compiler is named by its full path)
+LUME_ABS="$(cd "$(dirname "$LUME")" && pwd)/$(basename "$LUME")"
+out=$(cd examples/packages/tally && "$LUME_ABS" test 2>&1); code=$?
+check "packages/tally tests" "examples/packages/tally/test.expected" "$out
+exit: $code"
+
+# `lume new`, then run and test what it made, with no file named
+tmp=$(mktemp -d)
+out=$(cd "$tmp" && "$LUME_ABS" new hello 2>&1 && cd hello && "$LUME_ABS" run 2>&1 && "$LUME_ABS" new ../greet --lib 2>&1 && cd ../greet && "$LUME_ABS" test 2>&1); code=$?
+rm -rf "$tmp"
+check "lume new" "examples/packages/new.expected" "$out
+exit: $code"
 
 for f in examples/tests/*.lume; do
   name="tests/$(basename "$f" .lume)"
@@ -184,6 +209,7 @@ done
 rm -rf "$tmp"
 
 rm -rf examples/.lume examples/errors/.lume examples/port/.lume examples/modules/.lume examples/tests/.lume examples/json/.lume examples/mini/.lume examples/site/.lume examples/lib/.lume
+rm -rf examples/packages/*/.lume examples/errors/packages/*/*/.lume
 if [ $UPDATE = 1 ]; then echo "expected files updated"; exit 0; fi
 
 # Every example in docs/ is run and checked against what the docs claim.
