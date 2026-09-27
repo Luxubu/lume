@@ -1,0 +1,14 @@
+<b>hi</b>
+**hi**
+(hi)
+[hi]
+app text
+html text
+md text
+a&lt;b&gt;
+# big news
+<h1>A&lt;B</h1><ul><li>x</li><li>y&gt;z</li></ul>
+one / two / three
+<b>docs</b> / <b>api</b>
+**docs** / **api**
+exit: 0

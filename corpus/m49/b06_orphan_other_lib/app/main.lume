@@ -1,0 +1,21 @@
+# b06_orphan_other_lib — the app extends one library's type with another
+# library's interface. It owns neither side, so the orphan rule refuses it,
+# though neither library could have written it either.
+# Meant to FAIL.
+#   error: package `app` cannot extend `labels.Label` with `tally.Shouty`: neither is its own
+#     --> corpus/m49/b06_orphan_other_lib/app/main.lume:17:1
+#      |
+#   17 | extend labels.Label with tally.Shouty:
+#      | ^
+#     help: as in Rust, an `extend` goes in the package that defines the interface or the type; `tally.Shouty` is from `tally` and `labels.Label` is from `labels`. Wrap the type in a struct of your own and extend that
+# EXPECTED OUTPUT:
+# (none: it does not compile)
+
+import tally
+import labels
+
+extend labels.Label with tally.Shouty:
+  def shout -> Str = text.upcase
+
+def main:
+  puts labels.label("jam").shout

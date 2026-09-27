@@ -1,0 +1,48 @@
+# ledger/lib.lume — reads "memo, +, cents" lines and adds them up. Its
+# tests live here, next to what they test; `lume test` in this folder runs
+# them.
+
+pub enum Kind:
+  Credit
+  Debit
+
+pub struct Entry:
+  memo: Str
+  cents: Int
+  kind: Kind
+
+  def signed -> Int = match kind:
+    Credit -> cents
+    Debit -> 0 - cents
+
+pub def parse(line: Str) -> Entry or Error:
+  match line.split(",").map(_.trim).to_list:
+    [memo, "+", amount] -> Entry(memo, amount.to_int?, Credit)
+    [memo, "-", amount] -> Entry(memo, amount.to_int?, Debit)
+    _ -> Error("cannot read `#{line}`")
+
+pub def balance(entries: [Entry]) -> Int = entries.map(_.signed).sum
+
+pub def show(cents: Int) -> Str:
+  sign = if cents < 0: "-" else: ""
+  whole = cents.abs / 100
+  frac = cents.abs % 100
+  zero = if frac < 10: "0" else: ""
+  "#{sign}#{whole}.#{zero}#{frac}"
+
+test "a credit line":
+  e = parse("pay, +, 12000")!
+  assert e.kind == Credit
+  assert e.signed == 12000
+
+test "a debit line":
+  assert parse("rent,-,9500")!.signed == -9500
+
+test "a line without commas is refused":
+  assert parse("coffee 3").error?
+
+test "balance and show":
+  es = [parse("a,+,500")!, parse("b,-,1250")!]
+  assert balance(es) == -750
+  assert show(balance(es)) == "-7.50"
+  assert show(5) == "0.05"

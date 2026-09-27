@@ -1,0 +1,3 @@
+# md/util.lume — md's own `util`, private to it.
+
+pub def wrap(s: Str) -> Str = "**#{s}**"

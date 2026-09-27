@@ -1,0 +1,48 @@
+# c01_money_diamond — generics and an interface across a diamond.
+# `pricing` declares `Priced` and generic code bounded by it (functions and
+# a generic struct); `catalog` has types that conform without naming it;
+# both use `units`, whose `Money` has operator methods and whose methods
+# read a library constant. The app writes its own bounded generic, a
+# `pricing.Basket[catalog.Book]`, compares `Money` with `<`, and calls the
+# interface default `tag` on a `catalog.Book` directly.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# prices in EUR
+# books: 3 for 40.99 EUR
+# pens: 2 for 3.00 EUR
+# cheapest book: Emma [8.99 EUR]
+# [12.00 EUR] [8.99 EUR]
+# basket: 20.99 EUR
+# Some(Money(cents: 2000))
+# 2 cheap, 1 dear
+
+import units
+import pricing
+import catalog
+
+def describe[T: pricing.Priced](label: Str, xs: [T]) -> Str:
+  "#{label}: #{xs.len} for #{pricing.sum_of(xs).show}"
+
+def main:
+  puts "prices in #{units.CURRENCY}"
+  books = catalog.shelf()
+  puts describe("books", books)
+  pens = [catalog.Pen(color: "red"), catalog.Pen(color: "blue")]
+  puts describe("pens", pens)
+
+  match pricing.cheapest(books):
+    Some(b) -> puts "cheapest book: #{b.title} #{b.tag}"
+    None    -> puts "no books"
+
+  var basket: pricing.Basket[catalog.Book] = pricing.Basket(items: [])
+  for b in books where b.price < units.euros(15):
+    basket.add(b)
+  puts basket.tags
+  puts "basket: #{basket.total.show}"
+
+  puts books.map(_.price).max
+  limit = units.euros(15)
+  (cheap, dear) = books.partition { |b| b.price < limit }
+  puts "#{cheap.len} cheap, #{dear.len} dear"

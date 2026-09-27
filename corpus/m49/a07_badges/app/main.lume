@@ -1,0 +1,36 @@
+# a07_badges — an app that tries to make a built-in type conform to a
+# library's interface.
+# Probes: the orphan rule. `User` is the app's own and conforms by having
+# `badge`, which is fine. `extend Str with badges.Badge` is refused: `Str`
+# is built in and `Badge` belongs to `badges`, so neither is the app's.
+# Meant to FAIL.
+# lume check corpus/m49/a07_badges/app/main.lume should print:
+# error: package `app` cannot extend `Str` with `badges.Badge`: neither is its own
+#   --> corpus/m49/a07_badges/app/main.lume:30:1
+#    |
+# 30 | extend Str with badges.Badge:
+#    | ^
+#   help: as in Rust, an `extend` goes in the package that defines the interface or the type; `badges.Badge` is from `badges` and `Str` is built in. Wrap the type in a struct of your own and extend that
+# It does not compile, so nothing is printed.
+# EXPECTED OUTPUT:
+
+import badges
+
+struct User:
+  name: Str
+
+  def badge -> Str = "@#{name}"
+
+struct Tag:
+  text: Str
+
+  def badge -> Str = text.upcase
+
+# The fix would be `Tag` above; this is the line that is refused.
+extend Str with badges.Badge:
+  def badge -> Str = self.upcase
+
+def main:
+  xs: [badges.Badge] = [User(name: "ada"), 7, Tag(text: "new")]
+  puts badges.wall(xs)
+  puts "beta".framed

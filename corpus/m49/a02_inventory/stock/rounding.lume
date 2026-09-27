@@ -1,0 +1,3 @@
+# stock/rounding.lume — not passed on: private to the package.
+
+pub def to_nickel(cents: Int) -> Int = (cents + 2) / 5 * 5

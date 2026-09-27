@@ -1,0 +1,12 @@
+# core/text/reader.lume — not passed on: private to `core`. Its neighbour
+# in another subfolder is named from the package root.
+
+import model.event.Event
+
+pub def parse(line: Str) -> Event or Error:
+  match line.split:
+    ["login", u]      -> Login(u)
+    ["logout", u]     -> Logout(u)
+    ["upload", u, n]  -> Upload(u, n.to_int?)
+    ["tick"]          -> Tick
+    _                 -> Error("cannot read `#{line}`")

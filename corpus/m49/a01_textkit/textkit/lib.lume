@@ -1,0 +1,25 @@
+# textkit/lib.lume — small text helpers, all at the root of the library.
+
+pub RULE_WIDTH = 24
+
+pub def slug(s: Str) -> Str = s.trim.downcase.split.join("-")
+
+pub def title(s: Str) -> Str = s.split.map(_.capitalize).join(" ")
+
+pub def initials(name: Str) -> Str =
+  name.split.map { |w| w[0].or("?").upcase }.join("")
+
+pub def count_words(s: Str) -> Int = s.split.len
+
+pub def plural(n: Int, word: Str) -> Str =
+  if n == 1: "#{n} #{word}" else: "#{n} #{word}s"
+
+pub def truncate(s: Str, n: Int) -> Str:
+  if s.len <= n:
+    return s
+  s.slice(0, n - 3) + "..."
+
+pub def rule(label: Str) -> Str:
+  room = RULE_WIDTH - label.len - 2
+  left = room / 2
+  "-".repeat(left) + " " + label + " " + "-".repeat(room - left)

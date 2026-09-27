@@ -1,0 +1,14 @@
+# ranking/lib.lume — declares `Scored`. It owns the interface, so the
+# orphan rule lets it make `coins.Coin` one.
+
+import coins
+
+pub interface Scored:
+  def score -> Int
+
+  def grade -> Str = if score >= 90: "A" elif score >= 70: "B" else: "C"
+
+extend coins.Coin with Scored:
+  def score -> Int = face * 10
+
+pub def passing[T: Scored](xs: [T]) -> Int = xs.count { |x| x.grade != "C" }

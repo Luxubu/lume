@@ -1,0 +1,9 @@
+prices in EUR
+books: 3 for 40.99 EUR
+pens: 2 for 3.00 EUR
+cheapest book: Emma [8.99 EUR]
+[12.00 EUR] [8.99 EUR]
+basket: 20.99 EUR
+Some(Money(cents: 2000))
+2 cheap, 1 dear
+exit: 0

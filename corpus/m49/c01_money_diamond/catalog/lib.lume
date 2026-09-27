@@ -1,0 +1,23 @@
+# catalog/lib.lume — two types that have a `price`. It does not depend on
+# `pricing` and never names `Priced`.
+
+import units
+
+pub struct Book:
+  title: Str
+  cost: units.Money
+
+  def price -> units.Money = cost
+
+pub struct Pen:
+  color: Str
+
+  def price -> units.Money = units.Money(cents: 150)
+
+pub def shelf -> [Book]:
+  books = [
+    Book(title: "Dune", cost: units.euros(12)),
+    Book(title: "Emma", cost: units.Money(cents: 899)),
+    Book(title: "Ulysses", cost: units.euros(20)),
+  ]
+  books

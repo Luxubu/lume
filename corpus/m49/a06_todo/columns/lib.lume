@@ -1,0 +1,11 @@
+# columns/lib.lume — lays text out in columns.
+
+pub def row(cells: [Str], widths: [Int]) -> Str:
+  var out: [Str] = []
+  for i, c in cells.enumerate:
+    match widths[i]:
+      Some(w) -> out.push(c.pad_right(w))
+      None -> out.push(c)
+  out.join(" ")
+
+pub def heading(text: Str, width: Int) -> Str = text.upcase + "\n" + "=".repeat(width)

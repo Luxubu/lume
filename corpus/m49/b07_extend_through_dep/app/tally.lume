@@ -1,0 +1,4 @@
+# app/tally.lume — the app's own module. `tally` the package is in the
+# program (labels uses it), but it is not a dependency of `app`.
+
+pub def total(xs: [Int]) -> Int = 100

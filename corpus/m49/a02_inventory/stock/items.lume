@@ -1,0 +1,19 @@
+# stock/items.lume — passed on by lib.lume.
+
+pub enum Kind:
+  Food
+  Tool
+  Toy
+
+  def label -> Str = match self:
+    Food -> "food"
+    Tool -> "tool"
+    Toy  -> "toy"
+
+pub struct Item:
+  name: Str
+  cents: Int
+  qty: Int
+  kind: Kind
+
+  def total_cents -> Int = cents * qty

@@ -1,0 +1,18 @@
+# b09_wrong_name — the dependency is named after its folder, `counter`,
+# but the package there calls itself `tally`. A dependency is named by the
+# package's own name, not its folder's; the manifest error should come
+# before anything in main.lume is looked at.
+# Meant to FAIL.
+#   error: `corpus/m49/b09_wrong_name/counter` is the package `tally`, not `counter`
+#     --> corpus/m49/b09_wrong_name/app/lume.toml:6:1
+#     |
+#   6 | counter = { path = "../counter" }
+#     | ^
+#     help: name it by its own name: `tally = { path = "…" }`
+# EXPECTED OUTPUT:
+# (none: it does not compile)
+
+import counter
+
+def main:
+  puts counter.total([1, 2, 3])

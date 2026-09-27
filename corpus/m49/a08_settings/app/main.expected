@@ -1,0 +1,7 @@
+lume with 8 jobs
+verbose: yes
+colour: auto
+target x86_64
+Some(Num(n: 8))
+bad config: not `key = value`: broken line
+exit: 0

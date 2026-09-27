@@ -1,0 +1,10 @@
+# audit/lib.lume — one side of the diamond: words for each event.
+
+import core.model.event
+
+pub def describe(e: event.Event) -> Str:
+  match e:
+    Login(u)     -> "#{u} came in"
+    Logout(u)    -> "#{u} left"
+    Upload(u, b) -> "#{u} sent #{b} bytes"
+    Tick         -> "tick"

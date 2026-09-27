@@ -1,0 +1,7 @@
+error: `corpus/m49/b09_wrong_name/counter` is the package `tally`, not `counter`
+  --> corpus/m49/b09_wrong_name/app/lume.toml:6:1
+  |
+6 | counter = { path = "../counter" }
+  | ^
+  help: name it by its own name: `tally = { path = "…" }`
+exit: 1

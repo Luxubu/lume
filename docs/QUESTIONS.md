@@ -112,6 +112,15 @@ block in a map or a tuple, `extend Box[Int]` — and two pages that disagreed
 (a block returning `T?`, a space before `{`). Those are now answered with
 checked examples. See `corpus/m45/REPORT.md`.
 
+## Round ten
+
+`corpus/m49/` measured milestones 47–48, packages: twenty-five programs of
+two to four packages each, **38 guesses**, a third of round nine's. Nearly
+all of them asked one question: does a module rule still hold across a
+package boundary? It always did. It is now said once, in
+[packages](reference/packages.md#what-carries-over-from-modules). See
+`corpus/m49/REPORT.md`.
+
 ## What writing the answers found
 
 Four programs that the compiler accepted and then could not generate Rust for:

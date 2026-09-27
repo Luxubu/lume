@@ -1,0 +1,45 @@
+# c05_async_ledger — `async def` and `spawn:` using library code. `net`
+# has `pub async def`s, one of which spawns tasks itself; the app holds a
+# `store.Ledger` in a `shared var`, spawns a task per quote, and each task
+# hands the shared ledger to `jobs.settle`, a plain function in a third
+# package that takes a `shared var store.Ledger`. Every task changes a
+# different, already-present key, so the result does not depend on which
+# task runs first.
+#
+# Meant to RUN. (The compiler's `shared var` warning goes to standard
+# error; the output below is standard output only.)
+#
+# EXPECTED OUTPUT:
+# ana ok
+# bo would go below zero
+# cy ok
+# skipped: no price for dee
+# total 450
+# ana 300
+# bo 100
+# cy 50
+# Ok(50)
+
+import store
+import net
+import jobs
+
+async def main:
+  shared var book = store.opening()
+  names = ["ana", "bo", "cy", "dee"]
+  quotes = await net.quote_all(names)
+
+  var tasks: [Task[Str]] = []
+  for who, q in names.zip(quotes):
+    t = spawn:
+      match q:
+        Ok(cents) -> jobs.settle(book, who, cents)
+        Error(e)  -> "skipped: #{e.message}"
+    tasks.push(t)
+  for line in await tasks:
+    puts line
+
+  puts "total #{book.total}"
+  for who, cents in book.balances:
+    puts "#{who} #{cents}"
+  puts await net.quote("cy")

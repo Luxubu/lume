@@ -1,0 +1,45 @@
+# c06_same_names — four modules called `util` (common's, html's, md's and
+# the app's) and three called `text`: html's `format/text.lume`, which
+# html passes on; md's at the same path, which md keeps; and the app's
+# own. The app reaches html's through its path in the package, under an
+# alias, and its own by name. `html` and `md` both use `common` (a
+# diamond), and hand their own `bold` to `map` by name.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# <b>hi</b>
+# **hi**
+# (hi)
+# [hi]
+# app text
+# html text
+# md text
+# a&lt;b&gt;
+# # big news
+# <h1>A&lt;B</h1><ul><li>x</li><li>y&gt;z</li></ul>
+# one / two / three
+# <b>docs</b> / <b>api</b>
+# **docs** / **api**
+
+import common
+import html
+import md
+import util
+import text
+import html.format.text as ht
+
+def main:
+  puts html.bold("hi")
+  puts md.bold("hi")
+  puts common.paren("hi")
+  puts util.wrap("hi")
+  puts text.name
+  puts ht.name
+  puts md.which
+  puts ht.esc("a<b>")
+  puts md.heading("*big* news")
+  puts html.page("A<B", ["x", "y>z"])
+  puts common.words("one two  three").join(common.SEP)
+  puts html.crumbs("docs api")
+  puts md.crumbs("docs api")

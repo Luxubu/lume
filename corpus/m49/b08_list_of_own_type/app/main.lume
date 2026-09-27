@@ -1,0 +1,20 @@
+# b08_list_of_own_type — coherence between two packages. `tally` makes
+# every `[T]` a `Tagged`; `bag` makes `[Bean]`, a list of its own type, a
+# `tally.Tagged` too. In Rust, `impl ForeignTrait for Vec<Local>` is an
+# orphan, and the docs say `[T]` is built in and belongs to no package, so
+# the orphan rule should catch it before the overlap with tally's `[T]`
+# does. The error is in the dependency, not in the app.
+# Meant to FAIL.
+#   error: package `bag` cannot extend `[Bean]` with `tally.Tagged`: neither is its own
+#     --> corpus/m49/b08_list_of_own_type/bag/lib.lume:7:1
+#     |
+#   7 | extend [Bean] with tally.Tagged:
+#     | ^
+#     help: as in Rust, an `extend` goes in the package that defines the interface or the type; `tally.Tagged` is from `tally` and `[Bean]` is built in. Wrap the type in a struct of your own and extend that
+# EXPECTED OUTPUT:
+# (none: it does not compile)
+
+import bag
+
+def main:
+  puts bag.beans.len

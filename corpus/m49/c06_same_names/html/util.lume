@@ -1,0 +1,3 @@
+# html/util.lume — html's own `util`, private to it.
+
+pub def wrap(s: Str) -> Str = "<b>#{s}</b>"

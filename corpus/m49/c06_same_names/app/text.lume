@@ -1,0 +1,4 @@
+# app/text.lume — the app's own `text`. html passes on a module called
+# `text` too; the app imports its own by that name, and its own wins.
+
+pub def name -> Str = "app text"

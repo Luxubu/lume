@@ -1,0 +1,19 @@
+# stats/lib.lume — the other side of the diamond: numbers from the events.
+
+import core.model.event
+
+pub def bytes_by_user(es: [event.Event]) -> {Str: Int}:
+  var out: {Str: Int} = {}
+  for e in es:
+    match e:
+      Upload(u, b) -> out[u] = out[u].or(0) + b
+      _            -> ()
+  out
+
+pub def users(es: [event.Event]) -> [Str]:
+  var out: [Str] = []
+  for e in es:
+    match e.who:
+      Some(u) -> out.push(u)
+      None    -> ()
+  out.uniq

@@ -1,0 +1,43 @@
+# b05_orphan_allowed — the three extends the orphan rule allows the app:
+# a library's interface onto the app's own type, the app's own interface
+# onto a library's type, and the app's own interface onto a built-in.
+# Also tally's own `extend [T] with Sized`, which arrives with `import tally`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 3
+# false
+# true
+# JAM!
+# 7!
+# 2
+
+import tally
+import labels
+
+interface Loud:
+  def loud -> Str
+
+struct Jar:
+  beans: [Int]
+
+# tally's interface, the app's type
+extend Jar with tally.Sized:
+  def size -> Int = beans.len
+
+# the app's interface, labels' type
+extend labels.Label with Loud:
+  def loud -> Str = text.upcase + "!"
+
+# the app's interface, a built-in type
+extend Int with Loud:
+  def loud -> Str = "#{self}!"
+
+def main:
+  j = Jar(beans: [1, 2, 3])
+  puts j.size
+  puts j.empty?
+  e = Jar(beans: [])
+  puts e.empty?
+  puts labels.label("jam").loud
+  puts 7.loud
+  puts [4, 5].size

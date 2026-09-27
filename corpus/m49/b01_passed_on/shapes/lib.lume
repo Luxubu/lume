@@ -1,0 +1,8 @@
+# shapes/lib.lume — passes `geo` on, keeps `secret` to itself, and uses a
+# crate that only its own lume.toml lists.
+
+pub import geo
+import secret
+import rust.hex
+
+pub def code(s: Str) -> Str = hex.encode(secret.salt(s))

@@ -1,0 +1,4 @@
+# coins/lib.lume — a type with no `score` of its own.
+
+pub struct Coin:
+  face: Int

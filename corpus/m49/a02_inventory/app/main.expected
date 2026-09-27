@@ -1,0 +1,7 @@
+4 lines, worth $43.64
+food apples, bread
+tool hammer
+toy  kite
+hammer on sale: $11.05
+Item(name: "apples", cents: 45, qty: 12, kind: Food)
+exit: 0

@@ -1,0 +1,9 @@
+# common/lib.lume — the bottom of the diamond under `html` and `md`.
+
+import util
+
+pub SEP = " / "
+
+pub def words(s: Str) -> [Str] = s.split.to_list
+
+pub def paren(s: Str) -> Str = util.wrap(s)

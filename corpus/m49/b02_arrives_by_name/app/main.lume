@@ -1,0 +1,19 @@
+# b02_arrives_by_name — the app writes only `import shapes`. Modules.md
+# says a passed-on module arrives under its own name (`geo`), an aliased
+# one under its alias (`tx`), and a passed-on item by its name (`Point`).
+# Does that hold across a package boundary, where the docs' own example
+# writes `import tally.counts` as well?
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 20
+# FAR!
+# 3
+
+import shapes
+
+def main:
+  p = Point(x: 3, y: 4)
+  puts geo.dist2(p, shapes.unit)
+  puts tx.shout("far")
+  q: geo.Point = p
+  puts q.x

@@ -1,0 +1,15 @@
+warning: `day` holds values of different types behind `clock.Minutes`, so calls on its items go through a pointer
+  --> corpus/m49/a04_durations/app/main.lume:33:3
+   |
+33 |   day: [clock.Minutes] = [Meeting(title: "standup", start: "9:00", length: 15), 90, "2:30"]
+   |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+2:15
+1:05
+45
+1:35
+4:15
+review at 14:00 for 0:50
+true
+false
+exit: 0

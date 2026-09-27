@@ -1,0 +1,28 @@
+# pricing/lib.lume — an interface, generic functions bounded by it, and a
+# generic struct whose parameter is bounded by it. It knows nothing of
+# `catalog`, whose types conform by having `price`.
+
+import units
+
+pub interface Priced:
+  def price -> units.Money
+
+  def tag -> Str = "[#{price.show}]"
+
+pub def cheapest[T: Priced](xs: [T]) -> T?:
+  xs.min_by { |x| x.price.cents }
+
+pub def sum_of[T: Priced](xs: [T]) -> units.Money:
+  var acc = units.Money(cents: 0)
+  for x in xs:
+    acc = acc + x.price
+  acc
+
+pub struct Basket[T: Priced]:
+  items: [T]
+
+  def add(var self, x: T):
+    items.push(x)
+
+  def total -> units.Money = units.Money(cents: items.map { |i| i.price.cents }.sum)
+  def tags -> Str = items.map { |i| i.tag }.join(" ")

@@ -1,0 +1,10 @@
+BOARD
+==============================
+[x] #1   write lume.toml    setup
+[~] #2   split lib from main setup,refactor
+[ ] #3   add tests          test
+[ ] #4   tag release        -
+
+done 1, doing 1, todo 2
+write lume.toml / split lib from main
+exit: 0

@@ -1,0 +1,9 @@
+# tally/lib.lume — an interface, and tally's own extend of a built-in with it.
+
+pub interface Sized:
+  def size -> Int
+
+  def empty? -> Bool = size == 0
+
+extend [T] with Sized:
+  def size -> Int = self.len

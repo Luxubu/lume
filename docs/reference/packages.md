@@ -134,6 +134,58 @@ The following are all errors, and each message names what to change:
   copy of each package.
 - Importing a package that has no `lib.lume`.
 
+## What carries over from modules
+
+> Round ten's reviewers asked about each of these. Every answer was checked
+> by running it (`corpus/m49/`).
+
+Everything [Modules](modules.md) says holds across a package boundary.
+Spelled out:
+
+- **`import tally` alone brings what `lib.lume` passes on.** It arrives under
+  the name it is passed on under: after `pub import counts` in the library,
+  the app can write `counts.count(...)` with no second import. A single
+  item passed on with `pub import geo.Point` arrives as `Point`, and it is
+  the same type as `geo.Point`. As between modules, your own import of a
+  name wins over one passed on.
+- **A passed-on module can also be named by the path the library wrote.**
+  After `pub import model.event` in `core/lib.lume` (the file
+  `core/model/event.lume`), both `import core.event` and
+  `import core.model.event` reach it. Items go one level deeper:
+  `import stock.items.Kind`.
+- **Passing on an item does not open its module.** `pub import geo.Point`
+  makes `Point` public, not the rest of `geo`.
+- **A package prefix goes wherever a name goes:** in a type with arguments
+  (`pricing.Basket[catalog.Book]`, `[pipeline.Stage[Int]]`), in a bound
+  (`[T: pricing.Priced]`), and on either side of an `extend`
+  (`extend coins.Coin with Scored`). A function with no arguments is called
+  without `()` through a prefix, as through a module: `stock.empty`.
+- **A type fits an interface from a package it never imports** when it has
+  the methods, and the interface's defaults are then its own methods.
+  Conformance is structural across packages as within one file.
+- **A value prints by its bare type name**, wherever the type was defined:
+  `Money(cents: 2000)`, not `units.Money(...)`.
+- **Constants from another package** can be used in your own constants:
+  `pub SPAN = limits.MAX_LEN - limits.MIN_LEN`.
+- **A library's `async def` may use `spawn:`.** It runs on the program's
+  runtime, which `async def main` starts.
+- **An error in a dependency's file is reported in that file.** Mistakes in
+  any `lume.toml` are found before any `.lume` file is read.
+- **A package may have a module named like a package deeper in the tree.**
+  If `labels` depends on `tally` and your app depends only on `labels`,
+  your own `tally.lume` is fine: `import tally` means it, because `tally`
+  is not your dependency. Only a *direct* dependency's name is taken.
+- **`import lib` is refused** in a package that has a `lib.lume`:
+
+```
+error: import the library by its package's name: `import app`
+  --> app/main.lume:16:1
+   |
+16 | import lib
+   | ^
+  help: `lib.lume` is the package itself, so it has the package's name
+```
+
 ## `extend` between packages: the orphan rule
 
 **An `extend T with I` must be written in the package that defines `I`, or
@@ -157,7 +209,15 @@ error: package `app` cannot extend `[T]` with `tally.Sized`: neither is its own
 
 Built-in types (`Int`, `Str`, `[T]`, maps, sets, tuples) belong to no
 package. Only the package that defines the interface may extend them with
-it.
+it. **That includes a list, map or tuple of your own type**: `[Bean]` is a
+built-in type even in the package that defines `Bean`, as `Vec<Bean>` is not
+local in Rust. Wrap it in a struct to extend it with another package's
+interface.
+
+An `extend` travels up the chain of imports across packages too, even
+through a package you cannot import yourself. If your app depends on
+`labels`, and `labels` imports `tally`, then `tally`'s `extend [T] with
+Sized` reaches your app.
 
 The rule is about packages, not modules. Inside one package, every
 `extend` that [Generics](generics.md#two-extends-of-one-interface-the-rust-rule)
@@ -178,6 +238,10 @@ each crate. Two packages that ask for the same crate must ask for versions
 Cargo can meet together. `"1"` and `"1.5"` are fine, and the program gets
 1.5 or later. `"0.3"` and `"0.4"` are not, and the error names both
 packages.
+
+A crate only a dependency imports needs nothing from you: the dependency's
+own `[rust]` entry is enough. A `[rust]` entry for a crate that no file
+imports is allowed and does nothing.
 
 A crate import still cannot be `pub`. A package that wants to expose a
 crate's type wraps it.

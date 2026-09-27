@@ -1,0 +1,8 @@
+[package]
+name = "app"
+version = "0.1.0"
+
+[dependencies]
+sku       = { path = "../sku" }
+warehouse = { path = "../warehouse" }
+orders    = { path = "../orders" }

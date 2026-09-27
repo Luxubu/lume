@@ -1,0 +1,29 @@
+# settings/lib.lume — reads "key = value" text. The reading is done by two
+# modules in the subfolder `parse/`: `value` is passed on, because callers
+# will want to look inside a `Value`; `line` stays private.
+
+pub import parse.value
+import parse.line
+
+pub struct Config:
+  pairs: {Str: value.Value}
+
+  def get(key: Str) -> value.Value? = pairs[key]
+
+  def text(key: Str, fallback: Str) -> Str:
+    match pairs[key]:
+      Some(v) -> v.show
+      None -> fallback
+
+  def number(key: Str) -> Int:
+    match pairs[key]:
+      Some(Num(n)) -> n
+      _ -> 0
+
+pub def load(source: Str) -> Config or Error:
+  var pairs: {Str: value.Value} = {}
+  for raw in source.lines:
+    match line.read(raw)?:
+      Blank -> ()
+      Pair(k, v) -> pairs[k] = v
+  Config(pairs: pairs)

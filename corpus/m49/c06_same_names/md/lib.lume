@@ -1,0 +1,13 @@
+# md/lib.lume — keeps both `util` and `format.text` to itself.
+
+import common
+import util
+import format.text
+
+pub def bold(s: Str) -> Str = util.wrap(s)
+
+pub def heading(s: Str) -> Str = "# " + text.esc(s)
+
+pub def crumbs(path: Str) -> Str = common.words(path).map(bold).join(common.SEP)
+
+pub def which -> Str = text.name

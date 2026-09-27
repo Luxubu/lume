@@ -1,0 +1,12 @@
+# orders/lib.lume — changes the caller's stock through a `var` parameter
+# and turns each failure into a line.
+
+import warehouse
+
+pub def fill(var stock: warehouse.Stock, wants: [(Str, Int)]) -> [Str]:
+  var out: [Str] = []
+  for code, n in wants:
+    match stock.take(code, n):
+      Ok(left) -> out.push("#{code}: #{left} left")
+      Error(e) -> out.push("#{code}: #{e.message}")
+  out

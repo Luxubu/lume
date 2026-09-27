@@ -1,0 +1,7 @@
+error: in a package, the version of `hex` goes in `lume.toml`
+  --> corpus/m49/b04_crate_version_in_dep/codec/lib.lume:2:1
+  |
+2 | import rust.hex = "0.4"
+  | ^
+  help: write `import rust.hex` here, and `hex = "0.4"` under `[rust]` in `corpus/m49/b04_crate_version_in_dep/codec/lume.toml`
+exit: 1

@@ -1,0 +1,25 @@
+# b01_passed_on — what a library passes on, reached the documented ways:
+# the package by name, a module it passes on (`import shapes.geo`), and
+# one of its `pub` items by name (`import shapes.code`). The library uses
+# a crate listed only in its own `[rust]`; the app lists none and never
+# imports it.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 7
+# 0
+# 4c756d6521
+# 616221
+# true
+
+import shapes
+import shapes.geo
+import shapes.code
+
+def main:
+  p = geo.Point(x: 3, y: 4)
+  puts p.taxi
+  o = geo.origin
+  puts o.taxi
+  puts shapes.code("Lume")
+  puts code("ab")
+  puts code("ab") == shapes.code("ab")

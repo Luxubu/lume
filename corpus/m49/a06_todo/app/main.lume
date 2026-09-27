@@ -1,0 +1,37 @@
+# a06_todo — a package with both main.lume and lib.lume, plus a library
+# beside it.
+# Probes: main.lume importing its own package's lib.lume as `import app`;
+# lib.lume using a dependency (`columns`) that main.lume also imports;
+# `var self` methods on a library struct called from main; `for var` over a
+# list field to change one item; enum variants passed bare and qualified
+# (`app.Status.Done`); a library function returning a two-line string.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# BOARD
+# ==============================
+# [x] #1   write lume.toml    setup
+# [~] #2   split lib from main setup,refactor
+# [ ] #3   add tests          test
+# [ ] #4   tag release        -
+#
+# done 1, doing 1, todo 2
+# write lume.toml / split lib from main
+
+import app
+import columns
+
+def main:
+  var b = app.board
+  b.add("write lume.toml", ["setup"])
+  b.add("split lib from main", ["setup", "refactor"])
+  b.add("add tests", ["test"])
+  b.add("tag release", [])
+  b.move(1, app.Status.Done)
+  b.move(2, Doing)
+
+  puts columns.heading("board", 30)
+  for t in b.tasks:
+    puts t.line
+  puts ""
+  puts "done #{b.count(app.Status.Done)}, doing #{b.count(Doing)}, todo #{b.count(Todo)}"
+  puts b.tagged("setup").map(_.title).join(" / ")

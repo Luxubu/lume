@@ -1,0 +1,25 @@
+# warehouse/lib.lume — methods that fail, and a loader that passes up both
+# sku's failures and its own with `?`.
+
+import sku
+
+pub struct Stock:
+  items: {Str: sku.Item}
+
+  def add(var self, it: sku.Item) -> () or Error:
+    if items.contains?(it.code):
+      return Error("duplicate #{it.code}")
+    items[it.code] = it
+
+  def take(var self, code: Str, n: Int) -> Int or Error:
+    it = items[code].or_error("no item #{code}")?
+    if it.qty < n:
+      return Error("only #{it.qty} of #{code}")
+    items[code] = sku.Item(code: it.code, kind: it.kind, qty: it.qty - n)
+    it.qty - n
+
+pub def load(lines: [Str]) -> Stock or Error:
+  var s = Stock(items: {})
+  for line in lines:
+    s.add(sku.parse_item(line)?)?
+  s

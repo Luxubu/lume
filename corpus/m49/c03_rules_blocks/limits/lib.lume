@@ -1,0 +1,6 @@
+# limits/lib.lume — constants, and nothing else. Both `rules` and
+# `pipeline` read them; so does the app.
+
+pub MIN_LEN = 3
+pub MAX_LEN = 8
+pub BANNED = ["root", "admin"]

@@ -1,0 +1,55 @@
+# c07_stock_errors — `T or Error` and `?` across three packages. `sku`
+# fails in a function of its enum and in a parser; `warehouse` passes
+# those failures up with `?` and adds its own, including one made from a
+# `T?` with `.or_error`; `orders` changes the app's stock through a `var`
+# parameter and reports each failure; the app's `main -> () or Error`
+# uses `?` on library calls that succeed, and matches the ones that fail.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# loaded 2 items, 14 units
+# h1: tool
+# a2: food, 7 days
+# bad batch: unknown kind `gadget`
+# bad line: `x` is not an integer
+# bad line: c5: negative quantity
+# bad line: expected 3 fields, got 2
+# h1: 1 left
+# h1: only 1 of h1
+# zz: no item zz
+# a2: 0 left
+# left: 1
+# Food(days: 3)
+# food, 3 days
+
+import sku
+import warehouse
+import orders
+
+GOOD = ["h1, tool, 4", "a2, food:7, 10"]
+BAD = ["h1, tool, 4", "b3, gadget, 1"]
+
+def units(s: warehouse.Stock) -> Int = s.items.values.map(_.qty).sum
+
+def main -> () or Error:
+  var stock = warehouse.load(GOOD)?
+  puts "loaded #{stock.items.len} items, #{units(stock)} units"
+  for code, it in stock.items:
+    puts "#{code}: #{it.kind.label}"
+
+  match warehouse.load(BAD):
+    Ok(_)    -> puts "unexpected"
+    Error(e) -> puts "bad batch: #{e.message}"
+  for line in ["c4, food:x, 1", "c5, tool, -2", "c6, tool"]:
+    match sku.parse_item(line):
+      Ok(it)   -> puts "unexpected #{it.code}"
+      Error(e) -> puts "bad line: #{e.message}"
+
+  for line in orders.fill(stock, [("h1", 3), ("h1", 3), ("zz", 1), ("a2", 10)]):
+    puts line
+  puts "left: #{units(stock)}"
+
+  k = sku.Kind.parse("food:3")?
+  puts k
+  puts k.label

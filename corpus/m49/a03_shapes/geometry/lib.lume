@@ -1,0 +1,16 @@
+# geometry/lib.lume — an interface, and helpers that work on anything that
+# conforms to it. The library defines no shapes of its own.
+
+pub PI = 3.14159
+
+pub interface Shape:
+  def area -> Float
+  def name -> Str
+
+  def describe -> Str = "#{name} of area #{area.decimals(2)}"
+
+pub def report(s: Shape) -> Str = "* " + s.describe
+
+pub def total_area(xs: [Shape]) -> Float = xs.map(_.area).sum
+
+pub def largest[T: Shape](xs: [T]) -> T? = xs.max_by(_.area)

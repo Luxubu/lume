@@ -1,0 +1,43 @@
+# a05_ledger — a library whose lib.lume carries its own `test` blocks.
+# Probes: `test` blocks in a library's lib.lume are left out when the app
+# that uses it runs; a library function returning `T or Error`, matched in
+# the app; importing a struct by name (`import ledger.Entry`) for a typed
+# empty list; a variant written through the package prefix
+# (`ledger.Kind.Debit`).
+# Meant to RUN.
+#
+# Also: `lume test` run inside corpus/m49/a05_ledger/ledger/ should print
+# (followed by exit status 0):
+#   test a credit line ... ok
+#   test a debit line ... ok
+#   test a line without commas is refused ... ok
+#   test balance and show ... ok
+#
+#   4 tests: 4 passed, 0 failed
+#
+# EXPECTED OUTPUT:
+# skipped: cannot read `coffee 3`
+# salary     2500.00
+# rent      -1200.00
+# books       -45.99
+# refund       15.00
+# balance 1269.01
+# 2 debits
+
+import ledger
+import ledger.Entry
+
+def main:
+  lines = ["salary, +, 250000", "rent, -, 120000", "coffee 3", "books, -, 4599", "refund, +, 1500"]
+  var good: [Entry] = []
+  for line in lines:
+    match ledger.parse(line):
+      Ok(e) -> good.push(e)
+      Error(e) -> puts "skipped: #{e.message}"
+
+  for e in good:
+    puts "#{e.memo.pad_right(8)}#{ledger.show(e.signed).pad(10)}"
+  puts "balance #{ledger.show(ledger.balance(good))}"
+
+  debits = good.filter(_.kind == ledger.Kind.Debit).len
+  puts "#{debits} debits"

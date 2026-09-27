@@ -1,0 +1,15 @@
+# core/lib.lume — passes `event` on, keeps `reader` to itself.
+
+pub import model.event
+import text.reader
+
+pub VERSION = 2
+
+pub def parse_all(src: Str) -> ([event.Event], [Str]):
+  var good: [event.Event] = []
+  var bad: [Str] = []
+  for line in src.lines:
+    match reader.parse(line):
+      Ok(e)    -> good.push(e)
+      Error(e) -> bad.push(e.message)
+  (good, bad)

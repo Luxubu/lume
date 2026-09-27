@@ -1,0 +1,8 @@
+[package]
+name = "app"
+version = "0.1.0"
+
+[dependencies]
+store = { path = "../store" }
+net   = { path = "../net" }
+jobs  = { path = "../jobs" }

@@ -1,0 +1,5 @@
+# shapes/lib.lume — passes on one item of `geo`, not `geo` itself.
+
+pub import geo.Point
+
+pub def origin -> Point = Point(x: 0, y: 0)

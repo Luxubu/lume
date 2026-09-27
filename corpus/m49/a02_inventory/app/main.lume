@@ -1,0 +1,36 @@
+# a02_inventory — a library that passes two of its modules on and keeps a
+# third private.
+# Probes: `pub import` in a library's lib.lume; using the passed-on modules
+# (`items`, `money`) after only `import stock`, with no `import stock.items`;
+# importing a type of a passed-on module by name through the package
+# (`import stock.items.Kind`); bare and qualified variants of that enum;
+# calling a no-argument package function without `()` (`stock.empty`); a
+# library that uses its private module (`rounding`) inside a pub function;
+# printing a struct that came from another package.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 4 lines, worth $43.64
+# food apples, bread
+# tool hammer
+# toy  kite
+# hammer on sale: $11.05
+# Item(name: "apples", cents: 45, qty: 12, kind: Food)
+
+import stock
+import stock.items.Kind
+
+def main:
+  var shelf = stock.empty
+  shelf.add(items.Item(name: "apples", cents: 45, qty: 12, kind: Food))
+  shelf.add(items.Item(name: "hammer", cents: 1299, qty: 1, kind: Kind.Tool))
+  shelf.add(items.Item("kite", 850, 2, Toy))
+  shelf.add(items.Item(name: "bread", cents: 275, qty: 3, kind: Food))
+
+  puts "#{shelf.entries.len} lines, worth #{money.show(shelf.value)}"
+  for k in [Kind.Food, Kind.Tool, Kind.Toy]:
+    names = shelf.by_kind(k).map(_.name).join(", ")
+    puts "#{k.label.pad_right(5)}#{names}"
+
+  sale = stock.discounted(1299, 15)
+  puts "hammer on sale: #{money.show(sale)}"
+  puts shelf.entries.at(0)

@@ -1,0 +1,42 @@
+# a01_textkit — a small library of text helpers, used by an app.
+# Probes: importing a package by its name (`import textkit`, then
+# `textkit.title(...)`); importing one item of it by name
+# (`import textkit.slug`, then `slug(...)`, which needs its `()`); reading
+# a `pub` constant of a package through its prefix (`textkit.RULE_WIDTH`);
+# a library function calling its own constant.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# -------- posts ---------
+# Hello Packages by AL (5 words)
+#   /hello-packages
+#   a first p...
+# Why Toml by GBH (1 word)
+#   /why-toml
+#   short
+# --------- end ----------
+# 24
+
+import textkit
+import textkit.slug
+
+struct Post:
+  title: Str
+  author: Str
+  body: Str
+
+  def summary -> Str:
+    words = textkit.plural(textkit.count_words(body), "word")
+    "#{textkit.title(title)} by #{textkit.initials(author)} (#{words})"
+
+def main:
+  posts = [
+    Post(title: "hello packages", author: "Ada Lovelace", body: "a first post about lume"),
+    Post(title: "  Why TOML  ", author: "grace brewster hopper", body: "short"),
+  ]
+  puts textkit.rule("posts")
+  for p in posts:
+    puts p.summary
+    puts "  /#{slug(p.title)}"
+    puts "  #{textkit.truncate(p.body, 12)}"
+  puts textkit.rule("end")
+  puts textkit.RULE_WIDTH

@@ -1,0 +1,16 @@
+# settings/parse/line.lume — one line of the text. Its neighbour in the
+# same subfolder is still named from the package root: `parse.value`.
+
+import parse.value
+
+pub enum Line:
+  Blank
+  Pair(key: Str, val: value.Value)
+
+pub def read(raw: Str) -> Line or Error:
+  s = raw.trim
+  if s.empty? or s.starts_with?("#"):
+    return Blank
+  match s.split("="):
+    [k, v] -> Pair(k.trim, value.guess(v.trim))
+    _ -> Error("not `key = value`: #{s}")

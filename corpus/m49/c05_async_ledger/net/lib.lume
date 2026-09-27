@@ -1,0 +1,15 @@
+# net/lib.lume — `pub async def`s. `quote_all` starts one task per name
+# and awaits the list, so the answers come back in the order asked.
+
+PRICES = {"ana": -200, "bo": -300, "cy": 50}
+DELAYS = {"ana": 30, "bo": 10, "cy": 20}
+
+pub async def quote(who: Str) -> Int or Error:
+  await Time.sleep(DELAYS[who].or(1))
+  match PRICES[who]:
+    Some(c) -> c
+    None    -> Error("no price for #{who}")
+
+pub async def quote_all(names: [Str]) -> [Int or Error]:
+  tasks = names.map { |n| spawn: await quote(n) }.to_list
+  await tasks

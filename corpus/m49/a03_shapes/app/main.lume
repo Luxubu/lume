@@ -1,0 +1,50 @@
+# a03_shapes — a library interface that the app's own types conform to.
+# Probes: importing a library's interface by name (`import geometry.Shape`)
+# and using it as a list type; the app's structs conform structurally, with
+# no `extend` and no mention of `Shape`; passing them to library functions
+# that take the interface and that take a `[T: Shape]` bound; calling the
+# interface's default (`describe`) directly on an app struct; a `pub`
+# Float constant read from the app's methods.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# * circle of area 3.14
+# * rect of area 6.00
+# * square of area 2.25
+# total 11.4
+# largest rect: 1.0 x 7.0
+# circle of area 12.57
+
+import geometry
+import geometry.Shape
+
+struct Circle:
+  r: Float
+
+  def area -> Float = geometry.PI * r * r
+  def name -> Str = "circle"
+
+struct Rect:
+  w: Float
+  h: Float
+
+  def area -> Float = w * h
+  def name -> Str = "rect"
+
+struct Square:
+  side: Float
+
+  def area -> Float = side * side
+  def name -> Str = "square"
+
+def main:
+  shapes: [Shape] = [Circle(1.0), Rect(2.0, 3.0), Square(1.5)]
+  for s in shapes:
+    puts geometry.report(s)
+  puts "total #{geometry.total_area(shapes).decimals(1)}"
+
+  rects = [Rect(2.0, 3.0), Rect(4.0, 0.5), Rect(1.0, 7.0)]
+  match geometry.largest(rects):
+    Some(r) -> puts "largest rect: #{r.w} x #{r.h}"
+    None -> puts "no rects"
+
+  puts Circle(2.0).describe

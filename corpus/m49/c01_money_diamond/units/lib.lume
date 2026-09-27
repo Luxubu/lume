@@ -1,0 +1,13 @@
+# units/lib.lume — the bottom of the diamond: money, and a constant.
+# `pricing` and `catalog` both use it; so does the app.
+
+pub CURRENCY = "EUR"
+
+pub struct Money:
+  cents: Int
+
+  def <(o: Money) -> Bool = cents < o.cents
+  def +(o: Money) -> Money = Money(cents: cents + o.cents)
+  def show -> Str = "#{(cents.to_float / 100.0).decimals(2)} #{CURRENCY}"
+
+pub def euros(n: Int) -> Money = Money(cents: n * 100)

@@ -1,0 +1,7 @@
+error: module `geo` of package `shapes` is private
+  --> corpus/m49/b03_item_not_module/app/main.lume:14:1
+   |
+14 | import shapes.geo
+   | ^
+  help: only what `corpus/m49/b03_item_not_module/shapes/lib.lume` makes public can be reached from outside the package; it would need `pub import geo`
+exit: 1

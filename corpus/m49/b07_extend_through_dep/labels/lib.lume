@@ -1,0 +1,11 @@
+# labels/lib.lume — uses tally, and does not pass it on.
+
+import tally
+
+pub struct Label:
+  text: Str
+
+extend Label with tally.Sized:
+  def size -> Int = text.len
+
+pub def label(text: Str) -> Label = Label(text: text)

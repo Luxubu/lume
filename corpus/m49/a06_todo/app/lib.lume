@@ -1,0 +1,41 @@
+# app/lib.lume — the library half of the `app` package. main.lume, beside
+# it, imports it by the package's name: `import app`.
+
+import columns
+
+pub enum Status:
+  Todo
+  Doing
+  Done
+
+  def mark -> Str = match self:
+    Todo -> "[ ]"
+    Doing -> "[~]"
+    Done -> "[x]"
+
+pub struct Chore:
+  id: Int
+  title: Str
+  status: Status
+  tags: [Str]
+
+  def tag_text -> Str = if tags.empty?: "-" else: tags.join(",")
+
+  def line -> Str = columns.row([status.mark, "##{id}", title, tag_text], [3, 4, 18])
+
+pub struct Board:
+  tasks: [Chore]
+
+  def add(var self, title: Str, tags: [Str]):
+    tasks.push(Chore(id: tasks.len + 1, title: title, status: Todo, tags: tags))
+
+  def move(var self, id: Int, to: Status):
+    for var t in tasks:
+      if t.id == id:
+        t.status = to
+
+  def count(s: Status) -> Int = tasks.count(_.status == s)
+
+  def tagged(tag: Str) -> [Chore] = tasks.filter(_.tags.contains?(tag)).to_list
+
+pub def board -> Board = Board(tasks: [])

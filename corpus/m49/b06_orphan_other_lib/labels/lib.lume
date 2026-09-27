@@ -1,0 +1,4 @@
+pub struct Label:
+  text: Str
+
+pub def label(text: Str) -> Label = Label(text: text)

@@ -1,0 +1,18 @@
+# b04_crate_version_in_dep — a dependency writes `import rust.hex = "0.4"`
+# in its lib.lume, the single-file form. The app's own `[rust]` lists
+# `hex = "0.4"`, but that is the app's list, not codec's; and `lume check`
+# checks "the package and every package it uses".
+# Meant to FAIL.
+#   error: in a package, the version of `hex` goes in `lume.toml`
+#     --> corpus/m49/b04_crate_version_in_dep/codec/lib.lume:2:1
+#     |
+#   2 | import rust.hex = "0.4"
+#     | ^
+#     help: write `import rust.hex` here, and `hex = "0.4"` under `[rust]` in `corpus/m49/b04_crate_version_in_dep/codec/lume.toml`
+# EXPECTED OUTPUT:
+# (none: it does not compile)
+
+import codec
+
+def main:
+  puts codec.code("Lume")

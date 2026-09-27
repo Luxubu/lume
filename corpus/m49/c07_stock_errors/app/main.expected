@@ -1,0 +1,15 @@
+loaded 2 items, 14 units
+h1: tool
+a2: food, 7 days
+bad batch: unknown kind `gadget`
+bad line: `x` is not an integer
+bad line: c5: negative quantity
+bad line: expected 3 fields, got 2
+h1: 1 left
+h1: only 1 of h1
+zz: no item zz
+a2: 0 left
+left: 1
+Food(days: 3)
+food, 3 days
+exit: 0

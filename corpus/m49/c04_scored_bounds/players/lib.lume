@@ -1,0 +1,8 @@
+# players/lib.lume — a type that has `score`. It depends on nothing and
+# never names `ranking.Scored`.
+
+pub struct Player:
+  name: Str
+  points: [Int]
+
+  def score -> Int = points.sum

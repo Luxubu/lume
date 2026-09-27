@@ -1,0 +1,16 @@
+warning: `book` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/m49/c05_async_ledger/app/main.lume:28:3
+   |
+28 |   shared var book = store.opening()
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+ana ok
+bo would go below zero
+cy ok
+skipped: no price for dee
+total 450
+ana 300
+bo 100
+cy 50
+Ok(50)
+exit: 0

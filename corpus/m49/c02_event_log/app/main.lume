@@ -1,0 +1,60 @@
+# c02_event_log — an enum in a subfolder module of `core`, passed on by
+# core's lib.lume, matched in two other packages (`audit`, `stats`: a
+# diamond over `core`) and in the app, with bare variants in patterns and
+# the qualified `event.Event.Login(u)` through the package's module. A
+# `T or Error` made by `?` in core's private module comes back through a
+# pub function; a library constant is read.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# core v2: 7 events, 2 bad
+# ana came in
+# ana sent 300 bytes
+# tick
+# bo came in
+# bo sent 120 bytes
+# ana left
+# ana sent 50 bytes
+# bad: `x` is not an integer
+# bad: cannot read `dance`
+# ana: 350
+# bo: 120
+# ["ana", "bo"]
+# Upload(user: "ana", bytes: 300)
+# first was a login by ana
+# ticks: 1
+
+import core
+import core.model.event
+import audit
+import stats
+
+LOG = """login ana
+upload ana 300
+tick
+login bo
+upload bo x
+upload bo 120
+logout ana
+dance
+upload ana 50"""
+
+def main:
+  (es, bad) = core.parse_all(LOG)
+  puts "core v#{core.VERSION}: #{es.len} events, #{bad.len} bad"
+  for e in es:
+    puts audit.describe(e)
+  for b in bad:
+    puts "bad: #{b}"
+  for u, n in stats.bytes_by_user(es):
+    puts "#{u}: #{n}"
+  puts stats.users(es)
+  puts es.at(1)
+
+  match es.at(0):
+    event.Event.Login(u) -> puts "first was a login by #{u}"
+    _                    -> puts "first was something else"
+
+  ticks = es.count { |e| e == event.Event.Tick }
+  puts "ticks: #{ticks}"

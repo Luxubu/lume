@@ -1,0 +1,3 @@
+# app/util.lume — the app's own `util`: the fourth in this program.
+
+pub def wrap(s: Str) -> Str = "[#{s}]"

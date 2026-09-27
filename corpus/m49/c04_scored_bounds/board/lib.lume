@@ -1,0 +1,10 @@
+# board/lib.lume — generic code bounded by another package's interface.
+# It knows neither `players` nor `coins`.
+
+import ranking
+
+pub def top[T: ranking.Scored](xs: [T], n: Int) -> [T] =
+  xs.sort_by { |x| 0 - x.score }.take(n).to_list
+
+pub def report[T: ranking.Scored](xs: [T]) -> [Str] =
+  xs.map { |x| "#{x.score} #{x.grade}" }.to_list

@@ -1,0 +1,5 @@
+# md/format/text.lume — the same path as html's, and private to md.
+
+pub def name -> Str = "md text"
+
+pub def esc(s: Str) -> Str = s.replace("*", "")

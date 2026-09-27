@@ -1,0 +1,7 @@
+pub struct Point:
+  x: Int
+  y: Int
+
+  def taxi -> Int = x + y
+
+pub def origin -> Point = Point(x: 0, y: 0)

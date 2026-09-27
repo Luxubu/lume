@@ -1,0 +1,5 @@
+# stock/money.lume — passed on by lib.lume.
+
+pub def show(cents: Int) -> Str = "$#{cents / 100}.#{two_digits(cents % 100)}"
+
+def two_digits(n: Int) -> Str = if n < 10: "0#{n}" else: "#{n}"

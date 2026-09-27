@@ -1,0 +1,25 @@
+# b07_extend_through_dep — the app depends on `labels` only; `labels`
+# imports `tally` privately. tally's `extend [T] with Sized` should still
+# reach the app, since an extend goes up the chain of imports, across
+# packages as across modules. And the app has a module of its own named
+# `tally`, which is allowed because `tally` is not the app's dependency,
+# only its dependency's.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 3
+# false
+# 3
+# false
+# 100
+
+import labels
+import tally
+
+def main:
+  xs = [4, 8, 9]
+  puts xs.size
+  puts xs.empty?
+  l = labels.label("jam")
+  puts l.size
+  puts l.empty?
+  puts tally.total(xs)

@@ -1,0 +1,5 @@
+# html/format/text.lume — passed on by html's lib.lume.
+
+pub def name -> Str = "html text"
+
+pub def esc(s: Str) -> Str = s.replace("<", "&lt;").replace(">", "&gt;")

@@ -1,0 +1,12 @@
+# core/model/event.lume — the enum every package matches on. It sits in a
+# subfolder; lib.lume passes it on with `pub import model.event`.
+
+pub enum Event:
+  Login(user: Str)
+  Logout(user: Str)
+  Upload(user: Str, bytes: Int)
+  Tick
+
+  def who -> Str? = match self:
+    Login(u) | Logout(u) | Upload(u, _) -> Some(u)
+    Tick -> None

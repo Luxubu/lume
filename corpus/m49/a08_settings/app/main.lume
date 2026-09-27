@@ -1,0 +1,43 @@
+# a08_settings — a library with modules in a subfolder.
+# Probes: `settings/parse/value.lume` and `settings/parse/line.lume`, named
+# `parse.value` and `parse.line` from the package root, by lib.lume and by
+# each other; lib.lume passes `parse.value` on with `pub import`, and the
+# app uses it as `value` after only `import settings`; a qualified variant
+# of the passed-on enum in a pattern (`value.Value.Text(t)`); a `"""`
+# constant; a failure from the private `line` module surfacing through
+# `settings.load`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# lume with 8 jobs
+# verbose: yes
+# colour: auto
+# target x86_64
+# Some(Num(n: 8))
+# bad config: not `key = value`: broken line
+
+import settings
+
+CONFIG = """
+  # build settings
+  name = lume
+  jobs = 8
+
+  verbose = yes
+  target = x86_64
+  """
+
+def main:
+  match settings.load(CONFIG):
+    Ok(c) ->
+      puts "#{c.text("name", "?")} with #{c.number("jobs")} jobs"
+      puts "verbose: #{c.text("verbose", "no")}"
+      puts "colour: #{c.text("colour", "auto")}"
+      match c.get("target"):
+        Some(value.Value.Text(t)) -> puts "target #{t}"
+        _ -> puts "no target"
+      puts c.get("jobs")
+    Error(e) -> puts "bad config: #{e.message}"
+
+  match settings.load("name = x\nbroken line"):
+    Ok(_) -> puts "loaded"
+    Error(e) -> puts "bad config: #{e.message}"

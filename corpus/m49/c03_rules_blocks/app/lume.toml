@@ -1,0 +1,8 @@
+[package]
+name = "app"
+version = "0.1.0"
+
+[dependencies]
+limits   = { path = "../limits" }
+rules    = { path = "../rules" }
+pipeline = { path = "../pipeline" }

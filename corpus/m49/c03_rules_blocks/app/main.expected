@@ -1,0 +1,14 @@
+ada: ok
+root: fails banned
+Bartholomew: fails length, lower
+zed_42: ok
+X: fails length, lower
+span 5, banned 2
+Rule(name: "lower", check: <block>)
+true
+1 -> 2
+3 -> 5
+10 -> 7
+double | clamp | minus one
+HI!
+exit: 0

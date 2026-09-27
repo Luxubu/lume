@@ -1,0 +1,24 @@
+# rules/lib.lume — a struct that keeps a block, and functions that build
+# one from another package's constants.
+
+import limits
+
+pub SPAN = limits.MAX_LEN - limits.MIN_LEN
+
+pub struct Rule:
+  name: Str
+  check: (Str) -> Bool
+
+  def passes?(s: Str) -> Bool = check(s)
+
+pub def length_rule -> Rule:
+  lo = limits.MIN_LEN
+  hi = limits.MAX_LEN
+  Rule(name: "length", check: { |s| s.len >= lo and s.len <= hi })
+
+pub def not_banned -> Rule:
+  banned = limits.BANNED
+  Rule(name: "banned", check: { |s| not banned.contains?(s) })
+
+pub def failures(rs: [Rule], s: Str) -> [Str] =
+  rs.filter { |r| not r.check(s) }.map(_.name).to_list

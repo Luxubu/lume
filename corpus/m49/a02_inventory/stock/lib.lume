@@ -1,0 +1,21 @@
+# stock/lib.lume — the front door. It passes `items` and `money` on to
+# whoever imports `stock`, and keeps `rounding` to itself.
+
+pub import items
+pub import money
+import rounding
+
+pub struct Shelf:
+  entries: [items.Item]
+
+  def add(var self, item: items.Item):
+    entries.push(item)
+
+  def value -> Int = entries.map(_.total_cents).sum
+
+  def by_kind(k: items.Kind) -> [items.Item] = entries.filter(_.kind == k).to_list
+
+pub def empty -> Shelf = Shelf(entries: [])
+
+pub def discounted(cents: Int, percent: Int) -> Int =
+  rounding.to_nickel(cents * (100 - percent) / 100)

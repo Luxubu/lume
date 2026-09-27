@@ -1,0 +1,12 @@
+# badges/lib.lume — an interface, one conformance of a built-in (allowed:
+# `Badge` is badges' own), and a helper.
+
+pub interface Badge:
+  def badge -> Str
+
+  def framed -> Str = "[#{badge}]"
+
+extend Int with Badge:
+  def badge -> Str = "##{self}"
+
+pub def wall(xs: [Badge]) -> Str = xs.map(_.framed).join(" ")

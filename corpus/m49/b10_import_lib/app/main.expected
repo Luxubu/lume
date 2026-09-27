@@ -1,0 +1,7 @@
+error: import the library by its package's name: `import app`
+  --> corpus/m49/b10_import_lib/app/main.lume:16:1
+   |
+16 | import lib
+   | ^
+  help: `lib.lume` is the package itself, so it has the package's name
+exit: 1

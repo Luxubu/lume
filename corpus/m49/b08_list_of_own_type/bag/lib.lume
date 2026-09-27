@@ -1,0 +1,10 @@
+# bag/lib.lume — `Bean` is bag's own, but a list of them is a list.
+import tally
+
+pub struct Bean:
+  n: Int
+
+extend [Bean] with tally.Tagged:
+  def tag -> Str = "beans"
+
+pub def beans -> [Bean] = [Bean(n: 1), Bean(n: 2)]

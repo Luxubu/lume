@@ -1,0 +1,57 @@
+# c03_rules_blocks — blocks kept in structs that libraries define. `rules`
+# and `pipeline` both read `limits` (a diamond); `rules` has a constant
+# computed from limits' constants. The app mixes library-made rules with
+# one it builds itself, and runs a generic `pipeline.Stage[T]` list at two
+# different `T`s.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# ada: ok
+# root: fails banned
+# Bartholomew: fails length, lower
+# zed_42: ok
+# X: fails length, lower
+# span 5, banned 2
+# Rule(name: "lower", check: <block>)
+# true
+# 1 -> 2
+# 3 -> 5
+# 10 -> 7
+# double | clamp | minus one
+# HI!
+
+import limits
+import rules
+import pipeline
+
+def main:
+  checks: [rules.Rule] = [
+    rules.length_rule(),
+    rules.not_banned(),
+    rules.Rule(name: "lower", check: { |s| s == s.downcase }),
+  ]
+  for name in ["ada", "root", "Bartholomew", "zed_42", "X"]:
+    failed = rules.failures(checks, name)
+    if failed.empty?:
+      puts "#{name}: ok"
+    else:
+      puts "#{name}: fails #{failed.join(", ")}"
+  puts "span #{rules.SPAN}, banned #{limits.BANNED.len}"
+  puts checks.at(2)
+  puts checks.at(1).passes?("ada")
+
+  steps: [pipeline.Stage[Int]] = [
+    pipeline.Stage(label: "double", run: { |n| n * 2 }),
+    pipeline.clamp_stage(),
+    pipeline.Stage(label: "minus one", run: { |n| n - 1 }),
+  ]
+  for n in [1, 3, 10]:
+    puts "#{n} -> #{pipeline.apply_all(n, steps)}"
+  puts steps.map(_.label).join(" | ")
+
+  words: [pipeline.Stage[Str]] = [
+    pipeline.Stage(label: "up", run: { |s| s.upcase }),
+    pipeline.Stage(label: "bang", run: { |s| s + "!" }),
+  ]
+  puts pipeline.apply_all("hi", words)

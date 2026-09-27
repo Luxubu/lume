@@ -1,0 +1,3 @@
+# common/util.lume — common's own `util`, private to it.
+
+pub def wrap(s: Str) -> Str = "(#{s})"

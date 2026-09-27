@@ -1,0 +1,7 @@
+error: package `bag` cannot extend `[Bean]` with `tally.Tagged`: neither is its own
+  --> corpus/m49/b08_list_of_own_type/bag/lib.lume:7:1
+  |
+7 | extend [Bean] with tally.Tagged:
+  | ^
+  help: as in Rust, an `extend` goes in the package that defines the interface or the type; `tally.Tagged` is from `tally` and `[Bean]` is built in. Wrap the type in a struct of your own and extend that
+exit: 1

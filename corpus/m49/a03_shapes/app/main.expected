@@ -1,0 +1,13 @@
+warning: `shapes` holds values of different types behind `geometry.Shape`, so calls on its items go through a pointer
+  --> corpus/m49/a03_shapes/app/main.lume:40:3
+   |
+40 |   shapes: [Shape] = [Circle(1.0), Rect(2.0, 3.0), Square(1.5)]
+   |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+* circle of area 3.14
+* rect of area 6.00
+* square of area 2.25
+total 11.4
+largest rect: 1.0 x 7.0
+circle of area 12.57
+exit: 0

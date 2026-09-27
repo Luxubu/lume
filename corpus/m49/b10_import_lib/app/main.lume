@@ -1,0 +1,19 @@
+# b10_import_lib — a package with both main.lume and lib.lume. The docs
+# say main.lume imports the library as `import app`, "not `import lib`".
+# Outside a package, `lib.lume` next to the file you run is the module
+# `lib`; inside one, the name is refused, and the error should say which
+# name to use.
+# Meant to FAIL.
+#   error: `lib.lume` is the root of package `app`, so it is imported as `app`, not `lib`
+#     --> corpus/m49/b10_import_lib/app/main.lume:16:1
+#      |
+#   16 | import lib
+#      | ^
+#     help: write `import app`
+# EXPECTED OUTPUT:
+# (none: it does not compile)
+
+import lib
+
+def main:
+  puts lib.greet("ana")

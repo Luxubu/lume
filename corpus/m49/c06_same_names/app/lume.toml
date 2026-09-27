@@ -1,0 +1,8 @@
+[package]
+name = "app"
+version = "0.1.0"
+
+[dependencies]
+common = { path = "../common" }
+html   = { path = "../html" }
+md     = { path = "../md" }

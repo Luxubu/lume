@@ -1,0 +1,33 @@
+# sku/lib.lume — an enum with a function of the type that can fail, and a
+# parser that passes failures up with `?`.
+
+pub enum Kind:
+  Tool
+  Food(days: Int)
+
+  def label -> Str = match self:
+    Tool    -> "tool"
+    Food(d) -> "food, #{d} days"
+
+  def self.parse(s: Str) -> Kind or Error:
+    if s == "tool":
+      return Tool
+    if s.starts_with?("food:"):
+      d = s.slice(5, s.len - 5).to_int?
+      return Food(d)
+    Error("unknown kind `#{s}`")
+
+pub struct Item:
+  code: Str
+  kind: Kind
+  qty: Int
+
+pub def parse_item(line: Str) -> Item or Error:
+  match line.split(","):
+    [code, kind, qty] ->
+      k = Kind.parse(kind.trim)?
+      n = qty.trim.to_int?
+      if n < 0:
+        return Error("#{code.trim}: negative quantity")
+      Item(code: code.trim, kind: k, qty: n)
+    parts -> Error("expected 3 fields, got #{parts.len}")

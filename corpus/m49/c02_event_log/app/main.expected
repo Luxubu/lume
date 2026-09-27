@@ -1,0 +1,17 @@
+core v2: 7 events, 2 bad
+ana came in
+ana sent 300 bytes
+tick
+bo came in
+bo sent 120 bytes
+ana left
+ana sent 50 bytes
+bad: `x` is not an integer
+bad: cannot read `dance`
+ana: 350
+bo: 120
+["ana", "bo"]
+Upload(user: "ana", bytes: 300)
+first was a login by ana
+ticks: 1
+exit: 0

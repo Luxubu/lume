@@ -1,0 +1,54 @@
+# c04_scored_bounds — an interface declared in `ranking`, met structurally
+# by `players.Player` (which never names it) and by `coins.Coin` through an
+# `extend` written in `ranking`, used through bounds in `board`, which
+# knows neither type. The app also imports the interface by name for a
+# bounded generic of its own, and calls the default `grade` and the
+# extended `score` directly.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# ana 95
+# cy 95
+# 95 A
+# 60 C
+# 95 A
+# 10 C
+# 50 C
+# 90 A
+# 70 B
+# [Coin(face: 9)]
+# 50
+# C
+# passing: 2 players, 2 coins
+# totals: 260 and 210
+
+import ranking
+import ranking.Scored
+import board
+import players
+import coins
+
+def total[T: Scored](xs: [T]) -> Int = xs.map(_.score).sum
+
+def main:
+  team = [
+    players.Player(name: "ana", points: [40, 55]),
+    players.Player(name: "bo", points: [30, 30]),
+    players.Player(name: "cy", points: [50, 45]),
+    players.Player(name: "di", points: [10]),
+  ]
+  for p in board.top(team, 2):
+    puts "#{p.name} #{p.score}"
+  for line in board.report(team):
+    puts line
+
+  purse = [coins.Coin(face: 5), coins.Coin(face: 9), coins.Coin(face: 7)]
+  for line in board.report(purse):
+    puts line
+  puts board.top(purse, 1)
+  puts purse.at(0).score
+  puts team.at(1).grade
+
+  puts "passing: #{ranking.passing(team)} players, #{ranking.passing(purse)} coins"
+  puts "totals: #{total(team)} and #{total(purse)}"

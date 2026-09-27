@@ -1,0 +1,6 @@
+# labels/lib.lume — a type and nothing else.
+
+pub struct Label:
+  text: Str
+
+pub def label(text: Str) -> Label = Label(text: text)

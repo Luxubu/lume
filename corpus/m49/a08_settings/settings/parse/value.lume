@@ -1,0 +1,20 @@
+# settings/parse/value.lume — what a setting can be.
+
+pub enum Value:
+  Num(n: Int)
+  Flag(on: Bool)
+  Text(s: Str)
+
+  def show -> Str = match self:
+    Num(n) -> "#{n}"
+    Flag(on) -> if on: "yes" else: "no"
+    Text(s) -> s
+
+pub def guess(raw: Str) -> Value:
+  match raw:
+    "true" | "yes" -> Flag(true)
+    "false" | "no" -> Flag(false)
+    _ ->
+      match raw.to_int:
+        Ok(n) -> Num(n)
+        Error(_) -> Text(raw)

@@ -1,0 +1,3 @@
+# counter/lib.lume — the folder is `counter`, the package is `tally`.
+
+pub def total(xs: [Int]) -> Int = xs.sum

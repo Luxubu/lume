@@ -283,7 +283,14 @@ impl Loader {
             if imp.path.len() == 1 && first == "lib" && self.lib_path(k).is_file() {
                 return Err(Fail::At(format!("import the library by its package's name: `import {}`", p), Some("`lib.lume` is the package itself, so it has the package's name".into())));
             }
-            let prefix = self.prefix_of(pkg);
+            let mut prefix = self.prefix_of(pkg);
+            // A module of the root package may share its name with a package
+            // further down the tree (a dependency's dependency), as a Rust
+            // crate may have a `mod` named like a crate it does not use. Its
+            // id must still differ from that package's.
+            if prefix.is_empty() && self.by_name.get(&first).map(|&j| j != 0).unwrap_or(false) {
+                prefix = "self".to_string();
+            }
             return match resolve_local(&root, &prefix, imp, PACKAGE_HELP) {
                 Ok((r, file)) => Ok((r, Some((Some(p.to_string()), file)))),
                 Err((msg, help)) => {
@@ -337,30 +344,39 @@ impl Loader {
         let rest = &imp.path[1..];
         // what `lib.lume` passes on, by the name it passes it on under
         let libm = &self.loaded[name];
-        let mut passed: HashMap<String, Resolved> = HashMap::new();
+        // each by the name it is passed on under (`event`) and by the path
+        // `lib.lume` wrote for it (`model.event`): either reaches it
+        let mut passed: Vec<(Vec<String>, Resolved)> = Vec::new();
         for it in &libm.items {
             if let Item::Import(pi) = it {
                 if pi.public && !pi.is_rust {
                     let n = pi.alias.clone().unwrap_or_else(|| pi.path.last().cloned().unwrap_or_default());
                     for r in &libm.imports {
-                        match r {
-                            Resolved::Module { alias, .. } if *alias == n => {
-                                passed.insert(n.clone(), r.clone());
+                        let hit = match r {
+                            Resolved::Module { alias, .. } => *alias == n,
+                            Resolved::Single { local, .. } => *local == n,
+                        };
+                        if hit {
+                            passed.push((vec![n.clone()], r.clone()));
+                            if pi.alias.is_none() && pi.path.len() > 1 {
+                                passed.push((pi.path.clone(), r.clone()));
                             }
-                            Resolved::Single { local, .. } if *local == n => {
-                                passed.insert(n.clone(), r.clone());
-                            }
-                            _ => {}
                         }
                     }
                 }
             }
         }
-        match (passed.get(&rest[0]), rest.len()) {
-            (Some(Resolved::Module { id, .. }), 1) => return Ok(Resolved::Module { alias: alias(&rest[0]), id: id.clone(), line, col }),
-            (Some(Resolved::Module { id, .. }), 2) => return Ok(Resolved::Single { local: alias(&rest[1]), id: id.clone(), item: rest[1].clone(), line, col }),
-            (Some(Resolved::Single { id, item, .. }), 1) => return Ok(Resolved::Single { local: alias(&rest[0]), id: id.clone(), item: item.clone(), line, col }),
-            _ => {}
+        for (path, r) in &passed {
+            let n = path.len();
+            if rest.len() < n || rest[..n] != path[..] {
+                continue;
+            }
+            match (r, rest.len() - n) {
+                (Resolved::Module { id, .. }, 0) => return Ok(Resolved::Module { alias: alias(&rest[n - 1]), id: id.clone(), line, col }),
+                (Resolved::Module { id, .. }, 1) => return Ok(Resolved::Single { local: alias(&rest[n]), id: id.clone(), item: rest[n].clone(), line, col }),
+                (Resolved::Single { id, item, .. }, 0) => return Ok(Resolved::Single { local: alias(&rest[n - 1]), id: id.clone(), item: item.clone(), line, col }),
+                _ => {}
+            }
         }
         let root = self.packages[k].root.clone();
         let is_module = root.join(format!("{}.lume", rest[0])).exists() || root.join(&rest[0]).is_dir();

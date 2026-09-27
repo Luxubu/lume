@@ -1,0 +1,7 @@
+error: package `app` cannot extend `Str` with `badges.Badge`: neither is its own
+  --> corpus/m49/a07_badges/app/main.lume:30:1
+   |
+30 | extend Str with badges.Badge:
+   | ^
+  help: as in Rust, an `extend` goes in the package that defines the interface or the type; `badges.Badge` is from `badges` and `Str` is built in. Wrap the type in a struct of your own and extend that
+exit: 1

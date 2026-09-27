@@ -1,0 +1,7 @@
+error: package `app` cannot extend `labels.Label` with `tally.Shouty`: neither is its own
+  --> corpus/m49/b06_orphan_other_lib/app/main.lume:17:1
+   |
+17 | extend labels.Label with tally.Shouty:
+   | ^
+  help: as in Rust, an `extend` goes in the package that defines the interface or the type; `tally.Shouty` is from `tally` and `labels.Label` is from `labels`. Wrap the type in a struct of your own and extend that
+exit: 1

@@ -1,0 +1,9 @@
+# jobs/lib.lume — a plain helper that works on the caller's `shared var`
+# ledger, a type from another package.
+
+import store
+
+pub def settle(book: shared var store.Ledger, who: Str, cents: Int) -> Str:
+  match book.apply(who, cents):
+    Ok(_)    -> "#{who} ok"
+    Error(e) -> e.message

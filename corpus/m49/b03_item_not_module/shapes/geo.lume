@@ -1,0 +1,5 @@
+pub struct Point:
+  x: Int
+  y: Int
+
+pub def dist2(a: Point, b: Point) -> Int = (a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y)

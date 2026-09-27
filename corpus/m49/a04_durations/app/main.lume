@@ -1,0 +1,39 @@
+# a04_durations — a library that ships `extend`s of built-in types.
+# Probes: the app writes no `extend`, yet `Int`, `Str` and `[Int]` have
+# `minutes`, `hm` and `longer_than?` because it imports `clock`; the
+# interface's defaults on those built-ins; the app's own struct conforms by
+# having `minutes`, and gets the defaults too; a `[clock.Minutes]` list
+# mixing the struct, an `Int` and a `Str`, handed to a library function.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 2:15
+# 1:05
+# 45
+# 1:35
+# 4:15
+# review at 14:00 for 0:50
+# true
+# false
+
+import clock
+
+struct Meeting:
+  title: Str
+  start: Str
+  length: Int
+
+  def minutes -> Int = length
+
+def main:
+  puts 135.hm
+  puts "1:05".hm
+  puts "45".minutes
+  puts [30, 45, 20].hm
+
+  day: [clock.Minutes] = [Meeting(title: "standup", start: "9:00", length: 15), 90, "2:30"]
+  puts clock.total(day).hm
+
+  m = Meeting(title: "review", start: "14:00", length: 50)
+  puts "#{m.title} at #{m.start} for #{m.hm}"
+  puts m.longer_than?(45)
+  puts "0:59".longer_than?(60)

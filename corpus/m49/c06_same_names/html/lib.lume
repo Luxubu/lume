@@ -1,0 +1,13 @@
+# html/lib.lume — keeps `util`, passes on `format.text` (as `text`).
+
+import common
+import util
+pub import format.text
+
+pub def bold(s: Str) -> Str = util.wrap(s)
+
+pub def page(title: Str, items: [Str]) -> Str:
+  lis = items.map { |i| "<li>#{text.esc(i)}</li>" }.join("")
+  "<h1>#{text.esc(title)}</h1><ul>#{lis}</ul>"
+
+pub def crumbs(path: Str) -> Str = common.words(path).map(bold).join(common.SEP)

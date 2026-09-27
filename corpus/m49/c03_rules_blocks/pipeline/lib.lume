@@ -1,0 +1,19 @@
+# pipeline/lib.lume — a generic struct holding a block of its own type
+# parameter, and a generic function that runs a list of them.
+
+import limits
+
+pub struct Stage[T]:
+  label: Str
+  run: (T) -> T
+
+pub def apply_all[T](x: T, stages: [Stage[T]]) -> T:
+  var out = x
+  for s in stages:
+    out = s.run(out)
+  out
+
+pub def clamp_stage -> Stage[Int]:
+  lo = limits.MIN_LEN
+  hi = limits.MAX_LEN
+  Stage(label: "clamp", run: { |n| n.clamp(lo, hi) })

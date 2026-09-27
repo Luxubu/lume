@@ -1,0 +1,29 @@
+# clock/lib.lume — an interface for "a number of minutes", and the built-in
+# types it ships conformances for. `Minutes` is clock's own, so clock may
+# extend `Int`, `Str` and `[Int]` with it; the extends travel with
+# `import clock`.
+
+pub interface Minutes:
+  def minutes -> Int
+
+  def hm -> Str:
+    h = minutes / 60
+    m = minutes % 60
+    if m < 10: "#{h}:0#{m}" else: "#{h}:#{m}"
+
+  def longer_than?(limit: Int) -> Bool = minutes > limit
+
+extend Int with Minutes:
+  def minutes -> Int = self
+
+# "1:30" is ninety minutes; "45" is forty-five; anything else is zero.
+extend Str with Minutes:
+  def minutes -> Int:
+    match self.split(":"):
+      [h, m] -> h.to_int.or(0) * 60 + m.to_int.or(0)
+      _ -> self.to_int.or(0)
+
+extend [Int] with Minutes:
+  def minutes -> Int = self.sum
+
+pub def total(xs: [Minutes]) -> Int = xs.map(_.minutes).sum

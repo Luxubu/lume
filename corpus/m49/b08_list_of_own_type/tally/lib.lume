@@ -1,0 +1,7 @@
+# tally/lib.lume — every list is a `Tagged`.
+
+pub interface Tagged:
+  def tag -> Str
+
+extend [T] with Tagged:
+  def tag -> Str = "list"

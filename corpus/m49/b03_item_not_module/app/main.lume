@@ -1,0 +1,18 @@
+# b03_item_not_module — `shapes/lib.lume` passes on `geo.Point` alone.
+# Passing on an item should not open the module it came from.
+# Meant to FAIL.
+#   error: module `geo` of package `shapes` is private
+#     --> corpus/m49/b03_item_not_module/app/main.lume:14:1
+#      |
+#   14 | import shapes.geo
+#      | ^
+#     help: only what `corpus/m49/b03_item_not_module/shapes/lib.lume` makes public can be reached from outside the package; it would need `pub import geo`
+# EXPECTED OUTPUT:
+# (none: it does not compile)
+
+import shapes
+import shapes.geo
+
+def main:
+  o = shapes.origin
+  puts geo.dist2(o, o)

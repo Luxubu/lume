@@ -1526,6 +1526,17 @@ impl Gen {
     /// are, then from the type the surrounding position expects.
     fn infer_call(&mut self, gs: &[TypeParam], params: &[(String, Type)], args: &[Arg], ret: &Type) -> HashMap<String, Type> {
         let mut m: HashMap<String, Type> = HashMap::new();
+        // Building the very type that is wanted here — `Stage(...)` where a
+        // `Stage[Int]` is declared — fixes its parameters before the
+        // arguments are read, so a block among them gets `Int`, not `T`.
+        if let (Type::App(head, _), Some(Type::App(whead, wargs))) = (ret, self.want.last()) {
+            if self.canon(head) == self.canon(whead) && wargs.iter().all(type_is_known) {
+                let w = Type::App(whead.clone(), wargs.clone());
+                let mut pre = HashMap::new();
+                Self::unify(ret, &w, &mut pre);
+                m.extend(pre.into_iter().filter(|(k, t)| gs.iter().any(|p| p.name == *k) && type_is_known(t)));
+            }
+        }
         if let Ok(bound) = self.bind_args("", params, args, 0, 0) {
             for (a, (_, pty)) in bound.iter().zip(params) {
                 if gs.iter().any(|p| Self::mentions_var(pty, &p.name)) {
@@ -2955,7 +2966,7 @@ impl Gen {
         for (n, info) in &ex.structs {
             let key = format!("{}.{}", key_prefix, n);
             let qualified = StructInfo {
-                generics: info.generics.clone(),
+                generics: info.generics.iter().map(|g| qualify_param(g, id, ex)).collect(),
                 fields: info.fields.iter().map(|(f, t)| (f.clone(), qualify_type(t, id, ex))).collect(),
                 methods: info.methods.iter().map(|(m, sg)| (m.clone(), qualify_sig(sg, id, ex))).collect(),
                 statics: info.statics.iter().map(|(m, sg)| (m.clone(), qualify_sig(sg, id, ex))).collect(),
@@ -2967,7 +2978,7 @@ impl Gen {
         for (n, info) in &ex.enums {
             let key = format!("{}.{}", key_prefix, n);
             let qualified = EnumInfo {
-                generics: info.generics.clone(),
+                generics: info.generics.iter().map(|g| qualify_param(g, id, ex)).collect(),
                 variants: info.variants.iter().map(|(v, fs)| (v.clone(), fs.iter().map(|(f, t)| (f.clone(), qualify_type(t, id, ex))).collect())).collect(),
                 methods: info.methods.iter().map(|(m, sg)| (m.clone(), qualify_sig(sg, id, ex))).collect(),
                 statics: info.statics.iter().map(|(m, sg)| (m.clone(), qualify_sig(sg, id, ex))).collect(),
@@ -4294,8 +4305,19 @@ impl Gen {
             ExprKind::SelfRef => self.current_self_ty.clone().or_else(|| self.current_type.clone().map(Type::Named)).unwrap_or(Type::Unknown),
             ExprKind::List(items) => {
                 let mut t = Type::Unknown;
+                // in a `[Stage[Int]]`, each item is wanted as a `Stage[Int]`
+                let item_want = match self.want.last() {
+                    Some(Type::List(w)) => Some((**w).clone()),
+                    _ => None,
+                };
                 for i in items {
+                    if let Some(w) = &item_want {
+                        self.want.push(w.clone());
+                    }
                     let it = self.ty_of(i).materialized();
+                    if item_want.is_some() {
+                        self.want.pop();
+                    }
                     if it != Type::Unknown {
                         t = it;
                         break;

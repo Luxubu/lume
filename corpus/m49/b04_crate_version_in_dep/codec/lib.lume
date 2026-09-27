@@ -1,0 +1,4 @@
+# codec/lib.lume — names the version in the file, the single-file way.
+import rust.hex = "0.4"
+
+pub def code(s: Str) -> Str = hex.encode(s)

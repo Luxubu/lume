@@ -1,0 +1,9 @@
+[package]
+name = "app"
+version = "0.1.0"
+
+[dependencies]
+ranking = { path = "../ranking" }
+board   = { path = "../board" }
+players = { path = "../players" }
+coins   = { path = "../coins" }
