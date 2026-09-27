@@ -703,6 +703,11 @@ pub struct Gen {
     /// The next built-in block is a `move` closure: it owns the kept block
     /// it calls, so a lazy chain can outlive the expression that made it.
     move_next_lambda: bool,
+    /// Emitting an interface's default bodies, inside the trait itself.
+    in_trait_decl: bool,
+    /// The method being emitted can be called only on a known type (it is
+    /// `async` or has type parameters), so `self` inside it is one.
+    current_static_only: bool,
     /// This module's own file, as a program would name it.
     this_file: String,
     /// Traits an imported module owns. Rust only offers a trait's methods
@@ -823,6 +828,8 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, module_id: &str
         kept_captured: HashSet::new(),
         annotate_params: false,
         move_next_lambda: false,
+        in_trait_decl: false,
+        current_static_only: false,
         this_file: file.to_string(),
         trait_uses: Vec::new(),
         local_types: HashSet::new(),
@@ -3378,9 +3385,11 @@ impl Gen {
                     self.check_generics_used(&e.generics, e.variants.iter().flat_map(|v| v.fields.iter().map(|f| &f.ty)), &format!("enum `{}`", e.name))?;
                 }
                 Item::Interface(i) => {
-                    if let Some(m) = i.defaults.iter().find(|m| m.is_async) {
-                        return Err(LumeError::new(m.line, m.col, format!("`{}` is `async` and has a body, which an interface cannot give yet", m.name))
-                            .with_help("leave it as a signature, `async def name -> T`, and let each type give the body"));
+                    // an `async` default runs across `await`s, and a block lent as
+                    // `&mut dyn FnMut` cannot be held there between tasks
+                    if let Some(m) = i.defaults.iter().find(|m| m.is_async && m.params.iter().any(|p| matches!(p.ty, Type::Fn(..)))) {
+                        return Err(LumeError::new(m.line, m.col, format!("`{}` is an `async` default that takes a block, which an interface cannot give yet", m.name))
+                            .with_help("leave this one a signature, `async def ...`, and let each type give the body; or take the values the block would compute"));
                     }
                     self.check_generics(&i.generics, &format!("`{}`", i.name))?;
                     let sig_types: Vec<Type> = i
@@ -4380,7 +4389,7 @@ impl Gen {
                         return if m.is_async { Type::Future(Box::new(ret)) } else { ret };
                     }
                     if let Some(m) = self.iface_default(&rt, name) {
-                        return m.ret;
+                        return if m.is_async { Type::Future(Box::new(m.ret)) } else { m.ret };
                     }
                     if name == "to_s" || name == "to_str" {
                         return Type::Str;
@@ -4394,7 +4403,8 @@ impl Gen {
                     }
                 }
                 if let Some(m) = self.iface_default(&rt, name) {
-                    return m.ret;
+                    // an `async` default gives a future, as any `async def` call does
+                    return if m.is_async { Type::Future(Box::new(m.ret)) } else { m.ret };
                 }
                 if name == "or" && args.len() == 1 && matches!(&rt, Type::Option(i) if **i == Type::Char) && char_literal(&args[0].value).is_none() {
                     if self.ty_of(&args[0].value).materialized() == Type::Str {
@@ -5482,9 +5492,11 @@ impl Gen {
             self.line(&format!("{};", self.trait_header(&m.name, sg, None)));
         }
         self.in_trait_impl = true;
+        self.in_trait_decl = true;
         for m in &i.defaults {
             self.fn_def(m, Some(&i.name))?;
         }
+        self.in_trait_decl = false;
         self.in_trait_impl = false;
         self.indent -= 1;
         self.line("}");
@@ -5545,6 +5557,11 @@ impl Gen {
     /// the interface, which Lume makes a generic — rather than one held
     /// through a pointer (a list item, a field, a binding)?
     fn is_static_iface_value(&self, e: &Expr) -> bool {
+        // `self` inside a default that is itself only for known types (an
+        // `async` one, or one with type parameters): Rust's `where Self: Sized`
+        if matches!(e.kind, ExprKind::SelfRef) {
+            return self.in_trait_impl && self.current_static_only;
+        }
         matches!(&e.kind, ExprKind::Ident(n) if self.iface_params.contains(n) && self.lookup(n).map(|b| self.is_interface(&b.ty)).unwrap_or(false))
     }
 
@@ -5552,6 +5569,10 @@ impl Gen {
     /// a generic can call. Rust refuses the same call on a `dyn` value.
     fn static_only_refusal(&self, rt: &Type, name: &str, sg: &Sig, e: &Expr) -> LumeError {
         let why = if sg.is_async { "is `async`".to_string() } else { format!("has type parameters of its own (`{}`)", sg.generics.iter().map(|g| g.name.clone()).collect::<Vec<_>>().join("`, `")) };
+        if matches!(e.kind, ExprKind::Method { ref recv, .. } if matches!(recv.kind, ExprKind::SelfRef)) {
+            return LumeError::new(e.line, e.col, format!("`{}` {}, so a default of `{}` that is neither `async` nor generic cannot call it on `self`", name, why, type_name(rt)))
+                .with_help(format!("make `{}` `async` too, or leave it a signature and let each type give the body", self.current_fn));
+        }
         LumeError::new(e.line, e.col, format!("`{}` {}, so it cannot be called on a `{}` held in a list, a field or a binding", name, why, type_name(rt)))
             .with_help(format!("call it where the value's own type is known: take it as a parameter, `def f(x: {})`, or a bound, `[T: {}]`", type_name(rt), type_name(rt)))
     }
@@ -6152,8 +6173,14 @@ impl Gen {
         }
         let saved_async = self.in_async;
         self.in_async = f.is_async;
-        let mut header = format!("{}{}fn {}{}({})", vis, if f.is_async { "async " } else { "" }, fn_name, gen, parts.join(", "));
-        if sig.ret != Type::Unit {
+        // an `async` default in the trait: Rust's `async fn` in a trait does
+        // not promise a future that can move between tasks, so it is
+        // written as one that does, over an `async move` block
+        let async_default = self.in_trait_decl && f.is_async;
+        let mut header = format!("{}{}fn {}{}({})", vis, if f.is_async && !async_default { "async " } else { "" }, fn_name, gen, parts.join(", "));
+        if async_default {
+            header.push_str(&format!(" -> impl std::future::Future<Output = {}> + Send", self.rt(&sig.ret)));
+        } else if sig.ret != Type::Unit {
             header.push_str(&format!(" -> {}", self.rt(&sig.ret)));
         }
         // a method only a generic can call, as the trait declares it
@@ -6163,6 +6190,10 @@ impl Gen {
         header.push_str(" {");
         self.line(&header);
         self.indent += 1;
+        if async_default {
+            self.line("async move {");
+            self.indent += 1;
+        }
         if is_main && !self.test_mode {
             self.line("lume_install_panic_hook();");
         }
@@ -6180,6 +6211,7 @@ impl Gen {
         self.current_self_ty = owner.and_then(|o| self.ext_targets.get(o).cloned());
         self.current_self = f.self_kind;
         self.current_fn = f.name.clone();
+        let saved_static_only = std::mem::replace(&mut self.current_static_only, Self::static_only(&sig));
         let want_value = sig.ret != Type::Unit;
         self.tail_of_fn = true;
         if unit_result {
@@ -6189,6 +6221,7 @@ impl Gen {
             self.block_body(&f.body, want_value)?;
         }
         self.tail_of_fn = false;
+        self.current_static_only = saved_static_only;
         self.in_async = saved_async;
         self.pop_scope();
         self.pop_generics(saved_gs);
@@ -6197,6 +6230,10 @@ impl Gen {
         self.iface_params = saved_iface_params;
         self.current_type = None;
         self.current_self_ty = None;
+        if async_default {
+            self.indent -= 1;
+            self.line("}");
+        }
         self.indent -= 1;
         self.line("}");
         if main_result && !self.test_mode {

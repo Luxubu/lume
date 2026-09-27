@@ -1,0 +1,6 @@
+error: `each_word` is an `async` default that takes a block, which an interface cannot give yet
+  --> examples/errors/iface_async_default_block.lume:4:3
+  |
+4 |   async def each_word(f: (Str) -> ()) -> ():
+  |   ^
+  help: leave this one a signature, `async def ...`, and let each type give the body; or take the values the block would compute

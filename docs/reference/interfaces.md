@@ -344,8 +344,33 @@ of that type holds a value of some conforming type behind a pointer, and
 the pointer only knows the methods every such type shares.
 
 An `async` method is written `async def fetch -> Str` in the interface, and
-awaited as any other: `await source.fetch()`. It has no default body yet —
-each type gives its own.
+awaited as any other: `await source.fetch()`. It may have a default body,
+which awaits the type's own methods; in Rust it is a method returning a
+future that can move between tasks:
+
+```lume
+interface Source:
+  async def fetch -> Str
+
+  async def both -> Str:
+    a = await fetch()
+    b = await fetch()
+    "#{a}+#{b}"
+
+struct Fixed:
+  text: Str
+
+  async def fetch -> Str = text
+
+async def main:
+  puts await Fixed(text: "yo").both()    #=> yo+yo
+```
+
+Two things stay with the type. A default that is neither `async` nor generic
+cannot call an `async` method on `self` — Rust would not know `self` is a
+known type there — so make that default `async` too. And an `async` default
+cannot take a block: the block is lent for the call, and an `async` body may
+still be running after it.
 
 ## `pub` and methods
 

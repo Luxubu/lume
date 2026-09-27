@@ -61,6 +61,12 @@ def labels[M: Mappable[Int]](m: M) -> [Str] = m.map_all { |n| "n#{n}" }
 interface Source:
   async def fetch -> Str
 
+  # an `async` default: it awaits the type's own `fetch`
+  async def both -> Str:
+    a = await fetch()
+    b = await fetch()
+    "#{a}+#{b}"
+
 struct Fixed:
   text: Str
 
@@ -93,3 +99,4 @@ async def main:
   puts held.map { |m| m.size }.to_list
   puts await read_twice(Fixed(text: "hi"))
   puts await read_twice(Slow(ms: 1))
+  puts await Fixed(text: "yo").both

@@ -1,0 +1,6 @@
+error: `fetch` is `async`, so a default of `Source` that is neither `async` nor generic cannot call it on `self`
+  --> examples/errors/iface_default_calls_async.lume:4:21
+  |
+4 |   def peek -> Str = fetch()
+  |                     ^
+  help: make `peek` `async` too, or leave it a signature and let each type give the body

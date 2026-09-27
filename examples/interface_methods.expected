@@ -1,13 +1,13 @@
 warning: `walks` holds values of different types behind `Walk`, so calls on its items go through a pointer
-  --> examples/interface_methods.lume:82:3
+  --> examples/interface_methods.lume:88:3
    |
-82 |   walks: [Walk] = [Bag(xs: [1, 2, 3]), Range2(lo: 1, hi: 4), [10, 20]]
+88 |   walks: [Walk] = [Bag(xs: [1, 2, 3]), Range2(lo: 1, hi: 4), [10, 20]]
    |   ^
   help: fine for most code; use a single concrete type or an enum if this is a hot loop
 warning: `held` holds values of different types behind `Mappable`, so calls on its items go through a pointer
-  --> examples/interface_methods.lume:92:3
+  --> examples/interface_methods.lume:98:3
    |
-92 |   held: [Mappable[Int]] = [Box(items: [3]), [4, 5]]
+98 |   held: [Mappable[Int]] = [Box(items: [3]), [4, 5]]
    |   ^
   help: fine for most code; use a single concrete type or an enum if this is a hot loop
 [6, 10, 30]
@@ -21,3 +21,4 @@ warning: `held` holds values of different types behind `Mappable`, so calls on i
 [1, 2]
 hi/hi
 slept 1/slept 1
+yo+yo

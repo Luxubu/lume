@@ -1,0 +1,9 @@
+interface Source:
+  async def fetch -> Str
+
+  async def each_word(f: (Str) -> ()) -> ():
+    for w in (await fetch()).split(" "):
+      f(w)
+
+def main:
+  puts 1
