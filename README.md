@@ -93,11 +93,13 @@ insertion order, which Rust's `HashMap` does not, so a lookup reads a
 key-to-position index and then the ordered entries. That is one hash and one
 compare, the same as Rust's, plus one indirection.
 
-Generic helpers taking blocks read 100% until milestone 46's follow-up, when
-the benchmark was found to finish in 3–5 ms — too short to measure, so its
-ratio was timer noise. At ten times the work it reads about 118%, the same
-with the compiler of milestone 36, so nothing since has slowed it; where the
-difference comes from is not yet known.
+Generic helpers taking blocks is the price of a guarantee. An `Int` that
+overflows stops a Lume program rather than wrapping, so Lume builds with
+overflow checks on; the Rust beside it is built the way most Rust is, with
+them off. This benchmark is almost nothing but arithmetic, so the checks show:
+built with the same setting, the two run at the same speed (37 ms and 37 ms
+unchecked, 43 ms and 43 ms checked). The benchmark read 100% only while it
+was too short to measure.
 
 ```sh
 tests/bench.sh            # build both sides, best of five, compare to bench/BASELINE
