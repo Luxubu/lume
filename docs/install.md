@@ -45,6 +45,7 @@ lume emit  file.lume                print the generated Rust
 lume crate file.lume <crate>        what a Rust crate offers, in Lume types
 lume clean file.lume                remove build output
 lume new   name [--lib]             make a package: a folder with lume.toml
+lume update [package]               move git dependencies on, rewrite lume.lock
 ```
 
 Inside a package the file can be left out: `lume run`, `lume test` and the

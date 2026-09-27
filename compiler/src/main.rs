@@ -9,6 +9,7 @@
 //!   lume crate <file.lume> <crate>         what a crate offers, in Lume types
 //!   lume clean <file.lume>                 remove the program's build directory
 //!   lume new   <name> [--lib]              make a package
+//!   lume update [<package>]                move git dependencies on
 //!
 //! In a package (a folder with `lume.toml`) the file may be left out.
 //!
@@ -20,6 +21,7 @@ mod ast;
 mod bridge;
 mod codegen;
 mod error;
+mod fetch;
 mod fmt;
 mod lexer;
 mod loader;
@@ -43,7 +45,8 @@ fn help_text() -> String {
          lume emit  <file.lume>                  print the generated Rust\n  \
          lume crate <file.lume> <crate>          what a Rust crate offers, in Lume types\n  \
          lume clean <file.lume> [--cache]        remove build output\n  \
-         lume new   <name> [--lib]               make a package: a folder with lume.toml\n\n\
+         lume new   <name> [--lib]               make a package: a folder with lume.toml\n  \
+         lume update [<package>]                 move git dependencies on, rewrite lume.lock\n\n\
          In a package, leave out the file: the command uses the package the\n\
          current folder is in (main.lume, or lib.lume for test and check).\n\n\
          docs: docs/README.md   a tour: docs/tour.md",
@@ -663,6 +666,48 @@ fn package_entry(cmd: &str) -> Result<(PathBuf, PathBuf), String> {
     }
 }
 
+/// `lume update [name]`: moves git dependencies — all, or the one named —
+/// to the commits their `lume.toml` asks for now, and rewrites `lume.lock`.
+fn update_package(args: &[String]) -> Result<(), String> {
+    let only = match args {
+        [] => None,
+        [n] if !n.starts_with('-') => Some(n.clone()),
+        _ => return Err("usage: lume update [<package>]\n".into()),
+    };
+    let (entry, _) = package_entry("update")?;
+    let update = match &only {
+        Some(n) => fetch::Update::One(n.clone()),
+        None => fetch::Update::All,
+    };
+    let (loaded, moved) = loader::load_updating(&entry, update)?;
+    let from_git: Vec<&manifest::Manifest> = loaded.packages.iter().filter(|m| m.origin.is_some()).collect();
+    if let Some(n) = &only {
+        if !from_git.iter().any(|m| m.name == *n) {
+            let known = loaded.packages.iter().any(|m| m.name == *n);
+            return Err(if known {
+                format!("error: `{}` comes from a path, so there is nothing to update\n  help: `lume update` moves packages that come from git\n", n)
+            } else {
+                format!("error: this program uses no package `{}`\n", n)
+            });
+        }
+    }
+    for m in &from_git {
+        if only.as_ref().map(|n| *n != m.name).unwrap_or(false) {
+            continue;
+        }
+        let commit = &m.origin.as_ref().unwrap().commit;
+        match moved.iter().find(|(n, _, _)| *n == m.name) {
+            Some((_, Some(old), new)) => eprintln!("updated `{}`: {} -> {}", m.name, fetch::short(old), fetch::short(new)),
+            Some((_, None, new)) => eprintln!("locked `{}` at {}", m.name, fetch::short(new)),
+            None => eprintln!("`{}` is up to date at {}", m.name, fetch::short(commit)),
+        }
+    }
+    if from_git.is_empty() {
+        eprintln!("no packages from git: nothing to update");
+    }
+    Ok(())
+}
+
 /// `lume new <name> [--lib]`: a folder with a `lume.toml` and a first file.
 fn new_package(args: &[String]) -> Result<(), String> {
     let mut name = None;
@@ -715,6 +760,13 @@ fn main() {
         _ => {}
     }
     let cmd = args[0].as_str();
+    if cmd == "update" {
+        if let Err(e) = update_package(&args[1..]) {
+            eprint!("{}", e);
+            process::exit(1);
+        }
+        return;
+    }
     if cmd == "new" {
         if let Err(e) = new_package(&args[1..]) {
             eprint!("{}", e);

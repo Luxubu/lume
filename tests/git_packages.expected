@@ -1,0 +1,86 @@
+--- a tag: fetched once, then locked
+fetching `colors` from <tmp>/colors.git
+red 1
+exit: 0
+# lume.lock: written by lume. The exact commit of every package that
+# comes from git; keep it with the program. `lume update` moves them on.
+
+[[package]]
+name = "colors"
+source = "git+<tmp>/colors.git?tag=v1"
+commit = "<v1>"
+red 1
+exit: 0
+--- the lock holds while the repository is gone: no network needed
+red 1
+exit: 0
+--- a rev
+fetching `colors` from <tmp>/colors.git
+red 1
+exit: 0
+--- the default branch moves; the lock does not, until lume update
+fetching `colors` from <tmp>/colors.git
+red 2
+exit: 0
+red 2
+exit: 0
+fetching `colors` from <tmp>/colors.git
+updated `colors`: <commit> -> <commit>
+exit: 0
+red 3
+exit: 0
+fetching `colors` from <tmp>/colors.git
+`colors` is up to date at <commit>
+exit: 0
+--- a tag that does not exist
+fetching `colors` from <tmp>/colors.git
+error: `colors` has no tag `v9` at <tmp>/colors.git
+  --> lume.toml:6:1
+  |
+6 | colors = { git = "../colors.git", tag = "v9" }
+  | ^
+  help: check the name in `lume.toml` against the repository
+exit: 1
+--- a repository that does not exist
+fetching `colors` from <tmp>/nothing.git
+error: cannot fetch `colors` from <tmp>/nothing.git: <git says why>
+  --> lume.toml:6:1
+  |
+6 | colors = { git = "../nothing.git", tag = "v1" }
+  | ^
+  help: check the URL, and that git can reach it: `git ls-remote <url>`
+exit: 1
+--- two packages asking for two commits of one package
+fetching `a` from <tmp>/a.git
+fetching `b` from <tmp>/b.git
+fetching `colors` from <tmp>/colors.git
+error: package `colors` is asked for at two commits: <commit> by `a`, and <commit> by `b`
+  --> <tmp>/home/git/checkouts/<package>/<commit>/lume.toml:6:1
+  |
+6 | colors = { git = "<tmp>/colors.git", tag = "v2" }
+  | ^
+  help: a program has one copy of each package: make `a` and `b` ask for the same one (git+<tmp>/colors.git?tag=v1 and git+<tmp>/colors.git?tag=v2)
+exit: 1
+--- a package from git that uses one from git: both locked
+fetching `a` from <tmp>/a.git
+fetching `colors` from <tmp>/colors.git
+red 1
+exit: 0
+name = "a"
+name = "colors"
+--- the same package from git and from a path
+fetching `a` from <tmp>/a.git
+fetching `colors` from <tmp>/colors.git
+error: package `colors` comes from two places: git+<tmp>/colors.git?tag=v1 and `../src/colors`
+  --> <tmp>/home/git/checkouts/<package>/<commit>/lume.toml:6:1
+  |
+6 | colors = { git = "<tmp>/colors.git", tag = "v1" }
+  | ^
+  help: a program has one copy of each package: have every `lume.toml` take it from the same place
+exit: 1
+--- a path dependency cannot be updated
+error: `colors` comes from a path, so there is nothing to update
+  help: `lume update` moves packages that come from git
+exit: 1
+no packages from git: nothing to update
+exit: 0

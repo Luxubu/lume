@@ -34,9 +34,11 @@ regex = "1"
 - `name` follows the rules for a Lume name: lower case letters, digits and
   `_`. The name `rust` is taken, because `import rust.…` means a crate.
 - `version` is informational for now.
-- A dependency is another package, found by `path` from this file's folder.
-  It is named by its own name: `counter = { path = "../tally" }` is an error
-  that says the package there is `tally`.
+- A dependency is another package. It is found by `path` from this file's
+  folder, or fetched with `git`; see
+  [Packages from git](#packages-from-git-and-lumelock). It is named by its
+  own name: `counter = { path = "../tally" }` is an error that says the
+  package there is `tally`.
 - `[rust]` gives the version of each Rust crate the package imports; see
   [Rust crates](#rust-crates).
 
@@ -192,11 +194,66 @@ It looks upward for a `lume.toml`, as Cargo does.
 | `lume build`, `lume check` | the package and every package it uses |
 | `lume test` | this package's tests, not its dependencies' tests, as `cargo test` does; `main.lume`, or `lib.lume` in a library |
 | `lume fmt [--check]` | every `.lume` file in the package; a package kept in a folder inside it is left alone |
+| `lume update [name]` | moves git dependencies (all, or the one named) to the commits `lume.toml` asks for now, and rewrites `lume.lock` |
 
 Naming a file still works in a package: `lume run tools/report.lume`.
 
+## Packages from git, and `lume.lock`
+
+```toml
+[dependencies]
+colors = { git = "https://github.com/someone/colors", tag = "v0.2.0" }
+# or  rev = "3f9c2e1"   or  branch = "main"   or none of them: the default branch
+```
+
+**The first build fetches the repository, and writes `lume.lock` next to
+`lume.toml`.** The lock records the exact commit each package from git
+resolved to, including packages that other packages from git depend on:
+
+```toml
+[[package]]
+name = "colors"
+source = "git+https://github.com/someone/colors?tag=v0.2.0"
+commit = "9c1deec281a9ebbb7d7f140e159050cc1d22e3fb"
+```
+
+**Every later build uses the locked commit, even when the branch or tag has
+moved since.** It asks the network only when that commit is not already on
+this machine. With the lock and a filled cache, builds work offline. Keep
+`lume.lock` with the program, so every machine builds the same code.
+`lume update` moves the packages on and rewrites the lock:
+
+```
+$ lume update
+fetching `colors` from https://github.com/someone/colors
+updated `colors`: 9c1deec281a9 -> 4ad4d0cbf709
+```
+
+- Only the lock of the program you build counts. A library's own
+  `lume.lock` is ignored when the library is used by another package, as
+  in Cargo.
+- Changing the `tag`, `rev` or `branch` in `lume.toml` takes effect at the
+  next build. The lock entry no longer matches what is asked for, so it is
+  resolved again.
+- Repositories are kept in `~/.lume/git/` (or `$LUME_HOME/git/`): one copy
+  of each, and one checkout of each commit a program uses. Deleting the
+  folder is safe; the next build fetches again.
+- A `git` path without a scheme, such as `../colors.git`, is a repository
+  on this machine, taken from the folder of `lume.toml`.
+
+**A program has one copy of each package, so one commit of each.** Two
+packages that ask for different commits of a third are refused, and so is
+one package that comes from git in one place and from a path in another:
+
+```
+error: package `colors` is asked for at two commits: 9c1deec281a9 by `a`, and 4ad4d0cbf709 by `b`
+  help: a program has one copy of each package: make `a` and `b` ask for the same one (git+…/colors.git?tag=v1 and git+…/colors.git?tag=v2)
+```
+
+Cargo would build both, when their versions are incompatible under semver.
+Lume may add that once there is a registry to give versions a meaning.
+
 ## Not yet
 
-Dependencies come only from a `path` for now. Git dependencies and a
-`lume.lock` that records exactly what was fetched are the next milestone,
-and a registry comes after that.
+A registry and `lume publish`. Until then, a package is shared by putting
+it in a git repository.

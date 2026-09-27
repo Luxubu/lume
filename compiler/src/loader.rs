@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 
 use crate::ast::{Import, Item};
 use crate::error::LumeError;
+use crate::fetch::{Fetcher, Update};
 use crate::manifest::{self, Manifest};
 use crate::{lexer, parser};
 
@@ -140,9 +141,23 @@ struct Loader {
 
 /// Loads the entry file and everything it imports, transitively.
 pub fn load(entry: &Path) -> Result<Loaded, String> {
+    load_updating(entry, Update::No).map(|(l, _)| l)
+}
+
+/// Loads, moving the git dependencies `update` names to the commits their
+/// `lume.toml` asks for now; writes `lume.lock`, and says which moved.
+pub fn load_updating(entry: &Path, update: Update) -> Result<(Loaded, Vec<(String, Option<String>, String)>), String> {
     let dir = entry.parent().map(|p| p.to_path_buf()).unwrap_or_else(|| PathBuf::from("."));
+    let mut moved = Vec::new();
     let packages = match manifest::find(&dir) {
-        Some(file) => manifest::load_all(manifest::read(&file)?)?,
+        Some(file) => {
+            let root = manifest::read(&file)?;
+            let root_dir = root.root.clone();
+            let mut fetcher = Fetcher::new(&root_dir, update)?;
+            let all = manifest::load_all(root, &mut fetcher)?;
+            moved = fetcher.write_lock(&root_dir)?;
+            all
+        }
         None => Vec::new(),
     };
     let by_name = packages.iter().enumerate().map(|(i, m)| (m.name.clone(), i)).collect();
@@ -162,7 +177,7 @@ pub fn load(entry: &Path) -> Result<Loaded, String> {
             out.push(m);
         }
     }
-    Ok(Loaded { modules: out, packages: l.packages })
+    Ok((Loaded { modules: out, packages: l.packages }, moved))
 }
 
 impl Loader {

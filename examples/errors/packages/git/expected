@@ -1,6 +1,0 @@
-error: `colors` comes from git, and git dependencies are not supported yet
-  --> examples/errors/packages/git/app/lume.toml:6:1
-  |
-6 | colors = { git = "https://example.com/colors", tag = "v1" }
-  | ^
-  help: use a copy on disk: `path = "…"`

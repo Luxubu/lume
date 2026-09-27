@@ -1,0 +1,6 @@
+error: `colors` has both a `path` and a `git` source
+  --> examples/errors/packages/two_sources/app/lume.toml:6:1
+  |
+6 | colors = { path = "../colors", git = "https://example.com/colors", tag = "v1" }
+  | ^
+  help: a dependency comes from one place: `path` for a folder on disk, or `git` for a repository

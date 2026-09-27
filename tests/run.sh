@@ -103,6 +103,10 @@ out=$(cd examples/packages/tally && "$LUME_ABS" test 2>&1); code=$?
 check "packages/tally tests" "examples/packages/tally/test.expected" "$out
 exit: $code"
 
+# packages from git and `lume.lock`, against local repositories only
+out=$(tests/git_packages.sh "$LUME" 2>&1)
+check "packages from git" "tests/git_packages.expected" "$out"
+
 # `lume new`, then run and test what it made, with no file named
 tmp=$(mktemp -d)
 out=$(cd "$tmp" && "$LUME_ABS" new hello 2>&1 && cd hello && "$LUME_ABS" run 2>&1 && "$LUME_ABS" new ../greet --lib 2>&1 && cd ../greet && "$LUME_ABS" test 2>&1); code=$?

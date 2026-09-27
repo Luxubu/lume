@@ -7,6 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use crate::error::LumeError;
+use crate::fetch::{self, Fetcher};
 
 pub const FILE: &str = "lume.toml";
 
@@ -20,12 +21,48 @@ pub struct Manifest {
     pub deps: Vec<DepSpec>,
     /// `regex = "1"` under `[rust]`: the crate, what Cargo is given, the line.
     pub rust: Vec<(String, String, usize)>,
+    /// For a package from git: what was asked for, the commit it resolved
+    /// to, and the package that asked. Set by `load_all`.
+    pub origin: Option<Origin>,
+}
+
+pub struct Origin {
+    pub source: String,
+    pub commit: String,
+    pub asked_by: String,
 }
 
 pub struct DepSpec {
     pub name: String,
-    pub path: PathBuf,
+    pub source: Source,
     pub line: usize,
+}
+
+pub enum Source {
+    Path(PathBuf),
+    /// `git = "…"` with at most one of `tag`, `rev`, `branch`.
+    Git { url: String, reference: GitRef },
+}
+
+#[derive(Clone)]
+pub enum GitRef {
+    Tag(String),
+    Rev(String),
+    Branch(String),
+    /// Neither: the repository's default branch.
+    Default,
+}
+
+impl GitRef {
+    /// How the lock file and messages name it: `?tag=v1`, or nothing.
+    pub fn query(&self) -> String {
+        match self {
+            GitRef::Tag(t) => format!("?tag={}", t),
+            GitRef::Rev(r) => format!("?rev={}", r),
+            GitRef::Branch(b) => format!("?branch={}", b),
+            GitRef::Default => String::new(),
+        }
+    }
 }
 
 /// The nearest `lume.toml` in `dir` or a folder above it, as Cargo finds
@@ -210,17 +247,45 @@ pub fn read(path: &Path) -> Result<Manifest, String> {
                     err(n, format!("`{}` needs a source", key), Some(format!("write `{} = {{ path = \"../{}\" }}`", key, key)))
                 })?;
                 let mut path = None;
+                let mut git = None;
+                let mut reference = GitRef::Default;
+                let mut refs = 0;
                 for (k, v) in table {
                     match k.as_str() {
                         "path" => path = Some(v),
-                        "git" | "tag" | "rev" | "branch" => {
-                            return Err(err(n, format!("`{}` comes from git, and git dependencies are not supported yet", key), Some("use a copy on disk: `path = \"…\"`".into())));
+                        "git" => git = Some(v),
+                        "tag" => {
+                            reference = GitRef::Tag(v);
+                            refs += 1;
                         }
-                        _ => return Err(err(n, format!("unknown key `{}` for dependency `{}`", k, key), Some("a dependency has a `path`".into()))),
+                        "rev" => {
+                            reference = GitRef::Rev(v);
+                            refs += 1;
+                        }
+                        "branch" => {
+                            reference = GitRef::Branch(v);
+                            refs += 1;
+                        }
+                        _ => return Err(err(n, format!("unknown key `{}` for dependency `{}`", k, key), Some("a dependency has a `path`, or a `git` URL with a `tag`, `rev` or `branch`".into()))),
                     }
                 }
-                let path = path.ok_or_else(|| err(n, format!("`{}` needs a source", key), Some(format!("write `{} = {{ path = \"../{}\" }}`", key, key))))?;
-                deps.push(DepSpec { name: key, path: normalize(&root.join(path)), line: n });
+                let source = match (path, git) {
+                    (Some(_), Some(_)) => return Err(err(n, format!("`{}` has both a `path` and a `git` source", key), Some("a dependency comes from one place: `path` for a folder on disk, or `git` for a repository".into()))),
+                    (Some(p), None) => {
+                        if refs > 0 {
+                            return Err(err(n, format!("`{}` comes from a path, so it has no `tag`, `rev` or `branch`", key), None));
+                        }
+                        Source::Path(normalize(&root.join(p)))
+                    }
+                    (None, Some(url)) => {
+                        if refs > 1 {
+                            return Err(err(n, format!("`{}` names more than one of `tag`, `rev` and `branch`", key), Some("give one: it says which commit to use".into())));
+                        }
+                        Source::Git { url: git_url(&root, &url), reference }
+                    }
+                    (None, None) => return Err(err(n, format!("`{}` needs a source", key), Some(format!("write `{} = {{ path = \"../{}\" }}`, or `{} = {{ git = \"https://…\", tag = \"…\" }}`", key, key, key)))),
+                };
+                deps.push(DepSpec { name: key, source, line: n });
             }
             _ => {
                 // a requirement, or a whole inline table, handed to Cargo as written
@@ -237,13 +302,26 @@ pub fn read(path: &Path) -> Result<Manifest, String> {
         }
     }
     let (name, _) = name.ok_or_else(|| err(1, "`lume.toml` has no package name".into(), Some("add `[package]` with `name = \"…\"`".into())))?;
-    Ok(Manifest { name, root, path: path.to_path_buf(), src, deps, rust })
+    Ok(Manifest { name, root, path: path.to_path_buf(), src, deps, rust, origin: None })
+}
+
+/// A git URL as written, except a repository on this machine given by a
+/// relative path, which is taken from the folder of `lume.toml`.
+fn git_url(root: &Path, url: &str) -> String {
+    let remote = url.contains("://") || url.contains('@') || Path::new(url).is_absolute();
+    if remote {
+        return url.to_string();
+    }
+    // from the folder, which exists, not the repository, which may not:
+    // the lock file must name it the same way whether or not it is there
+    let base = std::fs::canonicalize(if root.as_os_str().is_empty() { Path::new(".") } else { root }).unwrap_or(root.to_path_buf());
+    normalize(&base.join(url)).display().to_string()
 }
 
 /// Every package a program uses: the root first, then each dependency once.
 /// Refuses a dependency whose folder names another package, two copies of
 /// one package, and packages that depend on each other.
-pub fn load_all(root: Manifest) -> Result<Vec<Manifest>, String> {
+pub fn load_all(root: Manifest, fetcher: &mut Fetcher) -> Result<Vec<Manifest>, String> {
     let mut all = vec![root];
     let mut by_name: HashMap<String, usize> = HashMap::new();
     by_name.insert(all[0].name.clone(), 0);
@@ -258,25 +336,58 @@ pub fn load_all(root: Manifest) -> Result<Vec<Manifest>, String> {
                 }
                 e.render(&all[i].path.display().to_string(), &all[i].src)
             };
-            let file = d.path.join(FILE);
+            let (dir, origin) = match &d.source {
+                Source::Path(p) => (p.clone(), None),
+                Source::Git { url, reference } => {
+                    let (dir, commit) = fetcher.checkout(&d.name, url, reference).map_err(|(m, h)| at(m, h))?;
+                    (dir, Some(Origin { source: fetch::source_key(url, reference), commit, asked_by: all[i].name.clone() }))
+                }
+            };
+            let file = dir.join(FILE);
             if !file.is_file() {
-                return Err(at(format!("`{}` has no `lume.toml`", d.path.display()), Some(format!("a dependency is a package: give `{}` a `lume.toml` whose name is `{}`", d.path.display(), d.name))));
+                let whose = if origin.is_some() { "that commit of the repository" } else { "the folder" };
+                return Err(at(format!("`{}` has no `lume.toml`", dir.display()), Some(format!("a dependency is a package: {} needs a `lume.toml` whose name is `{}`", whose, d.name))));
             }
-            let m = read(&file)?;
+            let mut m = read(&file)?;
             if m.name != d.name {
-                return Err(at(format!("`{}` is the package `{}`, not `{}`", d.path.display(), m.name, d.name), Some(format!("name it by its own name: `{} = {{ path = \"…\" }}`", m.name))));
+                return Err(at(format!("`{}` is the package `{}`, not `{}`", dir.display(), m.name, d.name), Some(match &d.source {
+                    Source::Path(_) => format!("name it by its own name: `{} = {{ path = \"…\" }}`", m.name),
+                    Source::Git { .. } => format!("name it by its own name: `{} = {{ git = \"…\" }}`", m.name),
+                })));
             }
+            m.origin = origin;
             found.push((d.name.clone(), m, d.line));
         }
         for (name, m, line) in found {
             match by_name.get(&name) {
                 Some(&j) => {
-                    let a = std::fs::canonicalize(&all[j].root).unwrap_or(all[j].root.clone());
-                    let b = std::fs::canonicalize(&m.root).unwrap_or(m.root.clone());
-                    if a != b {
-                        let e = LumeError::new(line, 1, format!("package `{}` comes from two places: `{}` and `{}`", name, all[j].root.display(), m.root.display()))
-                            .with_help("a program has one copy of each package: point every `lume.toml` at the same folder");
-                        return Err(e.render(&all[i].path.display().to_string(), &all[i].src));
+                    let here = |msg: String, help: &str| LumeError::new(line, 1, msg).with_help(help.to_string()).render(&all[i].path.display().to_string(), &all[i].src);
+                    match (&all[j].origin, &m.origin) {
+                        (Some(a), Some(b)) => {
+                            if a.commit != b.commit {
+                                return Err(here(
+                                    format!("package `{}` is asked for at two commits: {} by `{}`, and {} by `{}`", name, fetch::short(&a.commit), a.asked_by, fetch::short(&b.commit), b.asked_by),
+                                    &format!("a program has one copy of each package: make `{}` and `{}` ask for the same one ({} and {})", a.asked_by, b.asked_by, a.source, b.source),
+                                ));
+                            }
+                        }
+                        (None, None) => {
+                            let a = std::fs::canonicalize(&all[j].root).unwrap_or(all[j].root.clone());
+                            let b = std::fs::canonicalize(&m.root).unwrap_or(m.root.clone());
+                            if a != b {
+                                return Err(here(
+                                    format!("package `{}` comes from two places: `{}` and `{}`", name, all[j].root.display(), m.root.display()),
+                                    "a program has one copy of each package: point every `lume.toml` at the same folder",
+                                ));
+                            }
+                        }
+                        _ => {
+                            let (git, path) = if m.origin.is_some() { (&m, &all[j]) } else { (&all[j], &m) };
+                            return Err(here(
+                                format!("package `{}` comes from two places: {} and `{}`", name, git.origin.as_ref().unwrap().source, path.root.display()),
+                                "a program has one copy of each package: have every `lume.toml` take it from the same place",
+                            ));
+                        }
                     }
                 }
                 None => {
