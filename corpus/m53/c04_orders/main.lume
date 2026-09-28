@@ -1,0 +1,55 @@
+# c04: a package with a library beside it (deps/money). Enums with struct
+# payloads from two modules, matched and rebuilt, one state replacing the
+# last.
+# Probes: `s = match e.split(":"): ...` where one arm hands back `s`
+# itself (named twice in the statement that replaces it); variants built
+# bare from another module; a struct from a dependency package carried in
+# variant payloads and summed with its own `+` (`t = t + x`); a finished
+# state moved into a list literal.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 1. draft(1)
+# 2. draft(2)
+# 3. placed(2, $14.49)
+# 4. shipped T4-2 $14.49
+# 5. shipped T4-2 $14.49
+# Shipped(tracking: "T4-2", total: Money(cents: 1449))
+#
+# 1. draft(1)
+# 2. placed(1, $5.00)
+# 3. cancelled: changed mind, refund $5.00
+# 1. cancelled: empty, refund $0.00
+# $19.49
+
+import money
+import model
+import model.Line
+import flow
+
+def run(events: [Str]) -> model.Status:
+  var s: model.Status = Draft([])
+  var n = 0
+  for e in events:
+    n += 1
+    s = match e.split(":"):
+      ["add", sku, qty, cents] -> flow.add(s, Line(sku, qty.to_int.or(0), money.Money(cents.to_int.or(0))))
+      ["place"] -> flow.place(s)
+      ["ship"] -> flow.ship(s, n)
+      ["cancel", why] -> flow.cancel(s, why)
+      _ -> s
+    puts "#{n}. #{s.label}"
+  s
+
+def refund(s: model.Status) -> money.Money:
+  match s:
+    Cancelled(_, m) -> m
+    Shipped(_, t) -> t
+    _ -> money.zero
+
+def main:
+  a = run(["add:pen:3:150", "add:ink:1:999", "place", "ship", "cancel:late"])
+  puts a
+  puts ""
+  b = run(["add:cap:2:250", "place", "cancel:changed mind"])
+  c = run(["place"])
+  puts money.sum([a, b, c].map(refund).to_list).show

@@ -1,0 +1,56 @@
+# c05: async tasks, each building a result from the struct handed to it,
+# with a `shared var` map and a `shared var` list changed by every task.
+# Probes: a loop variable holding a struct copied into `spawn:`; a task
+# body that builds an `Outcome` in another module, then hands it to an
+# `async def` that builds a new one from its fields; `seen[key] += 1` on a
+# shared map whose keys were put in first (so its order is fixed); results
+# awaited as a list and walked twice; the jobs still whole after every
+# task took a copy; text grown with `acc = acc + ...` from task results.
+# (Each `shared var` also warns on standard error; not part of this output.)
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 1 ant |bison| AB!
+# 2 cat | C!
+# 3 dog |eagle|fox | DEF!
+# AB!C!DEF!
+# {"short": 4, "long": 2}
+# [1, 2, 3]
+# #1:3 #2:2 #3:4
+# 22
+
+import work.job
+import work.job.Job
+
+async def slow_tag(o: job.Outcome, ms: Int) -> job.Outcome:
+  await Time.sleep(ms)
+  job.Outcome(id: o.id, line: o.line, tag: o.tag + "!")
+
+async def main:
+  jobs = [Job(1, ["ant", "bison"]), Job(2, ["cat"]), Job(3, ["dog", "eagle", "fox"])]
+  shared var seen: {Str: Int} = {"short": 0, "long": 0}
+  shared var order: [Int] = []
+  var tasks: [Task[job.Outcome]] = []
+  for j in jobs:
+    t = spawn:
+      o = job.perform(j)
+      for w in j.words:
+        key = if w.len < 4: "short" else: "long"
+        seen[key] += 1
+      order.push(j.id)
+      await slow_tag(o, 30 - j.id * 10)
+    tasks.push(t)
+  outs = await tasks
+
+  for o in outs:
+    puts "#{o.id} #{o.line} #{o.tag}"
+  var summary = ""
+  for o in outs:
+    summary = summary + o.tag
+  puts summary
+  puts seen
+  puts order.sort
+
+  shared prefix = "#"
+  again = await outs.map { |o| spawn: "#{prefix}#{o.id}:#{o.tag.len}" }.to_list
+  puts again.join(" ")
+  puts jobs.map(_.weight).sum

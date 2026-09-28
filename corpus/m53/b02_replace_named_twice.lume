@@ -1,0 +1,53 @@
+# b02: a local replaced by a value built from it, `x = f(x)`, where the
+# same statement also reads `x` in a block, in an interpolation or in a
+# second operand. Lists, text, a map, a set, an immutable self-transform.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ["2:a", "2:b"]
+# ["2:a2", "2:b2"]
+# ["2:a2", "2:b2", "2:A2", "2:B2"]
+# ab2AB
+# x0xy3y
+# abABab
+# {"b": 2}
+# {"yy"}
+# ["a", "b", "c", "c"]
+
+def tag(xs: [Str], label: Str) -> [Str] = xs.map { |x| "#{label}:#{x}" }.to_list
+
+def main:
+  var xs = ["a", "b"]
+  xs = tag(xs, "#{xs.len}")
+  puts xs
+  xs = xs.map { |x| x + xs.len.to_s }.to_list
+  puts xs
+  xs = xs + xs.map { |x| x.upcase }.to_list
+  puts xs
+
+  # text: the old value is read after the first `+`
+  var s = "ab"
+  s = s + "#{s.len}" + s.upcase
+  puts s
+  # `acc.len` must be the length before this statement, not after `+ w`
+  var acc = ""
+  for w in ["x", "y"]:
+    acc = acc + w + "#{acc.len}" + w
+  puts acc
+
+  # an immutable self-transform that reads the old value three times
+  w = "ab"
+  w = w + w.upcase + "#{w}"
+  puts w
+
+  # a map and a set replaced by a filter whose block reads them
+  var m = {"a": 1, "b": 2}
+  m = m.filter { |k, v| v > m.len - 1 }
+  puts m
+  var t = {"x", "yy"}
+  t = t.filter { |e| e.len == t.len }
+  puts t
+
+  # replaced by an `if` whose taken branch reads it three times
+  var n = ["c", "a", "b"]
+  n = if n.len > 2: n.sort + [n.at(0)] else: n
+  puts n

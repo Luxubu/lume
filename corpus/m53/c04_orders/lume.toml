@@ -1,0 +1,6 @@
+[package]
+name = "orders"
+version = "0.1.0"
+
+[dependencies]
+money = { path = "deps/money" }

@@ -1,0 +1,95 @@
+# a08_todo: a todo board, a struct holding a list of structs that each hold
+# a list. A `var self` method pushes a task built from its arguments and
+# then returns a field it bumped; `for var` walks the field to change one
+# task's status; the tasks are filtered into a `var` that is re-sorted into
+# itself; a map of lists is built with `m[k].push(..)` and then walked to
+# build text, reassigned in both branches of an `if`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 1 2 3
+# [~] 1 write docs #work
+# [ ] 2 buy milk #home #shop
+# [x] 3 fix bug #work #urgent
+# 2
+# buy milk | write docs
+# {"work": [1, 3], "home": [2], "shop": [2], "urgent": [3]}
+# work:2 home shop urgent
+# done: ["fix bug"]
+# 4
+
+enum Status:
+  Open
+  Doing
+  Done
+
+struct Chore:
+  id: Int
+  title: Str
+  tags: [Str]
+  status: Status
+
+def next_status(s: Status) -> Status:
+  match s:
+    Open -> Doing
+    Doing -> Done
+    Done -> Done
+
+struct Board:
+  tasks: [Chore]
+  next_id: Int
+
+  def add(var self, title: Str, tags: [Str]) -> Int:
+    id = next_id
+    tasks.push(Chore(id: id, title: title, tags: tags, status: Open))
+    next_id += 1
+    id
+
+  def advance(var self, id: Int):
+    for var t in tasks:
+      if t.id == id:
+        t.status = next_status(t.status)
+
+def show(t: Chore) -> Str:
+  mark = match t.status:
+    Open -> "[ ]"
+    Doing -> "[~]"
+    Done -> "[x]"
+  var line = "#{mark} #{t.id} #{t.title}"
+  for tag in t.tags:
+    line = line + " #" + tag
+  line
+
+def main:
+  var board = Board(tasks: [], next_id: 1)
+  a = board.add("write docs", ["work"])
+  b = board.add("buy milk", ["home", "shop"])
+  c = board.add("fix bug", ["work", "urgent"])
+  puts "#{a} #{b} #{c}"
+  board.advance(a)
+  board.advance(c)
+  board.advance(c)
+  for t in board.tasks:
+    puts show(t)
+
+  var open = board.tasks.filter { |t| t.status != Done }.to_list
+  puts open.len
+  open = open.sort_by { |t| t.title }
+  puts open.map(_.title).join(" | ")
+
+  var by_tag: {Str: [Int]} = {}
+  for t in board.tasks:
+    for tag in t.tags:
+      by_tag[tag].push(t.id)
+  puts by_tag
+
+  var summary = ""
+  for tag, ids in by_tag:
+    if ids.len > 1:
+      summary = summary + "#{tag}:#{ids.len} "
+    else:
+      summary = summary + tag + " "
+  puts summary.trim
+
+  done_titles = board.tasks.filter { |t| t.status == Done }.map(_.title).to_list
+  puts "done: #{done_titles}"
+  puts board.next_id

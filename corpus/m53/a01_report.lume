@@ -1,0 +1,70 @@
+# a01_report: a sales report built up as text, one line at a time, in a
+# `for (i, s) in xs.enumerate` loop (`report = report + line + "\n"`, with an
+# extra reassignment inside an `if`), then the finished text read again
+# (`lines`, `first`). The list of sales is handed to a function and read
+# again afterwards, and a second piece of text is built from a map.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# REGION  ITEM  QTY    TOTAL
+# north   pen    10    15.00
+# south   pad     3    12.75
+# --------------------------
+# north   ink     2    19.98
+# east    pen     7    10.50
+# --------------------------
+# south   pen     1     1.50
+# grand total: 59.73
+# lines: 9
+# chars in first line: 26
+# 5
+# north=34.98;south=14.25;east=10.50;
+# Some(("north", 3498))
+
+struct Sale:
+  region: Str
+  item: Str
+  qty: Int
+  cents: Int
+
+def money(c: Int) -> Str:
+  whole = c / 100
+  frac = c % 100
+  if frac < 10: "#{whole}.0#{frac}" else: "#{whole}.#{frac}"
+
+def region_totals(sales: [Sale]) -> {Str: Int}:
+  var m: {Str: Int} = {}
+  for s in sales:
+    m[s.region] = m[s.region].or(0) + s.qty * s.cents
+  m
+
+def main:
+  sales = [
+    Sale("north", "pen", 10, 150),
+    Sale("south", "pad", 3, 425),
+    Sale("north", "ink", 2, 999),
+    Sale("east", "pen", 7, 150),
+    Sale("south", "pen", 1, 150),
+  ]
+  header = "REGION".pad_right(8) + "ITEM".pad_right(6) + "QTY".pad(3) + "TOTAL".pad(9)
+  var report = header + "\n"
+  var grand = 0
+  for (i, s) in sales.enumerate:
+    total = s.qty * s.cents
+    grand += total
+    line = "#{s.region.pad_right(8)}#{s.item.pad_right(6)}#{s.qty.pad(3)}#{money(total).pad(9)}"
+    report = report + line + "\n"
+    if i % 2 == 1:
+      report = report + "-".repeat(header.len) + "\n"
+  report = report + "grand total: #{money(grand)}"
+  puts report
+  puts "lines: #{report.lines.len}"
+  puts "chars in first line: #{report.lines.first.or("").len}"
+
+  totals = region_totals(sales)
+  puts sales.len
+  var summary = ""
+  for region, cents in totals:
+    summary = summary + "#{region}=#{money(cents)};"
+  puts summary
+  top = totals.max_by { |r, c| c }
+  puts top

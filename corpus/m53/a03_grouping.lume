@@ -1,0 +1,57 @@
+# a03_grouping: orders grouped into maps (`group_by`, a tally built with
+# `m[k] = m[k].or(0) + ..`), then the map filtered and replaced by the
+# result (`totals = totals.filter { .. }`), a copy filtered while the
+# original is still needed, `map_values` into a map of sets that is itself
+# filtered and replaced, and the first map read again at the end.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# oslo: 3 orders, 185
+# rome: 2 orders, 55
+# lima: 1 orders, 300
+# {"ann": 180, "bo": 55, "cy": 300, "di": 5}
+# {"ann": 180, "bo": 55, "cy": 300}
+# ann & cy
+# 3
+# {"oslo": {"ann", "di"}, "lima": {"cy"}}
+# 1 cy 300
+# 2 ann 180
+# 3 bo 55
+# 3
+
+struct Order:
+  customer: Str
+  city: Str
+  amount: Int
+
+def main:
+  orders = [
+    Order("ann", "oslo", 120),
+    Order("bo", "rome", 40),
+    Order("ann", "oslo", 60),
+    Order("cy", "lima", 300),
+    Order("bo", "rome", 15),
+    Order("di", "oslo", 5),
+  ]
+  by_city = orders.group_by { |o| o.city }
+  for city, list in by_city:
+    puts "#{city}: #{list.len} orders, #{list.map(_.amount).sum}"
+
+  var totals: {Str: Int} = {}
+  for o in orders:
+    totals[o.customer] = totals[o.customer].or(0) + o.amount
+  puts totals
+  totals = totals.filter { |k, v| v >= 50 }
+  puts totals
+  big = totals.filter { |k, v| v > 100 }
+  puts big.keys.join(" & ")
+  puts totals.len
+
+  var cities = by_city.map_values { |list| list.map(_.customer).to_set }
+  cities = cities.filter { |c, who| who.len > 1 or who.contains?("cy") }
+  puts cities
+
+  ranked = totals.sort_by { |k, v| 0 - v }
+  for (i, pair) in ranked.enumerate:
+    (name, amount) = pair
+    puts "#{i + 1} #{name} #{amount}"
+  puts by_city["oslo"].or([]).len

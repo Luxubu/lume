@@ -1,0 +1,8 @@
+Person(name: "di", tags: ["t1", "DI"], score: 3)
+(["a"], 1)
+abba
+("fo", "FO")
+gi: gi/6 ["g"]
+Bag(items: [2, 3], first: 1)
+Person(name: "h1", tags: ["h1", "h2"], score: 2)
+exit: 0

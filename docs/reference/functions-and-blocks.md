@@ -508,6 +508,19 @@ def main:
   puts total    #=> 7
 ```
 
+A `var` the block copied can still be changed or replaced outside it; the
+block keeps the copy it made:
+
+```lume
+def main:
+  var xs = [1, 2]
+  size: () -> Int = do
+    xs.len
+  xs = xs + [3]
+  puts size()   #=> 2
+  puts xs.len   #=> 3
+```
+
 Because a `shared var` is not copied, a kept block that reads one sees the
 value as it is when the block runs, not when it was made:
 

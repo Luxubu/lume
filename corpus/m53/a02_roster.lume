@@ -1,0 +1,68 @@
+# a02_roster: one `var` list of structs filtered and re-sorted step by step,
+# always reassigned to itself (`players = players.filter { .. }.to_list`,
+# `players = players.sort_by { .. }`), including inside an `if` branch whose
+# block reads another `var`. A value taken from the list (`best`,
+# `top_team`) is read after the list has been replaced, and a `match` arm
+# reassigns a `var` in a loop.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ann,cy,di,ed,fay
+# di:40 ann:30 cy:25 ed:25 fay:8
+# 4 of 6 left, next cut 25
+# leader di (blue)
+# 1. di  blue  40
+# 2. ed  green 25
+# 3. ann red   30
+# 4. cy  red   25
+# [Player(name: "ed", team: "green", score: 25, active: true), Player(name: "ann", team: "red", score: 30, active: true), Player(name: "cy", team: "red", score: 25, active: true)]
+# blue
+# 79
+
+struct Player:
+  name: Str
+  team: Str
+  score: Int
+  active: Bool
+
+def main:
+  var players = [
+    Player("ann", "red", 30, true),
+    Player("bo", "blue", 12, false),
+    Player("cy", "red", 25, true),
+    Player("di", "blue", 40, true),
+    Player("ed", "green", 25, true),
+    Player("fay", "green", 8, true),
+  ]
+  everyone = players.len
+  players = players.filter { |p| p.active }.to_list
+  puts players.map(_.name).join(",")
+  players = players.sort_by { |p| 0 - p.score }
+  puts players.map { |p| "#{p.name}:#{p.score}" }.join(" ")
+
+  var cut = 20
+  if players.len > 4:
+    players = players.filter { |p| p.score >= cut }.to_list
+    cut = cut + 5
+  else:
+    players = players.reverse
+  puts "#{players.len} of #{everyone} left, next cut #{cut}"
+
+  best = players.first
+  players = players.sort_by { |p| p.team }
+  match best:
+    Some(p) -> puts "leader #{p.name} (#{p.team})"
+    None -> puts "nobody"
+
+  for (i, p) in players.enumerate:
+    puts "#{i + 1}. #{p.name.pad_right(4)}#{p.team.pad_right(6)}#{p.score}"
+
+  top_team = players.at(0).team
+  players = players.filter { |p| p.team != top_team }.to_list
+  puts players
+  puts top_team
+
+  for p in players:
+    match p.team:
+      "red" -> cut = cut + p.score
+      _ -> cut = cut - 1
+  puts cut

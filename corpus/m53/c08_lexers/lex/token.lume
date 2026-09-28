@@ -1,0 +1,18 @@
+# lex/token.lume — what the scanner produces.
+
+pub enum Token:
+  Num(value: Int)
+  Word(text: Str)
+  Sym(ch: Str)
+
+  def kind -> Str:
+    match self:
+      Num(_) -> "num"
+      Word(_) -> "word"
+      Sym(_) -> "sym"
+
+  def show -> Str:
+    match self:
+      Num(v) -> "#{v}"
+      Word(t) -> t.upcase
+      Sym(c) -> "'#{c}'"

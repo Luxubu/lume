@@ -1,0 +1,117 @@
+# c01: a small stack machine whose state struct is replaced every step.
+# Probes: `vm = step(vm, op)` in a `while`; an enum with struct payloads
+# matched, and rebuilt by `patch` (a literal inside a variant pattern);
+# the state's list, map and text each handed on into the next state; a
+# `var` struct rebuilt from its own fields, each read once, in the same
+# statement that replaces it; a finished struct moved into a `var`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# acc=4 acc=12 acc=24 acc=24 final=124
+# steps: 41, vars: {"acc": 24, "n": 0}
+# changed: 3
+# ACC=3 ACC=6 ACC=6 FINAL=106
+# steps: 33, vars: {"acc": 6, "n": 0}
+# Vm(stack: [33], vars: {"acc": 6, "n": 0}, out: "ACC=3 ACC=6 ACC=6 FINAL=106.", pc: 0, steps: 0)
+# 124
+
+enum Op:
+  Push(n: Int)
+  Mul
+  Add
+  Store(name: Str)
+  Load(name: Str)
+  Emit(label: Str)
+  Dec(name: Str)
+  JumpIfPos(name: Str, target: Int)
+  Halt
+
+struct Vm:
+  stack: [Int]
+  vars: {Str: Int}
+  out: Str
+  pc: Int
+  steps: Int
+
+  def done? -> Bool = pc < 0
+
+PROGRAM: [Op] = [
+  Push(1), Store("acc"),
+  Push(4), Store("n"),
+  Load("acc"), Load("n"), Mul, Store("acc"),
+  Load("acc"), Emit("acc"),
+  Dec("n"),
+  JumpIfPos("n", 4),
+  Load("acc"), Push(100), Add, Emit("final"),
+  Halt,
+]
+
+def pop2(xs: [Int]) -> ([Int], Int, Int):
+  var rest = xs
+  b = rest.pop.or(0)
+  a = rest.pop.or(0)
+  (rest, a, b)
+
+def step(vm: Vm, op: Op) -> Vm:
+  next_pc = vm.pc + 1
+  match op:
+    Push(n) -> Vm(stack: vm.stack + [n], vars: vm.vars, out: vm.out, pc: next_pc, steps: vm.steps + 1)
+    Mul ->
+      (rest, a, b) = pop2(vm.stack)
+      Vm(stack: rest + [a * b], vars: vm.vars, out: vm.out, pc: next_pc, steps: vm.steps + 1)
+    Add ->
+      (rest, a, b) = pop2(vm.stack)
+      Vm(stack: rest + [a + b], vars: vm.vars, out: vm.out, pc: next_pc, steps: vm.steps + 1)
+    Store(name) ->
+      var st = vm.stack
+      v = st.pop.or(0)
+      var vs = vm.vars
+      vs[name] = v
+      Vm(stack: st, vars: vs, out: vm.out, pc: next_pc, steps: vm.steps + 1)
+    Load(name) ->
+      Vm(stack: vm.stack + [vm.vars[name].or(0)], vars: vm.vars, out: vm.out, pc: next_pc, steps: vm.steps + 1)
+    Emit(label) ->
+      var st = vm.stack
+      top = st.pop.or(0)
+      Vm(stack: st, vars: vm.vars, out: vm.out + "#{label}=#{top} ", pc: next_pc, steps: vm.steps + 1)
+    Dec(name) ->
+      var vs = vm.vars
+      vs[name] = vs[name].or(0) - 1
+      Vm(stack: vm.stack, vars: vs, out: vm.out, pc: next_pc, steps: vm.steps + 1)
+    JumpIfPos(name, target) ->
+      to = if vm.vars[name].or(0) > 0: target else: next_pc
+      Vm(stack: vm.stack, vars: vm.vars, out: vm.out, pc: to, steps: vm.steps + 1)
+    Halt -> Vm(stack: vm.stack, vars: vm.vars, out: vm.out, pc: 0 - 1, steps: vm.steps + 1)
+
+def run(prog: [Op]) -> Vm:
+  var vm = Vm(stack: [], vars: {}, out: "", pc: 0, steps: 0)
+  while not vm.done?:
+    vm = step(vm, prog.at(vm.pc))
+  vm
+
+def patch(op: Op) -> Op:
+  match op:
+    Push(4) -> Push(3)
+    Emit(label) -> Emit(label.upcase)
+    other -> other
+
+def main:
+  first = run(PROGRAM)
+  puts first.out.trim
+  puts "steps: #{first.steps}, vars: #{first.vars}"
+
+  patched = PROGRAM.map(patch).to_list
+  changed = PROGRAM.zip(patched).count { |a, b| a != b }
+  puts "changed: #{changed}"
+
+  second = run(patched)
+  puts second.out.trim
+  puts "steps: #{second.steps}, vars: #{second.vars}"
+
+  # `second` is not needed again: it moves into `last`, and `last` is then
+  # rebuilt from its own fields, each read once
+  var last = second
+  last = Vm(stack: last.stack + [last.steps], vars: last.vars, out: last.out.trim + ".", pc: 0, steps: 0)
+  puts last
+
+  # the first run's state is still whole
+  puts first.vars["acc"].or(0) + 100

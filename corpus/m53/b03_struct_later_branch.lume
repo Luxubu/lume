@@ -1,0 +1,57 @@
+# b03: a struct whose fields are given away, and which is then printed or
+# passed on in a later branch (taken or not), in a `match` arm, or after
+# an `if` value that gives away its fields in one branch and all of it in
+# the other.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ann/4
+# ["a", "b"]
+# small Person(name: "bo!", tags: ["x"], score: 1)
+# cy/7
+# Person(name: "di", tags: ["k"], score: 9)
+# di
+# Person(name: "ED", tags: ["z", "ed"], score: 4)
+
+struct Person:
+  name: Str
+  tags: [Str]
+  score: Int
+
+def label(p: Person) -> Str = "#{p.name}/#{p.score}"
+
+def main:
+  # `p` is read in the branch not taken, and again after the `if`
+  p = Person(name: "ann", tags: ["a", "b"], score: 3)
+  q = Person(name: p.name, tags: p.tags, score: p.score + 1)
+  if q.score > 3:
+    puts label(q)
+  else:
+    puts p
+  puts p.tags
+
+  # `r` is read only in the branch not taken
+  r = Person(name: "bo", tags: ["x"], score: 1)
+  s = Person(name: r.name + "!", tags: r.tags, score: r.score)
+  if s.score > 5:
+    puts "big #{r}"
+  else:
+    puts "small #{s}"
+
+  # `t` is passed on in the arm that runs
+  t = Person(name: "cy", tags: [], score: 7)
+  u = Person(name: t.name, tags: t.tags, score: 0)
+  match u.score:
+    0 -> puts label(t)
+    _ -> puts label(u)
+
+  # fields given away in one branch, the whole value in the other,
+  # and a field read afterwards
+  v = Person(name: "di", tags: ["k"], score: 2)
+  w = if v.score > 1: Person(name: v.name, tags: v.tags, score: 9) else: v
+  puts w
+  puts v.name
+
+  # the last use, but `x.name` read twice in the statement
+  x = Person(name: "ed", tags: ["z"], score: 4)
+  y = Person(name: x.name.upcase, tags: x.tags + [x.name], score: x.score)
+  puts y

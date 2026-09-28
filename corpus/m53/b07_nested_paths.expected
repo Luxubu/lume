@@ -1,0 +1,11 @@
+["a", "b"]
+hi
+Outer(mid: Mid(inner: Inner(words: ["a", "b"], note: "hi"), n: 1), title: "t")
+Outer(mid: Mid(inner: Inner(words: ["c"], note: "u"), n: 3), title: "yo")
+Outer(mid: Mid(inner: Inner(words: ["d"], note: "ok"), n: 3), title: "okv")
+4
+["e", "f"]
+w
+zzy
+Outer(mid: Mid(inner: Inner(words: ["g"], note: "zz"), n: 5), title: "zzy")
+exit: 0

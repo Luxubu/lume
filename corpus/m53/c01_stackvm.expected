@@ -1,0 +1,8 @@
+acc=4 acc=12 acc=24 acc=24 final=124
+steps: 41, vars: {"acc": 24, "n": 0}
+changed: 3
+ACC=3 ACC=6 ACC=6 FINAL=106
+steps: 33, vars: {"acc": 6, "n": 0}
+Vm(stack: [33], vars: {"acc": 6, "n": 0}, out: "ACC=3 ACC=6 ACC=6 FINAL=106.", pc: 0, steps: 0)
+124
+exit: 0

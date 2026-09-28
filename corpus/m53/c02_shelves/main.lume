@@ -1,0 +1,69 @@
+# c02: generic containers across modules, holding text and structs,
+# emptied and rebuilt.
+# Probes: `Stack[Book]` and `Stack[Str]` from another module, built with
+# `Stack.empty`; `drain` handing a list out of a `var self` method; a list
+# walked by `for` and read again afterwards; records rebuilt field by field
+# (`retag`) and pushed back; a generic method with its own parameter
+# (`Box[T].apply[U]`) chained twice; `Stack[cell.Box[Str]]` drained inside
+# a loop that grows text with `acc = acc + ...`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 3
+# 0
+# Some("Dune")
+# Some(["read"])
+# ULYSSES,EMMA,DUNE
+# 0
+# b'': 300 pages
+# Ulysses []
+# YY': yyyy;X': xx;
+# 0
+
+import kit.stack.Stack
+import kit.cell
+
+struct Book:
+  title: Str
+  tags: [Str]
+  pages: Int
+
+def retag(b: Book, tag: Str) -> Book = Book(title: b.title, tags: b.tags + [tag], pages: b.pages)
+
+def main:
+  var shelf: Stack[Book] = Stack.empty
+  for (i, t) in ["Dune", "Emma", "Ulysses"].enumerate:
+    shelf.push(Book(title: t, tags: [], pages: (i + 1) * 100))
+  puts shelf.size
+
+  # empty it, then rebuild it from new records made from the old ones
+  books = shelf.drain
+  puts shelf.size
+  for b in books:
+    shelf.push(retag(b, "read"))
+  puts shelf.peek.map(_.title)
+  puts shelf.peek.map(_.tags)
+
+  # pop every book, keep only its title
+  var titles: Stack[Str] = Stack.empty
+  while shelf.size > 0:
+    match shelf.pop:
+      Some(b) -> titles.push(b.title.upcase)
+      None -> ()
+  puts titles.drain.join(",")
+  puts titles.size
+
+  # `books` was walked above and is still whole
+  bx = cell.Box(item: books.at(0), label: "b")
+  pages = bx.apply { |b| b.pages }
+  words = pages.apply { |n| "#{n} pages" }
+  puts words.show
+  puts "#{bx.item.title} #{bx.item.tags}"
+
+  var boxes: Stack[cell.Box[Str]] = Stack.empty
+  for t in ["x", "yy"]:
+    boxes.push(cell.Box(item: t, label: t.upcase))
+  var acc = ""
+  for bb in boxes.drain:
+    acc = acc + bb.apply { |s| s.repeat(2) }.show + ";"
+  puts acc
+  puts boxes.size

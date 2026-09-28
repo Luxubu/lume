@@ -1,0 +1,7 @@
+[package]
+name = "report"
+version = "0.1.0"
+
+[dependencies]
+grid = { path = "deps/grid" }
+counts = { path = "deps/counts" }

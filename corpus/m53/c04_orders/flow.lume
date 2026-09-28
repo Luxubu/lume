@@ -1,0 +1,28 @@
+# flow.lume — each function takes a state apart and builds the next one.
+# A state an event does not apply to is handed back unchanged.
+
+import money
+import model.Line
+import model.Status
+
+pub def add(s: Status, line: Line) -> Status:
+  match s:
+    Draft(ls) -> Draft(ls + [line])
+    other -> other
+
+pub def place(s: Status) -> Status:
+  match s:
+    Draft(ls) if ls.empty? -> Cancelled("empty", money.zero)
+    Draft(ls) -> Placed(ls, money.sum(ls.map(_.cost).to_list))
+    other -> other
+
+pub def ship(s: Status, n: Int) -> Status:
+  match s:
+    Placed(ls, t) -> Shipped("T#{n}-#{ls.len}", t)
+    other -> other
+
+pub def cancel(s: Status, why: Str) -> Status:
+  match s:
+    Draft(_) -> Cancelled(why, money.zero)
+    Placed(_, t) -> Cancelled(why, t)
+    other -> other

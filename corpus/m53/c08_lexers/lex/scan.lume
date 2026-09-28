@@ -1,0 +1,42 @@
+# lex/scan.lume — a scanner as a state machine. Its state is a struct that
+# is replaced for every character: `s = step(s, c)`.
+
+import lex.token.Token
+
+pub enum Mode:
+  Idle
+  InNum(acc: Int)
+  InWord(acc: Str)
+
+pub struct Scan:
+  mode: Mode
+  tokens: [Token]
+
+def flush(s: Scan) -> Scan:
+  match s.mode:
+    Idle -> s
+    InNum(n) -> Scan(mode: Idle, tokens: s.tokens + [Num(n)])
+    InWord(w) -> Scan(mode: Idle, tokens: s.tokens + [Word(w)])
+
+pub def step(s: Scan, c: Char) -> Scan:
+  if c.digit?:
+    d = c.code - 48
+    out = match s.mode:
+      InNum(n) -> Scan(mode: InNum(n * 10 + d), tokens: s.tokens)
+      _ -> Scan(mode: InNum(d), tokens: flush(s).tokens)
+    return out
+  if c.alpha?:
+    out = match s.mode:
+      InWord(w) -> Scan(mode: InWord(w + c), tokens: s.tokens)
+      _ -> Scan(mode: InWord(c.to_s), tokens: flush(s).tokens)
+    return out
+  if c.space?:
+    return flush(s)
+  Scan(mode: Idle, tokens: flush(s).tokens + [Sym(c.to_s)])
+
+pub def scan(text: Str) -> [Token]:
+  var s = Scan(mode: Idle, tokens: [])
+  for c in text.chars:
+    s = step(s, c)
+  s = flush(s)
+  s.tokens

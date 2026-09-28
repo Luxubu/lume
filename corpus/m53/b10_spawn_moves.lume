@@ -1,0 +1,65 @@
+# b10: values mentioned inside `spawn:` bodies: one local read by two
+# tasks and after them; a local copied into a task and replaced there by
+# a value built from it; a struct outside a loop whose fields a task in
+# each iteration builds on; a `var` replaced after a task captured it;
+# one-line tasks made in a block, all reading the same list.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# a+b
+# 2
+# ["a", "b"]
+# Lab
+# L
+# ann["x", "1"]
+# ann["x", "2"]
+# ann["x", "3"]
+# Person(name: "ann", tags: ["x"])
+# m!
+# m?
+# ["a1b", "a2b"]
+# ["a", "b"]
+
+struct Person:
+  name: Str
+  tags: [Str]
+
+async def main:
+  words = ["a", "b"]
+  t = spawn:
+    words.join("+")
+  u = spawn:
+    words.len
+  puts await t
+  puts await u
+  puts words
+
+  label = "L"
+  v = spawn:
+    var acc = label
+    for w in words:
+      acc = acc + w
+    acc
+  puts await v
+  puts label
+
+  p = Person(name: "ann", tags: ["x"])
+  var ts: [Task[Str]] = []
+  for i in 1..3:
+    tk = spawn:
+      q = Person(name: p.name, tags: p.tags + ["#{i}"])
+      "#{q.name}#{q.tags}"
+    ts.push(tk)
+  for line in await ts:
+    puts line
+  puts p
+
+  var msg = "m"
+  mt = spawn:
+    msg + "!"
+  msg = msg + "?"
+  puts await mt
+  puts msg
+
+  r = await (1..2).map { |k| spawn: words.join("#{k}") }.to_list
+  puts r
+  puts words

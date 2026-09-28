@@ -1,0 +1,11 @@
+HI!HI!
+up:HI | tail:HI! | x2:HI!HI!
+["+up", "+tail", "+x2"]
+0
+17
+-a-a-ab
+Cell(value: "GO!GO!", history: ["up", "tail", "x2"])
+YO!Y
+3
+Pipeline(stages: [Stage(name: "up", run: <block>), Stage(name: "tail", run: <block>), Stage(name: "x2", run: <block>)], log: ["+up", "+tail", "+x2"])
+exit: 0

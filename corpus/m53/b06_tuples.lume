@@ -1,0 +1,58 @@
+# b06: tuples taken apart and still needed, `enumerate` pairs kept as a
+# list and walked, a tuple replaced by one built from its own parts (once
+# and twice), `partition` destructured, a tuple inside a tuple.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ["a", "b"]
+# t
+# (["a", "b"], "t")
+# 0=p
+# 1=q
+# [(0, "p"), (1, "q")]
+# ["u"]
+# ["v", "w"]
+# ["u", "v", "w"]
+# ("y", "x")
+# ("xy", "y")
+# [("ann", 3)]
+# [("bo", 1)]
+# 2
+# ["v1"]
+# (("k", ["v1"]), 2)
+
+def split_at(xs: [Str], n: Int) -> ([Str], [Str]) = (xs.take(n).to_list, xs.skip(n).to_list)
+
+def main:
+  pair = (["a", "b"], "t")
+  (xs, s) = pair
+  puts xs
+  puts s
+  puts pair
+
+  ps = ["p", "q"].enumerate.to_list
+  for (i, w) in ps:
+    puts "#{i}=#{w}"
+  puts ps
+
+  letters = ["u", "v", "w"]
+  (front, back) = split_at(letters, 1)
+  puts front
+  puts back
+  puts letters
+
+  var t = ("x", "y")
+  t = (t.1, t.0)
+  puts t
+  t = (t.1 + t.0, t.0)
+  puts t
+
+  scores = [("ann", 3), ("bo", 1)]
+  (hi, lo) = scores.partition { |n, v| v > 2 }
+  puts hi
+  puts lo
+  puts scores.len
+
+  nest = (("k", ["v1"]), 2)
+  inner = nest.0
+  puts inner.1
+  puts nest

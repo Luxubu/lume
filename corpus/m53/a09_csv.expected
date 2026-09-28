@@ -1,0 +1,16 @@
+5 rows, 1 skipped
+| name | dept | salary |
+|---|---|---|
+| ann | eng | 120 |
+| cy | eng | 100 |
+| bo | ops | 90 |
+| di | ops | 95 |
+| ed | sales | 70 |
+dept,count,total,avg
+eng,2,220,110.0
+ops,2,185,92.5
+sales,1,70,70.0
+ann=132,cy=110,bo=94,di=99,ed=73
+120
+top: ann 132
+exit: 0

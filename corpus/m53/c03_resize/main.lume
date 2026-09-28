@@ -1,0 +1,43 @@
+# c03: an interface with a type parameter whose implementations build new
+# values from old, used through generic functions of another module.
+# Probes: `Resizable[T]` with a default (`twice`) that returns `T`; a `var`
+# list replaced by a generic call on itself, then by `filter ... .to_list`,
+# then by `+`; an item taken out with `.at(0)` and rebuilt; the same
+# functions on a second type made from text; defaults called in `_`
+# shorthand chains.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# a=2 b=3
+# a*2=8 b*2=12
+# 1
+# b*2=12 b*2*2=48
+# 240
+# ababab/ccc
+# abababababab=12 cccccc=6
+# cccccc=6
+# ab=2
+
+import geo.api
+import geo.shapes.Rect
+import geo.shapes.Word
+
+def main:
+  var rects = [Rect(w: 1, h: 2, label: "a"), Rect(w: 3, h: 1, label: "b")]
+  puts api.report(rects)
+  rects = api.grow_all(rects, 2)
+  puts api.report(rects)
+  rects = rects.filter { |r| r.area > 10 }.to_list
+  puts rects.len
+  big = rects.at(0).twice
+  rects = rects + [big]
+  puts api.report(rects)
+  puts rects.map(_.twice.area).sum
+
+  seed = ["ab", "c"].map { |t| Word(text: t) }.to_list
+  var words = seed
+  words = api.grow_all(words, 3)
+  puts words.map(_.text).join("/")
+  puts api.report(words.map(_.twice).to_list)
+  puts words.at(1).twice.line
+  # `seed` moved into `words` at its last use; a default on a fresh value
+  puts Word(text: "ab").line

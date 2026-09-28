@@ -1,0 +1,16 @@
+ax
+ay
+ab
+1
+["p", "q"]
+["p", "q"]
+2
+["p", "q", "r"]
+ann ["t"]
+ann ["t"]
+Person(name: "ann", tags: ["t"])
+a-b
+a+b
+[["k", "1"], ["k1"]]
+["k"]
+exit: 0

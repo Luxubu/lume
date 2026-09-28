@@ -1,0 +1,85 @@
+# a07_recursion: recursive functions that return lists, joined with `+`
+# (`leaves(l) + leaves(r)`, `[n] + collatz(..)`, `without + taken` where
+# `without` is also read by a block), a `var` list grown from two recursive
+# calls, and the results filtered and re-sorted into the same `var`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# [1, 2, 3, 4, 5]
+# 15
+# LL=1 LR=2 RL=3 RRL=4 RRR=5
+# 4
+# [0, 2, 4, 6, 8, 10]
+# 6 3 10 5 16 8 4 2 1
+# 9 steps, peak 16
+# [2, 4, 6, 8, 10, 16]
+# [[], ["c"], ["b"], ["b", "c"], ["a"], ["a", "c"], ["a", "b"], ["a", "b", "c"]]
+# 8
+# ["bc", "ac", "ab"]
+# abc
+
+enum Tree:
+  Leaf(value: Int)
+  Node(left: Tree, right: Tree)
+
+def leaves(t: Tree) -> [Int]:
+  match t:
+    Leaf(v) -> [v]
+    Node(l, r) -> leaves(l) + leaves(r)
+
+def paths(t: Tree, prefix: Str) -> [Str]:
+  match t:
+    Leaf(v) -> ["#{prefix}=#{v}"]
+    Node(l, r) ->
+      var out = paths(l, prefix + "L")
+      out = out + paths(r, prefix + "R")
+      out
+
+def depth(t: Tree) -> Int:
+  match t:
+    Leaf(_) -> 1
+    Node(l, r) -> 1 + depth(l).max(depth(r))
+
+def evens_upto(n: Int) -> [Int]:
+  if n <= 0:
+    return [0]
+  rest = evens_upto(n - 1)
+  if n % 2 == 0: rest + [n] else: rest
+
+def collatz(n: Int) -> [Int]:
+  if n == 1:
+    return [1]
+  next_n = if n % 2 == 0: n / 2 else: 3 * n + 1
+  [n] + collatz(next_n)
+
+def subsets(xs: [Str]) -> [[Str]]:
+  if xs.empty?:
+    return [xs]
+  head = xs.at(0)
+  rest = xs.skip(1).to_list
+  without = subsets(rest)
+  taken = without.map { |s| [head] + s }.to_list
+  without + taken
+
+def main:
+  tree = Node(Node(Leaf(1), Leaf(2)), Node(Leaf(3), Node(Leaf(4), Leaf(5))))
+  ls = leaves(tree)
+  puts ls
+  puts ls.sum
+  puts paths(tree, "").join(" ")
+  puts depth(tree)
+  puts evens_upto(10)
+
+  seq = collatz(6)
+  puts seq.join(" ")
+  puts "#{seq.len} steps, peak #{seq.max.or(0)}"
+  var evens = seq.filter(_.even?).to_list
+  evens = evens.sort
+  puts evens
+
+  letters = ["a", "b", "c"]
+  subs = subsets(letters)
+  puts subs
+  puts subs.len
+  pairs = subs.filter { |s| s.len == 2 }.map { |s| s.join("") }.to_list
+  puts pairs
+  puts letters.join("")

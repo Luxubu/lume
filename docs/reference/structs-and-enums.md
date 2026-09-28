@@ -201,6 +201,30 @@ def main:
   puts c.show    #=> hits=5
 ```
 
+Inside a `var self` method a field can be replaced whole, from itself or
+not, and its items changed in place with `for var`:
+
+```lume
+struct Line:
+  qty: Int
+
+struct Order:
+  lines: [Line]
+  log: [Str]
+
+  def restock(var self):
+    lines = lines.filter { |l| l.qty > 0 }.to_list
+    for var l in lines:
+      l.qty += 10
+    log.push("restocked")
+
+def main:
+  var o = Order(lines: [Line(qty: 1), Line(qty: 0), Line(qty: 2)], log: [])
+  o.restock
+  puts o.lines   #=> [Line(qty: 11), Line(qty: 12)]
+  puts o.log     #=> ["restocked"]
+```
+
 Without it, the assignment is refused where it happens:
 
 ```lume-bad

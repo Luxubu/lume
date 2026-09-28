@@ -1,0 +1,21 @@
+ann avg 91.7 (A)
+bo avg 72.3 (C)
+cy avg 84.7 (B)
+di avg 63.0 (F)
+0:ann:A
+1:bo:C
+2:cy:B
+3:di:F
+0:ann:A;1:bo:C;2:cy:B;3:di:F
+7
+ann avg 98.0 (A)
+bo avg 79.3 (C)
+cy avg 91.7 (A)
+di avg 70.0 (C)
+["ann", "cy"]
+363
+A: ann,cy
+C: bo,di
+[100, 100, 100]
+[100, 95, 99]
+exit: 0

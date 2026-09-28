@@ -1,0 +1,80 @@
+# b11: values handed to generic functions (one that gives its parameter
+# back twice, one that gives it back once), to an interface parameter, to
+# a bound, and into a `[Named]` list, then used again; `var self` methods
+# that read a field and then replace it, or replace a field by a value
+# built from it that names it twice.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# REX
+# ["ball"]
+# hi rex
+# ["ball"]
+# REX,FIDO
+# ["REX", "SPOT"]
+# Dog(call: "rex", toys: ["ball"])
+# ["start", "a"]
+# b
+# [3, 1, 2]
+# b
+# xb
+
+interface Named:
+  def name -> Str
+  def shout -> Str = name.upcase
+
+struct Dog:
+  call: Str
+  toys: [Str]
+
+  def name -> Str = call
+
+struct Log:
+  hits: [Str]
+  last: Str
+  items: [Int]
+
+  def record(var self, s: Str):
+    old = last
+    last = s
+    hits.push(old)
+
+  def rotate(var self):
+    items = items.skip(1).to_list + [items.at(0)]
+
+  def swap_out(var self, s: Str) -> Str:
+    was = last
+    last = s + was
+    was
+
+def twice[T](x: T) -> (T, T) = (x, x)
+
+def keep[T](xs: [T]) -> [T] = xs
+
+def hello(x: Named) -> Str = "hi #{x.name}"
+
+def loudest[T: Named](xs: [T]) -> Str = xs.map { |x| x.shout }.to_list.join(",")
+
+def main:
+  d = Dog(call: "rex", toys: ["ball"])
+  pair = twice(d)
+  puts pair.0.shout
+  puts d.toys
+  puts hello(d)
+  kept = keep(d.toys)
+  puts kept
+  puts loudest([d, Dog(call: "fido", toys: [])])
+  pack: [Named] = [d, Dog(call: "spot", toys: ["bone"])]
+  puts pack.map { |n| n.shout }.to_list
+  puts d
+
+  var lg = Log(hits: [], last: "start", items: [1, 2, 3])
+  lg.record("a")
+  lg.record("b")
+  puts lg.hits
+  puts lg.last
+  lg.rotate
+  lg.rotate
+  puts lg.items
+  got = lg.swap_out("x")
+  puts got
+  puts lg.last

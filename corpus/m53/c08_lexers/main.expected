@@ -1,0 +1,12 @@
+warning: `kinds` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/m53/c08_lexers/main.lume:34:3
+   |
+34 |   shared var kinds: {Str: Int} = {"num": 0, "word": 0, "sym": 0}
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+0: LET X '=' 12 '+' 30 -> 42
+1: GO 7 TIMES -> 7
+2: A 1 B 22 -> 23
+{"num": 5, "word": 6, "sym": 2}
+13 tokens, 13 counted
+exit: 0

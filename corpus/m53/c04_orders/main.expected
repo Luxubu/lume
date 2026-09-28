@@ -1,0 +1,13 @@
+1. draft(1)
+2. draft(2)
+3. placed(2, $14.49)
+4. shipped T4-2 $14.49
+5. shipped T4-2 $14.49
+Shipped(tracking: "T4-2", total: Money(cents: 1449))
+
+1. draft(1)
+2. placed(1, $5.00)
+3. cancelled: changed mind, refund $5.00
+1. cancelled: empty, refund $0.00
+$19.49
+exit: 0

@@ -357,7 +357,10 @@ async def main:
 ```
 
 A `shared var` list or map is changed the same way, with methods and
-assignments to a key: `seen.push(x)`, `counts[key] += 1`.
+assignments to a key: `seen.push(x)`, `counts[key] += 1`. None of this needs
+a task: outside `spawn:` a `shared var` is read, assigned (`hits = 0`),
+replaced by a value built from it (`seen = seen.filter { .. }.to_list`) and
+handed to a plain parameter like any `var`, each use taking the lock once.
 
 **`shared` without `var` is read-only.** It needs no lock, so it is cheap to
 hand to every task. Changing it is an error:

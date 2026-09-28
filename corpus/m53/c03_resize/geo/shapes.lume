@@ -1,0 +1,17 @@
+# geo/shapes.lume — two types that fit `api.Resizable` without naming it.
+
+pub struct Rect:
+  w: Int
+  h: Int
+  label: Str
+
+  def resized(k: Int) -> Rect = Rect(w: w * k, h: h * k, label: "#{label}*#{k}")
+  def area -> Int = w * h
+  def name -> Str = label
+
+pub struct Word:
+  text: Str
+
+  def resized(k: Int) -> Word = Word(text: text.repeat(k))
+  def area -> Int = text.len
+  def name -> Str = text

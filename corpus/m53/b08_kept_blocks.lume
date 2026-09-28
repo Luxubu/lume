@@ -1,0 +1,69 @@
+# b08: values captured by kept blocks and then replaced or given away
+# outside them; a kept block that hands back what it holds, called twice;
+# a parameter captured by a returned block; a list of kept blocks that
+# each build on the same captured list.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ax
+# ay
+# ab
+# 1
+# ["p", "q"]
+# ["p", "q"]
+# 2
+# ["p", "q", "r"]
+# ann ["t"]
+# ann ["t"]
+# Person(name: "ann", tags: ["t"])
+# a-b
+# a+b
+# [["k", "1"], ["k1"]]
+# ["k"]
+
+struct Person:
+  name: Str
+  tags: [Str]
+
+def joiner(parts: [Str]) -> (Str) -> Str = { |sep| parts.join(sep) }
+
+def main:
+  # captured, then replaced by a value built from it
+  var prefix = "a"
+  f: (Str) -> Str = { |s| prefix + s }
+  prefix = prefix + "b"
+  puts f("x")
+  puts f("y")
+  puts prefix
+
+  var seen = ["p"]
+  g: () -> Int = do
+    seen.len
+  seen = seen + ["q"]
+  puts g()
+  puts seen
+
+  # the block's whole result is what it captured: it must not give it away
+  h: () -> [Str] = do
+    seen
+  seen = seen + ["r"]
+  puts h()
+  puts h().len
+  puts seen
+
+  # captured, then its fields given away at what looks like its last use
+  p = Person(name: "ann", tags: ["t"])
+  show: () -> Str = do
+    "#{p.name} #{p.tags}"
+  q = Person(name: p.name, tags: p.tags)
+  puts show()
+  puts show()
+  puts q
+
+  j = joiner(["a", "b"])
+  puts j("-")
+  puts j("+")
+
+  base = ["k"]
+  steps: [(Int) -> [Str]] = [{ |n| base + ["#{n}"] }, { |n| base.map { |b| b + "#{n}" }.to_list }]
+  puts steps.map { |st| st(1) }.to_list
+  puts base

@@ -1,0 +1,62 @@
+# b09: `shared var` values whose fields and items are read and replaced:
+# a struct replaced by one built from its own fields, a `var self` method
+# that reads a field and then replaces it, a list replaced by a filter of
+# itself and then grown while walked, a map changed by key and replaced.
+# The tasks change `label` in an order the scheduler picks, so only what
+# does not depend on the order is printed. (The `shared var` warnings go
+# to standard error and are not part of the output.)
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# Box(items: ["a", "b"], label: "L")
+# 2
+# L!["a", "b", "Lc"]
+# ["y", "z"]
+# ["y", "z", "yy", "zz"]
+# 6
+# L!!!!
+# a
+# a
+# {"a": 2}
+
+struct Box:
+  items: [Str]
+  label: Str
+
+  def add(var self, s: Str):
+    items.push(label + s)
+    label = label + "!"
+
+def show(b: Box) -> Str = "#{b.label}#{b.items}"
+
+async def main:
+  shared var b = Box(items: ["a"], label: "L")
+  b = Box(items: b.items + ["b"], label: b.label)
+  puts b
+  n = b.items.len
+  puts n
+  b.add("c")
+  puts show(b)
+
+  shared var xs = ["x", "y", "z"]
+  xs = xs.filter { |s| s != "x" }.to_list
+  puts xs
+  for s in xs:
+    xs.push(s + s)
+  puts xs
+
+  var ts: [Task[()]] = []
+  for i in 1..3:
+    t = spawn:
+      b.add("#{i}")
+    ts.push(t)
+  await ts
+  puts b.items.len
+  puts b.label
+  first = b.items.at(0)
+  puts first
+  puts b.items.at(0)
+
+  shared var counts: {Str: Int} = {"a": 1}
+  counts["a"] += 1
+  counts = counts.filter { |k, v| v > 1 }
+  puts counts

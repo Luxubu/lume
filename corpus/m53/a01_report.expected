@@ -1,0 +1,15 @@
+REGION  ITEM  QTY    TOTAL
+north   pen    10    15.00
+south   pad     3    12.75
+--------------------------
+north   ink     2    19.98
+east    pen     7    10.50
+--------------------------
+south   pen     1     1.50
+grand total: 59.73
+lines: 9
+chars in first line: 26
+5
+north=34.98;south=14.25;east=10.50;
+Some(("north", 3498))
+exit: 0

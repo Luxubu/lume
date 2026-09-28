@@ -1,0 +1,16 @@
+# counts/lib.lume — a generic tally, and a generic bucket that grows by
+# building a new one.
+
+pub def tally[T: Hashable](xs: [T]) -> {T: Int}:
+  var m: {T: Int} = {}
+  for x in xs:
+    m[x] = m[x].or(0) + 1
+  m
+
+pub struct Bucket[T]:
+  name: Str
+  items: [T]
+
+  def adding(x: T) -> Bucket[T] = Bucket(name: name, items: items + [x])
+
+  def size -> Int = items.len

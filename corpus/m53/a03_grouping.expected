@@ -1,0 +1,13 @@
+oslo: 3 orders, 185
+rome: 2 orders, 55
+lima: 1 orders, 300
+{"ann": 180, "bo": 55, "cy": 300, "di": 5}
+{"ann": 180, "bo": 55, "cy": 300}
+ann & cy
+3
+{"oslo": {"ann", "di"}, "lima": {"cy"}}
+1 cy 300
+2 ann 180
+3 bo 55
+3
+exit: 0

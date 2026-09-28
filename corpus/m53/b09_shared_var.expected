@@ -1,0 +1,29 @@
+warning: `b` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/m53/b09_shared_var.lume:32:3
+   |
+32 |   shared var b = Box(items: ["a"], label: "L")
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+warning: `xs` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/m53/b09_shared_var.lume:40:3
+   |
+40 |   shared var xs = ["x", "y", "z"]
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+warning: `counts` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/m53/b09_shared_var.lume:59:3
+   |
+59 |   shared var counts: {Str: Int} = {"a": 1}
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+Box(items: ["a", "b"], label: "L")
+2
+L!["a", "b", "Lc"]
+["y", "z"]
+["y", "z", "yy", "zz"]
+6
+L!!!!
+a
+a
+{"a": 2}
+exit: 0

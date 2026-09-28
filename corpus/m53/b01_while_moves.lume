@@ -1,0 +1,61 @@
+# b01: a value moved in one statement and read again: by a `while`
+# condition, by the next time round a `for`, after a `break`, and by a
+# condition that reads a list replaced inside an `if` in the body.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# abcd
+# []
+# 0: x+yy+zzz
+# 1: x+yy+zzz
+# 2: x+yy+zzz
+# 3
+# ["q", "1"]
+# ["q", "2"]
+# ["q"]
+# ["m", "n", "m", "n"]
+# ["m", "n"]
+# 3 left: ["c", "d", "e"]
+
+def main:
+  # replaced in the body, read by the condition
+  var parts = ["a", "b", "c", "d"]
+  var out = ""
+  while parts.len > 0:
+    out = out + parts.at(0)
+    parts = parts.skip(1).to_list
+  puts out
+  puts parts
+
+  # given to a new name in the body, read by the condition next time round
+  words = ["x", "yy", "zzz"]
+  var round = 0
+  while words.len > round:
+    snapshot = words
+    puts "#{round}: #{snapshot.join("+")}"
+    round += 1
+  puts words.len
+
+  # bound outside a `for`, built on inside it
+  base = ["q"]
+  for i in 1..2:
+    grown = base + ["#{i}"]
+    puts grown
+  puts base
+
+  # used by the iteration that breaks and by every one before it
+  q = ["m", "n"]
+  var taken: [Str] = []
+  while true:
+    taken = taken + q
+    break if taken.len >= 4
+  puts taken
+  puts q
+
+  # replaced inside an `if` inside the loop; the condition reads it twice
+  var queue = ["a", "b", "c", "d", "e"]
+  var steps = 0
+  while queue.len > 3 or steps == 0:
+    if queue.at(0) < "c":
+      queue = queue.skip(1).to_list
+    steps += 1
+  puts "#{queue.len} left: #{queue}"

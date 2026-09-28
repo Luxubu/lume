@@ -180,7 +180,8 @@ puts short          #=> ["fig"]
 puts words          #=> ["pear", "fig"]
 ```
 
-A list moves when it is a local of your own and one of these holds:
+A list moves when it is a local of your own (bound with `=`, `var`, a
+`for`, or taken out of a tuple) and one of these holds:
 
 - nothing after the statement uses it;
 - the statement replaces it, as in `rows = rows.filter { .. }.to_list`,
@@ -197,7 +198,9 @@ of copying it.
 
 - `acc = acc + w` writes `w` onto the end of `acc`. It does not build a new
   string each time round a loop, so building text piece by piece costs as
-  much as the text is long, not its square.
+  much as the text is long, not its square. Everything on the right is
+  still read before `acc` changes: in `acc = acc + w + "#{acc.len}"`,
+  `acc.len` is the old length.
 - `m = m.filter { .. }` hands the map's entries over, and so does the same
   on a set.
 - A struct nothing needs afterwards gives its fields away one by one, as a

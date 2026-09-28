@@ -1,0 +1,8 @@
+ann/4
+["a", "b"]
+small Person(name: "bo!", tags: ["x"], score: 1)
+cy/7
+Person(name: "di", tags: ["k"], score: 9)
+di
+Person(name: "ED", tags: ["z", "ed"], score: 4)
+exit: 0

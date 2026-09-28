@@ -7602,7 +7602,14 @@ impl Gen {
                 }
                 false
             }
-            ExprKind::TupleIndex { recv, .. } => self.is_borrowed_place(recv) || self.is_borrowed_ident(recv),
+            // a part of a local tuple is taken out only when the tuple is
+            // finished with; otherwise it is read in place, like a field
+            ExprKind::TupleIndex { recv, .. } => {
+                self.is_borrowed_place(recv)
+                    || self.is_borrowed_ident(recv)
+                    || matches!(&recv.kind, ExprKind::Ident(n) if self.lookup(n).is_some()
+                        && !(self.dead_now(n) && self.stmt_stack.last().map(|st| mention_count(st, n) == 1).unwrap_or(false)))
+            }
             _ => false,
         }
     }

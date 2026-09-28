@@ -1,0 +1,70 @@
+# a04_pipeline: a pipeline of structs, each stage a new struct built from
+# the fields of the one before (Raw -> Parsed -> Priced -> Label). A parsed
+# value is handed to a function and then read again; a struct is rebuilt
+# from its own fields and then read again (so it cannot give them away);
+# the last one is rebuilt with nothing reading it afterwards.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# apple from shop
+# kale from farm
+# fig from shop
+# Priced(name: "APPLE", qty: 3, tags: ["fruit", "red", "sale"], unit: 40, total: 120)
+# apple
+# 570
+# applex3,kalex2,figx10
+# apple: 120
+# kale: 50
+# Label(text: "fig: 400!", tags: ["fruit"])
+
+struct Raw:
+  line: Str
+  source: Str
+
+struct Parsed:
+  name: Str
+  qty: Int
+  tags: [Str]
+  source: Str
+
+struct Priced:
+  name: Str
+  qty: Int
+  tags: [Str]
+  unit: Int
+  total: Int
+
+struct Label:
+  text: Str
+  tags: [Str]
+
+def parse(r: Raw) -> Parsed:
+  parts = r.line.split(";").map { |p| p.trim }.to_list
+  Parsed(name: parts.at(0), qty: parts.at(1).to_int.or(0), tags: parts.at(2).split(",").to_list, source: r.source)
+
+def price(p: Parsed, unit: Int) -> Priced:
+  Priced(name: p.name, qty: p.qty, tags: p.tags, unit: unit, total: p.qty * unit)
+
+def main:
+  raws = [Raw("apple ; 3 ; fruit,red", "shop"), Raw("kale;2;veg,green", "farm"), Raw(" fig;10;fruit", "shop")]
+  var out: [Priced] = []
+  for r in raws:
+    p = parse(r)
+    unit = if p.tags.contains?("fruit"): 40 else: 25
+    q = price(p, unit)
+    puts "#{p.name} from #{p.source}"
+    out.push(q)
+
+  first = out.at(0)
+  renamed = Priced(name: first.name.upcase, qty: first.qty, tags: first.tags + ["sale"], unit: first.unit, total: first.total)
+  puts renamed
+  puts first.name
+  puts out.map(_.total).sum
+
+  summary = out.map { |q| "#{q.name}x#{q.qty}" }.join(",")
+  puts summary
+  labels = out.map { |q| Label(text: "#{q.name}: #{q.total}", tags: q.tags) }.to_list
+  for l in labels where l.tags.len > 1:
+    puts l.text
+  last = labels.at(2)
+  final = Label(text: last.text + "!", tags: last.tags)
+  puts final

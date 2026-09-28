@@ -1,0 +1,59 @@
+# b07: nested structs, `a.b.c`. A deep field taken while the root is
+# printed later; every leaf given away once into a new struct; an inner
+# struct given away whole while a field under it is read in the same
+# statement; two overlapping paths bound one after another; a field of a
+# `var` replaced by a value built from a deep field and itself.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ["a", "b"]
+# hi
+# Outer(mid: Mid(inner: Inner(words: ["a", "b"], note: "hi"), n: 1), title: "t")
+# Outer(mid: Mid(inner: Inner(words: ["c"], note: "u"), n: 3), title: "yo")
+# Outer(mid: Mid(inner: Inner(words: ["d"], note: "ok"), n: 3), title: "okv")
+# 4
+# ["e", "f"]
+# w
+# zzy
+# Outer(mid: Mid(inner: Inner(words: ["g"], note: "zz"), n: 5), title: "zzy")
+
+struct Inner:
+  words: [Str]
+  note: Str
+
+struct Mid:
+  inner: Inner
+  n: Int
+
+struct Outer:
+  mid: Mid
+  title: Str
+
+def main:
+  o = Outer(mid: Mid(inner: Inner(words: ["a", "b"], note: "hi"), n: 1), title: "t")
+  w = o.mid.inner.words
+  puts w
+  puts o.mid.inner.note
+  puts o
+
+  # every leaf read once, nothing after: all of it can move
+  p = Outer(mid: Mid(inner: Inner(words: ["c"], note: "yo"), n: 2), title: "u")
+  q = Outer(mid: Mid(inner: Inner(words: p.mid.inner.words, note: p.title), n: p.mid.n + 1), title: p.mid.inner.note)
+  puts q
+
+  # `r.mid` whole, and a field under it, in one statement
+  r = Outer(mid: Mid(inner: Inner(words: ["d"], note: "ok"), n: 3), title: "v")
+  s = Outer(mid: r.mid, title: r.mid.inner.note + r.title)
+  puts s
+
+  # a path, then a longer path through it, then a sibling
+  x = Outer(mid: Mid(inner: Inner(words: ["e", "f"], note: "no"), n: 4), title: "w")
+  m = x.mid
+  i = x.mid.inner
+  puts m.n
+  puts i.words
+  puts x.title
+
+  var z = Outer(mid: Mid(inner: Inner(words: ["g"], note: "zz"), n: 5), title: "y")
+  z.title = z.mid.inner.note + z.title
+  puts z.title
+  puts z

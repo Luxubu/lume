@@ -1,0 +1,75 @@
+# a09_csv: CSV text parsed into structs (a list pattern on `split(",")`, a
+# tuple of the rows and a count handed back), the destructured list
+# re-sorted into itself, a markdown table and a CSV summary built up as
+# text, and a new list of structs built from the old one's fields while the
+# old one is still read afterwards.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 5 rows, 1 skipped
+# | name | dept | salary |
+# |---|---|---|
+# | ann | eng | 120 |
+# | cy | eng | 100 |
+# | bo | ops | 90 |
+# | di | ops | 95 |
+# | ed | sales | 70 |
+# dept,count,total,avg
+# eng,2,220,110.0
+# ops,2,185,92.5
+# sales,1,70,70.0
+# ann=132,cy=110,bo=94,di=99,ed=73
+# 120
+# top: ann 132
+
+struct Row:
+  name: Str
+  dept: Str
+  salary: Int
+
+def parse_rows(text: Str) -> ([Row], Int):
+  var rows: [Row] = []
+  var skipped = 0
+  for (i, line) in text.lines.enumerate:
+    next if i == 0
+    match line.split(","):
+      [name, dept, sal] ->
+        rows.push(Row(name: name.trim, dept: dept.trim, salary: sal.trim.to_int.or(0)))
+      _ -> skipped += 1
+  (rows, skipped)
+
+def main:
+  data = """
+    name,dept,salary
+    ann,eng,120
+    bo,ops,90
+    broken line
+    cy,eng,100
+    di,ops,95
+    ed,sales,70
+    """
+  (rows, skipped) = parse_rows(data)
+  puts "#{rows.len} rows, #{skipped} skipped"
+
+  rows = rows.sort_by { |r| r.dept }
+  var md = "| name | dept | salary |\n|---|---|---|\n"
+  for r in rows:
+    md = md + "| #{r.name} | #{r.dept} | #{r.salary} |\n"
+  md = md.trim_right
+  puts md
+
+  var csv = "dept,count,total,avg"
+  groups = rows.group_by { |r| r.dept }
+  for dept, members in groups:
+    total = members.map(_.salary).sum
+    avg = total.to_float / members.len.to_float
+    csv = csv + "\n#{dept},#{members.len},#{total},#{avg.decimals(1)}"
+  puts csv
+
+  var raised: [Row] = []
+  for r in rows:
+    pct = if r.dept == "eng": 10 else: 5
+    raised.push(Row(name: r.name, dept: r.dept, salary: r.salary + r.salary * pct / 100))
+  puts raised.map { |r| "#{r.name}=#{r.salary}" }.join(",")
+  puts rows.at(0).salary
+  best = raised.max_by { |r| r.salary }.or(rows.at(0))
+  puts "top: #{best.name} #{best.salary}"

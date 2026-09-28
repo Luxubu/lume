@@ -1,0 +1,89 @@
+# a06_inventory: a small inventory, a struct holding two lists. `var self`
+# methods replace a list field with one built from it
+# (`items = items.map { .. }.to_list`, `items = items.filter { .. }.to_list`)
+# and read it again on the next line; an argument is pushed into the list
+# and then read again, by the method and by the caller.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 0:a1=14 1:b2=5
+# true
+# false
+# false
+# 0:a1=14 1:b2=0
+# 0:a1=14
+# received washer
+# Some(Item(sku: "c3", name: "washer", qty: 7))
+# 1 new a1
+# 2 new b2
+# 3 restock a1 10->14
+# 4 ship b2 5
+# 5 short a1 20
+# 6 short c3 1
+# 7 dropped 1
+# 8 new c3
+# ["bolt", "washer"]
+# 2
+
+struct Item:
+  sku: Str
+  name: Str
+  qty: Int
+
+struct Inventory:
+  items: [Item]
+  log: [Str]
+
+  def find(sku: Str) -> Item? = items.find { |i| i.sku == sku }
+
+  def receive(var self, it: Item):
+    match find(it.sku):
+      Some(old) ->
+        items = items.map { |i| if i.sku == it.sku: Item(sku: i.sku, name: i.name, qty: i.qty + it.qty) else: i }.to_list
+        log.push("restock #{it.sku} #{old.qty}->#{old.qty + it.qty}")
+      None ->
+        items.push(it)
+        log.push("new #{it.sku}")
+
+  def ship(var self, sku: Str, n: Int) -> Bool:
+    match find(sku):
+      Some(old) if old.qty >= n ->
+        items = items.map { |i| if i.sku == sku: Item(i.sku, i.name, i.qty - n) else: i }.to_list
+        log.push("ship #{sku} #{n}")
+        true
+      _ ->
+        log.push("short #{sku} #{n}")
+        false
+
+  def drop_empty(var self):
+    before = items.len
+    items = items.filter { |i| i.qty > 0 }.to_list
+    log.push("dropped #{before - items.len}")
+
+  def report -> Str:
+    var s = ""
+    for (i, it) in items.enumerate:
+      s = s + "#{i}:#{it.sku}=#{it.qty} "
+    s.trim
+
+def main:
+  var inv = Inventory(items: [], log: [])
+  inv.receive(Item("a1", "bolt", 10))
+  inv.receive(Item("b2", "nut", 5))
+  inv.receive(Item("a1", "bolt", 4))
+  puts inv.report
+  puts inv.ship("b2", 5)
+  puts inv.ship("a1", 20)
+  puts inv.ship("c3", 1)
+  puts inv.report
+  inv.drop_empty
+  puts inv.report
+
+  item = Item("c3", "washer", 7)
+  inv.receive(item)
+  puts "received #{item.name}"
+  puts inv.find("c3")
+  for (i, entry) in inv.log.enumerate:
+    puts "#{i + 1} #{entry}"
+  names = inv.items.map(_.name).to_list
+  puts names
+  puts inv.items.len

@@ -166,10 +166,11 @@ for f in examples/fmt/*.lume; do
 done
 
 # The review corpus: real-user programs. A leaked rustc error is never accepted.
-for f in corpus/*.lume corpus/edge/*.lume corpus/m17/*.lume corpus/m18/*.lume corpus/m18/mod1/main.lume corpus/m26/*.lume corpus/m28/*.lume corpus/m30/*/main.lume corpus/m36/*.lume corpus/m36/*/main.lume corpus/m42/*.lume corpus/m42/*/main.lume corpus/m45/*.lume corpus/m45/*/main.lume corpus/m49/*/app/main.lume; do
+for f in corpus/*.lume corpus/edge/*.lume corpus/m17/*.lume corpus/m18/*.lume corpus/m18/mod1/main.lume corpus/m26/*.lume corpus/m28/*.lume corpus/m30/*/main.lume corpus/m36/*.lume corpus/m36/*/main.lume corpus/m42/*.lume corpus/m42/*/main.lume corpus/m45/*.lume corpus/m45/*/main.lume corpus/m49/*/app/main.lume corpus/m53/*.lume corpus/m53/*/main.lume; do
   name="corpus/${f#corpus/}"; name=${name%.lume}
   case "$f" in corpus/m30/*|corpus/m36/*/main.lume|corpus/m42/*/main.lume|corpus/m45/*/main.lume) name="${f%/main.lume}" ;; esac
   case "$f" in corpus/m49/*) name="${f%/app/main.lume}" ;; esac
+  case "$f" in corpus/m53/*/main.lume) name="${f%/main.lume}" ;; esac
   exp="${f%.lume}.expected"
   out=$("$LUME" run "$f" 2>&1); code=$?
   if printf '%s' "$out" | grep -q "generated Rust did not compile"; then
@@ -182,7 +183,7 @@ exit: $code"
   fi
 done
 rm -rf corpus/.lume corpus/edge/.lume corpus/m17/.lume corpus/m18/.lume corpus/m18/mod1/.lume corpus/m26/.lume corpus/m26/mod/.lume corpus/m28/.lume
-rm -rf corpus/m30/*/.lume corpus/m30/*/*/.lume corpus/m36/.lume corpus/m36/*/.lume corpus/m36/*/*/.lume corpus/m42/.lume corpus/m42/*/.lume corpus/m42/*/*/.lume corpus/m45/.lume corpus/m45/*/.lume corpus/m45/*/*/.lume corpus/m49/*/*/.lume
+rm -rf corpus/m30/*/.lume corpus/m30/*/*/.lume corpus/m36/.lume corpus/m36/*/.lume corpus/m36/*/*/.lume corpus/m42/.lume corpus/m42/*/.lume corpus/m42/*/*/.lume corpus/m45/.lume corpus/m45/*/.lume corpus/m45/*/*/.lume corpus/m49/*/*/.lume corpus/m53/.lume corpus/m53/*/.lume corpus/m53/*/*/.lume corpus/m53/*/*/*/.lume
 
 # The formatter must be idempotent and must not change what a program means.
 tmp=$(mktemp -d)

@@ -1,0 +1,78 @@
+# b12: an early `return` in the middle: a local handed back from inside a
+# loop that goes on to build on it; a local handed back from one `if` and
+# read by the ones after; a set read by the `return` inside a loop and by
+# the last line; a field bound to a name that one path gives away and the
+# other reads twice; a `return Error` before a `?` and after a `split`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ["0", "1"]
+# ["0", "1", "2", "3", "4", "end"]
+# a
+# x +2 ["x", "y", "z"]
+# none
+# dup a after 2
+# none in {"a", "b"}
+# Person(name: "AB", tags: [])
+# Person(name: "abab", tags: ["t", "ab"])
+# Error("too many: 3")
+# Error("`x` is not an integer")
+# Ok("4 of 4|5")
+
+struct Person:
+  name: Str
+  tags: [Str]
+
+def build(n: Int) -> [Str]:
+  var acc: [Str] = []
+  var i = 0
+  while i < 5:
+    if i == n:
+      return acc
+    acc = acc + ["#{i}"]
+    i += 1
+  acc + ["end"]
+
+def summary(raw: [Str]) -> Str:
+  words = raw.filter { |w| not w.empty? }.to_list
+  if words.len == 0:
+    return "none"
+  if words.len == 1:
+    return words.at(0)
+  first = words.at(0)
+  rest = words.skip(1).to_list
+  "#{first} +#{rest.len} #{words}"
+
+def first_dup(xs: [Str]) -> Str:
+  var seen: {Str} = {}
+  for x in xs:
+    if seen.contains?(x):
+      return "dup #{x} after #{seen.len}"
+    seen.add(x)
+  "none in #{seen}"
+
+def rename(p: Person, loud: Bool) -> Person:
+  n = p.name
+  if loud:
+    return Person(name: n.upcase, tags: p.tags)
+  Person(name: n + n, tags: p.tags + [n])
+
+def pick(raw: Str) -> Str or Error:
+  parts = raw.split(",").to_list
+  if parts.len > 2:
+    return Error("too many: #{parts.len}")
+  a = parts.at(0).to_int?
+  "#{a} of #{parts.join("|")}"
+
+def main:
+  puts build(2)
+  puts build(9)
+  puts summary(["", "a"])
+  puts summary(["x", "", "y", "z"])
+  puts summary([""])
+  puts first_dup(["a", "b", "a"])
+  puts first_dup(["a", "b"])
+  puts rename(Person(name: "ab", tags: []), true)
+  puts rename(Person(name: "ab", tags: ["t"]), false)
+  puts pick("1,2,3")
+  puts pick("x")
+  puts pick("4,5")

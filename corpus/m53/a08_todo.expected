@@ -1,0 +1,11 @@
+1 2 3
+[~] 1 write docs #work
+[ ] 2 buy milk #home #shop
+[x] 3 fix bug #work #urgent
+2
+buy milk | write docs
+{"work": [1, 3], "home": [2], "shop": [2], "urgent": [3]}
+work:2 home shop urgent
+done: ["fix bug"]
+4
+exit: 0

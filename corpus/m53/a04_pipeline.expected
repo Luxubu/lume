@@ -1,0 +1,11 @@
+apple from shop
+kale from farm
+fig from shop
+Priced(name: "APPLE", qty: 3, tags: ["fruit", "red", "sale"], unit: 40, total: 120)
+apple
+570
+applex3,kalex2,figx10
+apple: 120
+kale: 50
+Label(text: "fig: 400!", tags: ["fruit"])
+exit: 0

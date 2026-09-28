@@ -1,0 +1,89 @@
+# c06: kept blocks stored in structs, transforming values; structs holding
+# blocks rebuilt by methods that return new ones.
+# Probes: `p = p.then(...)` where `then` builds a new `Pipeline` from its
+# own list of `Stage`s (each holding a block) plus one; a block field
+# called like a method in a loop that replaces `cur`; blocks returned from
+# functions and composed in a loop (`whole = compose(whole, f)`); a map of
+# blocks looked up and called inside `n = match ...`; a record rebuilt each
+# step from a stage's block (`c = step(c, s)`); a block that copied a local
+# in when it was made; a struct holding blocks printed.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# HI!HI!
+# up:HI | tail:HI! | x2:HI!HI!
+# ["+up", "+tail", "+x2"]
+# 0
+# 17
+# -a-a-ab
+# Cell(value: "GO!GO!", history: ["up", "tail", "x2"])
+# YO!Y
+# 3
+# Pipeline(stages: [Stage(name: "up", run: <block>), Stage(name: "tail", run: <block>), Stage(name: "x2", run: <block>)], log: ["+up", "+tail", "+x2"])
+
+struct Stage:
+  name: Str
+  run: (Str) -> Str
+
+struct Pipeline:
+  stages: [Stage]
+  log: [Str]
+
+  def then(s: Stage) -> Pipeline = Pipeline(stages: stages + [s], log: log + ["+#{s.name}"])
+
+  def apply(input: Str) -> (Str, [Str]):
+    var cur = input
+    var trail: [Str] = []
+    for s in stages:
+      cur = s.run(cur)
+      trail.push("#{s.name}:#{cur}")
+    (cur, trail)
+
+struct Cell:
+  value: Str
+  history: [Str]
+
+def suffix(tail: Str) -> (Str) -> Str = { |s| s + tail }
+
+def times(n: Int) -> (Str) -> Str = { |s| s.repeat(n) }
+
+def compose(f: (Str) -> Str, g: (Str) -> Str) -> (Str) -> Str = { |x| g(f(x)) }
+
+def step(c: Cell, st: Stage) -> Cell = Cell(value: st.run(c.value), history: c.history + [st.name])
+
+def main:
+  base = Pipeline(stages: [], log: [])
+  shout = Stage(name: "up", run: { |s| s.upcase })
+  var p = base.then(shout)
+  p = p.then(Stage("tail", suffix("!")))
+  p = p.then(Stage("x2", times(2)))
+  (out, trail) = p.apply("hi")
+  puts out
+  puts trail.join(" | ")
+  puts p.log
+  puts base.stages.len
+
+  rules: {Str: (Int) -> Int} = {"inc": { |n| n + 1 }, "dbl": { |n| n * 2 }}
+  var n = 3
+  for key in ["inc", "dbl", "dbl", "inc", "nope"]:
+    n = match rules[key]:
+      Some(f) -> f(n)
+      None -> n
+  puts n
+
+  steps: [(Str) -> Str] = [suffix("a"), times(3), suffix("b")]
+  var whole: (Str) -> Str = { |s| s }
+  for f in steps:
+    whole = compose(whole, f)
+  puts whole("-")
+
+  var c = Cell("go", [])
+  for s in p.stages:
+    c = step(c, s)
+  puts c
+
+  limit = 4
+  short = p.then(Stage("clip", { |s| s[0...limit] }))
+  r2 = short.apply("yo")
+  puts r2.0
+  puts p.stages.len
+  puts p

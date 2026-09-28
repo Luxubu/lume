@@ -1,0 +1,56 @@
+# b04: the same field read twice in one statement in different ways:
+# given away and measured, given away and read through a method, given
+# away and read by a function taking the whole struct, read inside a
+# block and outside it, and a list field indexed and given away.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# Person(name: "di", tags: ["t1", "DI"], score: 3)
+# (["a"], 1)
+# abba
+# ("fo", "FO")
+# gi: gi/6 ["g"]
+# Bag(items: [2, 3], first: 1)
+# Person(name: "h1", tags: ["h1", "h2"], score: 2)
+
+struct Person:
+  name: Str
+  tags: [Str]
+  score: Int
+
+  def shout -> Str = name.upcase
+
+struct Bag:
+  items: [Int]
+  first: Int
+
+def label(p: Person) -> Str = "#{p.name}/#{p.score}"
+
+def main:
+  a = Person(name: "di", tags: ["t1"], score: 2)
+  b = Person(name: a.name, tags: a.tags + [a.name.upcase], score: a.tags.len + a.score)
+  puts b
+
+  c = Person(name: "ab", tags: ["a"], score: 0)
+  pair = (c.tags, c.tags.len)
+  puts pair
+  puts c.name + c.name.reverse
+
+  # the field, and a method that reads the same field
+  d = Person(name: "fo", tags: [], score: 5)
+  both = (d.name, d.shout)
+  puts both
+
+  # a field, the whole struct, and another field, in one interpolation
+  e = Person(name: "gi", tags: ["g"], score: 6)
+  line = "#{e.name}: #{label(e)} #{e.tags}"
+  puts line
+
+  # the list field read inside a block, then indexed outside it
+  s = Bag(items: [1, 2, 1, 3], first: 0)
+  k = Bag(items: s.items.filter { |x| x != s.items.at(0) }.to_list, first: s.items.at(0))
+  puts k
+
+  # an item of the list field, then the list field, then its length
+  f = Person(name: "hu", tags: ["h1", "h2"], score: 1)
+  g = Person(name: f.tags.at(0), tags: f.tags, score: f.tags.len)
+  puts g

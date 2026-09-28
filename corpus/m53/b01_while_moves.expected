@@ -1,0 +1,13 @@
+abcd
+[]
+0: x+yy+zzz
+1: x+yy+zzz
+2: x+yy+zzz
+3
+["q", "1"]
+["q", "2"]
+["q"]
+["m", "n", "m", "n"]
+["m", "n"]
+3 left: ["c", "d", "e"]
+exit: 0

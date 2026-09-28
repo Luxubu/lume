@@ -1,0 +1,12 @@
+ann,cy,di,ed,fay
+di:40 ann:30 cy:25 ed:25 fay:8
+4 of 6 left, next cut 25
+leader di (blue)
+1. di  blue  40
+2. ed  green 25
+3. ann red   30
+4. cy  red   25
+[Player(name: "ed", team: "green", score: 25, active: true), Player(name: "ann", team: "red", score: 30, active: true), Player(name: "cy", team: "red", score: 25, active: true)]
+blue
+79
+exit: 0

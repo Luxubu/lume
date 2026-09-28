@@ -1,0 +1,14 @@
+north pen     3
+south ink     12
+north pad     1
+east  pen     7
+?     bad row 0
+
+{"north": 2, "south": 1, "east": 1, "?": 1}
+north,south,east
+big: 3
+north pen 3
+south ink 12
+east  pen 7
+total     22
+exit: 0

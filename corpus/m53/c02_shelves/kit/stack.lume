@@ -1,0 +1,24 @@
+# kit/stack.lume — a generic stack that can be emptied and filled again.
+
+pub struct Stack[T]:
+  items: [T]
+
+  def self.empty -> Stack[T] = Stack(items: [])
+
+  def push(var self, x: T):
+    items.push(x)
+
+  def pop(var self) -> T? = items.pop
+
+  def peek -> T? = items.last
+
+  def size -> Int = items.len
+
+  # empties the stack and hands back what it held, top first
+  def drain(var self) -> [T]:
+    var out: [T] = []
+    while items.len > 0:
+      match items.pop:
+        Some(x) -> out.push(x)
+        None -> ()
+    out

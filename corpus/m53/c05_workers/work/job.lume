@@ -1,0 +1,17 @@
+# work/job.lume — a job handed to a task, and what the task makes of it.
+
+import work.text
+
+pub struct Job:
+  id: Int
+  words: [Str]
+
+  def weight -> Int = words.map(_.len).sum
+
+pub struct Outcome:
+  id: Int
+  line: Str
+  tag: Str
+
+pub def perform(j: Job) -> Outcome:
+  Outcome(id: j.id, line: text.banner(j.words, 4), tag: text.initials(j.words).upcase)

@@ -1,0 +1,13 @@
+["0", "1"]
+["0", "1", "2", "3", "4", "end"]
+a
+x +2 ["x", "y", "z"]
+none
+dup a after 2
+none in {"a", "b"}
+Person(name: "AB", tags: [])
+Person(name: "abab", tags: ["t", "ab"])
+Error("too many: 3")
+Error("`x` is not an integer")
+Ok("4 of 4|5")
+exit: 0

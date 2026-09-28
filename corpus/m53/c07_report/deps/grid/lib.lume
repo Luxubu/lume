@@ -1,0 +1,37 @@
+# grid/lib.lume — rows of text laid out in columns. Anything with a
+# `cells` method is a `Row`.
+
+pub interface Row:
+  def cells -> [Str]
+
+pub struct Grid:
+  rows: [[Str]]
+
+  def add(var self, row: [Str]):
+    rows.push(row)
+
+  def widths -> [Int]:
+    var ws: [Int] = []
+    for row in rows:
+      for (i, c) in row.enumerate:
+        if i < ws.len:
+          ws[i] = ws.at(i).max(c.len)
+        else:
+          ws.push(c.len)
+    ws
+
+  def render -> Str:
+    ws = widths
+    var out = ""
+    for row in rows:
+      var line = ""
+      for (i, c) in row.enumerate:
+        line = line + c.pad_right(ws.at(i)) + " "
+      out = out + line.trim_right + "\n"
+    out.trim_right
+
+pub def of[T: Row](xs: [T]) -> Grid:
+  var g = Grid(rows: [])
+  for x in xs:
+    g.add(x.cells)
+  g

@@ -1,0 +1,19 @@
+# geo/api.lume — an interface whose implementations build a new value of
+# their own type from the old one, and generic functions over it.
+
+pub interface Resizable[T]:
+  def resized(k: Int) -> T
+  def area -> Int
+  def name -> Str
+
+  def twice -> T = resized(2)
+  def line -> Str = "#{name}=#{area}"
+
+pub def grow_all[T: Resizable[T]](xs: [T], k: Int) -> [T]:
+  xs.map { |x| x.resized(k) }.to_list
+
+pub def report[T: Resizable[T]](xs: [T]) -> Str:
+  var out = ""
+  for x in xs:
+    out = out + x.line + " "
+  out.trim

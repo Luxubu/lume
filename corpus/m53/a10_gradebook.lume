@@ -1,0 +1,89 @@
+# a10_gradebook: students with score lists. Each one is passed to functions
+# and read again; a string is interpolated, printed and then pushed; a
+# `match` in a loop reassigns a `var` that a later block reads; the list is
+# replaced by `map` over a function that builds a new struct from the old
+# one's fields; one student is curved again while the original is still
+# read afterwards.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ann avg 91.7 (A)
+# bo avg 72.3 (C)
+# cy avg 84.7 (B)
+# di avg 63.0 (F)
+# 0:ann:A
+# 1:bo:C
+# 2:cy:B
+# 3:di:F
+# 0:ann:A;1:bo:C;2:cy:B;3:di:F
+# 7
+# ann avg 98.0 (A)
+# bo avg 79.3 (C)
+# cy avg 91.7 (A)
+# di avg 70.0 (C)
+# ["ann", "cy"]
+# 363
+# A: ann,cy
+# C: bo,di
+# [100, 100, 100]
+# [100, 95, 99]
+
+struct Student:
+  name: Str
+  scores: [Int]
+
+  def avg -> Float = scores.avg
+  def best -> Int = scores.max.or(0)
+
+def letter(avg: Float) -> Str:
+  if avg >= 90.0: "A" elif avg >= 80.0: "B" elif avg >= 70.0: "C" else: "F"
+
+def describe(s: Student) -> Str = "#{s.name} avg #{s.avg.decimals(1)} (#{letter(s.avg)})"
+
+def curve(s: Student, by: Int) -> Student =
+  Student(name: s.name, scores: s.scores.map { |x| (x + by).min(100) }.to_list)
+
+def main:
+  var students = [
+    Student("ann", [95, 88, 92]),
+    Student("bo", [72, 65, 80]),
+    Student("cy", [85, 91, 78]),
+    Student("di", [60, 58, 71]),
+  ]
+  for s in students:
+    puts describe(s)
+
+  var lines: [Str] = []
+  var bump = 0
+  for (i, s) in students.enumerate:
+    l = letter(s.avg)
+    match l:
+      "F" -> bump = bump + 5
+      "C" -> bump = bump + 2
+      _ -> ()
+    entry = "#{i}:#{s.name}:#{l}"
+    puts entry
+    lines.push(entry)
+  puts lines.join(";")
+  puts bump
+
+  students = students.map { |s| curve(s, bump) }.to_list
+  for s in students:
+    puts describe(s)
+  honor = students.filter { |s| s.avg >= 90.0 }.map(_.name).to_list
+  puts honor
+
+  var i = 0
+  var total = 0
+  while i < students.len:
+    total += students.at(i).best
+    i += 1
+  puts total
+
+  by_letter = students.group_by { |s| letter(s.avg) }
+  for l, group in by_letter:
+    puts "#{l}: #{group.map(_.name).join(",")}"
+
+  first = students.at(0)
+  again = curve(first, 10)
+  puts again.scores
+  puts first.scores

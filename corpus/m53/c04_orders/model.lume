@@ -1,0 +1,24 @@
+# model.lume — an order line, and the states an order moves through. Every
+# state but the first carries a struct from the `money` package.
+
+import money
+
+pub struct Line:
+  sku: Str
+  qty: Int
+  each: money.Money
+
+  def cost -> money.Money = money.Money(cents: each.cents * qty)
+
+pub enum Status:
+  Draft(lines: [Line])
+  Placed(lines: [Line], total: money.Money)
+  Shipped(tracking: Str, total: money.Money)
+  Cancelled(reason: Str, refund: money.Money)
+
+  def label -> Str:
+    match self:
+      Draft(ls) -> "draft(#{ls.len})"
+      Placed(ls, t) -> "placed(#{ls.len}, #{t.show})"
+      Shipped(tr, t) -> "shipped #{tr} #{t.show}"
+      Cancelled(r, m) -> "cancelled: #{r}, refund #{m.show}"

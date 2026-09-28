@@ -1,0 +1,10 @@
+# kit/cell.lume — a generic box whose `apply` builds a new box from the old
+# one's item, of another type.
+
+pub struct Box[T]:
+  item: T
+  label: Str
+
+  def apply[U](f: (T) -> U) -> Box[U] = Box(item: f(item), label: label + "'")
+
+  def show -> Str = "#{label}: #{item}"

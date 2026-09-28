@@ -1,0 +1,14 @@
+a+b
+2
+["a", "b"]
+Lab
+L
+ann["x", "1"]
+ann["x", "2"]
+ann["x", "3"]
+Person(name: "ann", tags: ["x"])
+m!
+m?
+["a1b", "a2b"]
+["a", "b"]
+exit: 0

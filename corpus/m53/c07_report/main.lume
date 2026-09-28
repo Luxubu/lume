@@ -1,0 +1,62 @@
+# c07: a package using two library packages beside it (deps/grid and
+# deps/counts). Records flow through both; text is built in loops inside a
+# dependency.
+# Probes: a struct of this package fitting `grid.Row` structurally and
+# handed to a generic `grid.of[T: grid.Row]`; `Grid.render` growing text
+# row by row with `line = line + ...` and `out = out + ...`; a `var` map
+# from `counts.tally` replaced by its own `filter`; a generic
+# `counts.Bucket[Sale]` replaced each time round a `for ... where` loop
+# (`b = b.adding(s)`); the bucket's items handed back to `grid.of` and the
+# grid changed afterwards.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# north pen     3
+# south ink     12
+# north pad     1
+# east  pen     7
+# ?     bad row 0
+#
+# {"north": 2, "south": 1, "east": 1, "?": 1}
+# north,south,east
+# big: 3
+# north pen 3
+# south ink 12
+# east  pen 7
+# total     22
+
+import grid
+import counts
+
+struct Sale:
+  region: Str
+  item: Str
+  qty: Int
+
+  def cells -> [Str] = [region, item, qty.to_s]
+
+def parse(line: Str) -> Sale:
+  match line.split(","):
+    [r, i, q] -> Sale(region: r, item: i, qty: q.to_int.or(0))
+    _ -> Sale(region: "?", item: line, qty: 0)
+
+DATA = ["north,pen,3", "south,ink,12", "north,pad,1", "east,pen,7", "bad row"]
+
+def main:
+  sales = DATA.map(parse).to_list
+  g = grid.of(sales)
+  puts g.render
+  puts ""
+
+  var regions = counts.tally(sales.map(_.region).to_list)
+  puts regions
+  regions = regions.filter { |k, v| k != "?" }
+  puts regions.keys.join(",")
+
+  var b: counts.Bucket[Sale] = counts.Bucket(name: "big", items: [])
+  for s in sales where s.qty > 2:
+    b = b.adding(s)
+  puts "#{b.name}: #{b.size}"
+
+  var g2 = grid.of(b.items)
+  g2.add(["total", "", b.items.map(_.qty).sum.to_s])
+  puts g2.render

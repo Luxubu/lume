@@ -1,0 +1,21 @@
+warning: `seen` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/m53/c05_workers/main.lume:30:3
+   |
+30 |   shared var seen: {Str: Int} = {"short": 0, "long": 0}
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+warning: `order` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/m53/c05_workers/main.lume:31:3
+   |
+31 |   shared var order: [Int] = []
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+1 ant |bison| AB!
+2 cat | C!
+3 dog |eagle|fox | DEF!
+AB!C!DEF!
+{"short": 4, "long": 2}
+[1, 2, 3]
+#1:3 #2:2 #3:4
+22
+exit: 0

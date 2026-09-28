@@ -1,0 +1,16 @@
+# money/lib.lume — an amount in cents, added with `+`.
+
+pub struct Money:
+  cents: Int
+
+  def +(o: Money) -> Money = Money(cents: cents + o.cents)
+
+  def show -> Str = "$#{(cents.to_float / 100.0).decimals(2)}"
+
+pub def zero -> Money = Money(cents: 0)
+
+pub def sum(xs: [Money]) -> Money:
+  var t = zero()
+  for x in xs:
+    t = t + x
+  t

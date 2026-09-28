@@ -121,6 +121,14 @@ package boundary? It always did. It is now said once, in
 [packages](reference/packages.md#what-carries-over-from-modules). See
 `corpus/m49/REPORT.md`.
 
+## Round eleven
+
+`corpus/m53/` measured milestones 50–52, values that move: thirty programs
+meant to run, 28 right on the first run, **18 guesses**, none of them about
+when a value moves. They asked about changing what lives inside a struct,
+`shared var` outside a task, and a kept block's copy. Each is now answered
+where it belongs. See `corpus/m53/REPORT.md`.
+
 ## What writing the answers found
 
 Four programs that the compiler accepted and then could not generate Rust for:

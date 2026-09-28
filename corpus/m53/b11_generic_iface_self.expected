@@ -1,0 +1,19 @@
+warning: `pack` holds values of different types behind `Named`, so calls on its items go through a pointer
+  --> corpus/m53/b11_generic_iface_self.lume:66:3
+   |
+66 |   pack: [Named] = [d, Dog(call: "spot", toys: ["bone"])]
+   |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+REX
+["ball"]
+hi rex
+["ball"]
+REX,FIDO
+["REX", "SPOT"]
+Dog(call: "rex", toys: ["ball"])
+["start", "a"]
+b
+[3, 1, 2]
+b
+xb
+exit: 0

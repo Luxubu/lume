@@ -1,0 +1,79 @@
+# b05: values read by a `where` filter, a match guard, a `?` expression and
+# an `.or(...)` default, and then given away or read again.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ann
+# cy
+# bo
+# a
+# long:bbbbb
+# long
+# ["x", "yy", "z2"]
+# Some("bcd/a,bcd")
+# None
+# Ok(9)
+# Error("`x` is not an integer")
+# ["x"]
+# ["none"]
+# ["none"]
+# ["k11", "end", "end"]
+# k1
+
+def first_long(xs: [Str]) -> Str?:
+  hit = xs.find { |x| x.len > 2 }?
+  Some(hit + "/" + xs.join(","))
+
+def sum_parts(raw: Str) -> Int or Error:
+  parts = raw.split(",").to_list
+  a = parts.at(0).to_int?
+  b = parts.at(1).to_int?
+  a + b + parts.len
+
+def main:
+  # read by `where` each time round, then printed
+  names = ["ann", "bo", "cy"]
+  target = "bo"
+  for n in names where n != target:
+    puts n
+  puts target
+
+  # given to `+` in a guarded arm inside a loop, then printed
+  label = "long"
+  for w in ["a", "bbbbb"]:
+    msg = match w.len:
+      n if n > 3 -> label + ":" + w
+      _ -> w
+    puts msg
+  puts label
+
+  # read by the guard, replaced by the arm
+  var words = ["x", "yy"]
+  match words.len:
+    n if words.contains?("yy") -> words = words + ["z#{n}"]
+    _ -> ()
+  puts words
+
+  # `?` after a local, and a local read after `?`s
+  puts first_long(["a", "bcd"])
+  puts first_long(["a"])
+  puts sum_parts("3,4")
+  puts sum_parts("3,x")
+
+  # the same default given to two `.or`s, then printed
+  fallback = ["none"]
+  m: {Str: [Str]} = {"a": ["x"]}
+  got = m["a"].or(fallback)
+  miss = m["b"].or(fallback)
+  puts got
+  puts miss
+  puts fallback
+
+  # read by a guard, given to `+` by the arm, each time round
+  key = "k1"
+  var seen: [Str] = []
+  for i in 1..3:
+    match i:
+      j if key.len > j -> seen.push(key + "#{j}")
+      _ -> seen.push("end")
+  puts seen
+  puts key

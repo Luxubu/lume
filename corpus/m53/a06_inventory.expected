@@ -1,0 +1,19 @@
+0:a1=14 1:b2=5
+true
+false
+false
+0:a1=14 1:b2=0
+0:a1=14
+received washer
+Some(Item(sku: "c3", name: "washer", qty: 7))
+1 new a1
+2 new b2
+3 restock a1 10->14
+4 ship b2 5
+5 short a1 20
+6 short c3 1
+7 dropped 1
+8 new c3
+["bolt", "washer"]
+2
+exit: 0

@@ -1,0 +1,53 @@
+# c08: a state machine in a module, run inside async tasks, one task per
+# line of input, each building its result from the line handed to it; a
+# `shared var` map tallied by every task.
+# Probes: `s = step(s, c)` and `s = flush(s)` replacing a struct that holds
+# an enum with a payload and a list of enums with payloads; a payload
+# rebuilt from the old one (`InWord(w + c)`, `InNum(n * 10 + d)`); the
+# tokens a task made walked twice inside the task and then handed to
+# `render`, which grows text in a loop; a tuple of results per task,
+# awaited as a list; `kinds[tk.kind] += 1` on a shared map whose keys were
+# put in first; the same scanner on the joined input after the tasks.
+# (The `shared var` warns on standard error; not part of this output.)
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 0: LET X '=' 12 '+' 30 -> 42
+# 1: GO 7 TIMES -> 7
+# 2: A 1 B 22 -> 23
+# {"num": 5, "word": 6, "sym": 2}
+# 13 tokens, 13 counted
+
+import lex.scan
+import lex.token.Token
+
+LINES = ["let x = 12 + 30", "go 7 times", "a1b22"]
+
+def render(ts: [Token]) -> Str:
+  var out = ""
+  for (i, t) in ts.enumerate:
+    if i > 0:
+      out = out + " "
+    out = out + t.show
+  out
+
+async def main:
+  shared var kinds: {Str: Int} = {"num": 0, "word": 0, "sym": 0}
+  var tasks: [Task[(Int, Str, Int)]] = []
+  for (i, line) in LINES.enumerate:
+    t = spawn:
+      toks = scan.scan(line)
+      for tk in toks:
+        kinds[tk.kind] += 1
+      var total = 0
+      for tk in toks:
+        match tk:
+          Num(v) -> total += v
+          _ -> ()
+      (i, render(toks), total)
+    tasks.push(t)
+  for r in await tasks:
+    puts "#{r.0}: #{r.1} -> #{r.2}"
+  puts kinds
+
+  all = scan.scan(LINES.join(" "))
+  puts "#{all.len} tokens, #{kinds.values.sum} counted"

@@ -1,0 +1,13 @@
+# work/text.lume — text built in loops, one piece at a time.
+
+pub def banner(words: [Str], width: Int) -> Str:
+  var line = ""
+  for w in words:
+    line = line + w.pad_right(width) + "|"
+  line
+
+pub def initials(words: [Str]) -> Str:
+  var out = ""
+  for w in words:
+    out = out + w[0].or("?")
+  out
