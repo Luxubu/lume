@@ -107,6 +107,10 @@ exit: $code"
 out=$(tests/git_packages.sh "$LUME" 2>&1)
 check "packages from git" "tests/git_packages.expected" "$out"
 
+# the csvq dogfood program: queries, a pipe, its errors, and three packages' tests
+out=$(examples/csvq/queries.sh "$LUME" 2>&1)
+check "csvq" "examples/csvq/queries.expected" "$out"
+
 # `lume new`, then run and test what it made, with no file named
 tmp=$(mktemp -d)
 out=$(cd "$tmp" && "$LUME_ABS" new hello 2>&1 && cd hello && "$LUME_ABS" run 2>&1 && "$LUME_ABS" new ../greet --lib 2>&1 && cd ../greet && "$LUME_ABS" test 2>&1); code=$?

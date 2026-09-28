@@ -1156,6 +1156,11 @@ impl Parser {
         }
         if self.eat_kw("for") {
             let mutable = self.eat_kw("var");
+            // `for (i, x) in`, as Rust writes it, is `for i, x in`
+            let paren = !mutable && self.at_sym("(");
+            if paren {
+                self.eat_sym("(");
+            }
             let (var, _, _) = self.ident("a loop variable")?;
             let mut vars = vec![var];
             if mutable && self.at_sym(",") {
@@ -1167,6 +1172,12 @@ impl Parser {
                     return Err(LumeError::new(vl, vc, format!("loop variable `{}` is listed twice", v)));
                 }
                 vars.push(v);
+            }
+            if paren {
+                if vars.len() < 2 {
+                    return Err(self.err("brackets around one loop variable say nothing").with_help(format!("write `for {} in ...:`", vars[0])));
+                }
+                self.expect_sym(")", "after the loop variables")?;
             }
             if !self.eat_kw("in") {
                 return Err(self

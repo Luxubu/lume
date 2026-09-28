@@ -58,6 +58,7 @@ Each one has a `FINDINGS.md` or a `README.md` saying what it exposed.
 | `lib/` | a library written in Lume — `seq` and `table` — and a report program using both |
 | `match/` | a concurrent record matcher: block, fan out across tasks, collect, report |
 | `port/` | the design document's sample programs, plus `app_async.lume` on threads |
+| `csvq/` | a CSV query tool in three packages — `csv`, `table` and the program — with a small query language, stdin, and each package's own tests |
 
 ## Modules
 
@@ -66,6 +67,7 @@ Each one has a `FINDINGS.md` or a `README.md` saying what it exposed.
 | `modules/` | a three-file program: `app.lume` imports `users/model` and `users/store` |
 | `travel/` | a library that ships its conformances; the consumer writes no `extend` |
 | `shipping/` | `pub import`: a library passes its own dependency on to its consumers |
+| `packages/` | three packages: a program over two libraries, one of which uses the other |
 
 ## Async
 

@@ -1,0 +1,103 @@
+$ csvq data/people.csv
+name                 city         age  score
+-------------------  -----------  ---  -----
+Ada Lovelace         London        36   91.5
+Alan Turing          Wilmslow      41     88
+Grace Hopper         New York      85  95.25
+Hamilton, Margaret   Boston        34     90
+Dennis Ritchie       Murray Hill   70     79
+Barbara Liskov       Boston        84     93
+Knuth, Donald "Don"  Stanford      86     97
+(7 of 7 rows)
+exit: 0
+$ csvq data/people.csv where age >= 70 sort age desc show name,age
+name                 age
+-------------------  ---
+Knuth, Donald "Don"   86
+Grace Hopper          85
+Barbara Liskov        84
+Dennis Ritchie        70
+(4 of 7 rows)
+exit: 0
+$ csvq data/people.csv where city = Boston count
+2
+exit: 0
+$ csvq data/people.csv where name has Turing
+name         city      age  score
+-----------  --------  ---  -----
+Alan Turing  Wilmslow   41     88
+(1 of 7 rows)
+exit: 0
+$ csvq data/people.csv sort score limit 3 show name,score
+name                score
+------------------  -----
+Dennis Ritchie         79
+Alan Turing            88
+Hamilton, Margaret     90
+(3 of 7 rows)
+exit: 0
+$ csvq data/people.csv sort city show city,name
+city         name
+-----------  -------------------
+Boston       Hamilton, Margaret
+Boston       Barbara Liskov
+London       Ada Lovelace
+Murray Hill  Dennis Ritchie
+New York     Grace Hopper
+Stanford     Knuth, Donald "Don"
+Wilmslow     Alan Turing
+(7 of 7 rows)
+exit: 0
+$ csvq data/people.csv where city has o where age < 50
+name                city      age  score
+------------------  --------  ---  -----
+Ada Lovelace        London     36   91.5
+Alan Turing         Wilmslow   41     88
+Hamilton, Margaret  Boston     34     90
+(3 of 7 rows)
+exit: 0
+$ csvq data/people.csv where nope = 1
+error: no column `nope`; the columns are name, city, age, score
+exit: 1
+$ csvq data/people.csv where age ~ 3
+error: `~` is not a comparison; use one of = != < > <= >= has
+exit: 1
+$ csvq data/people.csv limit x
+error: `x` is not an integer
+exit: 1
+$ csvq data/people.csv sort
+error: `sort` needs 1 more word
+exit: 1
+$ csvq no-such.csv
+error: cannot read `no-such.csv`: No such file or directory (os error 2)
+exit: 1
+$ cat data/people.csv | csvq - where city = Boston show name
+name
+------------------
+Hamilton, Margaret
+Barbara Liskov
+(2 of 7 rows)
+exit: 0
+$ csvq
+usage: csvq <file.csv> [where <column> <op> <value>]... [sort <column> [desc]] [limit <n>] [show <a,b,...>] [count]
+exit: 2
+$ (cd csv && lume test)
+test plain fields ... ok
+test quotes keep commas and double quotes ... ok
+test an unclosed quote is an error ... ok
+test a short row is an error ... ok
+
+4 tests: 4 passed, 0 failed
+exit: 0
+$ (cd table && lume test)
+test numbers go right, words go left ... ok
+
+1 test: 1 passed, 0 failed
+exit: 0
+$ (cd csvq && lume test)
+test query: a whole query ... ok
+test query: numbers compare as numbers, text as text ... ok
+test query: a query that stops short is an error ... ok
+
+3 tests: 3 passed, 0 failed
+exit: 0

@@ -1,0 +1,71 @@
+# csv — reads comma-separated text into a header and rows.
+#
+# A field may be quoted: "Smith, Jane" keeps its comma, and "" inside
+# quotes is one quote. Every row must have as many fields as the header.
+
+pub struct Sheet:
+  headers: [Str]
+  rows: [[Str]]
+
+  # The position of a column, by name.
+  def column(name: Str) -> Int or Error:
+    headers.index_of(name).or_error("no column `#{name}`; the columns are #{headers.join(", ")}")
+
+pub def parse(text: Str) -> Sheet or Error:
+  var lines: [Str] = []
+  for line in text.lines:
+    if line.trim != "":
+      lines.push(line)
+  headers = fields(lines.first.or_error("the file is empty")?)?
+  var rows: [[Str]] = []
+  var n = 1
+  for line in lines.skip(1):
+    n += 1
+    row = fields(line)?
+    if row.len != headers.len:
+      return Error("line #{n} has #{row.len} fields, and the header has #{headers.len}")
+    rows.push(row)
+  Sheet(headers: headers, rows: rows)
+
+# One line's fields.
+pub def fields(line: Str) -> [Str] or Error:
+  var out: [Str] = []
+  var cur = ""
+  var quoted = false
+  var i = 0
+  cs = line.chars
+  while i < cs.len:
+    c = cs.at(i)
+    if quoted:
+      if c == "\"":
+        if i + 1 < cs.len and cs.at(i + 1) == "\"":
+          cur += "\""
+          i += 1
+        else:
+          quoted = false
+      else:
+        cur += c
+    elif c == "\"":
+      quoted = true
+    elif c == ",":
+      out.push(cur.trim)
+      cur = ""
+    else:
+      cur += c
+    i += 1
+  if quoted:
+    return Error("a quote is never closed in: #{line}")
+  out.push(cur.trim)
+  out
+
+test "plain fields":
+  assert fields("a, b,c")! == ["a", "b", "c"]
+
+test "quotes keep commas and double quotes":
+  assert fields("\"Smith, Jane\",\"say \"\"hi\"\"\"")! == ["Smith, Jane", "say \"hi\""]
+
+test "an unclosed quote is an error":
+  assert not fields("\"open, x").ok?
+
+test "a short row is an error":
+  assert not parse("a,b\n1\n").ok?

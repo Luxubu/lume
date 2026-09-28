@@ -1,0 +1,6 @@
+error: brackets around one loop variable say nothing
+  --> examples/errors/loop_paren_one.lume:2:9
+  |
+2 |   for (w) in ["a"]:
+  |         ^
+  help: write `for w in ...:`

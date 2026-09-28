@@ -1,0 +1,6 @@
+error: module `shapes` has no `Right`
+  --> examples/errors/packages/variant/app/main.lume:4:14
+  |
+4 |   puts shapes.Right
+  |              ^
+  help: `Right` is a variant of `shapes.Align`: write `shapes.Align.Right`

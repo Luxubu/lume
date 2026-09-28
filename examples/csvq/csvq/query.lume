@@ -1,0 +1,125 @@
+# query.lume — the little language after the file name:
+#
+#   where <column> <op> <value>     keep rows that match; may repeat
+#   sort <column> [desc]            order the rows
+#   limit <n>                       keep the first n
+#   show <column>,<column>,...      which columns to print, in that order
+#   count                           print how many rows, not the rows
+#
+# <op> is one of  =  !=  <  >  <=  >=  has  (has: the text contains it).
+# Two numbers compare as numbers, anything else as text.
+
+pub enum Op:
+  Eq
+  Ne
+  Lt
+  Gt
+  Le
+  Ge
+  Has
+
+pub struct Filter:
+  column: Str
+  op: Op
+  value: Str
+
+pub struct Query:
+  filters: [Filter]
+  sort: Str?
+  desc: Bool
+  limit: Int?
+  show: [Str]
+  count: Bool
+
+pub def op_of(word: Str) -> Op or Error:
+  match word:
+    "="   -> Eq
+    "!="  -> Ne
+    "<"   -> Lt
+    ">"   -> Gt
+    "<="  -> Le
+    ">="  -> Ge
+    "has" -> Has
+    _     -> Error("`#{word}` is not a comparison; use one of = != < > <= >= has")
+
+pub def parse(words: [Str]) -> Query or Error:
+  var q = Query(filters: [], sort: None, desc: false, limit: None, show: [], count: false)
+  var i = 0
+  while i < words.len:
+    w = words.at(i)
+    match w:
+      "where" ->
+        need(words, i, 3)?
+        q.filters.push(Filter(column: words.at(i + 1), op: op_of(words.at(i + 2))?, value: words.at(i + 3)))
+        i += 4
+      "sort" ->
+        need(words, i, 1)?
+        q.sort = Some(words.at(i + 1))
+        i += 2
+        if i < words.len and words.at(i) == "desc":
+          q.desc = true
+          i += 1
+      "limit" ->
+        need(words, i, 1)?
+        q.limit = Some(words.at(i + 1).to_int?)
+        i += 2
+      "show" ->
+        need(words, i, 1)?
+        q.show = words.at(i + 1).split(",").map { |c| c.trim }.to_list
+        i += 2
+      "count" ->
+        q.count = true
+        i += 1
+      _ -> return Error("`#{w}` is not part of a query; it starts with where, sort, limit, show or count")
+  q
+
+# `where` needs three words after it, `sort` one, and so on.
+def need(words: [Str], i: Int, n: Int) -> () or Error:
+  if i + n >= words.len:
+    plural = if n == 1: "" else: "s"
+    return Error("`#{words.at(i)}` needs #{n} more word#{plural}")
+  ()
+
+# Does one value pass one comparison?
+pub def passes(have: Str, op: Op, want: Str) -> Bool:
+  match (have.to_float, want.to_float):
+    (Ok(a), Ok(b)) -> compare(a, b, op, have, want)
+    _              -> compare_text(have, op, want)
+
+def compare(a: Float, b: Float, op: Op, have: Str, want: Str) -> Bool:
+  match op:
+    Eq  -> a == b
+    Ne  -> a != b
+    Lt  -> a < b
+    Gt  -> a > b
+    Le  -> a <= b
+    Ge  -> a >= b
+    Has -> have.contains?(want)
+
+def compare_text(a: Str, op: Op, b: Str) -> Bool:
+  match op:
+    Eq  -> a == b
+    Ne  -> a != b
+    Lt  -> a < b
+    Gt  -> a > b
+    Le  -> a <= b
+    Ge  -> a >= b
+    Has -> a.contains?(b)
+
+test "a whole query":
+  q = parse(["where", "age", ">=", "30", "sort", "name", "desc", "limit", "2", "show", "name, age", "count"])!
+  assert q.filters.len == 1
+  assert q.sort == Some("name")
+  assert q.desc
+  assert q.limit == Some(2)
+  assert q.show == ["name", "age"]
+  assert q.count
+
+test "numbers compare as numbers, text as text":
+  assert passes("10", Gt, "9")
+  assert not passes("10", Gt, "9x")
+  assert passes("Boston", Has, "ost")
+
+test "a query that stops short is an error":
+  assert not parse(["where", "age", ">="]).ok?
+  assert not parse(["limit", "many"]).ok?

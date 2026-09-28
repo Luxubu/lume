@@ -240,6 +240,20 @@ for i in (1..10).step(2):    # does not build
   puts i
 ```
 
+## `for` over pairs
+
+**Two names take each pair apart**: `for k, v in m` over a map, and
+`for i, x in xs.enumerate` for positions. Rust's spelling with brackets,
+`for (i, x) in xs.enumerate`, means the same, and `lume fmt` writes it
+without them.
+
+```lume
+for (i, w) in ["a", "b"].enumerate:
+  puts "#{i} #{w}"
+#=> 0 a
+#=> 1 b
+```
+
 ## `for var`: changing the items
 
 **`for var x in xs` walks the list's own items, so changing `x` changes the

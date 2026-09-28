@@ -1,0 +1,7 @@
+[package]
+name = "csvq"
+version = "0.1.0"
+
+[dependencies]
+csv   = { path = "../csv" }
+table = { path = "../table" }

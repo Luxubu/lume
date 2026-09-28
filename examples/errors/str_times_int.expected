@@ -1,0 +1,6 @@
+error: `*` cannot combine a `Str` and a `Int`
+  --> examples/errors/str_times_int.lume:2:12
+  |
+2 |   puts "-" * 3
+  |            ^
+  help: to repeat text, write `.repeat(3)` on it, as in `"-".repeat(3)`

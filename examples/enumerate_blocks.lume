@@ -1,0 +1,19 @@
+# `enumerate` gives `(Int, item)` pairs, and a block may take them apart
+# with two names — over a list of text as over a list of numbers. The loop
+# may be written `for i, w in` or, as Rust writes it, `for (i, w) in`.
+
+def main:
+  words = ["a", "bb", "ccc"]
+  puts words.enumerate.map { |i, w| i + w.len }.to_list
+  puts words.enumerate.filter { |i, w| w.len > 1 }.to_list
+  puts words.enumerate.find { |i, w| i == 2 }
+  puts words.enumerate.count { |i, w| w != "bb" }
+  puts words.enumerate.sort_by { |i, w| 0 - i }.to_list
+  puts words.enumerate.max_by { |i, w| w.len }
+  puts [[1], [2, 3]].enumerate.map { |i, xs| xs.len + i }.to_list
+  for (i, w) in words.enumerate:
+    puts "#{i}: #{w}"
+  for i, w in words.map { |w| w.upcase }.enumerate:
+    puts "#{i}. #{w}"
+  # a key worked out once per item, and a stable sort
+  puts ["bb", "a", "cc", "d"].sort_by { |w| w.len }

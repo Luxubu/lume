@@ -1,0 +1,56 @@
+# csvq — query a CSV file from the command line.
+#
+#   lume run -- data/people.csv where age >= 30 sort age desc show name,age
+#   cat data/people.csv | lume run -- - count
+#
+# The CSV reading lives in the `csv` package and the layout in `table`;
+# this package is the query language (query.lume) and the program.
+
+import csv
+import table
+import query
+import query.Query
+
+USAGE = "usage: csvq <file.csv> [where <column> <op> <value>]... [sort <column> [desc]] [limit <n>] [show <a,b,...>] [count]"
+
+def main -> () or Error:
+  args = Env.args
+  if args.empty?:
+    warn USAGE
+    Env.exit(2)
+  path = args.at(0)
+  # `-` reads the CSV from standard input, so csvq fits in a pipe
+  text = if path == "-": Env.stdin? else: File.read(path)?
+  sheet = csv.parse(text)?
+  q = query.parse(args.skip(1).to_list)?
+  rows = select(sheet, q)?
+  if q.count:
+    puts rows.len
+    return ()
+  cols = if q.show.empty?: sheet.headers else: q.show
+  var at: [Int] = []
+  for c in cols:
+    at.push(sheet.column(c)?)
+  shown = rows.map { |r| at.map { |i| r.at(i) }.to_list }.to_list
+  puts table.render(cols, shown)
+  puts "(#{rows.len} of #{sheet.rows.len} rows)"
+  ()
+
+# The rows the query keeps, in its order.
+def select(sheet: csv.Sheet, q: Query) -> [[Str]] or Error:
+  var rows = sheet.rows
+  for f in q.filters:
+    c = sheet.column(f.column)?
+    rows = rows.filter { |r| query.passes(r.at(c), f.op, f.value) }.to_list
+  match q.sort:
+    Some(name) ->
+      c = sheet.column(name)?
+      numeric = table.align_of(rows.map { |r| r.at(c) }.to_list) == table.Align.Right
+      rows = if numeric: rows.sort_by { |r| r.at(c).to_float.or(0.0) } else: rows.sort_by { |r| r.at(c) }
+      if q.desc:
+        rows = rows.reverse
+    None -> ()
+  match q.limit:
+    Some(n) -> rows = rows.take(n).to_list
+    None    -> ()
+  rows

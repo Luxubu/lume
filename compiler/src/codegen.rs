@@ -3259,6 +3259,17 @@ impl Gen {
             .filter_map(|k| k.strip_prefix(&prefix).map(|s| s.to_string()))
             .filter(|s| !s.contains('.'))
             .collect();
+        // `table.Right` for a variant of `table.Align`: say where it lives
+        let mut owners: Vec<String> = self
+            .enums
+            .iter()
+            .filter(|(k, info)| k.strip_prefix(&prefix).map(|s| !s.contains('.')).unwrap_or(false) && info.variants.iter().any(|(v, _)| v == name))
+            .map(|(k, _)| k[prefix.len()..].to_string())
+            .collect();
+        owners.sort();
+        if let Some(en) = owners.first() {
+            return Err(e.with_help(format!("`{}` is a variant of `{}.{}`: write `{}.{}.{}`", name, alias, en, alias, en, name)));
+        }
         Err(match self.suggest_from(name, names.iter().cloned()) {
             Some(sug) => e.with_help(format!("did you mean `{}`?", sug)),
             None => e.with_help(format!("its public items are: {}", names.join(", "))),
@@ -4697,6 +4708,7 @@ impl Gen {
             (_, Type::Option(inner), _) if self.assignable(inner, &rt) => Some("the left side may be absent: unwrap it with `match`, `?` or `.or(default)`".to_string()),
             (_, _, Type::Option(inner)) if self.assignable(lt, inner) => Some("the right side may be absent: unwrap it with `match`, `?` or `.or(default)`".to_string()),
             ("and", _, _) | ("or", _, _) => Some("both sides must be `Bool`; compare first, as in `x > 0 and y > 0`".to_string()),
+            ("*", Type::Str, Type::Int) => Some(format!("to repeat text, write `.repeat({})` on it, as in `\"-\".repeat(3)`", snippet(rhs))),
             ("+", Type::Set(_), Type::Set(_)) => Some("sets combine by name: `a.union(b)`; the others are `.intersect(b)` and `.diff(b)`".to_string()),
             ("-", Type::Set(_), Type::Set(_)) => Some("write `a.diff(b)` for the items of `a` that are not in `b`".to_string()),
             ("+", Type::Map(..), Type::Map(..)) => Some("write `a.merge(b)`: the entries of `b` win where the keys are the same".to_string()),
@@ -6725,7 +6737,10 @@ impl Gen {
                     }
                     return Ok(());
                 }
-                let v = if is_str && *op == "+=" && rhs_char { format!("&({}).to_string()", v) } else if is_str && *op == "+=" { format!("&({})", v) } else { v };
+                // `s += c` with a `Char` pushes it, with no string made for it
+                let push_char = is_str && *op == "+=" && rhs_char;
+                let raw = v.clone();
+                let v = if push_char { format!("&({}).to_string()", v) } else if is_str && *op == "+=" { format!("&({})", v) } else { v };
                 match self.lookup(name).cloned() {
                     Some(Binding { ty: Type::Shared(_, true), .. }) => {
                         self.line(&format!("{{ let lume_v = {}; *{}.lock().unwrap() {} lume_v; }}", v, rust_name(name), op));
@@ -6733,6 +6748,9 @@ impl Gen {
                     Some(Binding { ty: Type::Shared(_, false), line: bl, .. }) => {
                         return Err(LumeError::new(*line, *col, format!("`{}` is `shared` and read-only", name))
                             .with_help(format!("declare it `shared var {}` on line {} if tasks change it", name, bl)));
+                    }
+                    Some(b) if b.mutable && push_char => {
+                        self.line(&format!("{}.push({});", rust_name(name), raw));
                     }
                     Some(b) if b.mutable => {
                         self.line(&format!("{} {} {};", rust_name(name), op, v));
@@ -8081,7 +8099,12 @@ impl Gen {
                 let owned = self.collect_iter_t(&it, by_ref, &elem);
                 let key = key_closure(&f, &self.rt(&elem));
                 match name {
-                    "sort_by" => format!("{{ let mut v = {}; let key = {}; v.sort_by(|a, b| key(a).partial_cmp(&key(b)).unwrap()); v }}", owned, key),
+                    // each key is worked out once, as Rust's `sort_by_cached_key`
+                    // does, not twice per comparison; the sort stays stable
+                    "sort_by" => format!(
+                        "{{ let key = {}; let mut kv: Vec<_> = {}.into_iter().map(|x| (key(&x), x)).collect(); kv.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap()); kv.into_iter().map(|(_, x)| x).collect::<Vec<_>>() }}",
+                        key, owned
+                    ),
                     "min_by" => format!("{{ let key = {}; {}.into_iter().min_by(|a, b| key(a).partial_cmp(&key(b)).unwrap()) }}", key, owned),
                     // Rust's `max_by` keeps the *last* of a tie and `min_by`
                     // the first. Lume gives the first for both, as Ruby and
@@ -9657,7 +9680,17 @@ impl Gen {
                     "+" if lt == Type::Str || lt == Type::Char => format!("format!(\"{{}}{{}}\", {}, {})", l, r),
                     "+" if matches!(lt, Type::List(_) | Type::Iter(..)) => format!("{{ let mut lume_v = ({}).clone(); lume_v.extend(({}).iter().cloned()); lume_v }}", l, r),
                     // strings compare as `&str` whatever they are held as
-                    "==" | "!=" | "<" | "<=" | ">" | ">=" if lt == Type::Str => format!("(({}).lume_as_str() {} ({}).lume_as_str())", l, op, r),
+                    "==" | "!=" | "<" | "<=" | ">" | ">=" if lt == Type::Str => {
+                        // `line.trim == ""` compares the trimmed slice; no new string
+                        let slice = |e: &Expr, t: String| -> String {
+                            let trims = matches!(&e.kind, ExprKind::Method { name, args, .. } if args.is_empty() && matches!(name.as_str(), "trim" | "trim_left" | "trim_right"));
+                            match t.strip_suffix(".to_string()") {
+                                Some(base) if trims => base.to_string(),
+                                _ => t,
+                            }
+                        };
+                        format!("(({}).lume_as_str() {} ({}).lume_as_str())", slice(lhs, l), op, slice(rhs, r))
+                    }
                     _ => format!("({} {} {})", l, op, r),
                 }
             }
@@ -9943,7 +9976,9 @@ impl Gen {
                             return Ok(format!("{}.{}(({}) as usize)", r, name, n));
                         }
                         "enumerate" if args.is_empty() => {
-                            return Ok(format!("{}.enumerate().map(|(i, x)| (i as i64, x))", r));
+                            // pairs are values: a borrowed item is copied into its pair
+                            let x = if *by_ref { "x.clone()" } else { "x" };
+                            return Ok(format!("{}.enumerate().map(|(i, x)| (i as i64, {}))", r, x));
                         }
                         "len" if args.is_empty() => return Ok(format!("({}.count() as i64)", r)),
                         "to_list" if args.is_empty() => return Ok(self.collect_iter_t(&r, *by_ref, elem)),
@@ -10255,7 +10290,10 @@ impl Gen {
                     let base = if elem.is_copy() { format!("({}).iter().cloned()", r) } else { format!("({}).iter()", r) };
                     match name.as_str() {
                         "take" | "skip" if parts.len() == 1 => return Ok(format!("{}.{}(({}) as usize)", base, name, parts[0])),
-                        "enumerate" if parts.is_empty() => return Ok(format!("{}.enumerate().map(|(i, x)| (i as i64, x))", base)),
+                        "enumerate" if parts.is_empty() => {
+                            let x = if elem.is_copy() { "x" } else { "x.clone()" };
+                            return Ok(format!("{}.enumerate().map(|(i, x)| (i as i64, {}))", base, x));
+                        }
                         "to_list" if parts.is_empty() => return Ok(format!("({}).clone()", r)),
                         _ => {}
                     }
@@ -11174,8 +11212,8 @@ fn builtin_method_type(recv: &Type, name: &str) -> Type {
             _ => Type::Unknown,
         },
         "enumerate" => match recv {
-            Type::List(e) => Type::Iter(Box::new(Type::Tuple(vec![Type::Int, (**e).clone()])), !e.is_copy()),
-            Type::Iter(e, by_ref) => Type::Iter(Box::new(Type::Tuple(vec![Type::Int, (**e).clone()])), *by_ref),
+            // `(Int, T)` pairs are values, whatever the items were
+            Type::List(e) | Type::Iter(e, _) => Type::Iter(Box::new(Type::Tuple(vec![Type::Int, (**e).clone()])), false),
             _ => Type::Unknown,
         },
         "to_list" => recv.materialized(),

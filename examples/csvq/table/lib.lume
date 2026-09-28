@@ -1,0 +1,43 @@
+# table — lays rows out in columns under a header.
+#
+# A column whose every value is a number is right-aligned, as a
+# spreadsheet does; any other is left-aligned.
+
+pub enum Align:
+  Left
+  Right
+
+pub def render(headers: [Str], rows: [[Str]]) -> Str:
+  var widths: [Int] = headers.map { |h| h.len }.to_list
+  for row in rows:
+    for i, v in row.enumerate:
+      if v.len > widths.at(i):
+        widths[i] = v.len
+  aligns = headers.enumerate.map { |i, _h| align_of(rows.map { |r| r.at(i) }.to_list) }.to_list
+  var out: [Str] = []
+  out.push(line(headers, widths, headers.map { |_h| Left }.to_list))
+  out.push(widths.map { |w| "-".repeat(w) }.to_list.join("  "))
+  for row in rows:
+    out.push(line(row, widths, aligns))
+  out.join("\n")
+
+# Right when every value reads as a number.
+pub def align_of(values: [Str]) -> Align:
+  if not values.empty? and values.all? { |v| v.to_float.ok? }:
+    Right
+  else:
+    Left
+
+def line(cells: [Str], widths: [Int], aligns: [Align]) -> Str:
+  var parts: [Str] = []
+  for i, c in cells.enumerate:
+    w = widths.at(i)
+    cell = match aligns.at(i):
+      Left  -> c.pad_right(w)
+      Right -> c.pad(w)
+    parts.push(cell)
+  parts.join("  ").trim_right
+
+test "numbers go right, words go left":
+  t = render(["name", "age"], [["ann", "7"], ["bob", "12"]])
+  assert t == "name  age\n----  ---\nann     7\nbob    12"
