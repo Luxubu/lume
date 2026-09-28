@@ -745,6 +745,17 @@ pub struct Gen {
     /// Scope depths at which a loop or a block body began: a binding from
     /// outside is used again on the next iteration or call.
     barriers: Vec<usize>,
+    /// The scope depths at which a closure body starts: a name bound below
+    /// one can never be moved out, however dead it is.
+    closure_barriers: Vec<usize>,
+    /// The statements being emitted, innermost last, for counting how often
+    /// a name appears in the one at hand.
+    stmt_stack: Vec<Stmt>,
+    /// `x = <value using x>`: while the value is emitted, the old `x` is
+    /// dead once the value is worked out, since the statement replaces it.
+    /// With the depth of `rest_stack` and `barriers` where the statement
+    /// began: only statements and loops inside the value can still use it.
+    dying: Option<(String, usize, usize)>,
     /// Rust paths of imported items, keyed by canonical id ("users.model.User").
     paths: HashMap<String, String>,
     /// How this module spells imported items -> canonical id
@@ -853,6 +864,9 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, module_id: &str
         has_rust_blocks: false,
         rest_stack: Vec::new(),
         barriers: Vec::new(),
+        closure_barriers: Vec::new(),
+        stmt_stack: Vec::new(),
+        dying: None,
         paths: HashMap::new(),
         canon: HashMap::new(),
         module_aliases: HashMap::new(),
@@ -4251,6 +4265,18 @@ impl Gen {
     // ----- type inference ---------------------------------------------------
 
     fn ty_of(&mut self, e: &Expr) -> Type {
+        let t = self.ty_of_inner(e);
+        // a chain that starts by consuming its list hands out the items
+        // themselves, not borrows of them
+        if let (Type::Iter(el, true), ExprKind::Method { recv, name, .. }) = (&t, &e.kind) {
+            if matches!(name.as_str(), "filter" | "reject" | "take_while" | "take" | "skip") && self.can_consume(recv) {
+                return Type::Iter(el.clone(), false);
+            }
+        }
+        t
+    }
+
+    fn ty_of_inner(&mut self, e: &Expr) -> Type {
         // `Temp.from_f` named where behaviour is wanted is behaviour
         if let Some(key) = self.module_fn_ref(e) {
             let s = self.fns[&key].clone();
@@ -6434,7 +6460,9 @@ impl Gen {
         for (i, s) in b.stmts.iter().enumerate() {
             let last = i + 1 == n;
             self.rest_stack.push(b.stmts[i + 1..].to_vec());
+            self.stmt_stack.push(s.clone());
             let r = self.stmt(s, want_value && last);
+            self.stmt_stack.pop();
             self.rest_stack.pop();
             r?;
         }
@@ -6467,6 +6495,65 @@ impl Gen {
         r
     }
 
+    /// Can the list named by `e` be given away here instead of read through
+    /// a borrow — its items moved out rather than copied? Yes for an owned
+    /// local that nothing uses afterwards and this statement names once, or
+    /// that this statement replaces (`rows = rows.filter { .. }.to_list`).
+    /// Never for a parameter, a field, a `shared` value, or a name a block
+    /// captures: Rust moves out of none of those.
+    fn can_consume(&self, e: &Expr) -> bool {
+        let n = match &e.kind {
+            ExprKind::Ident(n) => n,
+            _ => return false,
+        };
+        let b = match self.lookup(n) {
+            Some(b) => b,
+            None => return false,
+        };
+        if b.borrowed || self.lent_names.contains(n) || self.kept_captured.contains(n) || self.param_blocks.contains(n) {
+            return false;
+        }
+        match &b.ty {
+            Type::List(el) if !el.is_copy() => {}
+            _ => return false,
+        }
+        let idx = match self.scopes.iter().rposition(|sc| sc.contains_key(n)) {
+            Some(i) => i,
+            None => return false,
+        };
+        if self.closure_barriers.iter().any(|c| idx < *c) {
+            return false;
+        }
+        let here = match self.stmt_stack.last() {
+            Some(st) => st,
+            None => return false,
+        };
+        if mention_count(here, n) != 1 {
+            return false;
+        }
+        self.dead_now(n)
+    }
+
+    /// Is the local `name` finished with once this statement has read it?
+    /// Either nothing later uses it, or this statement replaces it
+    /// (`x = <value using x>`) and nothing later inside the value does.
+    fn dead_now(&self, n: &str) -> bool {
+        if let Some((d, rest_at, barriers_at)) = &self.dying {
+            // what follows the replacing statement sees the new value; what
+            // follows inside it, or a loop inside it, may still see the old
+            if d == n && self.barriers.len() == *barriers_at && !self.rest_stack[*rest_at..].iter().any(|rest| rest.iter().any(|st| stmt_uses(st, n))) {
+                return true;
+            }
+        }
+        !self.used_after(n)
+    }
+
+    /// `xs.reverse`, `xs.sort` and the like, where `xs` can be given away:
+    /// the result is built in the list itself, not in a copy of it.
+    fn consumes_recv(&self, e: &Expr) -> bool {
+        matches!(&e.kind, ExprKind::Method { recv, .. } if self.can_consume(recv))
+    }
+
     /// True when a name bound in the current block is not used by any later
     /// statement, so its value may be moved instead of cloned.
     fn dead_after_this(&self, name: &str) -> bool {
@@ -6486,6 +6573,22 @@ impl Gen {
     // ----- statements -------------------------------------------------------
 
     fn stmt(&mut self, s: &Stmt, is_tail: bool) -> Result<()> {
+        // `x = <value using x>` replaces `x`: its old value is dead once the
+        // new one has been worked out from it
+        let replacing = match s {
+            Stmt::Bind { name, ty: None, .. } if self.lookup(name).map(|b| b.mutable && !b.borrowed).unwrap_or(false) => {
+                Some((name.clone(), self.rest_stack.len(), self.barriers.len()))
+            }
+            // a statement inside the value keeps the one it is part of
+            _ => self.dying.clone(),
+        };
+        let saved = std::mem::replace(&mut self.dying, replacing);
+        let r = self.stmt_inner(s, is_tail);
+        self.dying = saved;
+        r
+    }
+
+    fn stmt_inner(&mut self, s: &Stmt, is_tail: bool) -> Result<()> {
         // A `shared var` place on the left: do the change inside one lock.
         match s {
             Stmt::FieldAssign { recv, value, .. } | Stmt::IndexAssign { recv, value, .. } => {
@@ -7467,7 +7570,7 @@ impl Gen {
         if !t.is_copy() && self.is_borrowed_place(e) {
             // a borrowed string may be a `&str`: to_string covers both
             if t == Type::Str { Ok(format!("{}.to_string()", s)) } else { Ok(format!("{}.clone()", s)) }
-        } else if !t.is_copy() && matches!(&e.kind, ExprKind::Ident(n) if self.lookup(n).is_some() && self.used_after(n)) {
+        } else if !t.is_copy() && matches!(&e.kind, ExprKind::Ident(n) if self.lookup(n).is_some() && !self.dead_now(n)) {
             // an owned local that is used again later: give away a copy, keep the value
             Ok(format!("{}.clone()", s))
         } else {
@@ -7647,6 +7750,9 @@ impl Gen {
             Type::List(elem) => {
                 if elem.is_copy() {
                     Ok((format!("({}).iter().cloned()", r), *elem, false))
+                } else if self.can_consume(recv) {
+                    // the list is not needed again: take its items, not copies
+                    Ok((format!("({}).into_iter()", r), *elem, false))
                 } else {
                     Ok((format!("({}).iter()", r), *elem, true))
                 }
@@ -7767,6 +7873,7 @@ impl Gen {
         self.in_block = true;
         self.tail_of_fn = false;
         self.barriers.push(self.scopes.len() - 1);
+        self.closure_barriers.push(self.scopes.len() - 1);
         let saved_out = std::mem::take(&mut self.out);
         let base = self.indent;
         let inline = body.stmts.len() == 1 && matches!(body.stmts[0], Stmt::Expr(ref x) if !matches!(x.kind, ExprKind::If { .. } | ExprKind::Match { .. }));
@@ -7786,6 +7893,7 @@ impl Gen {
         };
         self.out = saved_out;
         self.barriers.pop();
+        self.closure_barriers.pop();
         self.loop_depth = saved_loop;
         self.in_block = saved_in_block;
         self.tail_of_fn = saved_tail;
@@ -9678,7 +9786,16 @@ impl Gen {
                     "or" => format!("({} || {})", l, r),
                     "**" => format!("({}).lume_pow({})", l, r),
                     "+" if lt == Type::Str || lt == Type::Char => format!("format!(\"{{}}{{}}\", {}, {})", l, r),
-                    "+" if matches!(lt, Type::List(_) | Type::Iter(..)) => format!("{{ let mut lume_v = ({}).clone(); lume_v.extend(({}).iter().cloned()); lume_v }}", l, r),
+                    "+" if matches!(lt, Type::List(_) | Type::Iter(..)) => {
+                        // the left list is extended in place when nothing
+                        // else needs it: a value just built, or a local at
+                        // its last use; the right one gives its items away
+                        // on the same terms
+                        let fresh = |x: &Expr| matches!(x.kind, ExprKind::Call { .. } | ExprKind::Binary { .. }) || is_built(x);
+                        let copy = if fresh(lhs) || self.can_consume(lhs) { "" } else { ".clone()" };
+                        let add = if fresh(rhs) || self.can_consume(rhs) { format!("({})", r) } else { format!("({}).iter().cloned()", r) };
+                        format!("{{ let mut lume_v = ({}){}; lume_v.extend({}); lume_v }}", l, copy, add)
+                    }
                     // strings compare as `&str` whatever they are held as
                     "==" | "!=" | "<" | "<=" | ">" | ">=" if lt == Type::Str => {
                         // `line.trim == ""` compares the trimmed slice; no new string
@@ -10287,13 +10404,22 @@ impl Gen {
                     });
                 }
                 if let Type::List(elem) = &rt {
-                    let base = if elem.is_copy() { format!("({}).iter().cloned()", r) } else { format!("({}).iter()", r) };
+                    // a list not needed again gives its items away
+                    let consumed = !elem.is_copy() && matches!(name.as_str(), "take" | "skip" | "enumerate" | "to_list") && self.can_consume(recv);
+                    let base = if elem.is_copy() {
+                        format!("({}).iter().cloned()", r)
+                    } else if consumed {
+                        format!("({}).into_iter()", r)
+                    } else {
+                        format!("({}).iter()", r)
+                    };
                     match name.as_str() {
                         "take" | "skip" if parts.len() == 1 => return Ok(format!("{}.{}(({}) as usize)", base, name, parts[0])),
                         "enumerate" if parts.is_empty() => {
-                            let x = if elem.is_copy() { "x" } else { "x.clone()" };
+                            let x = if elem.is_copy() || consumed { "x" } else { "x.clone()" };
                             return Ok(format!("{}.enumerate().map(|(i, x)| (i as i64, {}))", base, x));
                         }
+                        "to_list" if parts.is_empty() && consumed => return Ok(r),
                         "to_list" if parts.is_empty() => return Ok(format!("({}).clone()", r)),
                         _ => {}
                     }
@@ -10500,7 +10626,11 @@ impl Gen {
                 }
             }
             "reverse" if *rt == Type::Str => { need(0)?; format!("({}).chars().rev().collect::<String>()", recv) }
-            "reverse" => { need(0)?; format!("{{ let mut lume_v = ({}).clone(); lume_v.reverse(); lume_v }}", recv) }
+            "reverse" => {
+                need(0)?;
+                let copy = if self.consumes_recv(e) { "" } else { ".clone()" };
+                format!("{{ let mut lume_v = ({}){}; lume_v.reverse(); lume_v }}", recv, copy)
+            }
             "slice" => { need(2)?; format!("({}).chars().skip(({}).max(0) as usize).take(({}).max(0) as usize).collect::<String>()", recv, args[0], args[1]) }
             "replace" => { need(2)?; format!("({}).replace(&*{}, &*{})", recv, args[0], args[1]) }
             "repeat" => { need(1)?; format!("({}).repeat(({}).max(0) as usize)", recv, args[0]) }
@@ -10534,8 +10664,8 @@ impl Gen {
                     _ => false,
                 };
                 match (name, partial) {
-                    ("sort", true) => format!("{{ let mut lume_v = ({}).clone(); lume_v.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)); lume_v }}", recv),
-                    ("sort", false) => format!("{{ let mut lume_v = ({}).clone(); lume_v.sort(); lume_v }}", recv),
+                    ("sort", true) => format!("{{ let mut lume_v = ({}){}; lume_v.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)); lume_v }}", recv, if self.consumes_recv(e) { "" } else { ".clone()" }),
+                    ("sort", false) => format!("{{ let mut lume_v = ({}){}; lume_v.sort(); lume_v }}", recv, if self.consumes_recv(e) { "" } else { ".clone()" }),
                     (_, true) => format!("({}).iter().cloned().{}_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))", recv, name),
                     (_, false) => format!("({}).iter().cloned().{}()", recv, name),
                 }
@@ -11748,5 +11878,70 @@ fn rust_char(c: char) -> String {
         '\0' => "\\0".into(),
         c if (c as u32) < 0x20 => format!("\\u{{{:x}}}", c as u32),
         c => c.to_string(),
+    }
+}
+
+/// How often `name` is used in `s`. Of the branches of an `if` or a
+/// `match` only one runs, so they count as the largest of them, not their
+/// sum: `rows = if a: rows.sort else: rows.reverse` uses `rows` once.
+fn mention_count(s: &Stmt, name: &str) -> usize {
+    let blk = |b: &Block| b.stmts.iter().map(|st| mention_count(st, name)).sum::<usize>();
+    let e = |x: &Expr| expr_count(x, name);
+    match s {
+        Stmt::Bind { value, .. } | Stmt::Var { value, .. } | Stmt::OpAssign { value, .. } | Stmt::Destructure { value, .. } | Stmt::Shared { value, .. } => e(value),
+        Stmt::FieldAssign { recv, value, .. } => e(recv) + e(value),
+        Stmt::IndexAssign { recv, index, value, .. } => e(recv) + e(index) + e(value),
+        Stmt::Expr(x) => e(x),
+        Stmt::Return { value, .. } => value.as_ref().map(e).unwrap_or(0),
+        Stmt::While { cond, body } => e(cond) + blk(body),
+        Stmt::For { iter, filter, body, .. } => e(iter) + filter.as_ref().map(e).unwrap_or(0) + blk(body),
+        Stmt::Break { .. } | Stmt::Next { .. } => 0,
+        Stmt::Assert { cond, .. } => e(cond),
+    }
+}
+
+fn expr_count(e: &Expr, name: &str) -> usize {
+    let c = |x: &Expr| expr_count(x, name);
+    let blk = |b: &Block| b.stmts.iter().map(|st| mention_count(st, name)).sum::<usize>();
+    match &e.kind {
+        ExprKind::Ident(n) => (n == name) as usize,
+        // Rust written by hand may use it any number of times
+        ExprKind::Rust(code) => if code.contains(name) { 2 } else { 0 },
+        ExprKind::SelfRef => (name == "self") as usize,
+        ExprKind::Int(_) | ExprKind::Float(_) | ExprKind::Bool(_) | ExprKind::None | ExprKind::Placeholder => 0,
+        ExprKind::Str(pieces) => pieces.iter().map(|p| match p {
+            StrPiece::Expr(x) => c(x),
+            _ => 0,
+        }).sum(),
+        ExprKind::List(items) | ExprKind::Tuple(items) | ExprKind::SetLit(items) => items.iter().map(c).sum(),
+        ExprKind::MapLit(pairs) => pairs.iter().map(|(k, v)| c(k) + c(v)).sum(),
+        ExprKind::Await(x) => c(x),
+        ExprKind::Spawn(b) | ExprKind::Lambda { body: b, .. } => blk(b),
+        ExprKind::Range { lo, hi, .. } => c(lo) + c(hi),
+        ExprKind::Unary { expr, .. } | ExprKind::Some(expr) | ExprKind::Ok(expr) | ExprKind::Try(expr) | ExprKind::Unwrap(expr) | ExprKind::Puts(expr) | ExprKind::Warn(expr) => c(expr),
+        ExprKind::TupleIndex { recv, .. } => c(recv),
+        ExprKind::Index { recv, index } => c(recv) + c(index),
+        ExprKind::Binary { lhs, rhs, .. } => c(lhs) + c(rhs),
+        ExprKind::Call { name: callee, args } => (callee == name) as usize + args.iter().map(|a| c(&a.value)).sum::<usize>(),
+        ExprKind::Method { recv, args, .. } => c(recv) + args.iter().map(|a| c(&a.value)).sum::<usize>(),
+        ExprKind::If { branches, else_block } => {
+            let conds: usize = branches.iter().map(|(x, _)| c(x)).sum();
+            let most = branches.iter().map(|(_, b)| blk(b)).chain(else_block.iter().map(blk)).max().unwrap_or(0);
+            conds + most
+        }
+        ExprKind::Match { scrutinee, arms } => {
+            let guards: usize = arms.iter().map(|a| a.guard.as_ref().map(c).unwrap_or(0)).sum();
+            c(scrutinee) + guards + arms.iter().map(|a| blk(&a.body)).max().unwrap_or(0)
+        }
+    }
+}
+
+/// A value this expression makes new — a list literal, or a chain ending in
+/// `.to_list`, `.sort`, `.reverse` — so nothing else holds it.
+fn is_built(e: &Expr) -> bool {
+    match &e.kind {
+        ExprKind::List(_) => true,
+        ExprKind::Method { name, args, .. } => args.is_empty() && matches!(name.as_str(), "to_list" | "sort" | "reverse"),
+        _ => false,
     }
 }

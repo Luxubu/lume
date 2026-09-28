@@ -161,3 +161,36 @@ for x in seen:
   seen.add(x * 10)
 puts seen.len    #=> 4
 ```
+
+## When a list is copied, and when it moves
+
+A list is a value: giving it to another name never lets the two change each
+other. What that costs depends on whether the old name is needed again.
+**Where it is not, the list moves**, as Rust's values do: no item is copied.
+
+```lume
+var rows = [["b", "2"], ["a", "1"], ["d", "4"]]
+rows = rows.filter { |r| r.at(0) != "d" }.to_list   # rows is replaced: moved
+rows = rows.sort_by { |r| r.at(1) }                  # moved again
+puts rows           #=> [["a", "1"], ["b", "2"]]
+
+words = ["pear", "fig"]
+short = words.filter { |w| w.len < 4 }.to_list      # words is used below: copied
+puts short          #=> ["fig"]
+puts words          #=> ["pear", "fig"]
+```
+
+A list moves when it is a local of your own and one of these holds:
+
+- nothing after the statement uses it;
+- the statement replaces it, as in `rows = rows.filter { .. }.to_list`,
+  even inside a loop.
+
+It is copied when anything later reads it, when the statement names it twice,
+when it is a parameter (a function borrows what it is given), when it is a
+field, and when a block uses it. A block may run many times, so it can never
+give away what it holds. `+` extends a list that nothing else holds instead
+of copying it.
+
+None of this changes what a program prints. It changes only how much work
+the program does.

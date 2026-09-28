@@ -1,0 +1,57 @@
+# A list that is not needed again is given away, not copied: its items move
+# into what is built from it, as Rust's `into_iter` moves them. Everywhere
+# the old list is still needed, it is copied as before. Each line below is
+# a place where one or the other must happen; the output is the same
+# either way, which is the point.
+
+def main:
+  # replaced by what is built from it, in a loop: moved each time
+  var rows = [["b", "2"], ["a", "1"], ["c", "3"], ["d", "4"]]
+  for keep in ["a", "b", "c"]:
+    rows = rows.filter { |r| r.at(0) != "d" }.to_list
+  puts rows
+
+  # replaced in one branch of an `if` or the other
+  sorted = true
+  rows = if sorted: rows.sort_by { |r| r.at(1) } else: rows.reverse
+  puts rows
+  rows = rows.reverse
+  puts rows
+  rows = rows.take(2).to_list
+  puts rows
+
+  # still needed afterwards: copied
+  words = ["pear", "fig", "apple"]
+  short = words.filter { |w| w.len < 5 }.to_list
+  puts short
+  puts words
+
+  # named twice in one statement: copied for the first, then read
+  pair = (words.sort, words.len)
+  puts pair
+
+  # used inside a block: never moved out of it
+  var names = ["x", "yy"]
+  lens = [1, 2].map { |i| names.filter { |n| n.len == i }.to_list }.to_list
+  puts lens
+  puts names
+
+  # the last use: moved
+  last = names.sort
+  puts last
+
+  # a replacement that reads the old value again later in its own value
+  var xs = ["b", "a"]
+  xs = if true:
+    ys = xs.sort
+    ys + xs
+  else:
+    xs
+  puts xs
+
+  # a parameter is borrowed: never moved
+  puts firsts([["p", "q"], ["r"]])
+
+def firsts(rows: [[Str]]) -> [Str]:
+  kept = rows.filter { |r| r.len > 1 }.to_list
+  return kept.map { |r| r.at(0) }.to_list + [rows.len.to_s]
