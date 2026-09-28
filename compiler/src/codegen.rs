@@ -350,6 +350,18 @@ impl<T: std::hash::Hash + Eq + Clone> LumeSet<T> {
 }
 impl<T: std::hash::Hash + Eq + Clone> Default for LumeSet<T> { fn default() -> Self { Self::new() } }
 impl<K: std::hash::Hash + Eq + Clone, V: Clone> Default for LumeMap<K, V> { fn default() -> Self { Self::new() } }
+/// A set given away whole hands out its items, in insertion order.
+impl<T> IntoIterator for LumeSet<T> {
+    type Item = T;
+    type IntoIter = std::iter::Map<<LumeMap<T, ()> as IntoIterator>::IntoIter, fn((T, ())) -> T>;
+    fn into_iter(self) -> Self::IntoIter { self.m.into_iter().map((|(t, _)| t) as fn((T, ())) -> T) }
+}
+/// A map given away whole hands out its entries, in insertion order.
+impl<K, V> IntoIterator for LumeMap<K, V> {
+    type Item = (K, V);
+    type IntoIter = std::iter::Flatten<std::vec::IntoIter<Option<(K, V)>>>;
+    fn into_iter(self) -> Self::IntoIter { self.entries.into_iter().flatten() }
+}
 impl<T: std::hash::Hash + Eq + Clone> FromIterator<T> for LumeSet<T> {
     fn from_iter<I: IntoIterator<Item = T>>(it: I) -> Self { let mut s = Self::new(); for x in it { s.insert(x); } s }
 }
@@ -756,6 +768,9 @@ pub struct Gen {
     /// With the depth of `rest_stack` and `barriers` where the statement
     /// began: only statements and loops inside the value can still use it.
     dying: Option<(String, usize, usize)>,
+    /// Which `rest_stack` levels are a call's arguments still to come, not
+    /// later statements: a field move has already checked those.
+    arg_rest_levels: Vec<usize>,
     /// Rust paths of imported items, keyed by canonical id ("users.model.User").
     paths: HashMap<String, String>,
     /// How this module spells imported items -> canonical id
@@ -867,6 +882,7 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, module_id: &str
         closure_barriers: Vec::new(),
         stmt_stack: Vec::new(),
         dying: None,
+        arg_rest_levels: Vec::new(),
         paths: HashMap::new(),
         canon: HashMap::new(),
         module_aliases: HashMap::new(),
@@ -6489,9 +6505,11 @@ impl Gen {
     /// `t` into the field rather than move it, because `slug(t)` follows.
     fn arg_with_rest(&mut self, a: &Expr, want: &Type, rest: &[&Expr]) -> Result<String> {
         let later: Vec<Stmt> = rest.iter().map(|x| Stmt::Expr((*x).clone())).collect();
+        self.arg_rest_levels.push(self.rest_stack.len());
         self.rest_stack.push(later);
         let r = self.expr_owned_as(a, want);
         self.rest_stack.pop();
+        self.arg_rest_levels.pop();
         r
     }
 
@@ -6501,11 +6519,20 @@ impl Gen {
     /// that this statement replaces (`rows = rows.filter { .. }.to_list`).
     /// Never for a parameter, a field, a `shared` value, or a name a block
     /// captures: Rust moves out of none of those.
+    /// Is `name` a `shared` value anywhere in scope? Under its lock the name
+    /// is bound again as the plain value, which must still never be moved.
+    fn shared_anywhere(&self, name: &str) -> bool {
+        self.scopes.iter().any(|sc| matches!(sc.get(name), Some(b) if matches!(b.ty, Type::Shared(..))))
+    }
+
     fn can_consume(&self, e: &Expr) -> bool {
         let n = match &e.kind {
             ExprKind::Ident(n) => n,
             _ => return false,
         };
+        if self.shared_anywhere(n) {
+            return false;
+        }
         let b = match self.lookup(n) {
             Some(b) => b,
             None => return false,
@@ -6513,8 +6540,11 @@ impl Gen {
         if b.borrowed || self.lent_names.contains(n) || self.kept_captured.contains(n) || self.param_blocks.contains(n) {
             return false;
         }
+        // anything a copy would cost something for; never a block or a
+        // `shared` value, which are handles
         match &b.ty {
-            Type::List(el) if !el.is_copy() => {}
+            Type::List(el) | Type::Set(el) if !el.is_copy() => {}
+            Type::Str | Type::Map(..) | Type::Named(_) | Type::App(..) => {}
             _ => return false,
         }
         let idx = match self.scopes.iter().rposition(|sc| sc.contains_key(n)) {
@@ -6546,6 +6576,74 @@ impl Gen {
             }
         }
         !self.used_after(n)
+    }
+
+    /// `v.f` in a place that takes the value, where `v` is a struct of this
+    /// function's that nothing needs afterwards: the field moves out, as a
+    /// Rust struct's fields can, one by one. This statement must use each
+    /// field of `v` at most once and never `v` itself.
+    fn can_move_field(&self, e: &Expr) -> bool {
+        let (v, f) = match &e.kind {
+            ExprKind::Method { recv, name, args } if args.is_empty() => match &recv.kind {
+                ExprKind::Ident(v) => (v, name),
+                _ => return false,
+            },
+            _ => return false,
+        };
+        if self.shared_anywhere(v) {
+            return false;
+        }
+        let b = match self.lookup(v) {
+            Some(b) => b,
+            None => return false,
+        };
+        if b.borrowed || self.lent_names.contains(v) || self.kept_captured.contains(v) {
+            return false;
+        }
+        let key = match &b.ty {
+            Type::Named(_) | Type::App(..) => self.type_key(&b.ty),
+            _ => return false,
+        };
+        let fields: Vec<String> = match self.structs.get(&key) {
+            Some(info) => info.fields.iter().map(|(n, _)| n.clone()).collect(),
+            None => return false,
+        };
+        if !fields.contains(f) {
+            return false;
+        }
+        let idx = match self.scopes.iter().rposition(|sc| sc.contains_key(v)) {
+            Some(i) => i,
+            None => return false,
+        };
+        if self.closure_barriers.iter().any(|c| idx < *c) {
+            return false;
+        }
+        let here = match self.stmt_stack.last() {
+            Some(st) => st,
+            None => return false,
+        };
+        let mut uses = Vec::new();
+        field_uses_stmt(here, v, &mut uses);
+        // a name the statement never writes — one the compiler made, such as
+        // a lock guard — is never moved from
+        if !uses.contains(&Some(f.clone())) {
+            return false;
+        }
+        let mut seen = HashSet::new();
+        for u in &uses {
+            match u {
+                Some(n) if fields.contains(n) && seen.insert(n.clone()) => {}
+                _ => return false,
+            }
+        }
+        // the rest of this statement's arguments were counted above
+        let used_from = |from: usize| self.rest_stack.iter().enumerate().skip(from).any(|(i, rest)| !self.arg_rest_levels.contains(&i) && rest.iter().any(|st| stmt_uses(st, v)));
+        let later = used_from(0);
+        let dying = matches!(&self.dying, Some((d, rest_at, at)) if d == v && self.barriers.len() == *at && !used_from(*rest_at));
+        if self.barriers.iter().any(|b| idx < *b) && !dying {
+            return false;
+        }
+        dying || !later
     }
 
     /// `xs.reverse`, `xs.sort` and the like, where `xs` can be given away:
@@ -7567,7 +7665,10 @@ impl Gen {
             return Ok(self.collect_iter_t(&s, by_ref, &elem));
         }
         let s = self.expr(e)?;
-        if !t.is_copy() && self.is_borrowed_place(e) {
+        if !t.is_copy() && self.can_move_field(e) {
+            // a field of a struct nothing needs afterwards moves out
+            Ok(s)
+        } else if !t.is_copy() && self.is_borrowed_place(e) {
             // a borrowed string may be a `&str`: to_string covers both
             if t == Type::Str { Ok(format!("{}.to_string()", s)) } else { Ok(format!("{}.clone()", s)) }
         } else if !t.is_copy() && matches!(&e.kind, ExprKind::Ident(n) if self.lookup(n).is_some() && !self.dead_now(n)) {
@@ -8111,6 +8212,18 @@ impl Gen {
                     if v.is_copy() { "" } else { "&" },
                     self.rt(v)
                 );
+                if self.can_consume(recv) {
+                    // a map not needed again gives its entries away
+                    let kp = if k.is_copy() { "k" } else { "&k" };
+                    let vp = if v.is_copy() { "v" } else { "&v" };
+                    return Ok(format!(
+                        "{{ let lume_keep = {}; let mut lume_m = LumeMap::new(); for (k, v) in ({}).into_iter() {{ if lume_keep(({}, {})) {{ lume_m.insert(k, v); }} }} lume_m }}",
+                        annotate_closure(&f, &pair_ty),
+                        r,
+                        kp,
+                        vp
+                    ));
+                }
                 return Ok(format!(
                     "{{ let lume_keep = {}; let mut lume_m = LumeMap::new(); for (k, v) in ({}).iter() {{ if lume_keep({}) {{ lume_m.insert(k.clone(), v.clone()); }} }} lume_m }}",
                     annotate_closure(&f, &pair_ty),
@@ -8121,9 +8234,11 @@ impl Gen {
             (Type::Set(el), "filter" | "reject") => {
                 let el = (**el).clone();
                 let r = self.expr(recv)?;
-                let by_ref = !el.is_copy();
+                // a set not needed again gives its items away
+                let consumed = !el.is_copy() && self.can_consume(recv);
+                let by_ref = !el.is_copy() && !consumed;
                 let f = self.gen_lambda_ex(params, body, &el, by_ref, true, true, None, name == "reject", lam)?;
-                let it = if by_ref { format!("({}).iter()", r) } else { format!("({}).iter().cloned()", r) };
+                let it = if consumed { format!("({}).into_iter()", r) } else if by_ref { format!("({}).iter()", r) } else { format!("({}).iter().cloned()", r) };
                 let tail = if by_ref { ".cloned()" } else { "" };
                 return Ok(format!("{}.filter({}){}.collect::<LumeSet<_>>()", it, f, tail));
             }
@@ -9752,12 +9867,25 @@ impl Gen {
                 if *op == "+" && text_like(&lt) && text_like(&rt_) {
                     let mut leaves: Vec<&Expr> = Vec::new();
                     self.text_leaves(e, &mut leaves);
+                    // `acc = acc + w`: when the first piece is a string
+                    // nothing needs afterwards, the rest are written onto
+                    // its end rather than into a new string
+                    let grow = leaves.len() > 1 && self.ty_of(leaves[0]).materialized() == Type::Str && self.can_consume(leaves[0]);
                     let mut parts = Vec::new();
                     for leaf in leaves {
                         parts.push(match str_literal(leaf) {
                             Some(t) => t,
                             None => self.expr_val(leaf)?,
                         });
+                    }
+                    if grow {
+                        let first = parts.remove(0);
+                        return Ok(format!(
+                            "{{ use std::fmt::Write as _; let mut lume_s = {}; write!(lume_s, \"{}\", {}).unwrap(); lume_s }}",
+                            first,
+                            "{}".repeat(parts.len()),
+                            parts.join(", ")
+                        ));
                     }
                     return Ok(format!("format!(\"{}\", {})", "{}".repeat(parts.len()), parts.join(", ")));
                 }
@@ -11943,5 +12071,118 @@ fn is_built(e: &Expr) -> bool {
         ExprKind::List(_) => true,
         ExprKind::Method { name, args, .. } => args.is_empty() && matches!(name.as_str(), "to_list" | "sort" | "reverse"),
         _ => false,
+    }
+}
+
+/// Every use of `name` in `s`: `Some(f)` for `name.f` with no arguments,
+/// `None` for anything else — the bare name, a method call with arguments,
+/// or any use inside a block, which may run many times.
+fn field_uses_stmt(s: &Stmt, name: &str, out: &mut Vec<Option<String>>) {
+    let mut e = |x: &Expr, out: &mut Vec<Option<String>>| field_uses(x, name, out);
+    let blk = |b: &Block, out: &mut Vec<Option<String>>| {
+        for st in &b.stmts {
+            field_uses_stmt(st, name, out);
+        }
+    };
+    match s {
+        Stmt::Bind { value, .. } | Stmt::Var { value, .. } | Stmt::OpAssign { value, .. } | Stmt::Destructure { value, .. } | Stmt::Shared { value, .. } => e(value, out),
+        Stmt::FieldAssign { recv, value, .. } => {
+            e(recv, out);
+            e(value, out);
+        }
+        Stmt::IndexAssign { recv, index, value, .. } => {
+            e(recv, out);
+            e(index, out);
+            e(value, out);
+        }
+        Stmt::Expr(x) | Stmt::Assert { cond: x, .. } => e(x, out),
+        Stmt::Return { value, .. } => {
+            if let Some(v) = value {
+                e(v, out);
+            }
+        }
+        Stmt::While { cond, body } => {
+            e(cond, out);
+            blk(body, out);
+        }
+        Stmt::For { iter, filter, body, .. } => {
+            e(iter, out);
+            if let Some(f) = filter {
+                e(f, out);
+            }
+            blk(body, out);
+        }
+        Stmt::Break { .. } | Stmt::Next { .. } => {}
+    }
+}
+
+fn field_uses(e: &Expr, name: &str, out: &mut Vec<Option<String>>) {
+    let mut go = |x: &Expr, out: &mut Vec<Option<String>>| field_uses(x, name, out);
+    let blk = |b: &Block, out: &mut Vec<Option<String>>| {
+        for st in &b.stmts {
+            field_uses_stmt(st, name, out);
+        }
+    };
+    match &e.kind {
+        ExprKind::Method { recv, name: f, args } if matches!(&recv.kind, ExprKind::Ident(n) if n == name) => {
+            out.push(if args.is_empty() { Some(f.clone()) } else { None });
+            for a in args {
+                go(&a.value, out);
+            }
+        }
+        ExprKind::Ident(n) if n == name => out.push(None),
+        ExprKind::Rust(code) if code.contains(name) => out.push(None),
+        ExprKind::Lambda { body, .. } | ExprKind::Spawn(body) => {
+            let mut inner = Vec::new();
+            blk(body, &mut inner);
+            out.extend(inner.into_iter().map(|_| None));
+        }
+        ExprKind::Str(pieces) => {
+            for p in pieces {
+                if let StrPiece::Expr(x) = p {
+                    go(x, out);
+                }
+            }
+        }
+        ExprKind::List(items) | ExprKind::Tuple(items) | ExprKind::SetLit(items) => items.iter().for_each(|i| go(i, out)),
+        ExprKind::MapLit(pairs) => pairs.iter().for_each(|(k, v)| {
+            go(k, out);
+            go(v, out);
+        }),
+        ExprKind::Await(x) | ExprKind::Unary { expr: x, .. } | ExprKind::Some(x) | ExprKind::Ok(x) | ExprKind::Try(x) | ExprKind::Unwrap(x) | ExprKind::Puts(x) | ExprKind::Warn(x) => go(x, out),
+        ExprKind::TupleIndex { recv, .. } => go(recv, out),
+        ExprKind::Range { lo: a, hi: b, .. } | ExprKind::Index { recv: a, index: b } | ExprKind::Binary { lhs: a, rhs: b, .. } => {
+            go(a, out);
+            go(b, out);
+        }
+        ExprKind::Call { name: callee, args } => {
+            if callee == name {
+                out.push(None);
+            }
+            args.iter().for_each(|a| go(&a.value, out));
+        }
+        ExprKind::Method { recv, args, .. } => {
+            go(recv, out);
+            args.iter().for_each(|a| go(&a.value, out));
+        }
+        ExprKind::If { branches, else_block } => {
+            for (c, b) in branches {
+                go(c, out);
+                blk(b, out);
+            }
+            if let Some(b) = else_block {
+                blk(b, out);
+            }
+        }
+        ExprKind::Match { scrutinee, arms } => {
+            go(scrutinee, out);
+            for a in arms {
+                if let Some(g) = &a.guard {
+                    go(g, out);
+                }
+                blk(&a.body, out);
+            }
+        }
+        _ => {}
     }
 }

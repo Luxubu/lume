@@ -1,0 +1,66 @@
+# Milestone 52: what `examples/moves.lume` does for lists, for every value.
+# Text, maps, sets and structs move at their last use, and a struct gives
+# its fields away one by one; wherever the old value is still needed, it is
+# copied. The output is the same either way.
+
+struct Person:
+  name: Str
+  tags: [Str]
+  score: Int
+
+  def shout -> Str = name.upcase
+
+def label(p: Person) -> Str = "#{p.name}/#{p.score}"
+
+def main:
+  # text grows in place when it is being replaced
+  var acc = ""
+  for w in ["a", "b", "c"]:
+    acc = acc + w + ","
+  puts acc
+  # still needed: a new string is made
+  base = "x"
+  more = base + "y"
+  puts "#{base} #{more}"
+  # named twice: a new string
+  var twice = "ab"
+  twice = twice + twice
+  puts twice
+
+  # a map replaced by what is built from it: entries move
+  var m: {Str: [Int]} = {"a": [1], "b": [2, 3], "c": []}
+  m = m.filter { |k, v| not v.empty? }
+  puts m
+  # still needed: copied
+  kept = m.filter { |k, v| v.len > 1 }
+  puts kept
+  puts m
+
+  # a set of text, replaced
+  var tags = {"red", "green", "blue"}
+  tags = tags.filter { |t| t.len > 3 }
+  puts tags
+
+  # a struct nothing needs afterwards gives its fields away
+  p = Person(name: "ann", tags: ["a", "b"], score: 3)
+  q = Person(name: p.name, tags: p.tags, score: p.score + 1)
+  puts label(q)
+  # still needed afterwards: copied
+  r = Person(name: "bo", tags: [], score: 1)
+  n = r.name
+  puts n
+  puts r.shout
+  # the same field twice: copied
+  s = Person(name: "cy", tags: [], score: 2)
+  both = (s.name, s.name)
+  puts both
+  # bound outside a loop: copied each time round
+  t = Person(name: "di", tags: ["t"], score: 4)
+  for i in [1, 2]:
+    got = t.tags
+    puts got
+  # used by a block: copied
+  u = Person(name: "ed", tags: ["u"], score: 5)
+  lens = [1].map { |i| u.name }.to_list
+  puts lens
+  puts u.name

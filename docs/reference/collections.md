@@ -192,5 +192,19 @@ field, and when a block uses it. A block may run many times, so it can never
 give away what it holds. `+` extends a list that nothing else holds instead
 of copying it.
 
+**The same holds for every value that is not a number, a `Bool` or a
+`Char`**: text, maps, sets and structs.
+
+- `acc = acc + w` writes `w` onto the end of `acc`. It does not build a new
+  string each time round a loop, so building text piece by piece costs as
+  much as the text is long, not its square.
+- `m = m.filter { .. }` hands the map's entries over, and so does the same
+  on a set.
+- A struct nothing needs afterwards gives its fields away one by one, as a
+  Rust struct does: in `q = Person(name: p.name, tags: p.tags, score: p.score + 1)`
+  nothing is copied, provided the statement reads each field of `p` once
+  and nothing later reads `p`.
+
 None of this changes what a program prints. It changes only how much work
-the program does.
+the program does. `examples/moves.lume` and `examples/moves_values.lume`
+show each side of the line.
