@@ -63,7 +63,7 @@ fn render(e: &LumeError, path: &Path, src: &str) -> String {
 }
 
 fn parse_file(path: &Path) -> Result<(String, Vec<Item>), String> {
-    let src = std::fs::read_to_string(path).map_err(|e| format!("error: cannot read `{}`: {}", path.display(), e))?;
+    let src = crate::diag::read_source(path).map_err(|e| format!("error: cannot read `{}`: {}", path.display(), e))?;
     let toks = lexer::lex(&src).map_err(|e| render(&e, path, &src))?;
     let items = parser::parse_program(toks).map_err(|e| render(&e, path, &src))?;
     Ok((src, items))

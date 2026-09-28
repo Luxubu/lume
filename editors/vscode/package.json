@@ -1,0 +1,39 @@
+{
+  "name": "lume",
+  "displayName": "Lume",
+  "description": "Lume: syntax highlighting, and errors as you type from `lume lsp`",
+  "version": "0.1.0",
+  "publisher": "luxubu",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/Luxubu/lume" },
+  "engines": { "vscode": "^1.82.0" },
+  "categories": ["Programming Languages", "Linters"],
+  "activationEvents": ["onLanguage:lume"],
+  "main": "./extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "lume",
+        "aliases": ["Lume", "lume"],
+        "extensions": [".lume"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      { "language": "lume", "scopeName": "source.lume", "path": "./syntaxes/lume.tmLanguage.json" }
+    ],
+    "configuration": {
+      "title": "Lume",
+      "properties": {
+        "lume.path": {
+          "type": "string",
+          "default": "lume",
+          "description": "The `lume` command, or the full path to it."
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  }
+}

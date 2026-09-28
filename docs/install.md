@@ -46,6 +46,8 @@ lume crate file.lume <crate>        what a Rust crate offers, in Lume types
 lume clean file.lume                remove build output
 lume new   name [--lib]             make a package: a folder with lume.toml
 lume update [package]               move git dependencies on, rewrite lume.lock
+lume check file.lume --json         errors and warnings as JSON, for tools
+lume lsp                            a language server, for editors
 ```
 
 Inside a package the file can be left out: `lume run`, `lume test` and the
@@ -64,6 +66,40 @@ Generated Rust and binaries go in a `.lume/` directory next to the source
 file. Programs that use a crate or `async` are built with cargo, which shares
 one build cache per machine (`~/.cache/lume/target`), so a crate is compiled
 once rather than once per program.
+
+## Editors
+
+`editors/vscode/` is an extension for VS Code: highlighting, and Lume's
+errors and warnings as you type. Its README says how to install it.
+
+Other editors can use the same server. `lume lsp` speaks the Language Server
+Protocol over stdin and stdout. It checks the program a file belongs to on
+every change, using the text not yet saved, and reports what `lume check`
+would. For tools that want data rather than text, `lume check --json`
+prints every error and warning with its file, line, column, message and
+help:
+
+```sh
+lume check --json main.lume
+```
+
+```json
+{
+  "diagnostics": [
+    {
+      "col": 8,
+      "file": "main.lume",
+      "help": null,
+      "line": 4,
+      "message": "`add` is missing an argument: b",
+      "severity": "error"
+    }
+  ],
+  "ok": false
+}
+```
+
+The exit status is 1 when there is an error, as with `lume check`.
 
 ## What to read next
 

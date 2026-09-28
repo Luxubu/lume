@@ -1,0 +1,19 @@
+{
+  "diagnostics": [
+    {
+      "col": 8,
+      "file": "examples/errors/arity.lume",
+      "help": null,
+      "line": 4,
+      "message": "`add` is missing an argument: b",
+      "severity": "error"
+    }
+  ],
+  "ok": false
+}
+exit: 1
+{
+  "diagnostics": [],
+  "ok": true
+}
+exit: 0

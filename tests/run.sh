@@ -107,6 +107,12 @@ exit: $code"
 out=$(tests/git_packages.sh "$LUME" 2>&1)
 check "packages from git" "tests/git_packages.expected" "$out"
 
+# editors: diagnostics as JSON, and the language server driven as an editor would
+out=$("$LUME" check examples/errors/arity.lume --json 2>&1; echo "exit: $?"; "$LUME" check examples/fib.lume --json 2>&1; echo "exit: $?")
+check "check --json" "examples/check_json.expected" "$out"
+out=$(python3 tests/lsp_test.py "$LUME" 2>&1)
+check "lume lsp" "tests/lsp_test.expected" "$out"
+
 # the csvq dogfood program: queries, a pipe, its errors, and three packages' tests
 out=$(examples/csvq/queries.sh "$LUME" 2>&1)
 check "csvq" "examples/csvq/queries.expected" "$out"

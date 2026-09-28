@@ -1,0 +1,243 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Lume",
+  "scopeName": "source.lume",
+  "patterns": [
+    {
+      "include": "#comment"
+    },
+    {
+      "include": "#raw-triple"
+    },
+    {
+      "include": "#triple"
+    },
+    {
+      "include": "#raw-string"
+    },
+    {
+      "include": "#string"
+    },
+    {
+      "include": "#rust-import"
+    },
+    {
+      "include": "#def"
+    },
+    {
+      "include": "#type-decl"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#constants"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#types"
+    },
+    {
+      "include": "#block-params"
+    },
+    {
+      "include": "#operators"
+    }
+  ],
+  "repository": {
+    "comment": {
+      "name": "comment.line.number-sign.lume",
+      "match": "#(?!\\{).*$"
+    },
+    "escape": {
+      "name": "constant.character.escape.lume",
+      "match": "\\\\[nrt0\\\\\"{}]"
+    },
+    "interpolation": {
+      "name": "meta.interpolation.lume",
+      "begin": "#\\{",
+      "end": "\\}",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.section.interpolation.begin.lume"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.interpolation.end.lume"
+        }
+      },
+      "patterns": [
+        {
+          "include": "$self"
+        }
+      ]
+    },
+    "string": {
+      "name": "string.quoted.double.lume",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "include": "#escape"
+        },
+        {
+          "include": "#interpolation"
+        }
+      ]
+    },
+    "triple": {
+      "name": "string.quoted.triple.lume",
+      "begin": "\"\"\"",
+      "end": "\"\"\"",
+      "patterns": [
+        {
+          "include": "#escape"
+        },
+        {
+          "include": "#interpolation"
+        }
+      ]
+    },
+    "raw-string": {
+      "name": "string.quoted.raw.lume",
+      "begin": "\\br\"",
+      "end": "\""
+    },
+    "raw-triple": {
+      "name": "string.quoted.raw.triple.lume",
+      "begin": "\\br\"\"\"",
+      "end": "\"\"\""
+    },
+    "rust-import": {
+      "match": "\\b(import)\\s+(rust)\\.",
+      "captures": {
+        "1": {
+          "name": "keyword.control.import.lume"
+        },
+        "2": {
+          "name": "support.namespace.rust.lume"
+        }
+      }
+    },
+    "def": {
+      "match": "\\b(def)\\s+(?:(self)\\.)?([a-z_][A-Za-z0-9_]*[?!]?|[-+*/%<>=!]+)",
+      "captures": {
+        "1": {
+          "name": "storage.type.function.lume"
+        },
+        "2": {
+          "name": "variable.language.self.lume"
+        },
+        "3": {
+          "name": "entity.name.function.lume"
+        }
+      }
+    },
+    "type-decl": {
+      "match": "\\b(struct|enum|interface)\\s+([A-Z][A-Za-z0-9_]*)",
+      "captures": {
+        "1": {
+          "name": "storage.type.lume"
+        },
+        "2": {
+          "name": "entity.name.type.lume"
+        }
+      }
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.lume",
+          "match": "\\b(if|elif|else|unless|while|for|in|where|return|break|next|match|await|spawn|do)\\b"
+        },
+        {
+          "name": "keyword.other.lume",
+          "match": "\\b(def|var|const|struct|enum|interface|extend|import|pub|test|assert|async|shared|with|as)\\b"
+        },
+        {
+          "name": "keyword.operator.word.lume",
+          "match": "\\b(and|or|not)\\b"
+        },
+        {
+          "name": "support.function.builtin.lume",
+          "match": "\\b(puts|warn|rust)\\b"
+        },
+        {
+          "name": "variable.language.self.lume",
+          "match": "\\bself\\b"
+        }
+      ]
+    },
+    "constants": {
+      "patterns": [
+        {
+          "name": "constant.language.lume",
+          "match": "\\b(true|false|None)\\b"
+        },
+        {
+          "name": "constant.other.lume",
+          "match": "\\b[A-Z][A-Z0-9_]+\\b"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.float.lume",
+          "match": "\\b[0-9][0-9_]*\\.[0-9][0-9_]*([eE][-+]?[0-9]+)?\\b"
+        },
+        {
+          "name": "constant.numeric.integer.lume",
+          "match": "\\b[0-9][0-9_]*([eE][-+]?[0-9]+)?\\b"
+        }
+      ]
+    },
+    "types": {
+      "name": "entity.name.type.lume",
+      "match": "\\b[A-Z][A-Za-z0-9_]*\\b"
+    },
+    "block-params": {
+      "begin": "(?<=\\{|do)\\s*(\\|)",
+      "end": "\\|",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.parameters.begin.lume"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.parameters.end.lume"
+        }
+      },
+      "patterns": [
+        {
+          "name": "variable.parameter.lume",
+          "match": "[a-z_][A-Za-z0-9_]*"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.arrow.lume",
+          "match": "->"
+        },
+        {
+          "name": "keyword.operator.range.lume",
+          "match": "\\.\\.\\.?"
+        },
+        {
+          "name": "keyword.operator.pipe.lume",
+          "match": "\\|>"
+        },
+        {
+          "name": "keyword.operator.lume",
+          "match": "\\*\\*=?|[-+*/%]=?|==|!=|<=|>=|<|>|=|\\?|!"
+        }
+      ]
+    }
+  }
+}

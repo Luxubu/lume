@@ -20,6 +20,8 @@
 mod ast;
 mod bridge;
 mod codegen;
+mod diag;
+mod lsp;
 mod error;
 mod fetch;
 mod fmt;
@@ -46,7 +48,9 @@ fn help_text() -> String {
          lume crate <file.lume> <crate>          what a Rust crate offers, in Lume types\n  \
          lume clean <file.lume> [--cache]        remove build output\n  \
          lume new   <name> [--lib]               make a package: a folder with lume.toml\n  \
-         lume update [<package>]                 move git dependencies on, rewrite lume.lock\n\n\
+         lume update [<package>]                 move git dependencies on, rewrite lume.lock\n  \
+         lume check <file.lume> --json           errors and warnings as JSON\n  \
+         lume lsp                                a language server for editors, over stdio\n\n\
          In a package, leave out the file: the command uses the package the\n\
          current folder is in (main.lume, or lib.lume for test and check).\n\n\
          docs: docs/README.md   a tour: docs/tour.md",
@@ -211,7 +215,7 @@ fn compile_to_rust(path: &Path, test_mode: bool) -> Result<Compiled, String> {
         let rust_mod = if is_entry { None } else { Some(m.rust_mod()) };
         let (out, ex) = codegen::generate_module(&m.items, rust_mod.as_deref(), &m.id, &package_of, &dep_list, test_mode, &m.src, &file).map_err(|e| e.render(&file, &m.src))?;
         for w in out.warnings {
-            eprint!("{}", w.render(&file, &m.src).replacen("error:", "warning:", 1));
+            diag::warn(w.render(&file, &m.src).replacen("error:", "warning:", 1));
         }
         if is_entry {
             // the entry carries the prelude, so it goes first; modules follow
@@ -760,6 +764,10 @@ fn main() {
         _ => {}
     }
     let cmd = args[0].as_str();
+    if cmd == "lsp" {
+        lsp::serve();
+        return;
+    }
     if cmd == "update" {
         if let Err(e) = update_package(&args[1..]) {
             eprint!("{}", e);
@@ -808,6 +816,18 @@ fn main() {
             }
         },
         // `check` compiles the tests too, so they are checked along with the program
+        // `--json`: every error and warning as data, for editors and tools
+        "check" if args[2..].iter().any(|a| a == "--json") => {
+            let (r, warnings) = diag::collecting(|| compile_to_rust(&file, true));
+            let mut ds: Vec<diag::Diagnostic> = warnings.iter().flat_map(|w| diag::parse(w)).collect();
+            let failed = r.is_err();
+            if let Err(e) = r {
+                ds.extend(diag::parse(&e));
+            }
+            let json = serde_json::json!({ "ok": !failed, "diagnostics": ds.iter().map(diag::to_json).collect::<Vec<_>>() });
+            println!("{}", serde_json::to_string_pretty(&json).unwrap());
+            process::exit(if failed { 1 } else { 0 });
+        }
         "check" => match compile_to_rust(&file, true) {
             Ok(_) => eprintln!("ok: {}", file.display()),
             Err(e) => {

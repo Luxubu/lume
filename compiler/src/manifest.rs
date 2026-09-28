@@ -179,7 +179,7 @@ fn inline_table(s: &str) -> Option<Vec<(String, String)>> {
 }
 
 pub fn read(path: &Path) -> Result<Manifest, String> {
-    let src = std::fs::read_to_string(path).map_err(|e| format!("error: cannot read `{}`: {}", path.display(), e))?;
+    let src = crate::diag::read_source(path).map_err(|e| format!("error: cannot read `{}`: {}", path.display(), e))?;
     let shown = path.display().to_string();
     let err = |line: usize, msg: String, help: Option<String>| {
         let mut e = LumeError::new(line, 1, msg);
