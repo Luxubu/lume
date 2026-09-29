@@ -1,0 +1,4 @@
+# A `%` at the end of a pattern starts a directive and never finishes it.
+
+def main:
+  puts Time.parse("2024-09-29", "%Y-%m-%d%")

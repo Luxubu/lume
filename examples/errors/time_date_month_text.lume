@@ -1,0 +1,4 @@
+# `Time.date` takes the year, the month and the day as numbers.
+
+def main:
+  puts Time.date(2024, "Sep", 29)

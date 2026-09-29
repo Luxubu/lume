@@ -1,0 +1,27 @@
+# Dates and times: `Time.now` is seconds since 1970, and these read and
+# write it, in UTC. A pattern written out is checked when the program is
+# compiled; a date that does not exist is an `Error`, not a surprise.
+
+def main -> () or Error:
+  launch = Time.date(2024, 9, 29)? + 8 * 3600 + 53 * 60
+  puts Time.format(launch, "%Y-%m-%d %H:%M")             # the ISO form
+  puts Time.format(launch, "%A, %d %B %Y")                # for people
+  puts Time.format(launch, "%a %b %d, day %j of the year")
+
+  # the parts of a time
+  puts "#{Time.year(launch)}-#{Time.month(launch)}-#{Time.day(launch)}, weekday #{Time.weekday(launch)} (Monday is 1)"
+
+  # reading a date back, by the same directives
+  due = Time.parse("25 Dec 2024", "%d %b %Y")?
+  days = (due - launch) / 86400
+  puts "#{days} days from launch to #{Time.format(due, "%d %B")}"
+
+  # a week of dates: a day is 86400 seconds
+  week = (0...7).map { |i| Time.format(launch + i * 86400, "%a %d") }.to_list
+  puts week.join(" | ")
+
+  # what does not exist, or does not match, says why
+  puts Time.date(2023, 2, 29)
+  puts Time.parse("2024-13-01", "%Y-%m-%d")
+  puts Time.parse("29/09/2024", "%Y-%m-%d")
+  ()

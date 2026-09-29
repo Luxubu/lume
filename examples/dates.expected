@@ -1,0 +1,9 @@
+2024-09-29 08:53
+Sunday, 29 September 2024
+Sun Sep 29, day 273 of the year
+2024-9-29, weekday 7 (Monday is 1)
+86 days from launch to 25 December
+Sun 29 | Mon 30 | Tue 01 | Wed 02 | Thu 03 | Fri 04 | Sat 05
+Error("February 2023 has days 1 to 28, not 29")
+Error("`2024-13-01` does not match `%Y-%m-%d`: month 13 is not 1 to 12")
+Error("`29/09/2024` does not match `%Y-%m-%d`: expected `-` at position 2")

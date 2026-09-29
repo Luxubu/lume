@@ -1,0 +1,6 @@
+error: `Time.date` takes an `Int`, but this is a `Str`
+  --> examples/errors/time_date_month_text.lume:4:24
+  |
+4 |   puts Time.date(2024, "Sep", 29)
+  |                        ^
+  help: parse it: `.to_int` gives `Int or Error`, so `x.to_int?` or `x.to_int.or(0)`

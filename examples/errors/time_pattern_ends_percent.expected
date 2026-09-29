@@ -1,0 +1,6 @@
+error: `%` at the end of the pattern is not a date directive
+  --> examples/errors/time_pattern_ends_percent.lume:4:33
+  |
+4 |   puts Time.parse("2024-09-29", "%Y-%m-%d%")
+  |                                 ^
+  help: `Time.format` and `Time.parse` know %Y %m %d %H %M %S %j %a %A %b %B %s, and %% for a `%`

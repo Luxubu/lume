@@ -247,6 +247,12 @@ programs an `async def`, as `examples/jobr/` does.
 | `Time.now` | `Int` | seconds since 1970 |
 | `Time.now_ms` | `Int` | milliseconds since 1970 |
 | `Time.sleep(ms)` | nothing | waits that many **milliseconds** |
+| `Time.format(t, pattern)` | `Str` | a time as text, by the directives below |
+| `Time.parse(text, pattern)` | `Int or Error` | text back into a time, by the same directives |
+| `Time.date(year, month, day)` | `Int or Error` | midnight at the start of that day; an error for a day that does not exist |
+| `Time.year(t)`, `month`, `day`, `hour`, `minute`, `second` | `Int` | one part of a time |
+| `Time.weekday(t)` | `Int` | 1 for Monday to 7 for Sunday, as ISO 8601 counts |
+| `Time.day_of_year(t)` | `Int` | 1 to 366 |
 
 `Time.now` and `Time.now_ms` take no arguments either. The clock is
 different on every run, so only a comparison is shown here:
@@ -283,6 +289,48 @@ async def main:
 ```
 
 More on this in [Concurrency](concurrency.md).
+
+### Dates
+
+**A time is seconds since 1970, in UTC.** `Time.now` gives one, and the
+functions above read it, write it and make one from a date. There are no
+time zones: Rust's standard library has none either, and UTC gives the same
+answer on every machine. A day is 86400 seconds, so dates are added and
+compared as whole numbers.
+
+```lume
+def main -> () or Error:
+  t = Time.date(2024, 9, 29)? + 8 * 3600 + 53 * 60
+  puts Time.format(t, "%Y-%m-%d %H:%M")        #=> 2024-09-29 08:53
+  puts Time.format(t, "%A, %d %B %Y")          #=> Sunday, 29 September 2024
+  puts Time.weekday(t)                         #=> 7
+  due = Time.parse("25 Dec 2024", "%d %b %Y")?
+  days = (due - t) / 86400
+  puts days                                    #=> 86
+  puts Time.date(2023, 2, 29)                  #=> Error("February 2023 has days 1 to 28, not 29")
+  ()
+```
+
+| directive | writes | | directive | writes |
+|---|---|---|---|---|
+| `%Y` | `2024` | | `%a` | `Sun` |
+| `%m` | `09` | | `%A` | `Sunday` |
+| `%d` | `29` | | `%b` | `Sep` |
+| `%H` | `08`, 00 to 23 | | `%B` | `September` |
+| `%M` | `53` | | `%j` | `273`, the day of the year |
+| `%S` | `00` | | `%s` | seconds since 1970 |
+| `%%` | `%` | | | |
+
+`Time.parse` reads what `Time.format` writes, and its error says where the
+text stopped matching: ``Error("`29/09/2024` does not match `%Y-%m-%d`:
+expected `-` at position 2")``. **A pattern written out in the program is
+checked when it is compiled**, so `%Q` is an error before anything runs:
+
+```lume-bad
+def main:
+  puts Time.format(Time.now, "%Y-%Q")
+#! `%Q` is not a date directive
+```
 
 ## When I/O fails
 

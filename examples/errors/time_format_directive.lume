@@ -1,0 +1,4 @@
+# `%Q` is not one of the directives `Time.format` knows; a pattern written out is checked before the program runs.
+
+def main:
+  puts Time.format(Time.now, "%Y-%Q")

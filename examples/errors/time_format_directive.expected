@@ -1,0 +1,6 @@
+error: `%Q` is not a date directive
+  --> examples/errors/time_format_directive.lume:4:30
+  |
+4 |   puts Time.format(Time.now, "%Y-%Q")
+  |                              ^
+  help: `Time.format` and `Time.parse` know %Y %m %d %H %M %S %j %a %A %b %B %s, and %% for a `%`

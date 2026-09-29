@@ -463,6 +463,165 @@ fn lume_process_run(program: &str, args: &[String]) -> ::std::result::Result<(i6
         Err(e) => Err(Error { message: format!("cannot run `{}`: {}", program, e) }),
     }
 }
+/// Days since 1970-01-01 for a date in the proleptic Gregorian calendar
+/// (Howard Hinnant's `days_from_civil`), and back.
+fn lume_days_from_civil(y: i64, m: i64, d: i64) -> i64 {
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = (if y >= 0 { y } else { y - 399 }) / 400;
+    let yoe = y - era * 400;
+    let mp = (m + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146097 + doe - 719468
+}
+fn lume_civil_from_days(z: i64) -> (i64, i64, i64) {
+    let z = z + 719468;
+    let era = (if z >= 0 { z } else { z - 146096 }) / 146097;
+    let doe = z - era * 146097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    (if m <= 2 { y + 1 } else { y }, m, d)
+}
+fn lume_days_in_month(y: i64, m: i64) -> i64 {
+    match m {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        _ => if (y % 4 == 0 && y % 100 != 0) || y % 400 == 0 { 29 } else { 28 },
+    }
+}
+/// A time in seconds since 1970, in UTC: year, month, day, hour, minute,
+/// second, weekday (1 Monday .. 7 Sunday) and day of the year.
+fn lume_time_fields(t: i64) -> [i64; 8] {
+    let days = t.div_euclid(86400);
+    let secs = t.rem_euclid(86400);
+    let (y, m, d) = lume_civil_from_days(days);
+    // 1970-01-01 was a Thursday
+    let wd = (days + 3).rem_euclid(7) + 1;
+    let yday = days - lume_days_from_civil(y, 1, 1) + 1;
+    [y, m, d, secs / 3600, secs % 3600 / 60, secs % 60, wd, yday]
+}
+fn lume_time_part(t: i64, which: usize) -> i64 {
+    lume_time_fields(t)[which]
+}
+const LUME_WEEKDAYS: [&str; 7] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const LUME_MONTHS: [&str; 12] = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+/// `Time.format`: strftime's directives, in UTC.
+fn lume_time_format(t: i64, pattern: &str) -> String {
+    let f = lume_time_fields(t);
+    let mut out = String::new();
+    let mut cs = pattern.chars();
+    while let Some(c) = cs.next() {
+        if c != '%' {
+            out.push(c);
+            continue;
+        }
+        match cs.next() {
+            Some('Y') => out.push_str(&format!("{:04}", f[0])),
+            Some('m') => out.push_str(&format!("{:02}", f[1])),
+            Some('d') => out.push_str(&format!("{:02}", f[2])),
+            Some('H') => out.push_str(&format!("{:02}", f[3])),
+            Some('M') => out.push_str(&format!("{:02}", f[4])),
+            Some('S') => out.push_str(&format!("{:02}", f[5])),
+            Some('j') => out.push_str(&format!("{:03}", f[7])),
+            Some('A') => out.push_str(LUME_WEEKDAYS[(f[6] - 1) as usize]),
+            Some('a') => out.push_str(&LUME_WEEKDAYS[(f[6] - 1) as usize][..3]),
+            Some('B') => out.push_str(LUME_MONTHS[(f[1] - 1) as usize]),
+            Some('b') => out.push_str(&LUME_MONTHS[(f[1] - 1) as usize][..3]),
+            Some('s') => out.push_str(&t.to_string()),
+            Some('%') => out.push('%'),
+            Some(other) => {
+                out.push('%');
+                out.push(other);
+            }
+            None => out.push('%'),
+        }
+    }
+    out
+}
+/// `Time.date(y, m, d)`: midnight UTC of that day.
+fn lume_time_date(y: i64, m: i64, d: i64) -> ::std::result::Result<i64, Error> {
+    if !(1..=12).contains(&m) {
+        return Err(Error { message: format!("month {} is not 1 to 12", m) });
+    }
+    let most = lume_days_in_month(y, m);
+    if d < 1 || d > most {
+        return Err(Error { message: format!("{} {} has days 1 to {}, not {}", LUME_MONTHS[(m - 1) as usize], y, most, d) });
+    }
+    Ok(lume_days_from_civil(y, m, d) * 86400)
+}
+/// `Time.parse`: reads `text` by the same directives `Time.format` writes.
+fn lume_time_parse(text: &str, pattern: &str) -> ::std::result::Result<i64, Error> {
+    let t: Vec<char> = text.chars().collect();
+    let mut i = 0usize;
+    let (mut y, mut mo, mut d, mut h, mut mi, mut sec) = (1970i64, 1i64, 1i64, 0i64, 0i64, 0i64);
+    let fail = |why: String| Error { message: format!("`{}` does not match `{}`: {}", text, pattern, why) };
+    let mut ps = pattern.chars();
+    while let Some(c) = ps.next() {
+        if c != '%' {
+            if t.get(i) != Some(&c) {
+                return Err(fail(format!("expected `{}` at position {}", c, i)));
+            }
+            i += 1;
+            continue;
+        }
+        let dir = ps.next().unwrap_or('%');
+        let mut digits = |most: usize, what: &str| -> ::std::result::Result<i64, Error> {
+            let start = i;
+            while i < t.len() && i - start < most && t[i].is_ascii_digit() {
+                i += 1;
+            }
+            if i == start {
+                return Err(fail(format!("expected the {} at position {}", what, start)));
+            }
+            Ok(t[start..i].iter().collect::<String>().parse::<i64>().unwrap_or(0))
+        };
+        match dir {
+            'Y' => y = digits(4, "year")?,
+            'm' => mo = digits(2, "month")?,
+            'd' => d = digits(2, "day")?,
+            'H' => h = digits(2, "hour")?,
+            'M' => mi = digits(2, "minute")?,
+            'S' => sec = digits(2, "second")?,
+            's' => return Ok(digits(20, "seconds")?),
+            'b' | 'B' | 'a' | 'A' => {
+                let names: &[&str] = if dir == 'b' || dir == 'B' { &LUME_MONTHS } else { &LUME_WEEKDAYS };
+                let rest: String = t[i..].iter().collect();
+                let found = names.iter().enumerate().find_map(|(k, n)| {
+                    let n = if dir == 'b' || dir == 'a' { &n[..3] } else { *n };
+                    if rest.to_lowercase().starts_with(&n.to_lowercase()) { Some((k, n.chars().count())) } else { None }
+                });
+                match found {
+                    Some((k, len)) => {
+                        i += len;
+                        if dir == 'b' || dir == 'B' {
+                            mo = k as i64 + 1;
+                        }
+                    }
+                    None => return Err(fail(format!("expected a {} name at position {}", if dir == 'b' || dir == 'B' { "month" } else { "weekday" }, i))),
+                }
+            }
+            '%' => {
+                if t.get(i) != Some(&'%') {
+                    return Err(fail(format!("expected `%` at position {}", i)));
+                }
+                i += 1;
+            }
+            other => return Err(fail(format!("`%{}` is not a date directive", other))),
+        }
+    }
+    if i < t.len() {
+        return Err(fail(format!("`{}` is left over", t[i..].iter().collect::<String>())));
+    }
+    if h > 23 || mi > 59 || sec > 60 {
+        return Err(fail(format!("{:02}:{:02}:{:02} is not a time of day", h, mi, sec)));
+    }
+    let day = lume_time_date(y, mo, d).map_err(|e| fail(e.message))?;
+    Ok(day + h * 3600 + mi * 60 + sec)
+}
 fn lume_now_ms() -> i64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
 }
@@ -10516,6 +10675,28 @@ impl Gen {
                                 r?;
                             }
                         }
+                        // a pattern written out is checked now, not when it runs
+                        if tn == "Time" && (name == "format" || name == "parse") {
+                            if let Some(pat) = args.get(1).and_then(|a| match &a.value.kind {
+                                ExprKind::Str(pieces) if pieces.iter().all(|p| matches!(p, StrPiece::Lit(_))) => Some(pieces.iter().map(|p| if let StrPiece::Lit(t) = p { t.clone() } else { String::new() }).collect::<String>()),
+                                _ => None,
+                            }) {
+                                let mut cs = pat.chars();
+                                while let Some(c) = cs.next() {
+                                    if c == '%' {
+                                        match cs.next() {
+                                            Some('Y' | 'm' | 'd' | 'H' | 'M' | 'S' | 'j' | 'a' | 'A' | 'b' | 'B' | 's' | '%') => {}
+                                            Some('j') if name == "parse" => {}
+                                            other => {
+                                                let shown = other.map(|c| format!("`%{}`", c)).unwrap_or_else(|| "`%` at the end of the pattern".to_string());
+                                                return Err(LumeError::new(args[1].value.line, args[1].value.col, format!("{} is not a date directive", shown))
+                                                    .with_help("`Time.format` and `Time.parse` know %Y %m %d %H %M %S %j %a %A %b %B %s, and %% for a `%`"));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         let mut parts = Vec::new();
                         for a in args {
                             parts.push(self.expr_val(&a.value)?);
@@ -10559,6 +10740,14 @@ impl Gen {
                                     format!("lume_process_run(&{}, &{})", parts[0], parts[1])
                                 }
                             }
+                            ("Time", "format") => { need(2)?; format!("lume_time_format({}, &{})", parts[0], parts[1]) }
+                            ("Time", "parse") => { need(2)?; format!("lume_time_parse(&{}, &{})", parts[0], parts[1]) }
+                            ("Time", "date") => { need(3)?; format!("lume_time_date({}, {}, {})", parts[0], parts[1], parts[2]) }
+                            ("Time", part @ ("year" | "month" | "day" | "hour" | "minute" | "second" | "weekday" | "day_of_year")) => {
+                                need(1)?;
+                                let which = ["year", "month", "day", "hour", "minute", "second", "weekday", "day_of_year"].iter().position(|p| *p == part).unwrap();
+                                format!("lume_time_part({}, {})", parts[0], which)
+                            }
                             ("Time", "now") => { need(0)?; "lume_now()".to_string() }
                             ("Time", "now_ms") => { need(0)?; "lume_now_ms()".to_string() }
                             ("Time", "sleep") => {
@@ -10581,7 +10770,7 @@ impl Gen {
                                 "Dir" => "Dir has exists?, make, list, walk and remove",
                                 "Path" => "Path has join(a, b), dir, base, ext and stem",
                                 "Process" => "Process has run(program, args)",
-                                _ => "Time has now (seconds), now_ms and sleep(ms)",
+                                _ => "Time has now (seconds), now_ms, sleep(ms), format(t, pattern), parse(text, pattern), date(y, m, d), and year, month, day, hour, minute, second, weekday and day_of_year of a time",
                             }));
                     }
                     if self.lookup(tn).is_none() && self.structs.contains_key(&self.canon(tn)) {
@@ -11777,6 +11966,10 @@ fn builtin_namespace_params(ns: &str, name: &str) -> Option<Vec<Type>> {
         ("File", _) | ("Dir", _) | ("Path", _) | ("Env", "get") => vec![s()],
         ("Env", "exit") | ("Time", "sleep") => vec![Type::Int],
         ("Process", "run") => vec![s(), Type::List(Box::new(s()))],
+        ("Time", "format") => vec![Type::Int, s()],
+        ("Time", "parse") => vec![s(), s()],
+        ("Time", "date") => vec![Type::Int, Type::Int, Type::Int],
+        ("Time", "year" | "month" | "day" | "hour" | "minute" | "second" | "weekday" | "day_of_year") => vec![Type::Int],
         _ => return None,
     })
 }
@@ -11799,6 +11992,9 @@ fn builtin_namespace_type(ns: &str, name: &str) -> Option<Type> {
         ("Env", "args") => Type::List(Box::new(Type::Str)),
         ("Env", "get") => Type::Option(Box::new(Type::Str)),
         ("Process", "run") => Type::Result(Box::new(Type::Tuple(vec![Type::Int, Type::Str, Type::Str])), err()),
+        ("Time", "format") => Type::Str,
+        ("Time", "parse") | ("Time", "date") => Type::Result(Box::new(Type::Int), err()),
+        ("Time", "year" | "month" | "day" | "hour" | "minute" | "second" | "weekday" | "day_of_year") => Type::Int,
         ("Time", "now") => Type::Int,
         ("Time", "now_ms") => Type::Int,
         ("Time", "sleep") => Type::Unit, // becomes `async ()` inside async code; see ty_of
