@@ -1,0 +1,7 @@
+struct Task:
+  id: Int
+
+async def main:
+  var hs: [Task[Int]] = []
+  hs.push(spawn: 1)
+  puts await hs

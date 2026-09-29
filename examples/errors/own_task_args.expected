@@ -1,0 +1,6 @@
+error: `Task` is this program's own `Task`, which takes no type arguments
+  --> examples/errors/own_task_args.lume:5:3
+  |
+5 |   var hs: [Task[Int]] = []
+  |   ^
+  help: a type of your own named `Task` hides the built-in one, as in Rust; leave out the type of what `spawn:` gives and Lume works it out

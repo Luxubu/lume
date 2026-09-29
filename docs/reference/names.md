@@ -174,7 +174,7 @@ The whole list:
 | refused as a type name | because |
 |---|---|
 | `Int` `Float` `Str` `Char` `Bool` | the scalar types |
-| `List` `Map` `Set` `Option` `Task` | built-in Lume names |
+| `List` `Map` `Set` `Option` | built-in Lume names |
 | `Some` `None` `Ok` `Err` | the variants of `T?` and `T or Error` |
 | `File` `Time` `Math` | built-in Lume names |
 | `Error` | the built-in error type |
@@ -188,6 +188,28 @@ a direction is one of the most natural names there is, and two independent
 reviewers wrote exactly that. A type of yours with one of those names hides
 the built-in in that file — after `enum Dir:`, `Dir.list(...)` means your
 type, not the functions of [Input and output](io.md).
+
+`Task` is not refused either. Reviewers in two review rounds running
+reached for it for a to-do item, and Rust lets a type of yours shadow a name
+from its prelude. A `struct Task` or `enum Task` of your own, or one you
+import by name, is what `Task` means in that file, and `Task[..]` means
+yours too:
+
+```lume
+struct Task:
+  title: Str
+  done: Bool
+
+async def main:
+  todo = [Task(title: "write", done: true), Task(title: "test", done: false)]
+  names = todo.map { |t| spawn: t.title.upcase }.to_list
+  puts await names     #=> ["WRITE", "TEST"]
+```
+
+`spawn:` still works in that file. What it gives back is still a task, but
+there is no longer a name to write its type with. Leave the type out, as
+above, and Lume works it out. `[Task[Int]]` in that file names your `Task`,
+and the error says so.
 
 ## What the capital letter means
 

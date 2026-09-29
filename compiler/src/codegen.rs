@@ -773,6 +773,10 @@ pub struct Gen {
     /// Where each definition this module can name was written, keyed as
     /// `fns`/`structs` are (`Item`, `model.Item`), members as `Item::field`.
     def_sites: HashMap<String, (String, usize, usize)>,
+    /// The program has a `Task` of its own, defined here or imported by
+    /// name: as a type of yours shadows a prelude name in Rust, `Task[..]`
+    /// then means yours, not the built-in handle `spawn:` gives.
+    own_task: bool,
     /// Which `rest_stack` levels are a call's arguments still to come, not
     /// later statements: a field move has already checked those.
     arg_rest_levels: Vec<usize>,
@@ -888,6 +892,7 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, module_id: &str
         stmt_stack: Vec::new(),
         dying: None,
         arg_rest_levels: Vec::new(),
+        own_task: false,
         def_sites: HashMap::new(),
         paths: HashMap::new(),
         canon: HashMap::new(),
@@ -931,6 +936,8 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, module_id: &str
         }
     }
     g.register_deps(deps)?;
+    g.own_task = program.iter().any(|it| matches!(it, Item::Struct(d) if d.name == "Task") || matches!(it, Item::Enum(d) if d.name == "Task"))
+        || deps.iter().any(|d| matches!(d, Dep::Single { local, .. } if local == "Task"));
     g.collect_def_sites(program);
     g.program(program)?;
     let mut rust_deps = Vec::new();
@@ -1186,6 +1193,8 @@ impl Gen {
             Type::Result(a, b) => Type::Result(Box::new(self.ct(a)), Box::new(self.ct(b))),
             Type::Map(a, b) => Type::Map(Box::new(self.ct(a)), Box::new(self.ct(b))),
             Type::Set(t) => Type::Set(Box::new(self.ct(t))),
+            // your own `Task[T]`, when you have one
+            Type::Task(i) if self.own_task => Type::App(self.canon("Task"), vec![self.ct(i)]),
             Type::Task(i) => Type::Task(Box::new(self.ct(i))),
             Type::Future(i) => Type::Future(Box::new(self.ct(i))),
             Type::Shared(i, m) => Type::Shared(Box::new(self.ct(i)), *m),
@@ -3744,6 +3753,11 @@ impl Gen {
                 }
                 let gs = self.generics_of(&key);
                 if gs.is_empty() {
+                    // `Task[Int]` in a program with a `Task` of its own
+                    if self.own_task && n.rsplit('.').next() == Some("Task") {
+                        return Err(LumeError::new(line, col, format!("`{}` is this program's own `Task`, which takes no type arguments", n))
+                            .with_help("a type of your own named `Task` hides the built-in one, as in Rust; leave out the type of what `spawn:` gives and Lume works it out"));
+                    }
                     return Err(LumeError::new(line, col, format!("`{}` takes no type arguments", n))
                         .with_help(format!("write it as `{}`; only a `struct` or `enum` declared `{}[T]` takes them", n, n)));
                 }
@@ -12014,7 +12028,7 @@ fn describe_names(names: &[&String]) -> String {
 /// Names of built-in types and Rust types the generated code relies on.
 fn reserved_type_name(name: &str, line: usize, col: usize) -> Result<()> {
     const RESERVED: &[&str] = &[
-        "Int", "Float", "Str", "Char", "Bool", "List", "Map", "Set", "Option", "Vec", "String", "Task", "Time", "File", "Math", "Rc", "Arc", "Mutex", "Some",
+        "Int", "Float", "Str", "Char", "Bool", "List", "Map", "Set", "Option", "Vec", "String", "Time", "File", "Math", "Rc", "Arc", "Mutex", "Some",
         "None", "Ok", "Err", "Clone", "Copy", "Iterator", "Ordering", "Self",
         // traits the generated Rust derives or calls by name
         "Default", "Debug", "Display", "Eq", "PartialEq", "Ord", "PartialOrd", "Hash", "IntoIterator", "ToOwned", "ToString", "From", "Into",
