@@ -1,0 +1,17 @@
+# b02: the result of Process.run taken apart as a tuple straight away,
+# without `?` or `match`. The value is `(Int, Str, Str) or Error`, not the
+# tuple. This is the line a Rust or Python writer types first; the editor
+# should say what to do. (A plain `main`, so the help cannot usefully
+# suggest `?` alone.)
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: this value is a `(Int, Str, Str) or Error` — it may be an error, so it cannot be taken apart directly
+#   --> corpus/m59/b02_process_no_try.lume:16:3
+#    |
+# 16 |   (code, out, err) = Process.run("echo", ["hi"])
+#    |   ^
+#   help: unwrap it first: `?` to pass the error up, `match` on `Ok(x)`/`Error(e)`, or `.or(default)`
+
+def main:
+  (code, out, err) = Process.run("echo", ["hi"])
+  puts "#{code} #{out.trim} #{err.trim}"

@@ -1,0 +1,10 @@
+# With a `Task[T]` of your own, `Task[Int]` in a type is yours, not what `spawn:` gives.
+
+struct Task[T]:
+  name: Str
+  value: T
+
+async def main:
+  var hs: [Task[Int]] = []
+  hs.push(spawn: 1 + 1)
+  puts hs.len

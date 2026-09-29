@@ -1,0 +1,10 @@
+[x]  1 write the brief
+[ ]  2 run the corpus
+[x]  3 fix the parser
+[ ]  4 update the docs
+pending: run the corpus, update the docs
+tagged docs: 2
+cannot finish: no task 9
+2 of 4 done
+Task(id: 2, title: "run the corpus", done: false, tags: ["test", "ci"])
+exit: 0

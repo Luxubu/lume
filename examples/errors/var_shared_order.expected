@@ -1,0 +1,6 @@
+error: `shared var` is written in that order
+  --> examples/errors/var_shared_order.lume:3:20
+  |
+3 | def remember(seen: var shared [Int], n: Int):
+  |                    ^
+  help: write `shared var T`, as in `def bump(n: shared var Int)`

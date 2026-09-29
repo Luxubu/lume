@@ -1,0 +1,9 @@
+[1] prepare: true
+[2] compile: echo compiling main.o
+    compiling main.o
+[3] test: echo 3 passed
+    3 passed
+[4] lint: echo 2 warnings >&2; exit 2
+    2 warnings
+stopped: lint exited with 2
+exit: 2

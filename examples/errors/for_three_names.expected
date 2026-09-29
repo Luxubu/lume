@@ -1,0 +1,5 @@
+error: `for i, w, extra` names 3 variables, but each item has 2 parts
+  --> examples/errors/for_three_names.lume:4:3
+  |
+4 |   for (i, w, extra) in ["a", "b"].enumerate:
+  |   ^

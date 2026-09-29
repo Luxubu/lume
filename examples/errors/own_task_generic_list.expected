@@ -1,0 +1,6 @@
+error: `.push` on a `[Task[Int]]` takes a `Task[Int]`, but this is a `Task[Int]`
+  --> examples/errors/own_task_generic_list.lume:9:11
+  |
+9 |   hs.push(spawn: 1 + 1)
+  |           ^
+  help: this program has a `Task` of its own, so `Task[..]` in a type means yours; what `spawn:` gives is the built-in task, which has no other name here: leave its type out and Lume works it out

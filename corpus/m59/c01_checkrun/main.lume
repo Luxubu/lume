@@ -1,0 +1,35 @@
+# c01 — a parallel test runner: shell checks run in tasks by a library
+# (`c01_checks`, beside this package), reported in the order they were
+# listed. The first check sleeps a second, so it finishes last and is still
+# reported first. Probes: a package over a library whose `pub async def`
+# uses `spawn:`, `Process.run` inside tasks, exit codes and stderr kept,
+# `await` on a list of tasks, `for (i, x) in`, awaiting through a prefix.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 1. PASS  sleeps, then passes
+# 2. PASS  arithmetic
+# 3. PASS  three lines
+# 4. FAIL  mismatch (exit 1): expected 3, got 2
+# 5. FAIL  false fails (exit 1)
+# 6. FAIL  exit code kept (exit 7): partial
+# 3 of 6 passed
+# failed: mismatch, false fails, exit code kept
+
+import c01_checks
+import c01_checks.Check
+
+async def main:
+  checks = [
+    Check(name: "sleeps, then passes", cmd: "sleep 1; true"),
+    Check(name: "arithmetic", cmd: "test $((2 + 2)) -eq 4"),
+    Check(name: "three lines", cmd: "test $(printf 'a\nb\nc\n' | wc -l) -eq 3"),
+    Check(name: "mismatch", cmd: "echo 'expected 3, got 2' >&2; exit 1"),
+    Check(name: "false fails", cmd: "false"),
+    Check(name: "exit code kept", cmd: "echo partial; exit 7"),
+  ]
+  reports = await c01_checks.run_all(checks)
+  for (i, r) in reports.enumerate:
+    puts "#{i + 1}. #{r.line}"
+  puts c01_checks.summary(reports)
+  failed = reports.reject { |r| r.passed? }.map { |r| r.name }.to_list
+  puts "failed: #{failed.join(", ")}"

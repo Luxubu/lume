@@ -1,0 +1,63 @@
+# a10_harness: a tiny test harness. Each case is a program, its arguments
+# and the exit code it should give; the harness runs them in order, prints
+# one line per case and a tally, and exits 1 when anything did not pass.
+# Probes: Process.run on `true`, `false`, `test` and `sh -c 'exit 3'`, and on
+# a program that does not exist (an `Error`, reported as BROKEN, not a
+# crash); `Ok((code, _, _))`; an enum outcome matched as a value; a
+# `var self` tally; `Env.exit(1)` as the last statement, after all output.
+# Exit status 1. Nothing on standard error.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 1. true          ok
+# 2. false         ok
+# 3. exit 3        ok
+# 4. false is 0    FAIL (exit 1, wanted 0)
+# 5. 2 -gt 1       ok
+# 6. 1 -gt 2       FAIL (exit 1, wanted 0)
+# 7. missing       BROKEN (cannot start a10-no-such-program)
+# 8. exit 3 is 0   FAIL (exit 3, wanted 0)
+# 8 cases: 4 passed, 3 failed, 1 broken
+
+struct Case:
+  name: Str
+  program: Str
+  args: [Str]
+  want: Int
+
+enum Outcome:
+  Pass
+  Fail(got: Int)
+  Broken(why: Str)
+
+struct Tally:
+  passed: Int
+  failed: Int
+  broken: Int
+
+  def record(var self, o: Outcome):
+    match o:
+      Pass -> passed += 1
+      Fail(_) -> failed += 1
+      Broken(_) -> broken += 1
+
+  def total -> Int = passed + failed + broken
+
+def check(c: Case) -> Outcome:
+  match Process.run(c.program, c.args):
+    Ok((code, _, _)) -> if code == c.want: Pass else: Fail(code)
+    Error(_) -> Broken("cannot start #{c.program}")
+
+def main:
+  cases = [Case("true", "true", [], 0), Case("false", "false", [], 1), Case("exit 3", "sh", ["-c", "exit 3"], 3), Case("false is 0", "false", [], 0), Case("2 -gt 1", "test", ["2", "-gt", "1"], 0), Case("1 -gt 2", "test", ["1", "-gt", "2"], 0), Case("missing", "a10-no-such-program", [], 0), Case("exit 3 is 0", "sh", ["-c", "exit 3"], 0)]
+  var tally = Tally(passed: 0, failed: 0, broken: 0)
+  for (i, c) in cases.enumerate:
+    outcome = check(c)
+    tally.record(outcome)
+    label = match outcome:
+      Pass -> "ok"
+      Fail(got) -> "FAIL (exit #{got}, wanted #{c.want})"
+      Broken(why) -> "BROKEN (#{why})"
+    puts "#{i + 1}. #{c.name.pad_right(14)}#{label}"
+  puts "#{tally.total} cases: #{tally.passed} passed, #{tally.failed} failed, #{tally.broken} broken"
+  if tally.failed + tally.broken > 0:
+    Env.exit(1)

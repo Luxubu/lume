@@ -920,6 +920,10 @@ impl Parser {
     }
 
     fn parse_type_atom(&mut self) -> Result<Type> {
+        // `var shared T`: the words the other way round
+        if self.at_kw("var") && matches!(self.peek_at(1), Tok::Ident(s) if s == "shared") {
+            return Err(self.err("`shared var` is written in that order").with_help("write `shared var T`, as in `def bump(n: shared var Int)`"));
+        }
         if self.eat_kw("shared") {
             let mutable = self.eat_kw("var");
             let inner = self.parse_type_atom()?;

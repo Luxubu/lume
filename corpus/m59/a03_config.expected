@@ -1,0 +1,8 @@
+config 1: web on 8080, 4 workers, ratio 0.75
+config 2: port: `eighty` is not an integer
+config 3: missing key `workers`
+config 4: line 2: expected `key = value`, got `port 80`
+config 5: port: 70000 is out of range
+config 6: ratio: `half` is not a number
+Ok(Config(name: "web", port: 8080, workers: 4, ratio: 0.75))
+exit: 0

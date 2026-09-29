@@ -1,0 +1,40 @@
+# a05_task_spawn: a `struct Task` of its own (a named shell command) in a
+# program that also starts `spawn:` tasks, one per command, and awaits them.
+# Probes: own `Task` beside `spawn:` with the task type never written
+# (names.md); `todo.map { |t| spawn: run_one(t) }.to_list` then `await`
+# giving results in start order; Process.run in a plain `def` called from a
+# task, and directly in a `spawn:` body that uses `?` (task gives
+# `T or Error`); a raw string holding `\n` for the shell.
+# Exit status 0. Nothing on standard error.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# greet (echo hi); count (printf 'a\nb\nc\n' | wc -l); fail (echo nope; exit 5)
+# greet: exit 0, hi
+# count: exit 0, 3
+# fail: exit 5, nope
+# single: 0:greet
+
+struct Task:
+  name: Str
+  command: Str
+
+  def describe -> Str = "#{name} (#{command})"
+
+def run_one(t: Task) -> Str:
+  match Process.run("sh", ["-c", t.command]):
+    Ok((code, out, _)) -> "#{t.name}: exit #{code}, #{out.trim}"
+    Error(e) -> "#{t.name}: #{e.message}"
+
+async def main:
+  todo = [Task(name: "greet", command: "echo hi"), Task(name: "count", command: r"printf 'a\nb\nc\n' | wc -l"), Task(name: "fail", command: "echo nope; exit 5")]
+  puts todo.map(_.describe).join("; ")
+  running = todo.map { |t| spawn: run_one(t) }.to_list
+  for line in await running:
+    puts line
+  first = todo.at(0)
+  single = spawn:
+    (code, out, _) = Process.run("echo", [first.name])?
+    "#{code}:#{out.trim}"
+  match await single:
+    Ok(s) -> puts "single: #{s}"
+    Error(e) -> puts "single failed: #{e.message}"

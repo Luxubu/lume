@@ -1,0 +1,91 @@
+# c06 — an interface `Step` with four structs that fit it; one of them,
+# `Shell`, writes its input to a scratch file and runs a command on it. The
+# same list of steps is applied to three inputs at once, one task each, each
+# with its own scratch file under a directory the program makes and removes.
+# The third input runs out of lines and fails at `keep 3`.
+# Probes: structural conformance and an interface default, a `[Step]` list
+# copied into `spawn:`, `map_error` on `Process.run` inside a method, `?`
+# through a list of steps, `File.write`/`File.remove` inside tasks,
+# `INPUTS.enumerate.map { |i, text| spawn: ... }`, cleanup.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# [words] -> [sh: sort -u] -> [keep 3] -> [replace]
+# 'the cat sat on the mat' => cat,mat,on
+# 'b a b' => a,b
+# '' => failed: keep 3: nothing to keep
+# scratch files left: 0
+
+DIR = "/tmp/lume-m59-c06"
+INPUTS = ["the cat sat on the mat", "b a b", ""]
+
+interface Step:
+  def name -> Str
+  def apply(text: Str, scratch: Str) -> Str or Error
+
+  def label -> Str = "[#{name}]"
+
+# One word per piece, joined by `sep`.
+struct Words:
+  sep: Str
+
+  def name -> Str = "words"
+  def apply(text: Str, scratch: Str) -> Str or Error = text.split.join(sep)
+
+# Feeds the text to a shell command through a scratch file.
+struct Shell:
+  cmd: Str
+
+  def name -> Str = "sh: #{cmd}"
+
+  def apply(text: Str, scratch: Str) -> Str or Error:
+    me = name
+    File.write(scratch, text + "\n")?
+    (code, out, err) = Process.run("sh", ["-c", "#{cmd} < #{scratch}"]).map_error { |e| Error("#{me}: #{e.message}") }?
+    File.remove(scratch)?
+    if code != 0:
+      return Error("#{me}: exit #{code}: #{err.trim}")
+    out.trim
+
+# The first lines only; nothing at all is a failure.
+struct Keep:
+  first: Int
+
+  def name -> Str = "keep #{first}"
+
+  def apply(text: Str, scratch: Str) -> Str or Error:
+    rows = text.lines.to_list
+    if rows.empty?:
+      return Error("#{name}: nothing to keep")
+    rows.take(first).join("\n")
+
+struct Replace:
+  from: Str
+  to: Str
+
+  def name -> Str = "replace"
+  def apply(text: Str, scratch: Str) -> Str or Error = text.replace(from, to)
+
+def run_all(steps: [Step], text: Str, scratch: Str) -> Str or Error:
+  var now = text
+  for s in steps:
+    now = s.apply(now, scratch)?
+  now
+
+async def main -> () or Error:
+  if Dir.exists?(DIR):
+    Dir.remove(DIR)?
+  Dir.make(DIR)?
+
+  steps: [Step] = [Words(sep: "\n"), Shell(cmd: "sort -u"), Keep(first: 3), Replace(from: "\n", to: ",")]
+  puts steps.map { |s| s.label }.join(" -> ")
+
+  tasks = INPUTS.enumerate.map { |i, text| spawn: run_all(steps, text, Path.join(DIR, "in#{i}.txt")) }.to_list
+  results = await tasks
+  for (text, r) in INPUTS.zip(results):
+    match r:
+      Ok(out) -> puts "'#{text}' => #{out}"
+      Error(e) -> puts "'#{text}' => failed: #{e.message}"
+
+  left = Dir.list(DIR)?
+  Dir.remove(DIR)?
+  puts "scratch files left: #{left.len}"

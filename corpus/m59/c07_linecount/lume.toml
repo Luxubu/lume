@@ -1,0 +1,6 @@
+[package]
+name = "c07_linecount"
+version = "0.1.0"
+
+[dependencies]
+c07_shell = { path = "../c07_shell" }

@@ -1,0 +1,7 @@
+error: `shared var` is written in that order
+  --> corpus/m59/b12_shared_var_reversed.lume:12:20
+   |
+12 | def remember(seen: var shared [Int], n: Int):
+   |                    ^
+  help: write `shared var T`, as in `def bump(n: shared var Int)`
+exit: 1

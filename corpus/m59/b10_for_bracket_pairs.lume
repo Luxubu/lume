@@ -1,0 +1,41 @@
+# b10: `for (a, b) in` in every place a pair comes from: `enumerate`, a map
+# (in insertion order), `zip`, with `where`, with `next` and `break`, and
+# with a loop name that hides an outer `i` only for the loop.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 0 ant
+# 1 bee
+# 2 cat
+# ada is 36
+# bo is 7
+# ant3
+# bee1
+# cat2
+# kept ant
+# kept cat
+# 1:bee
+# 99
+# 3
+
+def main:
+  words = ["ant", "bee", "cat"]
+  for (i, w) in words.enumerate:
+    puts "#{i} #{w}"
+  ages = {"ada": 36, "bo": 7}
+  for (name, age) in ages:
+    puts "#{name} is #{age}"
+  for (w, n) in words.zip([3, 1, 2]):
+    puts "#{w}#{n}"
+  for (i, w) in words.enumerate where i != 1:
+    puts "kept #{w}"
+  i = 99
+  for (i, w) in words.enumerate:
+    next if i == 0
+    break if i == 2
+    puts "#{i}:#{w}"
+  puts i
+  var total = 0
+  sizes = {"x": 1, "y": 2}
+  for (k, v) in sizes:
+    total += v
+  puts total

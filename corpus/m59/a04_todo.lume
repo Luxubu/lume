@@ -1,0 +1,66 @@
+# a04_todo: a to-do list with a `struct Task` of its own, in a program with
+# no concurrency at all.
+# Probes: `struct Task` (names.md says it is not refused); a list `[Task]`
+# as a field; `var self` methods, one returning `() or Error` and called with
+# `?` from `main -> () or Error`; `for var t in tasks` with `return ()` in
+# the middle; printing a `Task` value.
+# Exit status 0. Nothing on standard error.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# [x]  1 write the brief
+# [ ]  2 run the corpus
+# [x]  3 fix the parser
+# [ ]  4 update the docs
+# pending: run the corpus, update the docs
+# tagged docs: 2
+# cannot finish: no task 9
+# 2 of 4 done
+# Task(id: 2, title: "run the corpus", done: false, tags: ["test", "ci"])
+
+struct Task:
+  id: Int
+  title: Str
+  done: Bool
+  tags: [Str]
+
+  def line -> Str:
+    mark = if done: "x" else: " "
+    "[#{mark}] #{id.pad(2)} #{title}"
+
+struct Todo:
+  tasks: [Task]
+  next_id: Int
+
+  def add(var self, title: Str, tags: [Str]):
+    tasks.push(Task(id: next_id, title: title, done: false, tags: tags))
+    next_id += 1
+
+  def finish(var self, id: Int) -> () or Error:
+    for var t in tasks:
+      if t.id == id:
+        t.done = true
+        return ()
+    return Error("no task #{id}")
+
+  def pending -> [Task] = tasks.filter { |t| not t.done }.to_list
+
+  def tagged(tag: Str) -> [Task] = tasks.filter { |t| t.tags.contains?(tag) }.to_list
+
+def main -> () or Error:
+  var todo = Todo(tasks: [], next_id: 1)
+  todo.add("write the brief", ["docs"])
+  todo.add("run the corpus", ["test", "ci"])
+  todo.add("fix the parser", ["code"])
+  todo.add("update the docs", ["docs"])
+  todo.finish(1)?
+  todo.finish(3)?
+  for t in todo.tasks:
+    puts t.line
+  puts "pending: #{todo.pending.map(_.title).join(", ")}"
+  puts "tagged docs: #{todo.tagged("docs").len}"
+  match todo.finish(9):
+    Ok(_) -> puts "finished 9"
+    Error(e) -> puts "cannot finish: #{e.message}"
+  done_count = todo.tasks.count { |t| t.done }
+  puts "#{done_count} of #{todo.tasks.len} done"
+  puts todo.tasks.at(1)

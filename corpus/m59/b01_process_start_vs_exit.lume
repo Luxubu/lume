@@ -1,0 +1,39 @@
+# b01: Process.run at its edges. A program that fails to start is the only
+# `Error`; a program that runs and exits non-zero (false, `exit 7`, a failed
+# `test`) is an `Ok` with its code. Also: the output keeps its last newline
+# (the first line prints a `]` on its own line), no shell is involved (`&&`
+# reaches echo as text), arguments with spaces stay one argument, a child's
+# standard input is empty (`cat` with no file ends at once), and `wc` output
+# is trimmed so macOS's leading spaces do not matter.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 0 [hello
+# ]
+# ran: code 1, out [], err []
+# ran: code 7, out [a
+# b], err [oops]
+# did not start: cannot run `no-such-program-b01`: No such file or directory (os error 2)
+# ran: code 0, out [], err []
+# ran: code 0, out [a && b], err []
+# ran: code 0, out [3], err []
+# ran: code 0, out [a b|c|], err []
+# ran: code 1, out [], err []
+# 42
+
+def show(r: (Int, Str, Str) or Error) -> Str:
+  match r:
+    Ok((code, out, err)) -> "ran: code #{code}, out [#{out.trim}], err [#{err.trim}]"
+    Error(e) -> "did not start: #{e.message}"
+
+def main -> () or Error:
+  (code, out, _) = Process.run("echo", ["hello"])?
+  puts "#{code} [#{out}]"
+  puts show(Process.run("false", []))
+  puts show(Process.run("sh", ["-c", "(echo b; echo a) | sort; echo oops >&2; exit 7"]))
+  puts show(Process.run("no-such-program-b01", []))
+  puts show(Process.run("cat", []))
+  puts show(Process.run("echo", ["a && b"]))
+  puts show(Process.run("sh", ["-c", "printf abc | wc -c"]))
+  puts show(Process.run("printf", ["%s|", "a b", "c"]))
+  puts show(Process.run("test", ["-f", "/no/such/file/b01"]))
+  puts Process.run("sh", ["-c", "exit 42"])?.0

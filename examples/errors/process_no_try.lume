@@ -1,0 +1,5 @@
+# `Process.run` gives a `T or Error`: take the tuple out with `?` or `match` first.
+
+def main:
+  (code, out, err) = Process.run("echo", ["hi"])
+  puts code

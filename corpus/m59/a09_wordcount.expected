@@ -1,0 +1,9 @@
+text 1: wc 4, split 4, agree
+text 2: wc 3, split 3, agree
+text 3: wc 0, split 0, agree
+text 4: wc 3, split 3, agree
+lines in text 2: 2
+héllo: 6 bytes, 5 characters
+apple,fig,pear
+`printf 'x' | wc -w; exit 9` exited 9
+exit: 0

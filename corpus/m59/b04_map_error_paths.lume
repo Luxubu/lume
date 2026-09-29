@@ -1,0 +1,38 @@
+# b04: map_error on every path: a success goes through untouched (the block
+# never runs), a failure is replaced, two map_errors stack, `?` straight
+# after the block, map_error on Process.run's failure to start, and a
+# replaced failure ending `main` through `?`. The last line stops the program:
+# `error: retries: `twelve` is not an integer` goes to standard error, the
+# exit status is 1, and `unreachable` is never printed.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# Ok(3)
+# Error("retries: `x` is not an integer")
+# Ok("0:")
+# Error("step failed to start: no-such-program-b04")
+# 5
+# Error("outer: inner: `q` is not an integer")
+# outer: inner: `q` is not an integer
+# 13
+
+def retries(v: Str) -> Int or Error = v.to_int.map_error { |e| Error("retries: #{e.message}") }
+
+def run_quiet(program: Str) -> Str or Error:
+  (code, out, _) = Process.run(program, []).map_error { |e| Error("step failed to start: #{program}") }?
+  "#{code}:#{out.trim}"
+
+def main -> () or Error:
+  puts retries("3")
+  puts retries("x")
+  puts run_quiet("true")
+  puts run_quiet("no-such-program-b04")
+  puts "5".to_int.map_error { |e| Error("never: #{e.message}") }.or(0)
+  r = "q".to_int.map_error { |e| Error("inner: #{e.message}") }.map_error { |e| Error("outer: #{e.message}") }
+  puts r
+  match r:
+    Ok(n) -> puts n
+    Error(e) -> puts e.message
+  n = retries("12")?
+  puts n + 1
+  m = retries("twelve")?
+  puts "unreachable #{m}"

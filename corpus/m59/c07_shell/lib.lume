@@ -1,0 +1,30 @@
+# c07_shell — running programs, with every way it can go wrong turned into
+# a `T or Error` that says what happened. Failing to start a program gets a
+# message of this library's own (the system's reason is left out, so the
+# message is the same on every machine); a command that exits non-zero is a
+# failure too, with its exit code and standard error.
+
+pub struct Ran:
+  code: Int
+  out: Str
+  err: Str
+
+pub def run(program: Str, args: [Str]) -> Ran or Error:
+  (code, out, err) = Process.run(program, args).map_error { |_e| Error("could not start `#{program}`") }?
+  Ran(code: code, out: out, err: err)
+
+# A shell line's standard output, trimmed; a non-zero exit is a failure.
+pub def sh(cmd: Str) -> Str or Error:
+  r = run("sh", ["-c", cmd])?
+  if r.code != 0:
+    return Error("exit #{r.code}: #{r.err.trim}")
+  r.out.trim
+
+pub def lines(cmd: Str) -> [Str] or Error:
+  text = sh(cmd).map_error { |e| Error("lines: #{e.message}") }?
+  text.lines.to_list
+
+# A shell line that prints one whole number.
+pub def count(cmd: Str) -> Int or Error:
+  text = sh(cmd)?
+  text.to_int.map_error { |e| Error("count: #{e.message}") }

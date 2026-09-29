@@ -1,0 +1,6 @@
+[package]
+name = "c04_jobgraph"
+version = "0.1.0"
+
+[dependencies]
+c04_graph = { path = "../c04_graph" }

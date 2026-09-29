@@ -1,0 +1,62 @@
+# a07_args: reads its options from `Env.args`, falling back to defaults for
+# anything not given, and shows the same parser on argument lists written
+# out in the program.
+# Probes: `Env.args` (run with no arguments: `lume run corpus/m59/a07_args.lume`);
+# `args[i].or_error(..)?` and `to_int.map_error(..)?` inside a `match` arm
+# of a `while` loop; `opts = match .. Error(e) -> warn ..; Env.exit(2)`
+# (not taken); `Env.get` of a variable that is not set, with `.or`.
+# Assumes LUME_A07_USER is not set in the environment.
+# Exit status 0. Nothing on standard error.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# using defaults
+# hello, world (1)
+# --loud Ada -> Options(name: "Ada", count: 1, loud: true)
+# --count 2 Bo -> Options(name: "Bo", count: 2, loud: false)
+# --count -> error: --count needs a number
+# --count two -> error: --count: `two` is not an integer
+# user: nobody
+
+struct Options:
+  name: Str
+  count: Int
+  loud: Bool
+
+def parse_args(args: [Str]) -> Options or Error:
+  var name = "world"
+  var count = 1
+  var loud = false
+  var i = 0
+  while i < args.len:
+    a = args.at(i)
+    match a:
+      "--loud" -> loud = true
+      "--count" ->
+        i += 1
+        v = args[i].or_error("--count needs a number")?
+        count = v.to_int.map_error { |e| Error("--count: #{e.message}") }?
+      other -> name = other
+    i += 1
+  Options(name: name, count: count, loud: loud)
+
+def greet(o: Options) -> [Str]:
+  word = if o.loud: "HELLO" else: "hello"
+  (1..o.count).map { |n| "#{word}, #{o.name} (#{n})" }.to_list
+
+def main:
+  given = Env.args
+  source = if given.empty?: "defaults" else: "#{given.len} arguments"
+  puts "using #{source}"
+  opts = match parse_args(given):
+    Ok(o) -> o
+    Error(e) ->
+      warn e.message
+      Env.exit(2)
+  for line in greet(opts):
+    puts line
+  for sample in [["--loud", "Ada"], ["--count", "2", "Bo"], ["--count"], ["--count", "two"]]:
+    match parse_args(sample):
+      Ok(o) -> puts "#{sample.join(" ")} -> #{o}"
+      Error(e) -> puts "#{sample.join(" ")} -> error: #{e.message}"
+  user = Env.get("LUME_A07_USER").or("nobody")
+  puts "user: #{user}"

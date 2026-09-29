@@ -1,0 +1,8 @@
+using defaults
+hello, world (1)
+--loud Ada -> Options(name: "Ada", count: 1, loud: true)
+--count 2 Bo -> Options(name: "Bo", count: 2, loud: false)
+--count -> error: --count needs a number
+--count two -> error: --count: `two` is not an integer
+user: nobody
+exit: 0

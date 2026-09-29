@@ -1,0 +1,16 @@
+# b11: three names in brackets over `enumerate`, whose items are pairs.
+# By analogy with `(a, b) = (x, y, z)` (destructure_arity), the tuple's
+# size and the count of names are compared.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: this tuple has 2 parts, but 3 are named
+#   --> corpus/m59/b11_for_three_names.lume:15:7
+#    |
+# 15 |   for (i, w, extra) in words.enumerate:
+#    |       ^
+#   help: name every part; use `_` for a part you do not need
+
+def main:
+  words = ["ant", "bee"]
+  for (i, w, extra) in words.enumerate:
+    puts "#{i} #{w} #{extra}"

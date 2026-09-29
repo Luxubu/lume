@@ -1,0 +1,51 @@
+# c04_graph — a job graph written one job per line:
+#
+#   name: needs needs ... | shell command
+#
+# `levels` puts each job one level below its deepest need, so every job in
+# a level can run at the same time once the levels above it are done.
+
+pub struct Node:
+  name: Str
+  needs: [Str]
+  cmd: Str
+
+pub def parse(text: Str) -> [Node] or Error:
+  var nodes: [Node] = []
+  for (i, raw) in text.lines.enumerate:
+    line = raw.trim
+    if line == "" or line.starts_with?("#"):
+      next
+    match line.split("|"):
+      [head, cmd] ->
+        match head.split(":"):
+          [name, needs] -> nodes.push(Node(name: name.trim, needs: needs.split.to_list, cmd: cmd.trim))
+          _ -> return Error("line #{i + 1}: expected `name: needs | command`")
+      _ -> return Error("line #{i + 1}: expected one `|` between the needs and the command")
+  nodes
+
+pub def levels(nodes: [Node]) -> [[Node]] or Error:
+  names = nodes.map { |n| n.name }.to_set
+  for n in nodes:
+    for need in n.needs:
+      if not names.contains?(need):
+        return Error("`#{n.name}` needs `#{need}`, which is not a job")
+  var level: {Str: Int} = {}
+  var left = nodes
+  while not left.empty?:
+    ready = left.filter { |n| n.needs.all? { |d| level.contains?(d) } }.to_list
+    if ready.empty?:
+      return Error("these jobs need each other: #{left.map { |n| n.name }.join(", ")}")
+    for n in ready:
+      depth = 1 + n.needs.map { |d| level[d].or(0) }.max.or(0)
+      level[n.name] = depth
+    left = left.reject { |n| level.contains?(n.name) }.to_list
+  deepest = level.values.max.or(0)
+  var out: [[Node]] = []
+  for l in 1..deepest:
+    out.push(nodes.filter { |n| level[n.name].or(0) == l }.to_list)
+  out
+
+pub def plan(text: Str) -> [[Node]] or Error:
+  nodes = parse(text)?
+  levels(nodes)

@@ -1,0 +1,13 @@
+0 [hello
+]
+ran: code 1, out [], err []
+ran: code 7, out [a
+b], err [oops]
+did not start: cannot run `no-such-program-b01`: No such file or directory (os error 2)
+ran: code 0, out [], err []
+ran: code 0, out [a && b], err []
+ran: code 0, out [3], err []
+ran: code 0, out [a b|c|], err []
+ran: code 1, out [], err []
+42
+exit: 0

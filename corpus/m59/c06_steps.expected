@@ -1,0 +1,12 @@
+warning: `steps` holds values of different types behind `Step`, so calls on its items go through a pointer
+  --> corpus/m59/c06_steps.lume:79:3
+   |
+79 |   steps: [Step] = [Words(sep: "\n"), Shell(cmd: "sort -u"), Keep(first: 3), Replace(from: "\n", to: ",")]
+   |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+[words] -> [sh: sort -u] -> [keep 3] -> [replace]
+'the cat sat on the mat' => cat,mat,on
+'b a b' => a,b
+'' => failed: keep 3: nothing to keep
+scratch files left: 0
+exit: 0

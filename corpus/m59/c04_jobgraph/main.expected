@@ -1,0 +1,22 @@
+warning: `status` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/m59/c04_jobgraph/main.lume:60:3
+   |
+60 |   shared var status: {Str: Str} = {}
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+level 1: fetch
+level 2: lint build
+level 3: test docs
+level 4: ship
+--
+build  ok: built
+docs   ok: docs
+fetch  ok: fetched
+lint   ok: lint clean
+ship   skipped: needs test
+test   failed (exit 2): 1 of 3 failed
+4 of 6 ok
+these jobs need each other: a, b
+`b` needs `c`, which is not a job
+line 1: expected one `|` between the needs and the command
+exit: 0

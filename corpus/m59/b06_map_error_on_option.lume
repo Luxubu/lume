@@ -1,0 +1,30 @@
+# b06: map_error on a `T?` (`.first` gives `Int?`), which has no failure to
+# replace. The fix is `.or_error("no ports")`; does the editor say so?
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: this value is a `Int?` — it may be absent, so `.map_error` cannot be called on it directly
+#   --> corpus/m59/b06_map_error_on_option.lume:27:59
+#    |
+# 27 | def first_port(ports: [Int]) -> Int or Error = ports.first.map_error { |e| Error("no ports") }
+#    |                                                           ^
+#   help: unwrap it first: `match` on `Some(x)`/`None`, or `.or(default).map_error`
+#
+# `lume check --json corpus/m59/b06_map_error_on_option.lume` prints:
+# {
+#   "diagnostics": [
+#     {
+#       "col": 59,
+#       "file": "corpus/m59/b06_map_error_on_option.lume",
+#       "help": "unwrap it first: `match` on `Some(x)`/`None`, or `.or(default).map_error`",
+#       "line": 27,
+#       "message": "this value is a `Int?` — it may be absent, so `.map_error` cannot be called on it directly",
+#       "severity": "error"
+#     }
+#   ],
+#   "ok": false
+# }
+
+def first_port(ports: [Int]) -> Int or Error = ports.first.map_error { |e| Error("no ports") }
+
+def main:
+  puts first_port([80])

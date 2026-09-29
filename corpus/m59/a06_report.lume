@@ -1,0 +1,51 @@
+# a06_report: an invoice-style text report, numbered with
+# `for (i, x) in ...enumerate`, then ranked, then a legend from a split.
+# Probes: `for (i, it) in items.enumerate` (the bracketed form), over a list,
+# over a `sort_by` result, and over `"...".split.enumerate` (a chain);
+# `pad` / `pad_right` on Int and Str; `decimals(2)` for money; `sum` on a
+# chain of method results.
+# Every output line below is written after "# ", so a line that starts
+# with spaces keeps them.
+# Exit status 0. Nothing on standard error.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# no  item       qty   total
+# --------------------------
+#  1  pencil      12    3.00
+#  2  notebook     3   11.97
+#  3  stapler      1   12.50
+#  4  paper        5   24.00
+# --------------------------
+#     total       21   51.47
+# rank 1: paper (46%)
+# rank 2: stapler (24%)
+# rank 3: notebook (23%)
+# rank 4: pencil (5%)
+# 0=red 1=green 2=blue
+
+struct Item:
+  name: Str
+  qty: Int
+  cents: Int
+
+  def total -> Int = qty * cents
+
+def money(cents: Int) -> Str = (cents.to_float / 100.0).decimals(2)
+
+def main:
+  items = [Item("pencil", 12, 25), Item("notebook", 3, 399), Item("stapler", 1, 1250), Item("paper", 5, 480)]
+  puts "no  " + "item".pad_right(10) + "qty".pad(4) + "total".pad(8)
+  puts "-".repeat(26)
+  for (i, it) in items.enumerate:
+    puts "#{(i + 1).pad(2)}  #{it.name.pad_right(10)}#{it.qty.pad(4)}#{money(it.total).pad(8)}"
+  puts "-".repeat(26)
+  grand = items.map(_.total).sum
+  puts "    " + "total".pad_right(10) + items.map(_.qty).sum.pad(4) + money(grand).pad(8)
+  ranked = items.sort_by { |it| 0 - it.total }
+  for (i, it) in ranked.enumerate:
+    share = it.total * 100 / grand
+    puts "rank #{i + 1}: #{it.name} (#{share}%)"
+  var legend: [Str] = []
+  for (i, colour) in "red green blue".split.enumerate:
+    legend.push("#{i}=#{colour}")
+  puts legend.join(" ")

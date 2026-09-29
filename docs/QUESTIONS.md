@@ -129,6 +129,14 @@ when a value moves. They asked about changing what lives inside a struct,
 `shared var` outside a task, and a kept block's copy. Each is now answered
 where it belongs. See `corpus/m53/REPORT.md`.
 
+## Round twelve
+
+`corpus/m59/` measured milestones 55–58: twenty-nine programs, **38
+guesses**. Most were the wording of misuse messages for the newest features
+(`Process.run`, `map_error`, `Env.exit` in a branch, a `Task` of your own),
+which no page or example showed. Each now has an example in
+`examples/errors/`. See `corpus/m59/REPORT.md`.
+
 ## What writing the answers found
 
 Four programs that the compiler accepted and then could not generate Rust for:

@@ -1,0 +1,6 @@
+# The block of `map_error` gives the new failure, an `Error`.
+
+def port(v: Str) -> Int or Error = v.to_int.map_error { |e| "port: #{e.message}" }
+
+def main:
+  puts port("80")

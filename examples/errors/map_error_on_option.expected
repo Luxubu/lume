@@ -1,0 +1,6 @@
+error: `map_error` changes the failure of a `T or Error`, but this is an `Int?`
+  --> examples/errors/map_error_on_option.lume:3:59
+  |
+3 | def first_port(ports: [Int]) -> Int or Error = ports.first.map_error { |e| Error("no ports") }
+  |                                                           ^
+  help: a `T?` has no failure to change: `.or_error("message")` turns its `None` into one

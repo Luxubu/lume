@@ -1,0 +1,81 @@
+# c02 — a build pipeline whose stages are structs holding a kept block.
+# Stages with the same wave run at the same time, one task each; a failed
+# stage stops the pipeline after its wave. Some stages run commands, one
+# writes files itself. Everything lives under a directory the program makes
+# and removes. `count` sleeps a second so it finishes after `sort`, and is
+# still reported first.
+# Probes: a block kept in a struct field, including a function's name given
+# as one; a struct holding a block copied into `spawn:` and its block called
+# there; `Process.run` with `?` and tuple destructuring; `T or Error` from a
+# task; `for (s, r) in xs.zip(ys)`; `break` out of a wave loop; cleanup.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# wave 1
+#   sources  ok: wrote 2 files
+# wave 2
+#   count    ok: 3 lines
+#   sort     ok: apple,fig,pear
+# wave 3
+#   verify   ok: sorted.txt is there
+#   package  FAILED: exit 4: no dist.tar
+# stopped after wave 3; 1 stage(s) not run
+# cleaned up: true
+
+ROOT = "/tmp/lume-m59-c02"
+
+struct Stage:
+  name: Str
+  wave: Int
+  act: (Str) -> Str or Error
+
+# Runs one shell line inside `dir`. A non-zero exit becomes a failure.
+def sh(dir: Str, cmd: Str) -> Str or Error:
+  (code, out, err) = Process.run("sh", ["-c", "cd #{dir} && #{cmd}"])?
+  if code != 0:
+    return Error("exit #{code}: #{err.trim}")
+  out.trim
+
+def write_sources(dir: Str) -> Str or Error:
+  File.write(Path.join(dir, "a.txt"), "pear\napple\n")?
+  File.write(Path.join(dir, "b.txt"), "fig\n")?
+  "wrote 2 files"
+
+async def main -> () or Error:
+  if Dir.exists?(ROOT):
+    Dir.remove(ROOT)?
+  Dir.make(ROOT)?
+
+  stages: [Stage] = [
+    Stage(name: "sources", wave: 1, act: write_sources),
+    Stage(name: "count", wave: 2, act: { |dir| sh(dir, "sleep 1; cat a.txt b.txt | wc -l").map { |n| "#{n} lines" } }),
+    Stage(name: "sort", wave: 2, act: { |dir| sh(dir, "sort a.txt b.txt > sorted.txt && cat sorted.txt").map { |s| s.lines.join(",") } }),
+    Stage(name: "verify", wave: 3, act: { |dir| sh(dir, "test -s sorted.txt && echo sorted.txt is there") }),
+    Stage(name: "package", wave: 3, act: { |dir| sh(dir, "test -f dist.tar || { echo 'no dist.tar' >&2; exit 4; }") }),
+    Stage(name: "publish", wave: 4, act: { |dir| sh(dir, "echo published") }),
+  ]
+
+  last = stages.map { |s| s.wave }.max.or(0)
+  var stopped = 0
+  for w in 1..last:
+    wave = stages.filter { |s| s.wave == w }.to_list
+    puts "wave #{w}"
+    tasks = wave.map { |s| spawn: s.act(ROOT) }.to_list
+    results = await tasks
+    var failed = false
+    for (s, r) in wave.zip(results):
+      match r:
+        Ok(msg) -> puts "  #{s.name.pad_right(8)} ok: #{msg}"
+        Error(e) ->
+          puts "  #{s.name.pad_right(8)} FAILED: #{e.message}"
+          failed = true
+    if failed:
+      stopped = w
+      break
+
+  if stopped > 0:
+    left = stages.count { |s| s.wave > stopped }
+    puts "stopped after wave #{stopped}; #{left} stage(s) not run"
+  else:
+    puts "all #{stages.len} stages done"
+  Dir.remove(ROOT)?
+  puts "cleaned up: #{not Dir.exists?(ROOT)}"

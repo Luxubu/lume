@@ -1,0 +1,6 @@
+error: `for i, w, extra` names 3 variables, but each item has 2 parts
+  --> corpus/m59/b11_for_three_names.lume:15:3
+   |
+15 |   for (i, w, extra) in words.enumerate:
+   |   ^
+exit: 1

@@ -1,0 +1,16 @@
+warning: `total` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/m59/c07_linecount/main.lume:41:3
+   |
+41 |   shared var total = 0
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+one.txt     1
+three.txt   3
+missing.txt error: missing.txt: exit 1: no such file
+two.txt     2
+total lines: 6
+a b c
+both: count: `many` is not an integer
+could not start `no-such-program-m59`
+removed: true
+exit: 0

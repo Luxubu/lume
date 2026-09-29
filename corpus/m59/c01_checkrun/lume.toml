@@ -1,0 +1,6 @@
+[package]
+name = "c01_checkrun"
+version = "0.1.0"
+
+[dependencies]
+c01_checks = { path = "../c01_checks" }

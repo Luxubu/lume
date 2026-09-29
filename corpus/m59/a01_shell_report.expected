@@ -1,0 +1,11 @@
+echo: exit 0
+  out| hello world
+printf: exit 0
+  out| a-b
+sh: exit 4
+  out| up
+  err| down
+quiet: exit 0
+exit 7 gives 7, 0 chars out
+missing program fails to start: true
+exit: 0

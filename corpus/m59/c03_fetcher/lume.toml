@@ -1,0 +1,6 @@
+[package]
+name = "c03_fetcher"
+version = "0.1.0"
+
+[dependencies]
+c03_fetch = { path = "../c03_fetch" }

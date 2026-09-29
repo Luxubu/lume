@@ -1,0 +1,6 @@
+1. alpha: alpha payload (1 try)
+2. beta: beta payload (3 tries)
+3. gamma: gave up after 3 tries: gamma: exit 75: gamma busy (3)
+5 markers left: beta.1 beta.2 gamma.1 gamma.2 gamma.3
+cleaned up: true
+exit: 0

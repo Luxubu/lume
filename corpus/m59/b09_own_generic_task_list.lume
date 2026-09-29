@@ -1,0 +1,36 @@
+# b09: with a generic `struct Task[T]` of your own, `[Task[Int]]` is a
+# perfectly good type: it names the struct, with the right number of type
+# arguments, so the `own_task_args` error does not apply. What `spawn:`
+# gives is the built-in task, which that file can no longer name. Pushing
+# one into the list is the mistake; the message shows two types spelled
+# the same way.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `.push` on a `[Task[Int]]` takes a `Task[Int]`, but this is a `Task[Int]`
+#   --> corpus/m59/b09_own_generic_task_list.lume:35:11
+#    |
+# 35 |   hs.push(spawn: 1 + 1)
+#    |           ^
+#
+# `lume check --json corpus/m59/b09_own_generic_task_list.lume` prints:
+# {
+#   "diagnostics": [
+#     {
+#       "col": 11,
+#       "file": "corpus/m59/b09_own_generic_task_list.lume",
+#       "help": null,
+#       "line": 35,
+#       "message": "`.push` on a `[Task[Int]]` takes a `Task[Int]`, but this is a `Task[Int]`",
+#       "severity": "error"
+#     }
+#   ],
+#   "ok": false
+# }
+
+struct Task[T]:
+  payload: T
+
+async def main:
+  var hs: [Task[Int]] = []
+  hs.push(spawn: 1 + 1)
+  puts await hs

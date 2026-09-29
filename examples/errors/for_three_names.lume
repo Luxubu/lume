@@ -1,0 +1,5 @@
+# `for (i, w, x)` names three parts of a pair.
+
+def main:
+  for (i, w, extra) in ["a", "b"].enumerate:
+    puts w

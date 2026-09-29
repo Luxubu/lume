@@ -1,0 +1,66 @@
+# c07 — counts the lines of some files in parallel through `c07_shell`, a
+# library beside this package whose functions return `T or Error` built
+# with `map_error` around `Process.run`. The files are written by the
+# program into a directory it removes at the end; one name has no file.
+# The per-file counts go into a `shared var` total from the tasks.
+# Probes: `map_error` in a library and again in the program, `?` passing a
+# library's failure through unchanged, a `shared var Int` parameter bumped
+# from tasks, `await t?` in `async def main -> () or Error`, `?` inside a
+# `spawn:` body giving `T or Error`, a program that cannot start,
+# `for (name, body) in` over a constant list of tuples, cleanup.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# one.txt     1
+# three.txt   3
+# missing.txt error: missing.txt: exit 1: no such file
+# two.txt     2
+# total lines: 6
+# a b c
+# both: count: `many` is not an integer
+# could not start `no-such-program-m59`
+# removed: true
+
+import c07_shell
+
+DIR = "/tmp/lume-m59-c07"
+FILES = [("one.txt", "a\n"), ("three.txt", "c\na\nb\n"), ("two.txt", "a\nb\n")]
+
+def tally(path: Str, total: shared var Int) -> Int or Error:
+  cmd = "test -f #{path} || { echo 'no such file' >&2; exit 1; }; wc -l < #{path}"
+  n = c07_shell.count(cmd).map_error { |e| Error("#{Path.base(path)}: #{e.message}") }?
+  total += n
+  n
+
+async def main -> () or Error:
+  if Dir.exists?(DIR):
+    Dir.remove(DIR)?
+  Dir.make(DIR)?
+  for (name, body) in FILES:
+    File.write(Path.join(DIR, name), body)?
+
+  shared var total = 0
+  names = ["one.txt", "three.txt", "missing.txt", "two.txt"]
+  tasks = names.map { |n| spawn: tally(Path.join(DIR, n), total) }.to_list
+  results = await tasks
+  for (name, r) in names.zip(results):
+    match r:
+      Ok(n) -> puts "#{name.pad_right(11)} #{n}"
+      Error(e) -> puts "#{name.pad_right(11)} error: #{e.message}"
+  puts "total lines: #{total}"
+
+  t = spawn: c07_shell.lines("sort #{Path.join(DIR, "three.txt")}")
+  sorted = await t?
+  puts sorted.join(" ")
+
+  both = spawn:
+    a = c07_shell.count("echo 4")?
+    b = c07_shell.count("echo many")?
+    a + b
+  match await both:
+    Ok(n) -> puts "sum #{n}"
+    Error(e) -> puts "both: #{e.message}"
+
+  puts c07_shell.run("no-such-program-m59", []).error.map { |e| e.message }.or("ran")
+
+  Dir.remove(DIR)?
+  puts "removed: #{not Dir.exists?(DIR)}"

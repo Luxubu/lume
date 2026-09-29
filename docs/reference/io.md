@@ -196,7 +196,9 @@ To end with an error from `main`, returning a failure through `?` (below) is
 usually clearer than `warn` and `Env.exit(1)`.
 
 **`Env.exit` never comes back, so it can end a branch whose other branches
-give a value**, the way Rust's `exit` has the type `!`:
+give a value**, the way Rust's `exit` has the type `!`. That holds for a
+`match` or `if` that is a binding's value, and for one that is a function's
+result:
 
 ```lume
 def main:
@@ -214,9 +216,10 @@ def main:
 |---|---|---|
 | `Process.run(program, args)` | `(Int, Str, Str) or Error` | runs it and waits: its exit code, then what it wrote to standard output and to standard error |
 
-**Only failing to start the program is an `Error`.** A program that runs and
-exits with a non-zero code has still run: that is the code, and what it
-printed. A program ended by a signal gives `-1`. This is Rust's
+**Only failing to start the program is an `Error`.** Its message names the
+program and what the system said, as in ``cannot run `no-such-program`: No
+such file or directory (os error 2)``. A program that runs and exits with a
+non-zero code has still run: that is the code, and what it printed. A program ended by a signal gives `-1`. This is Rust's
 `std::process::Command`: the program and its arguments are given apart, and
 no shell is involved, so for pipes and `&&` run `sh -c`:
 
@@ -231,7 +234,10 @@ def main -> () or Error:
 ```
 
 **Inside a task, other tasks go on while one waits for its program.** Three
-programs started from three `spawn:` bodies run at the same time.
+programs started from three `spawn:` bodies, or from `async def`s they call,
+run at the same time. A plain `def` called from a task works too, but it
+holds on to its thread while the program runs, so make a helper that runs
+programs an `async def`, as `examples/jobr/` does.
 `examples/jobr/` is a job runner built on this.
 
 ## `Time`

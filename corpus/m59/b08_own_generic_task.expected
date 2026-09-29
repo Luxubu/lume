@@ -1,0 +1,4 @@
+["WRITE: 1", "TEST: 2"]
+Task(title: "ship", payload: "friday")
+6
+exit: 0

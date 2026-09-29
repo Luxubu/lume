@@ -1,0 +1,16 @@
+# b05: a map_error block that gives back the new message as a `Str`, not an
+# `Error("...")`. The most likely slip with map_error: the block is "what the
+# failure becomes", and the writer thinks of the text.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: this block gives back a `Str`, but the parameter asks for an `Error`
+#   --> corpus/m59/b05_map_error_gives_str.lume:13:55
+#    |
+# 13 | def port(v: Str) -> Int or Error = v.to_int.map_error { |e| "port: #{e.message}" }
+#    |                                                       ^
+#   help: the block's last line must be an `Error`
+
+def port(v: Str) -> Int or Error = v.to_int.map_error { |e| "port: #{e.message}" }
+
+def main:
+  puts port("80")

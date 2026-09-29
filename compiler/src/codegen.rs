@@ -5027,6 +5027,14 @@ impl Gen {
         if let Some(h) = self.predicate_try_hint(e, have, want) {
             return err.with_help(h);
         }
+        // two types that print the same: say which is which
+        if type_name(have) == type_name(want) {
+            let task_here = |t: &Type| format!("{:?}", t).contains("Task(");
+            if self.own_task && (task_here(have) || task_here(want)) {
+                return err.with_help("this program has a `Task` of its own, so `Task[..]` in a type means yours; what `spawn:` gives is the built-in task, which has no other name here: leave its type out and Lume works it out");
+            }
+            return err.with_help(format!("these are two different types that are both written `{}` here", type_name(have)));
+        }
         let help = match (have, want) {
             (Type::Str, Type::Char) => Some("a `Char` is one character: use a one-character literal like `\"a\"`, or `.chars` and take one".to_string()),
             (Type::Char, Type::Str) => Some("write `.to_s` to make it a string".to_string()),
@@ -6463,7 +6471,9 @@ impl Gen {
         if !self.tail_of_fn || (self.in_block && !matches!(self.block_ret, Some(Type::Result(..)) | Some(Type::Option(_)))) {
             return Ok(text);
         }
-        if matches!(e.kind, ExprKind::Rust(_)) {
+        // `Env.exit(..)` never comes back: in Rust it is `!`, which fits
+        // whatever the function returns, so there is nothing to check or wrap
+        if matches!(e.kind, ExprKind::Rust(_)) || self.is_env_exit(e) {
             return Ok(text);
         }
         let ret = self.current_ret.clone();
@@ -6983,7 +6993,12 @@ impl Gen {
                     Type::Tuple(ts) => ts.clone(),
                     Type::Unknown => vec![Type::Unknown; names.len()],
                     other => {
-                        return Err(LumeError::new(value.line, value.col, format!("`({}) = ...` takes a tuple apart, but this is a `{}`", names.join(", "), type_name(other))));
+                        let e = LumeError::new(value.line, value.col, format!("`({}) = ...` takes a tuple apart, but this is a `{}`", names.join(", "), type_name(other)));
+                        return Err(match other {
+                            Type::Result(..) => e.with_help(format!("the tuple is inside a result: take it out first, with `({}) = ...?` or a `match` on `Ok(..)`/`Error(e)`", names.join(", "))),
+                            Type::Option(_) => e.with_help(format!("the tuple may be absent: take it out first, with `({}) = ...?` or a `match` on `Some(..)`/`None`", names.join(", "))),
+                            _ => e,
+                        });
                     }
                 };
                 if ts.len() != names.len() {
@@ -8395,6 +8410,13 @@ impl Gen {
             return Err(LumeError::new(e.line, e.col, format!("`{}` takes only a block", name)));
         }
         let rt = self.ty_of(recv);
+        if name == "map_error" && !matches!(rt.materialized(), Type::Result(..)) {
+            let e2 = LumeError::new(e.line, e.col, format!("`map_error` changes the failure of a `T or Error`, but this is {}", a_type(&rt.materialized())));
+            return Err(match rt.materialized() {
+                Type::Option(_) => e2.with_help("a `T?` has no failure to change: `.or_error(\"message\")` turns its `None` into one"),
+                _ => e2,
+            });
+        }
         match (&rt, name) {
             (Type::Option(inner), "map") | (Type::Result(inner, _), "map") => {
                 let inner = (**inner).clone();
@@ -10357,7 +10379,14 @@ impl Gen {
                         // a sleep of eighteen quintillion milliseconds.
                         if let Some(want) = builtin_namespace_params(tn, name) {
                             for (a, w) in args.iter().zip(want.iter()) {
-                                self.check_assign(&a.value, w, &format!("`{}.{}` takes {}", tn, name, a_type(w)))?;
+                                let r = self.check_assign(&a.value, w, &format!("`{}.{}` takes {}", tn, name, a_type(w)));
+                                // `Process.run("sh", "-c true")`: no shell splits the text
+                                if let (Err(err), true) = (&r, tn == "Process" && matches!(w, Type::List(_))) {
+                                    if err.help.is_none() {
+                                        return Err(err.clone().with_help("the arguments are a list, each one passed as it is, as in `Process.run(\"sh\", [\"-c\", \"echo hi\"])`"));
+                                    }
+                                }
+                                r?;
                             }
                         }
                         let mut parts = Vec::new();

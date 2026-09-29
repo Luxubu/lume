@@ -1,0 +1,10 @@
+1. true          ok
+2. false         ok
+3. exit 3        ok
+4. false is 0    FAIL (exit 1, wanted 0)
+5. 2 -gt 1       ok
+6. 1 -gt 2       FAIL (exit 1, wanted 0)
+7. missing       BROKEN (cannot start a10-no-such-program)
+8. exit 3 is 0   FAIL (exit 3, wanted 0)
+8 cases: 4 passed, 3 failed, 1 broken
+exit: 1

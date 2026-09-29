@@ -1,0 +1,39 @@
+# b07: Env.exit ending branches whose values are then used. A function
+# declared `-> Int` whose `Error` arm ends in Env.exit; a multi-line `if`
+# used as a value whose `else` warns and exits; an `if` without `else` that
+# only exits (a statement, so no `else` is needed); and a function `-> Int`
+# whose `match` has one arm, and that arm is Env.exit, so no branch gives an
+# `Int` at all. The program ends inside `give_up`: nothing is printed after
+# `still here`, the program writes nothing to standard error (no branch
+# that warns is taken), and the exit status is 5.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 8081
+# high
+# still here
+
+def port_of(s: Str) -> Int:
+  match s.to_int:
+    Ok(n) -> n
+    Error(e) ->
+      warn "bad port: #{e.message}"
+      Env.exit(2)
+
+def give_up(code: Int) -> Int:
+  match code:
+    _ -> Env.exit(code)
+
+def main:
+  p = port_of("8080")
+  puts p + 1
+  label = if p > 1024:
+    "high"
+  else:
+    warn "low port"
+    Env.exit(3)
+  puts label
+  if p < 0:
+    Env.exit(4)
+  puts "still here"
+  total = give_up(5) + 1
+  puts "unreachable #{total}"

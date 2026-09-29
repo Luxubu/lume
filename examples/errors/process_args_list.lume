@@ -1,0 +1,6 @@
+# The arguments go in a list of their own: no shell splits them.
+
+def main -> () or Error:
+  (code, _, _) = Process.run("sh", "-c true")?
+  puts code
+  ()

@@ -1,0 +1,11 @@
+wave 1
+  sources  ok: wrote 2 files
+wave 2
+  count    ok: 3 lines
+  sort     ok: apple,fig,pear
+wave 3
+  verify   ok: sorted.txt is there
+  package  FAILED: exit 4: no dist.tar
+stopped after wave 3; 1 stage(s) not run
+cleaned up: true
+exit: 0

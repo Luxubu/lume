@@ -1,0 +1,7 @@
+fast -> Fast, limit 10
+careful -> Careful, limit 3
+dry -> Dry, limit 0
+count 12
+picked b
+done
+exit: 0

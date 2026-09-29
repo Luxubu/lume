@@ -1,0 +1,56 @@
+# c05 — a to-do list whose items are a struct of the program's own called
+# `Task`, each with a shell line. Every item runs in its own task; each
+# writes what its command printed into a `shared var` map and bumps a
+# `shared var` counter, through a helper whose parameters are typed
+# `shared var`. The map is printed sorted by title, so the order the
+# commands finish in (the last one sleeps a second) never shows.
+# Probes: `struct Task` beside `spawn:` in the same file with the task
+# type left unwritten, `shared var` map and counter handed to a plain `def`
+# from a `spawn:` inside a `.map { }` block, `Process.run` in that plain
+# `def`, exit code and stderr, `for (i, t) in`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 1. count words
+# 2. sort letters
+# 3. arithmetic
+# 4. stderr only
+# 5. a slow one
+# 5 of 5 ran, 4 succeeded
+# a slow one   late
+# arithmetic   42
+# count words  3
+# sort letters a,b,c
+# stderr only  exit 3: oops
+
+struct Task:
+  title: Str
+  cmd: Str
+
+def record(t: Task, outputs: shared var {Str: Str}, ran: shared var Int) -> Bool:
+  result = match Process.run("sh", ["-c", t.cmd]):
+    Ok((0, out, _)) -> (true, out.trim.lines.join(","))
+    Ok((code, _, err)) -> (false, "exit #{code}: #{err.trim}")
+    Error(e) -> (false, e.message)
+  (ok, text) = result
+  outputs[t.title] = text
+  ran += 1
+  ok
+
+async def main:
+  todo = [
+    Task(title: "count words", cmd: "echo one two three | wc -w"),
+    Task(title: "sort letters", cmd: "printf 'c\nb\na\n' | sort"),
+    Task(title: "arithmetic", cmd: "echo $((6 * 7))"),
+    Task(title: "stderr only", cmd: "echo oops >&2; exit 3"),
+    Task(title: "a slow one", cmd: "sleep 1; echo late"),
+  ]
+  for (i, t) in todo.enumerate:
+    puts "#{i + 1}. #{t.title}"
+
+  shared var outputs: {Str: Str} = {}
+  shared var ran = 0
+  handles = todo.map { |t| spawn: record(t, outputs, ran) }.to_list
+  oks = await handles
+  puts "#{ran} of #{todo.len} ran, #{oks.count { |ok| ok }} succeeded"
+  for title in outputs.keys.sort:
+    puts "#{title.pad_right(12)} #{outputs[title].or("")}"

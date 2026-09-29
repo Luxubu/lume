@@ -1,0 +1,55 @@
+# a03_config: reads `key = value` config text into a struct, and turns every
+# way it can go wrong into one clear message: a malformed line, a missing
+# key, a number that does not parse, a port out of range.
+# Probes: `map_error { |e| Error("...: #{e.message}") }?` on `to_int` and
+# `to_float`; `.or_error(..)?` on a map lookup; `?` straight after a call and
+# then a method (`field(..)?.to_int`); a `(Str, Str) or Error` function whose
+# arm gives a bare tuple; `for (i, raw) in text.lines.enumerate`.
+# Exit status 0. Nothing on standard error.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# config 1: web on 8080, 4 workers, ratio 0.75
+# config 2: port: `eighty` is not an integer
+# config 3: missing key `workers`
+# config 4: line 2: expected `key = value`, got `port 80`
+# config 5: port: 70000 is out of range
+# config 6: ratio: `half` is not a number
+# Ok(Config(name: "web", port: 8080, workers: 4, ratio: 0.75))
+
+struct Config:
+  name: Str
+  port: Int
+  workers: Int
+  ratio: Float
+
+def field(pairs: {Str: Str}, key: Str) -> Str or Error =
+  pairs[key].or_error("missing key `#{key}`")
+
+def parse_line(line: Str, n: Int) -> (Str, Str) or Error:
+  match line.split("="):
+    [k, v] -> (k.trim, v.trim)
+    _ -> Error("line #{n}: expected `key = value`, got `#{line}`")
+
+def parse(text: Str) -> Config or Error:
+  var pairs: {Str: Str} = {}
+  for (i, raw) in text.lines.enumerate:
+    line = raw.trim
+    next if line.empty? or line.starts_with?("#")
+    (k, v) = parse_line(line, i + 1)?
+    pairs[k] = v
+  name = field(pairs, "name")?
+  port = field(pairs, "port")?.to_int.map_error { |e| Error("port: #{e.message}") }?
+  workers = field(pairs, "workers")?.to_int.map_error { |e| Error("workers: #{e.message}") }?
+  ratio = field(pairs, "ratio")?.to_float.map_error { |e| Error("ratio: #{e.message}") }?
+  if port < 1 or port > 65535:
+    return Error("port: #{port} is out of range")
+  Config(name: name, port: port, workers: workers, ratio: ratio)
+
+def main:
+  good = "# the web server\nname = web\nport = 8080\nworkers = 4\nratio = 0.75\n"
+  samples = [good, "name = api\nport = eighty\nworkers = 2\nratio = 1.0", "name = db\nport = 5432\nratio = 0.5", "name = x\nport 80", "name = big\nport = 70000\nworkers = 1\nratio = 2.5", "name = r\nport = 1\nworkers = 1\nratio = half"]
+  for (i, text) in samples.enumerate:
+    match parse(text):
+      Ok(c) -> puts "config #{i + 1}: #{c.name} on #{c.port}, #{c.workers} workers, ratio #{c.ratio}"
+      Error(e) -> puts "config #{i + 1}: #{e.message}"
+  puts parse(good)

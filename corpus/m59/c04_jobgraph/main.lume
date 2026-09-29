@@ -1,0 +1,90 @@
+# c04 — a job graph like jobr's, in a one-line-per-job format read by the
+# `c04_graph` library beside this package. Each level's jobs run at once,
+# one task each; each task writes its result into a `shared var` map, which
+# is printed sorted by name at the end, so finishing order never shows. A
+# job whose need failed is skipped. Then three bad graphs, and what `plan`
+# says about each.
+# Probes: `match` arms that end in `Env.exit(2)`, a `shared var` map written
+# by key from tasks and outside them, `for (i, level) in`,
+# `for (name, ok) in xs.zip(ys)`, `Process.run` from a plain `def` inside a
+# task, a `"""` constant, a library's `T or Error` messages.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# level 1: fetch
+# level 2: lint build
+# level 3: test docs
+# level 4: ship
+# --
+# build  ok: built
+# docs   ok: docs
+# fetch  ok: fetched
+# lint   ok: lint clean
+# ship   skipped: needs test
+# test   failed (exit 2): 1 of 3 failed
+# 4 of 6 ok
+# these jobs need each other: a, b
+# `b` needs `c`, which is not a job
+# line 1: expected one `|` between the needs and the command
+
+import c04_graph
+import c04_graph.Node
+
+CONFIG = """
+  # name: needs | command
+  fetch:            | echo fetched
+  lint: fetch       | test 2 -gt 1 && echo lint clean
+  build: fetch      | echo built
+  test: build lint  | echo '1 of 3 failed' >&2; exit 2
+  docs: build       | echo docs
+  ship: test docs   | echo shipped
+  """
+
+def run_node(n: Node) -> (Bool, Str):
+  match Process.run("sh", ["-c", n.cmd]):
+    Ok((0, out, _)) -> (true, "ok: #{out.trim}")
+    Ok((code, _, err)) -> (false, "failed (exit #{code}): #{err.trim}")
+    Error(e) -> (false, "could not start sh: #{e.message}")
+
+async def main:
+  nodes = match c04_graph.parse(CONFIG):
+    Ok(ns) -> ns
+    Error(e) ->
+      warn "config: #{e.message}"
+      Env.exit(2)
+  stages = match c04_graph.levels(nodes):
+    Ok(ls) -> ls
+    Error(e) ->
+      warn "config: #{e.message}"
+      Env.exit(2)
+
+  shared var status: {Str: Str} = {}
+  var broken: {Str} = {}
+  for (i, level) in stages.enumerate:
+    puts "level #{i + 1}: #{level.map { |n| n.name }.join(" ")}"
+    var names: [Str] = []
+    var tasks: [Task[Bool]] = []
+    for n in level:
+      blocked = n.needs.filter { |d| broken.contains?(d) }.to_list
+      if blocked.any?:
+        status[n.name] = "skipped: needs #{blocked.join(", ")}"
+        broken.add(n.name)
+        next
+      t = spawn:
+        (ok, line) = run_node(n)
+        status[n.name] = line
+        ok
+      names.push(n.name)
+      tasks.push(t)
+    results = await tasks
+    for (name, ok) in names.zip(results):
+      if not ok:
+        broken.add(name)
+
+  puts "--"
+  for name in status.keys.sort:
+    puts "#{name.pad_right(6)} #{status[name].or("?")}"
+  good = status.values.count { |v| v.starts_with?("ok") }
+  puts "#{good} of #{nodes.len} ok"
+
+  for bad in ["a: b | true\nb: a | true", "a: | true\nb: c | true", "a true"]:
+    puts c04_graph.plan(bad).error.map { |e| e.message }.or("no error")

@@ -1,0 +1,43 @@
+# c03_fetch — a fetch that may be refused, simulated with `sh -c` and marker
+# files. A source that is busy for n attempts refuses the first n times: each
+# refusal leaves a marker `<name>.<i>` in the directory it is given, so the
+# next attempt gets one step further. `fetch` retries with a growing wait.
+
+pub struct Source:
+  name: Str
+  busy_for: Int
+  body: Str
+
+  # The shell line one attempt runs.
+  def command(dir: Str) -> Str:
+    var parts: [Str] = []
+    for i in 1..busy_for:
+      mark = Path.join(dir, "#{name}.#{i}")
+      parts.push("test -f #{mark} || { echo try > #{mark}; echo '#{name} busy (#{i})' >&2; exit 75; }")
+    parts.push("echo '#{body}'")
+    parts.join("; ")
+
+pub struct Fetched:
+  name: Str
+  tries: Int
+  done: Bool
+  text: Str
+
+# One attempt. Failing to start `sh` and a refusal are both failures, each
+# with the source's name in front.
+pub def attempt(src: Source, dir: Str) -> Str or Error:
+  (code, out, err) = Process.run("sh", ["-c", src.command(dir)]).map_error { |e| Error("#{src.name}: cannot start sh: #{e.message}") }?
+  if code != 0:
+    return Error("#{src.name}: exit #{code}: #{err.trim}")
+  out.trim
+
+pub async def fetch(src: Source, dir: Str, max_tries: Int) -> Fetched:
+  var tries = 0
+  var last = ""
+  while tries < max_tries:
+    tries += 1
+    match attempt(src, dir):
+      Ok(text) -> return Fetched(name: src.name, tries: tries, done: true, text: text)
+      Error(e) -> last = e.message
+    await Time.sleep(10 * tries)
+  Fetched(name: src.name, tries: tries, done: false, text: last)

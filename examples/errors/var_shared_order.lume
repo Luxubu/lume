@@ -1,0 +1,7 @@
+# In a type, `shared` comes before `var`.
+
+def remember(seen: var shared [Int], n: Int):
+  seen.push(n)
+
+def main:
+  puts 1

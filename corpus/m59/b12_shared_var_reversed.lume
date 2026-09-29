@@ -1,0 +1,20 @@
+# b12: a `shared var` parameter with the two words the wrong way round,
+# `var shared`, in the type. Milestone 58 gave `shared var n: Int` (the
+# words before the name) its own message; this is the other slip.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: expected a type, found `var`
+#   --> corpus/m59/b12_shared_var_reversed.lume:12:20
+#    |
+# 12 | def remember(seen: var shared [Int], n: Int):
+#    |                    ^
+
+def remember(seen: var shared [Int], n: Int):
+  seen.push(n)
+
+async def main:
+  shared var seen: [Int] = []
+  t = spawn:
+    remember(seen, 1)
+  await t
+  puts seen

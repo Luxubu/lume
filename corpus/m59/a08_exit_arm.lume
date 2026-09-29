@@ -1,0 +1,63 @@
+# a08_exit_arm: functions whose last expression is a `match` or an
+# `if`/`else`, with one branch that warns and ends in `Env.exit`. That branch
+# is never taken here, so the program prints everything and exits 0.
+# Probes: an `Env.exit` arm as the *result* of a function declared `-> Mode`
+# (io.md shows it only as the value of a binding); an `else` branch ending
+# in `Env.exit` as the result of a `-> Str` function; the documented
+# `n = match s.to_int: .. Error(e) -> warn ..; Env.exit(3)` form inside a
+# helper, followed by a statement `if` that exits.
+# Exit status 0. Nothing on standard error.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# fast -> Fast, limit 10
+# careful -> Careful, limit 3
+# dry -> Dry, limit 0
+# count 12
+# picked b
+# done
+
+enum Mode:
+  Fast
+  Careful
+  Dry
+
+def mode_from(s: Str) -> Mode:
+  match s:
+    "fast" -> Fast
+    "careful" -> Careful
+    "dry" -> Dry
+    other ->
+      warn "unknown mode `#{other}`; use fast, careful or dry"
+      Env.exit(2)
+
+def limit_for(m: Mode) -> Int:
+  match m:
+    Fast -> 10
+    Careful -> 3
+    Dry -> 0
+
+def check_count(s: Str) -> Int:
+  n = match s.to_int:
+    Ok(n) -> n
+    Error(e) ->
+      warn e.message
+      Env.exit(3)
+  if n < 0:
+    warn "a count cannot be negative"
+    Env.exit(3)
+  n
+
+def pick(xs: [Str], i: Int) -> Str:
+  if i < xs.len:
+    xs.at(i)
+  else:
+    warn "there is no item #{i}"
+    Env.exit(4)
+
+def main:
+  for s in ["fast", "careful", "dry"]:
+    m = mode_from(s)
+    puts "#{s} -> #{m}, limit #{limit_for(m)}"
+  puts "count #{check_count("12")}"
+  puts "picked #{pick(["a", "b"], 1)}"
+  puts "done"

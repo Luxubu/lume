@@ -1,0 +1,23 @@
+# b08: a generic `struct Task[T]` of your own, used beside `spawn:`. The
+# spawned tasks' types are never written, as names.md says to do, and
+# `Task[Str]` in a binding's type names this struct with its one argument.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ["WRITE: 1", "TEST: 2"]
+# Task(title: "ship", payload: "friday")
+# 6
+
+struct Task[T]:
+  title: Str
+  payload: T
+
+  def label -> Str = "#{title}: #{payload}"
+
+async def main:
+  todo = [Task(title: "write", payload: 1), Task(title: "test", payload: 2)]
+  handles = todo.map { |t| spawn: t.label.upcase }.to_list
+  puts await handles
+  one: Task[Str] = Task(title: "ship", payload: "friday")
+  puts one
+  h = spawn: one.payload.len
+  puts await h

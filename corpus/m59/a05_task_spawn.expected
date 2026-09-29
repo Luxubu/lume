@@ -1,0 +1,6 @@
+greet (echo hi); count (printf 'a\nb\nc\n' | wc -l); fail (echo nope; exit 5)
+greet: exit 0, hi
+count: exit 0, 3
+fail: exit 5, nope
+single: 0:greet
+exit: 0

@@ -1,0 +1,9 @@
+1. PASS  sleeps, then passes
+2. PASS  arithmetic
+3. PASS  three lines
+4. FAIL  mismatch (exit 1): expected 3, got 2
+5. FAIL  false fails (exit 1)
+6. FAIL  exit code kept (exit 7): partial
+3 of 6 passed
+failed: mismatch, false fails, exit code kept
+exit: 0

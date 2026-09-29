@@ -1,0 +1,6 @@
+# `map_error` is for a `T or Error`. A `T?` has no failure to change.
+
+def first_port(ports: [Int]) -> Int or Error = ports.first.map_error { |e| Error("no ports") }
+
+def main:
+  puts first_port([80])

@@ -1,0 +1,7 @@
+error: the block of `map_error` gives a `Str`, but it must give an `Error`
+  --> corpus/m59/b05_map_error_gives_str.lume:13:55
+   |
+13 | def port(v: Str) -> Int or Error = v.to_int.map_error { |e| "port: #{e.message}" }
+   |                                                       ^
+  help: write the new failure, as in `r.map_error { |e| Error("reading the file: #{e.message}") }`
+exit: 1

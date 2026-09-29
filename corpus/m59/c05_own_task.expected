@@ -1,0 +1,24 @@
+warning: `outputs` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/m59/c05_own_task.lume:50:3
+   |
+50 |   shared var outputs: {Str: Str} = {}
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+warning: `ran` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/m59/c05_own_task.lume:51:3
+   |
+51 |   shared var ran = 0
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+1. count words
+2. sort letters
+3. arithmetic
+4. stderr only
+5. a slow one
+5 of 5 ran, 4 succeeded
+a slow one   late
+arithmetic   42
+count words  3
+sort letters a,b,c
+stderr only  exit 3: oops
+exit: 0

@@ -1,0 +1,36 @@
+# a01_shell_report: runs a few commands and reports each one's exit code
+# and what it wrote, line by line, to standard output and standard error.
+# Probes: Process.run from a plain `def`; `(code, out, err) = Process.run(..)?`
+# in a helper that returns `() or Error`, called as a statement with `?`;
+# a `match` arm `Ok((code, out, _))`; a program that cannot be started.
+# Exit status 0. Nothing on standard error.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# echo: exit 0
+#   out| hello world
+# printf: exit 0
+#   out| a-b
+# sh: exit 4
+#   out| up
+#   err| down
+# quiet: exit 0
+# exit 7 gives 7, 0 chars out
+# missing program fails to start: true
+
+def show(label: Str, program: Str, args: [Str]) -> () or Error:
+  (code, out, err) = Process.run(program, args)?
+  puts "#{label}: exit #{code}"
+  for line in out.lines:
+    puts "  out| #{line}"
+  for line in err.lines:
+    puts "  err| #{line}"
+
+def main -> () or Error:
+  show("echo", "echo", ["hello", "world"])?
+  show("printf", "printf", ["%s-%s\n", "a", "b"])?
+  show("sh", "sh", ["-c", "echo up; echo down >&2; exit 4"])?
+  show("quiet", "true", [])?
+  match Process.run("sh", ["-c", "exit 7"]):
+    Ok((code, out, _)) -> puts "exit 7 gives #{code}, #{out.len} chars out"
+    Error(e) -> puts "could not start sh: #{e.message}"
+  puts "missing program fails to start: #{Process.run("a01-no-such-program", []).error?}"

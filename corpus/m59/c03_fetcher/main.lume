@@ -1,0 +1,44 @@
+# c03 — a retrying fetcher. Three sources are fetched at once, one task
+# each, through the `c03_fetch` library beside this package; each gets three
+# tries. The refusals are simulated by `sh -c` and marker files in a
+# directory this program makes, lists, and removes.
+# Probes: `map_error` around `Process.run` in a library, `?` after it with
+# tuple destructuring, `return` from a `match` arm inside a `while` in a
+# `pub async def`, `await Time.sleep` between tries, a constant used inside
+# `spawn:`, `for (i, f) in`, `Dir.list` order, cleanup.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 1. alpha: alpha payload (1 try)
+# 2. beta: beta payload (3 tries)
+# 3. gamma: gave up after 3 tries: gamma: exit 75: gamma busy (3)
+# 5 markers left: beta.1 beta.2 gamma.1 gamma.2 gamma.3
+# cleaned up: true
+
+import c03_fetch
+import c03_fetch.Source
+
+DIR = "/tmp/lume-m59-c03"
+
+async def main -> () or Error:
+  if Dir.exists?(DIR):
+    Dir.remove(DIR)?
+  Dir.make(DIR)?
+
+  sources = [
+    Source(name: "alpha", busy_for: 0, body: "alpha payload"),
+    Source(name: "beta", busy_for: 2, body: "beta payload"),
+    Source(name: "gamma", busy_for: 5, body: "gamma payload"),
+  ]
+  tasks = sources.map { |s| spawn: await c03_fetch.fetch(s, DIR, 3) }.to_list
+  results = await tasks
+  for (i, f) in results.enumerate:
+    tries = if f.tries == 1: "1 try" else: "#{f.tries} tries"
+    if f.done:
+      puts "#{i + 1}. #{f.name}: #{f.text} (#{tries})"
+    else:
+      puts "#{i + 1}. #{f.name}: gave up after #{tries}: #{f.text}"
+
+  markers = Dir.list(DIR)?
+  puts "#{markers.len} markers left: #{markers.join(" ")}"
+  Dir.remove(DIR)?
+  puts "cleaned up: #{not Dir.exists?(DIR)}"

@@ -1,0 +1,44 @@
+# a02_make: a small "make". Reads a recipe of `name: command` lines, runs
+# each command with `sh -c` in order, shows what it printed, and stops at
+# the first step that fails, with `Env.exit` and that step's exit code.
+# Probes: Process.run inside a `for`; `Env.exit(code)` with a code that is a
+# variable, inside an `if` inside a `match` arm; output printed before the
+# exit still appears; a triple-quoted recipe; `split(": ")` then `skip(1)`.
+# Exit status 2 (the `lint` step's). Nothing on standard error.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# [1] prepare: true
+# [2] compile: echo compiling main.o
+#     compiling main.o
+# [3] test: echo 3 passed
+#     3 passed
+# [4] lint: echo 2 warnings >&2; exit 2
+#     2 warnings
+# stopped: lint exited with 2
+
+def main:
+  recipe = """
+    prepare: true
+    compile: echo compiling main.o
+    test: echo 3 passed
+    lint: echo 2 warnings >&2; exit 2
+    package: echo never reached
+    """
+  var n = 0
+  for line in recipe.lines:
+    parts = line.split(": ")
+    name = parts.at(0)
+    command = parts.skip(1).to_list.join(": ")
+    n += 1
+    puts "[#{n}] #{name}: #{command}"
+    match Process.run("sh", ["-c", command]):
+      Ok((code, out, err)) ->
+        for l in (out + err).lines:
+          puts "    #{l}"
+        if code != 0:
+          puts "stopped: #{name} exited with #{code}"
+          Env.exit(code)
+      Error(e) ->
+        puts "stopped: cannot start sh: #{e.message}"
+        Env.exit(127)
+  puts "all #{n} steps passed"

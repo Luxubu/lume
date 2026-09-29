@@ -1,0 +1,48 @@
+# a09_wordcount: counts words by piping text through the shell, as
+# `printf '%s' '<text>' | wc -w`, and checks the count against Lume's own
+# `split`; then lines, bytes against characters, and a `sort` pipe.
+# Probes: Process.run("sh", ["-c", ..]) with a pipe; interpolating text
+# (with real newlines) into the command; `out.trim.to_int.map_error(..)` as
+# the last expression of an `Int or Error` function; a helper that turns a
+# non-zero exit into an `Error`; `wc -c` counting bytes while `len` counts
+# characters. `wc` pads its number on some systems, so every count is
+# trimmed before it is read.
+# Exit status 0. Nothing on standard error.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# text 1: wc 4, split 4, agree
+# text 2: wc 3, split 3, agree
+# text 3: wc 0, split 0, agree
+# text 4: wc 3, split 3, agree
+# lines in text 2: 2
+# héllo: 6 bytes, 5 characters
+# apple,fig,pear
+# `printf 'x' | wc -w; exit 9` exited 9
+
+def sh(command: Str) -> Str or Error:
+  (code, out, _) = Process.run("sh", ["-c", command])?
+  if code != 0:
+    return Error("`#{command}` exited #{code}")
+  out
+
+def wc(flag: Str, text: Str) -> Int or Error:
+  out = sh("printf '%s' '#{text}' | wc #{flag}")?
+  out.trim.to_int.map_error { |e| Error("wc #{flag} gave `#{out.trim}`: #{e.message}") }
+
+def main -> () or Error:
+  texts = ["the quick brown fox", "one\ntwo three\n", "", "  spaced   out  words  "]
+  for (i, text) in texts.enumerate:
+    w = wc("-w", text)?
+    ours = text.split.len
+    verdict = if w == ours: "agree" else: "differ"
+    puts "text #{i + 1}: wc #{w}, split #{ours}, #{verdict}"
+  lines = wc("-l", texts.at(1))?
+  puts "lines in text 2: #{lines}"
+  word = "héllo"
+  bytes = wc("-c", word)?
+  puts "#{word}: #{bytes} bytes, #{word.len} characters"
+  sorted = sh("printf '%s' 'pear\napple\nfig\n' | sort")?
+  puts sorted.lines.join(",")
+  match sh("printf 'x' | wc -w; exit 9"):
+    Ok(_) -> puts "unexpected success"
+    Error(e) -> puts e.message

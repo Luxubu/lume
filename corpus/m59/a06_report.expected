@@ -1,0 +1,14 @@
+no  item       qty   total
+--------------------------
+ 1  pencil      12    3.00
+ 2  notebook     3   11.97
+ 3  stapler      1   12.50
+ 4  paper        5   24.00
+--------------------------
+    total       21   51.47
+rank 1: paper (46%)
+rank 2: stapler (24%)
+rank 3: notebook (23%)
+rank 4: pencil (5%)
+0=red 1=green 2=blue
+exit: 0

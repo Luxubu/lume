@@ -57,6 +57,9 @@ rest use the package the current folder is in. See
 `lume run` trades some of the program's optimisation for compile speed, so
 edit-and-run takes about 0.2 s. `lume build` is the one to measure.
 
+Warnings are shown when a program is compiled, as cargo shows them, not
+again each time an unchanged program runs. `lume check` always shows them.
+
 **Rebuilding after an edit** takes about 0.75 s for a 9,000-line program and
 1.6 s for 27,000 lines: Lume's own work is a small part of that (0.15 s at
 27,000 lines, which is all `lume check` does), and rustc's incremental cache

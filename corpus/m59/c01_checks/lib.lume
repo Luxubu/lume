@@ -1,0 +1,43 @@
+# c01_checks — a named shell check, run with `sh -c`, and what came of it.
+# `run_all` runs every check in its own task and gives the reports back in
+# the order the checks were given, whatever order they finish in.
+
+pub struct Check:
+  name: Str
+  cmd: Str
+
+pub enum Verdict:
+  Pass
+  Fail(code: Int, said: Str)
+  Broken(why: Str)
+
+pub struct Report:
+  name: Str
+  verdict: Verdict
+
+  def passed? -> Bool:
+    match verdict:
+      Pass -> true
+      _ -> false
+
+  def line -> Str:
+    match verdict:
+      Pass -> "PASS  #{name}"
+      Fail(code, said) -> if said == "": "FAIL  #{name} (exit #{code})" else: "FAIL  #{name} (exit #{code}): #{said}"
+      Broken(why) -> "ERROR #{name}: #{why}"
+
+# One check. A non-zero exit is a failure of the check; only failing to
+# start `sh` at all is `Broken`.
+pub def run(c: Check) -> Report:
+  match Process.run("sh", ["-c", c.cmd]):
+    Ok((0, _, _)) -> Report(name: c.name, verdict: Pass)
+    Ok((code, out, err)) -> Report(name: c.name, verdict: Fail(code, (out + err).trim))
+    Error(e) -> Report(name: c.name, verdict: Broken(e.message))
+
+pub async def run_all(checks: [Check]) -> [Report]:
+  tasks = checks.map { |c| spawn: run(c) }.to_list
+  await tasks
+
+pub def summary(reports: [Report]) -> Str:
+  passed = reports.count { |r| r.passed? }
+  "#{passed} of #{reports.len} passed"

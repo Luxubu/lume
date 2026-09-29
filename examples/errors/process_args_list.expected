@@ -1,0 +1,6 @@
+error: `Process.run` takes a `[Str]`, but this is a `Str`
+  --> examples/errors/process_args_list.lume:4:36
+  |
+4 |   (code, _, _) = Process.run("sh", "-c true")?
+  |                                    ^
+  help: the arguments are a list, each one passed as it is, as in `Process.run("sh", ["-c", "echo hi"])`
