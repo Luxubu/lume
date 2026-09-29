@@ -318,6 +318,37 @@ fn git_url(root: &Path, url: &str) -> String {
     normalize(&base.join(url)).display().to_string()
 }
 
+/// The folder below `dir`, at most `depth` levels down, holding a
+/// `lume.toml` whose package is `name`.
+fn find_package(dir: &Path, name: &str, depth: usize) -> Option<PathBuf> {
+    let mut entries: Vec<PathBuf> = std::fs::read_dir(dir).ok()?.flatten().map(|e| e.path()).filter(|p| p.is_dir()).collect();
+    entries.sort();
+    for sub in &entries {
+        let hidden = sub.file_name().map(|n| n.to_string_lossy().starts_with('.')).unwrap_or(true);
+        if hidden {
+            continue;
+        }
+        let f = sub.join(FILE);
+        if f.is_file() {
+            if let Ok(m) = read(&f) {
+                if m.name == name {
+                    return Some(sub.clone());
+                }
+            }
+        }
+    }
+    if depth > 1 {
+        for sub in &entries {
+            if sub.file_name().map(|n| !n.to_string_lossy().starts_with('.')).unwrap_or(false) {
+                if let Some(found) = find_package(sub, name, depth - 1) {
+                    return Some(found);
+                }
+            }
+        }
+    }
+    None
+}
+
 /// Every package a program uses: the root first, then each dependency once.
 /// Refuses a dependency whose folder names another package, two copies of
 /// one package, and packages that depend on each other.
@@ -343,8 +374,17 @@ pub fn load_all(root: Manifest, fetcher: &mut Fetcher) -> Result<Vec<Manifest>, 
                     (dir, Some(Origin { source: fetch::source_key(url, reference), commit, asked_by: all[i].name.clone() }))
                 }
             };
+            // a repository may hold its package in a folder of its own, or
+            // several: find the one with this name, as Cargo does
+            let dir = if origin.is_some() && !dir.join(FILE).is_file() { find_package(&dir, &d.name, 3).unwrap_or(dir) } else { dir };
             let file = dir.join(FILE);
             if !file.is_file() {
+                if let (Source::Git { url, reference }, Some(_)) = (&d.source, &origin) {
+                    return Err(at(
+                        format!("{}{} has no package named `{}`", url, reference.query(), d.name),
+                        Some(format!("a repository's packages are found by the name in their `lume.toml`, at its top or up to three folders down; check that one is named `{}`", d.name)),
+                    ));
+                }
                 let whose = if origin.is_some() { "that commit of the repository" } else { "the folder" };
                 return Err(at(format!("`{}` has no `lume.toml`", dir.display()), Some(format!("a dependency is a package: {} needs a `lume.toml` whose name is `{}`", whose, d.name))));
             }

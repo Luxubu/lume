@@ -304,6 +304,10 @@ updated `colors`: 9c1deec281a9 -> 4ad4d0cbf709
   folder is safe; the next build fetches again.
 - A `git` path without a scheme, such as `../colors.git`, is a repository
   on this machine, taken from the folder of `lume.toml`.
+- A repository may hold several packages in folders of their own, as this
+  one does (`packages/json/`). The dependency's name picks one: it is the
+  package whose `lume.toml` has that name, at the top of the repository or
+  up to three folders down.
 
 **A program has one copy of each package, so one commit of each.** Two
 packages that ask for different commits of a third are refused, and so is

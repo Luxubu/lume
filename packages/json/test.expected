@@ -1,0 +1,10 @@
+test scalars ... ok
+test unicode escapes ... ok
+test errors say where ... ok
+test queries ... ok
+test typed reads ... ok
+test decoding says what was wrong ... ok
+test encoding ... ok
+
+7 tests: 7 passed, 0 failed
+exit: 0

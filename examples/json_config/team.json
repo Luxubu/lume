@@ -1,0 +1,8 @@
+{
+  "team": "compilers",
+  "members": [
+    {"name": "Ada", "role": "lead", "years": 12, "remote": false},
+    {"name": "Grace", "role": "reviewer", "years": 30, "remote": true},
+    {"name": "Linus", "role": "maintainer", "years": 7, "remote": true}
+  ]
+}

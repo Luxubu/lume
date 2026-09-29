@@ -1,0 +1,61 @@
+# json_config — reads a team from JSON into types of its own, and writes it
+# back. It uses the `json` package (packages/json) as a dependency.
+#
+#   lume run                 reads team.json
+#   lume run -- other.json   reads another file
+
+import json
+import json.Json
+import json.ToJson
+
+struct Member:
+  name: Str
+  role: Str
+  years: Int
+  remote: Bool
+
+  # decoding: every field named in the error when it is wrong
+  def self.from_json(j: Json) -> Member or Error:
+    Member(name: j.need_str("name")?, role: j.need_str("role")?, years: j.need_int("years")?, remote: j.need_bool("remote")?)
+
+  def to_json -> Json:
+    json.obj([("name", name.to_json), ("role", role.to_json), ("years", years.to_json), ("remote", remote.to_json)])
+
+struct Team:
+  name: Str
+  members: [Member]
+
+  def self.from_json(j: Json) -> Team or Error:
+    var members: [Member] = []
+    for (i, m) in j.need_items("members")?.enumerate:
+      members.push(Member.from_json(m).map_error { |e| Error("member #{i + 1}: #{e.message}") }?)
+    Team(name: j.need_str("team")?, members: members)
+
+  def to_json -> Json = json.obj([("team", name.to_json), ("members", members.to_json)])
+
+def load(path: Str) -> Team or Error:
+  text = File.read(path)?
+  doc = json.parse(text).map_error { |e| Error("#{path}: #{e.message}") }?
+  Team.from_json(doc).map_error { |e| Error("#{path}: #{e.message}") }
+
+def main:
+  path = Env.args.first.or("team.json")
+  team = match load(path):
+    Ok(t) -> t
+    Error(e) ->
+      warn e.message
+      Env.exit(1)
+  puts "#{team.name}: #{team.members.len} members"
+  for m in team.members.sort_by { |m| 0 - m.years }:
+    place = if m.remote: "remote" else: "on site"
+    puts "  #{m.name.pad_right(6)} #{m.role.pad_right(10)} #{m.years.pad(2)} years, #{place}"
+  remote = team.members.filter { |m| m.remote }.to_list
+  puts json.show(Team(name: "#{team.name} (remote)", members: remote).to_json)
+  # a document that is wrong in one place says where
+  for bad in ["{\"team\": \"x\", \"members\": [{\"name\": \"A\", \"role\": \"r\", \"years\": \"many\", \"remote\": true}]}", "{\"team\": 5, \"members\": []}", "{\"members\": ["]:
+    match json.parse(bad):
+      Ok(doc) ->
+        match Team.from_json(doc):
+          Ok(_) -> puts "accepted?"
+          Error(e) -> puts "refused: #{e.message}"
+      Error(e) -> puts "not JSON: #{e.message}"

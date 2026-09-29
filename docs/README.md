@@ -26,6 +26,7 @@ it claims by `tests/docs.sh`. If an answer here is wrong, the build fails.
 | [Modules](reference/modules.md) | `import` paths and forms, `pub`, constants, `pub import`, where `extend` reaches |
 | [Packages](reference/packages.md) | `lume.toml`, `lib.lume`, importing another package, the orphan rule, `[rust]`, git and `lume.lock` |
 | [Concurrency](reference/concurrency.md) | `async def`, `spawn:`, `await`, `shared var`, what a lock covers |
+| [JSON](reference/json.md) | the `json` package: parsing, reading, decoding into your types, writing |
 | [Input and output](reference/io.md) | `File`, `Dir`, `Path`, `Env`, `Time`, `Process`: every function, and what a failure looks like |
 
 ## Guides

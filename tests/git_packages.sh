@@ -87,6 +87,21 @@ printf '[package]\nname = "mixed"\nversion = "0.1.0"\n\n[dependencies]\na = { gi
 printf 'import a\n\ndef main:\n  puts a.shade\n' > "$tmp/mixed/main.lume"
 run "$tmp/mixed" check
 
+step "a repository holding packages in folders: the one named is found"
+mkdir -p "$tmp/src/mono/packages/greet" "$tmp/src/mono/packages/other" && cd "$tmp/src/mono" || exit 1
+g init -q .
+printf '[package]\nname = "greet"\nversion = "0.1.0"\n' > packages/greet/lume.toml
+printf 'pub def hello(who: Str) -> Str = "hello, #{who}"\n' > packages/greet/lib.lume
+printf '[package]\nname = "other"\nversion = "0.1.0"\n' > packages/other/lume.toml
+printf 'pub def x -> Int = 1\n' > packages/other/lib.lume
+g add -A && g commit -qm one && g tag v1 && g clone -q --bare . "$tmp/mono.git"
+mkdir -p "$tmp/usesmono"
+printf '[package]\nname = "usesmono"\nversion = "0.1.0"\n\n[dependencies]\ngreet = { git = "../mono.git", tag = "v1" }\n' > "$tmp/usesmono/lume.toml"
+printf 'import greet\n\ndef main:\n  puts greet.hello("lume")\n' > "$tmp/usesmono/main.lume"
+run "$tmp/usesmono" run
+printf '[package]\nname = "usesmono"\nversion = "0.1.0"\n\n[dependencies]\nmissing = { git = "../mono.git", tag = "v1" }\n' > "$tmp/usesmono/lume.toml"
+run "$tmp/usesmono" check
+
 step "a path dependency cannot be updated"
 mkdir -p "$tmp/local"
 printf '[package]\nname = "local"\nversion = "0.1.0"\n\n[dependencies]\ncolors = { path = "../src/colors" }\n' > "$tmp/local/lume.toml"

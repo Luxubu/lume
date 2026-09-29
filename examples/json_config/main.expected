@@ -1,0 +1,9 @@
+compilers: 3 members
+  Grace  reviewer   30 years, remote
+  Ada    lead       12 years, on site
+  Linus  maintainer  7 years, remote
+{"team":"compilers (remote)","members":[{"name":"Grace","role":"reviewer","years":30,"remote":true},{"name":"Linus","role":"maintainer","years":7,"remote":true}]}
+refused: member 1: `years` is a string, not a whole number
+refused: `team` is a number, not a string
+not JSON: unexpected end of input at position 13
+exit: 0

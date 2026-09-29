@@ -7714,8 +7714,17 @@ impl Gen {
                                 _ => format!("({}).lume_str()", g.expr_val(x)?),
                             })
                         };
-                        let l = side(self, lhs, other(&lt, &rt))?;
-                        let r = side(self, rhs, other(&rt, &lt))?;
+                        // a side whose type is only partly its own, as `Some(None)`,
+                        // takes the other side's, the way the comparison does
+                        let typed = |g: &mut Self, x: &Expr, mine: &Type, theirs: &Type| -> Result<String> {
+                            if !type_is_known(mine) && type_is_known(theirs) && !matches!(x.kind, ExprKind::None) {
+                                let v = g.expr_owned_as(x, theirs)?;
+                                return Ok(format!("({{ let lume_v: {} = {}; lume_v }}).lume_str()", g.rt(theirs), v));
+                            }
+                            side(g, x, other(mine, theirs))
+                        };
+                        let l = typed(self, lhs, &lt, &rt)?;
+                        let r = typed(self, rhs, &rt, &lt)?;
                         format!("Some(({}, {}))", l, r)
                     }
                     _ => "None".to_string(),

@@ -1,0 +1,446 @@
+# json — read and write JSON (RFC 8259).
+#
+#   doc = json.parse(text)?                 Json or Error, with the position
+#   json.show(doc) / json.pretty(doc)       one line, or indented
+#   doc.path("users.0.name")                a Json? by keys and positions
+#   doc.get("name").str                     typed reads give an optional
+#   doc.need_str("name")?                   decoding gives an Error naming the field
+#   people.to_json                          anything with `to_json` (see ToJson)
+#
+# It began as examples/json, the milestone 19 dogfood program.
+
+pub enum Json:
+  Null
+  Bool(b: Bool)
+  Num(n: Float)
+  Str(s: Str)
+  Arr(items: [Json])
+  Obj(pairs: [(Str, Json)])
+
+  def kind -> Str:
+    match self:
+      Null    -> "null"
+      Bool(_) -> "bool"
+      Num(_)  -> "number"
+      Str(_)  -> "string"
+      Arr(_)  -> "array"
+      Obj(_)  -> "object"
+
+  # ---- reading: each gives `None` when the value is not what is asked for
+
+  # `j.get("name")`: the value under a key of an object
+  def get(key: Str) -> Json?:
+    match self:
+      Obj(pairs) -> pairs.find { |k, v| k == key }.map { |kv| kv.1 }
+      _ -> None
+
+  # `j.at(0)`: an item of an array
+  def at(i: Int) -> Json?:
+    match self:
+      Arr(items) -> items[i]
+      _ -> None
+
+  # `j.path("users.0.name")`: keys and positions, separated by dots
+  def path(p: Str) -> Json?:
+    var cur = self
+    for step in p.split("."):
+      cur = match cur:
+        Obj(_) -> cur.get(step)?
+        Arr(_) -> cur.at(step.to_int.ok()?)?
+        _ -> return None
+    cur
+
+  def str -> Str?:
+    match self:
+      Str(s) -> Some(s)
+      _ -> None
+
+  def num -> Float?:
+    match self:
+      Num(n) -> Some(n)
+      _ -> None
+
+  # a number with no fraction
+  def int -> Int?:
+    match self:
+      Num(n) if n == n.floor and n.abs < 1e15 -> Some(n.to_int)
+      _ -> None
+
+  def bool -> Bool?:
+    match self:
+      Bool(b) -> Some(b)
+      _ -> None
+
+  def null? -> Bool:
+    match self:
+      Null -> true
+      _ -> false
+
+  # the items of an array; none for anything else
+  def items -> [Json]:
+    match self:
+      Arr(xs) -> xs
+      _ -> []
+
+  # the keys and values of an object, in the order written
+  def pairs -> [(Str, Json)]:
+    match self:
+      Obj(ps) -> ps
+      _ -> []
+
+  def keys -> [Str] = pairs.map { |k, v| k }.to_list
+
+  # ---- decoding: each gives an `Error` that says what was wrong
+
+  # `j.need("name")`: the value under a key, or an error naming the key
+  def need(key: Str) -> Json or Error:
+    match self:
+      Obj(_) -> get(key).or_error("`#{key}` is missing")
+      _ -> Error("expected an object with `#{key}`, found #{a_kind(self)}")
+
+  def need_str(key: Str) -> Str or Error:
+    v = need(key)?
+    v.str.or_error("`#{key}` is #{a_kind(v)}, not a string")
+
+  def need_num(key: Str) -> Float or Error:
+    v = need(key)?
+    v.num.or_error("`#{key}` is #{a_kind(v)}, not a number")
+
+  def need_int(key: Str) -> Int or Error:
+    v = need(key)?
+    v.int.or_error("`#{key}` is #{a_kind(v)}, not a whole number")
+
+  def need_bool(key: Str) -> Bool or Error:
+    v = need(key)?
+    v.bool.or_error("`#{key}` is #{a_kind(v)}, not true or false")
+
+  # the items of the array under a key
+  def need_items(key: Str) -> [Json] or Error:
+    v = need(key)?
+    match v:
+      Arr(xs) -> xs
+      _ -> Error("`#{key}` is #{a_kind(v)}, not an array")
+
+# "a string", "an object": for messages
+def a_kind(j: Json) -> Str:
+  k = j.kind
+  if k == "object" or k == "array": "an #{k}" else: "a #{k}"
+
+# ---- encoding: a type that can be written as JSON
+
+# A type of yours gives its JSON by having `to_json`; lists of such values,
+# and text, numbers and `Bool`, have it already.
+pub interface ToJson:
+  def to_json -> Json
+
+extend Str with ToJson:
+  def to_json -> Json = Str(self)
+
+extend Int with ToJson:
+  def to_json -> Json = Num(self.to_float)
+
+extend Float with ToJson:
+  def to_json -> Json = Num(self)
+
+extend Bool with ToJson:
+  def to_json -> Json = Bool(self)
+
+extend [T: ToJson] with ToJson:
+  def to_json -> Json = Arr(self.map { |x| x.to_json }.to_list)
+
+# An object from its keys and values, in that order: `json.obj([("a", 1.to_json)])`.
+pub def obj(pairs: [(Str, Json)]) -> Json = Obj(pairs)
+
+# ---- parsing --------------------------------------------------------------
+
+# The parser walks the characters as a list: `s[i]` on a string counts from
+# the start each time, so a long document would be quadratic. `Char` is a
+# plain value, so `peek` costs nothing.
+struct Parser:
+  chars: [Char]
+  pos: Int
+
+  # the NUL character stands for the end of the text
+  def peek -> Char:
+    chars[pos].or("\u{0}")
+
+  def at_end -> Bool:
+    pos >= chars.len
+
+  def advance(var self):
+    pos += 1
+
+  def skip_space(var self):
+    while not at_end and peek.space?:
+      advance()
+
+  def fail(what: Str) -> Error:
+    Error("#{what} at position #{pos}")
+
+  def expect(var self, c: Str) -> () or Error:
+    skip_space()
+    if peek != c:
+      return fail("expected `#{c}`, found `#{peek}`")
+    advance()
+
+  def parse_value(var self) -> Json or Error:
+    skip_space()
+    if at_end:
+      return fail("unexpected end of input")
+    c = peek
+    match c:
+      "{"  -> parse_object()
+      "["  -> parse_array()
+      "\"" -> Str(parse_string()?)
+      "t"  -> parse_word("true", Bool(true))
+      "f"  -> parse_word("false", Bool(false))
+      "n"  -> parse_word("null", Null)
+      _ if c == "-" or c.digit? -> parse_number()
+      _    -> fail("unexpected character `#{c}`")
+
+  def parse_word(var self, word: Str, value: Json) -> Json or Error:
+    for expected in word.chars:
+      if peek != expected:
+        return fail("expected `#{word}`")
+      advance()
+    value
+
+  def parse_number(var self) -> Json or Error:
+    start = pos
+    advance() if peek == "-"
+    while not at_end and peek.digit?:
+      advance()
+    if peek == ".":
+      advance()
+      while not at_end and peek.digit?:
+        advance()
+    if peek == "e" or peek == "E":
+      advance()
+      advance() if peek == "+" or peek == "-"
+      while not at_end and peek.digit?:
+        advance()
+    text = chars[start...pos].join("")
+    match text.to_float:
+      Ok(n)    -> Num(n)
+      Error(_) -> fail("bad number `#{text}`")
+
+  def parse_string(var self) -> Str or Error:
+    expect("\"")?
+    var out = ""
+    while true:
+      if at_end:
+        return fail("unterminated string")
+      c = peek
+      advance()
+      match c:
+        "\"" -> break
+        "\\" ->
+          e = peek
+          advance()
+          out += match e:
+            "n"  -> "\n"
+            "t"  -> "\t"
+            "r"  -> "\r"
+            "b"  -> "\u{8}"
+            "f"  -> "\u{c}"
+            "/"  -> "/"
+            "\\" -> "\\"
+            "\"" -> "\""
+            "u"  -> parse_unicode()?.to_s
+            _    -> return fail("bad escape `\\#{e}`")
+        _ -> out += c
+    out
+
+  def parse_unicode(var self) -> Char or Error:
+    hex = chars[pos...pos + 4].join("")
+    if hex.len != 4:
+      return fail("short \\u escape")
+    pos += 4
+    var code = hex_value(hex)?
+    # a surrogate pair: \ud83d\ude00
+    if code >= 55296 and code <= 56319:
+      if chars[pos...pos + 2].join("") != "\\u":
+        return fail("lone surrogate")
+      pos += 2
+      low_hex = chars[pos...pos + 4].join("")
+      pos += 4
+      low = hex_value(low_hex)?
+      code = 65536 + (code - 55296) * 1024 + (low - 56320)
+    code.to_char.or_error("bad code point #{code}")
+
+  def parse_array(var self) -> Json or Error:
+    expect("[")?
+    var items: [Json] = []
+    skip_space()
+    if peek == "]":
+      advance()
+      return Arr(items)
+    while true:
+      items.push(parse_value()?)
+      skip_space()
+      match peek:
+        "," -> advance()
+        "]" ->
+          advance()
+          break
+        _ -> return fail("expected `,` or `]`")
+    Arr(items)
+
+  def parse_object(var self) -> Json or Error:
+    expect("{")?
+    var pairs: [(Str, Json)] = []
+    skip_space()
+    if peek == "}":
+      advance()
+      return Obj(pairs)
+    while true:
+      skip_space()
+      key = parse_string()?
+      expect(":")?
+      value = parse_value()?
+      pairs.push((key, value))
+      skip_space()
+      match peek:
+        "," -> advance()
+        "}" ->
+          advance()
+          break
+        _ -> return fail("expected `,` or `}`")
+    Obj(pairs)
+
+def hex_value(hex: Str) -> Int or Error:
+  var n = 0
+  for c in hex.downcase.chars:
+    d = "0123456789abcdef".index_of(c).or_error("bad hex digit `#{c}`")?
+    n = n * 16 + d
+  n
+
+pub def parse(text: Str) -> Json or Error:
+  var p = Parser(chars: text.chars, pos: 0)
+  value = p.parse_value()?
+  p.skip_space
+  if not p.at_end:
+    return p.fail("trailing characters")
+  value
+
+# ---- printing -------------------------------------------------------------
+
+def quote(s: Str) -> Str:
+  var out = "\""
+  for c in s.chars:
+    match c:
+      "\"" -> out += "\\\""
+      "\\" -> out += "\\\\"
+      "\n" -> out += "\\n"
+      "\t" -> out += "\\t"
+      "\r" -> out += "\\r"
+      _    -> out += c
+  out + "\""
+
+def show_num(n: Float) -> Str:
+  if n == n.floor and n.abs < 1e15:
+    n.to_int.to_s
+  else:
+    n.to_s
+
+# One line, no spaces: the form for storage and comparison.
+pub def show(j: Json) -> Str:
+  match j:
+    Null       -> "null"
+    Bool(b)    -> b.to_s
+    Num(n)     -> show_num(n)
+    Str(s)     -> quote(s)
+    Arr(items) -> "[" + items.map(show).join(",") + "]"
+    Obj(pairs) -> "{" + pairs.map { |k, v| quote(k) + ":" + show(v) }.join(",") + "}"
+
+# Indented output, two spaces per level.
+pub def pretty(j: Json) -> Str:
+  pretty_at(j, 0)
+
+def pretty_at(j: Json, depth: Int) -> Str:
+  pad = "  ".repeat(depth + 1)
+  close = "  ".repeat(depth)
+  match j:
+    Arr(items) if items.empty? -> "[]"
+    Obj(pairs) if pairs.empty? -> "{}"
+    Arr(items) ->
+      inner = items.map { |x| pad + pretty_at(x, depth + 1) }.join(",\n")
+      "[\n#{inner}\n#{close}]"
+    Obj(pairs) ->
+      inner = pairs.map { |k, v| pad + quote(k) + ": " + pretty_at(v, depth + 1) }.join(",\n")
+      "{\n#{inner}\n#{close}}"
+    _ -> show(j)
+
+# ---- queries --------------------------------------------------------------
+
+pub struct Stats:
+  objects: Int
+  arrays: Int
+  strings: Int
+  numbers: Int
+  depth: Int
+
+pub def stats(j: Json) -> Stats:
+  var s = Stats(objects: 0, arrays: 0, strings: 0, numbers: 0, depth: 0)
+  walk(j, 1, s)
+  s
+
+def walk(j: Json, depth: Int, var s: Stats):
+  s.depth = s.depth.max(depth)
+  match j:
+    Obj(pairs) ->
+      s.objects += 1
+      for k, v in pairs:
+        walk(v, depth + 1, s)
+    Arr(items) ->
+      s.arrays += 1
+      for x in items:
+        walk(x, depth + 1, s)
+    Str(_) -> s.strings += 1
+    Num(_) -> s.numbers += 1
+    _      -> ()
+
+test "scalars":
+  assert show(parse("42")!) == "42"
+  assert show(parse("-1.5e2")!) == "-150"
+  assert show(parse(" true ")!) == "true"
+  assert show(parse("\"a\\nb\"")!) == "\"a\\nb\""
+
+test "unicode escapes":
+  assert show(parse("\"\\u00e9\"")!) == "\"é\""
+  assert show(parse("\"\\ud83d\\ude00\"")!) == "\"😀\""
+
+test "errors say where":
+  match parse("[1, 2"):
+    Ok(_)    -> assert false
+    Error(e) -> assert e.message == "expected `,` or `]` at position 5"
+
+test "queries":
+  doc = parse("{\"xs\": [10, 20, {\"y\": [true]}]}")!
+  assert doc.path("xs.1").map(show) == Some("20")
+  assert doc.path("xs.2.y.0").map(show) == Some("true")
+  assert doc.path("xs.7") == None
+  assert doc.path("nope") == None
+  assert stats(doc).depth == 5
+
+test "typed reads":
+  doc = parse("{\"name\": \"ada\", \"age\": 36, \"ratio\": 0.5, \"ok\": true, \"tags\": [\"a\", \"b\"], \"none\": null}")!
+  assert doc.get("name").map { |j| j.str } == Some(Some("ada"))
+  assert doc.get("age").map { |j| j.int } == Some(Some(36))
+  assert doc.get("ratio").map { |j| j.int } == Some(None)
+  assert doc.get("ok").map { |j| j.bool } == Some(Some(true))
+  assert doc.get("tags").map { |j| j.items.len } == Some(2)
+  assert doc.get("none").map { |j| j.null? } == Some(true)
+  assert doc.keys == ["name", "age", "ratio", "ok", "tags", "none"]
+
+test "decoding says what was wrong":
+  doc = parse("{\"name\": \"ada\", \"age\": \"old\"}")!
+  assert doc.need_str("name") == Ok("ada")
+  assert doc.need_int("age").error.map { |e| e.message } == Some("`age` is a string, not a whole number")
+  assert doc.need_int("height").error.map { |e| e.message } == Some("`height` is missing")
+  assert Json.Num(1.0).need("x").error.map { |e| e.message } == Some("expected an object with `x`, found a number")
+
+test "encoding":
+  assert show([1, 2].to_json) == "[1,2]"
+  assert show(["a", "b\n"].to_json) == "[\"a\",\"b\\n\"]"
+  assert show(obj([("ok", true.to_json), ("n", 2.5.to_json)])) == "{\"ok\":true,\"n\":2.5}"

@@ -122,6 +122,13 @@ check "check --json" "examples/check_json.expected" "$out"
 out=$(python3 tests/lsp_test.py "$LUME" 2>&1)
 check "lume lsp" "tests/lsp_test.expected" "$out"
 
+# the json package: its own tests, and a program that depends on it by path
+LUME_ABS2="$(cd "$(dirname "$LUME")" && pwd)/$(basename "$LUME")"
+out=$(cd packages/json && "$LUME_ABS2" test 2>&1; echo "exit: $?")
+check "json package tests" "packages/json/test.expected" "$out"
+out=$(cd examples/json_config && "$LUME_ABS2" run 2>&1; echo "exit: $?")
+check "json_config" "examples/json_config/main.expected" "$out"
+
 # the jobr dogfood program: dry run, a real run with its timing, broken job files
 out=$(examples/jobr/check.sh "$LUME" 2>&1)
 check "jobr" "examples/jobr/queries.expected" "$out"

@@ -78,6 +78,18 @@ error: package `colors` comes from two places: git+<tmp>/colors.git?tag=v1 and `
   | ^
   help: a program has one copy of each package: have every `lume.toml` take it from the same place
 exit: 1
+--- a repository holding packages in folders: the one named is found
+fetching `greet` from <tmp>/mono.git
+hello, lume
+exit: 0
+fetching `missing` from <tmp>/mono.git
+error: <tmp>/mono.git?tag=v1 has no package named `missing`
+  --> lume.toml:6:1
+  |
+6 | missing = { git = "../mono.git", tag = "v1" }
+  | ^
+  help: a repository's packages are found by the name in their `lume.toml`, at its top or up to three folders down; check that one is named `missing`
+exit: 1
 --- a path dependency cannot be updated
 error: `colors` comes from a path, so there is nothing to update
   help: `lume update` moves packages that come from git
