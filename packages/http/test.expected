@@ -1,0 +1,5 @@
+test a request that cannot be made is an Error ... ok
+test a response reads its headers in any case ... ok
+
+2 tests: 2 passed, 0 failed
+exit: 0

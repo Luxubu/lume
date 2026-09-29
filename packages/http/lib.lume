@@ -1,0 +1,79 @@
+# http — HTTP requests: the status, the headers and the body.
+#
+#   resp = http.get("https://example.com/api/items")?
+#   if resp.ok?: puts resp.body
+#   items = resp.json?                        # the body, parsed (the json package)
+#   http.post_json(url, doc)?                 # a Json document as the body
+#   http.send("PUT", url, [("X-Key", k)], body)?
+#
+# Only a request that could not be made is an `Error` (no connection, a bad
+# URL, a timeout). A 404 or a 500 is a `Response` like any other, with
+# `ok?` false, as Python's requests and Rust's reqwest have it. Requests
+# time out after 30 seconds. It is built on the Rust crate ureq.
+
+import rust.ureq
+import json
+import json.Json
+
+pub struct Response:
+  status: Int
+  # names in lower case, in the order the server sent them
+  headers: [(Str, Str)]
+  body: Str
+
+  # a 2xx status
+  def ok? -> Bool = status >= 200 and status < 300
+
+  # a header's value; the name in any case
+  def header(name: Str) -> Str?:
+    n = name.downcase
+    headers.find { |k, v| k == n }.map { |kv| kv.1 }
+
+  # the body, parsed as JSON
+  def json -> Json or Error = json.parse(body).map_error { |e| Error("the body is not JSON: #{e.message}") }
+
+pub def get(url: Str) -> Response or Error = send("GET", url, [], "")
+
+pub def delete(url: Str) -> Response or Error = send("DELETE", url, [], "")
+
+# a body, and what it is: `http.post(url, "a=1", "application/x-www-form-urlencoded")`
+pub def post(url: Str, body: Str, content_type: Str) -> Response or Error = send("POST", url, [("Content-Type", content_type)], body)
+
+pub def put(url: Str, body: Str, content_type: Str) -> Response or Error = send("PUT", url, [("Content-Type", content_type)], body)
+
+# a JSON document as the body
+pub def post_json(url: Str, doc: Json) -> Response or Error = post(url, json.show(doc), "application/json")
+
+# Any method, headers of your own, and a body ("" for none).
+pub def send(method: Str, url: Str, headers: [(Str, Str)], body: Str) -> Response or Error:
+  raw: (Int, [(Str, Str)], Str) or Error = rust:
+    {
+      let mut req = ureq::request(&method, &url).timeout(std::time::Duration::from_secs(30));
+      for (k, v) in headers.iter() {
+          req = req.set(k, v);
+      }
+      let got = if body.is_empty() { req.call() } else { req.send_string(&body) };
+      match got {
+          Ok(r) | Err(ureq::Error::Status(_, r)) => {
+              let status = r.status() as i64;
+              let hs: Vec<(String, String)> = r.headers_names().iter().filter_map(|n| r.header(n).map(|v| (n.to_lowercase(), v.to_string()))).collect();
+              match r.into_string() {
+                  Ok(b) => Ok((status, hs, b)),
+                  Err(e) => Err(Error { message: format!("reading the body from {}: {}", url, e) }),
+              }
+          }
+          Err(e) => Err(Error { message: format!("{} {}: {}", method, url, e) }),
+      }
+    }
+  (status, hs, text) = raw?
+  Response(status: status, headers: hs, body: text)
+
+test "a request that cannot be made is an Error":
+  r = get("not a url")
+  assert r.error?
+
+test "a response reads its headers in any case":
+  r = Response(status: 404, headers: [("content-type", "text/plain")], body: "gone")
+  assert not r.ok?
+  assert r.header("Content-Type") == Some("text/plain")
+  assert r.json.error?

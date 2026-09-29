@@ -47,6 +47,9 @@ pub struct ForeignFn {
     pub self_kind: Option<SelfKind>,
     /// Why Lume cannot call it, when it cannot
     pub unsupported: Option<String>,
+    /// It takes `self` by value, as a builder's steps do
+    /// (`request.set(..).call()`): the value is used up.
+    pub consumes: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -208,7 +211,9 @@ impl CrateInfo {
                 ms.sort_by(|a, b| a.0.cmp(b.0));
                 for (m, f) in ms {
                     let var = if f.self_kind == Some(SelfKind::Mutate) { "var " } else { "" };
-                    out.push_str(&format!("  def {}.{}{}\n", var, m, sig(f)));
+                    // a builder's step: the value it is called on is used up
+                    let used = if f.consumes && f.unsupported.is_none() { "   (uses the value up)" } else { "" };
+                    out.push_str(&format!("  def {}.{}{}{}\n", var, m, sig(f), used));
                 }
             }
             let mut mods: Vec<_> = ns.modules.iter().collect();
@@ -536,7 +541,7 @@ impl<'a> Builder<'a> {
 
     /// Reads a function item into a `ForeignFn`.
     fn function(&mut self, f: &Value, rust_path: &str, self_id: Option<&String>) -> ForeignFn {
-        let mut out = ForeignFn { rust_path: rust_path.to_string(), params: Vec::new(), ret: Type::Unit, ret_conv: Conv::None, self_kind: None, unsupported: None };
+        let mut out = ForeignFn { rust_path: rust_path.to_string(), params: Vec::new(), ret: Type::Unit, ret_conv: Conv::None, self_kind: None, unsupported: None, consumes: false };
         // generics: type parameters are only allowed when a bound pins them to a string
         let mut generic_as_str: Vec<String> = Vec::new();
         if let Some(ps) = f["generics"]["params"].as_array() {
@@ -578,10 +583,10 @@ impl<'a> Builder<'a> {
                 out.self_kind = Some(match &rt {
                     RTy::Ref(_, true) => SelfKind::Mutate,
                     RTy::Ref(_, false) => SelfKind::Read,
+                    // `self` by value: the call uses the value up; the
+                    // caller moves it, or copies it, as its own moves do
                     _ => {
-                        if out.unsupported.is_none() {
-                            out.unsupported = Some("it takes `self` by value (consumes the value)".into());
-                        }
+                        out.consumes = true;
                         SelfKind::Read
                     }
                 });

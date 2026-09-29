@@ -1,0 +1,32 @@
+# http_demo — the http package against a server: a JSON document, a page
+# that is not there, a POST that is echoed back, and a server that is not
+# running. tests/http_local.sh starts a small server on this machine and
+# runs it:
+#
+#   lume run -- http://127.0.0.1:8765
+
+import http
+import json
+
+def main -> () or Error:
+  base = Env.args.first.or("http://127.0.0.1:8765")
+
+  r = http.get("#{base}/hello.json")?
+  puts "GET /hello.json: #{r.status}, #{r.header("content-type").or("no type")}"
+  doc = r.json?
+  puts "  ok is #{doc.path("ok").map(json.show).or("missing")}"
+
+  gone = http.get("#{base}/nope")?
+  puts "GET /nope: #{gone.status}, ok? #{gone.ok?}"
+
+  sent = json.obj([("name", "lume".to_json), ("n", 3.to_json)])
+  echo = http.post_json("#{base}/echo", sent)?
+  back = echo.json?
+  puts "POST /echo: #{echo.status}, sent back #{json.show(back.get("body").or(json.Json.Null))}"
+  puts "  as #{back.get("type").map { |t| t.str.or("?") }.or("?")}"
+
+  # nothing listens on port 9: a request that cannot be made is an Error
+  match http.get("http://127.0.0.1:9/"):
+    Ok(_) -> puts "port 9 answered?"
+    Error(_) -> puts "port 9: no connection, an Error"
+  ()

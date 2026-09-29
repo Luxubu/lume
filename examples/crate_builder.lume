@@ -1,0 +1,21 @@
+# A crate's builder, through the bridge. Most Rust builders take `self` by
+# value: each step uses the value up and gives back a new one. Lume moves
+# the value when nothing needs it afterwards, and copies it when the crate's
+# type can be cloned and it is needed again. Nothing here is sent: the
+# requests are only built and read back.
+
+import rust.ureq = "2"
+
+def main:
+  # a chain: each step's value is the next step's, so each is moved on
+  req = ureq.get("http://example.com/items").set("Accept", "application/json").set("X-Trace", "7")
+  puts req.method()
+  puts req.header("accept").or("none")
+  puts req.header_names()
+
+  # `base` is needed again below, and a ureq.Request can be cloned, so
+  # each `.set` works on a copy and `base` is left as it was
+  base = ureq.post("http://example.com/items")
+  a = base.set("X-Kind", "a")
+  b = base.set("X-Kind", "b")
+  puts "#{a.header("x-kind").or("-")} #{b.header("x-kind").or("-")} #{base.header("x-kind").or("-")}"

@@ -1,5 +1,16 @@
 # Changes
 
+## Unreleased
+
+- **`packages/http`**: `get`, `post`, `post_json` and `send`, with a
+  `Response` that has `ok?`, headers and `.json`. A 404 is a response; only a
+  request that could not be made is an `Error`.
+- **Crate builders**: methods that take `self` by value, which is how most
+  Rust builders work, can be called through the bridge. `lume crate` marks
+  them.
+- **Docs**: new pages [HTTP](docs/reference/http.md) and
+  [Rust crates](docs/reference/crates.md).
+
 ## 0.1.0 — the first release
 
 Lume is a language with Ruby's feel that compiles to Rust and runs at Rust's

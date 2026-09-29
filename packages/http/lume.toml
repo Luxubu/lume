@@ -1,0 +1,9 @@
+[package]
+name = "http"
+version = "0.1.0"
+
+[dependencies]
+json = { path = "../json" }
+
+[rust]
+ureq = "2"

@@ -137,6 +137,17 @@ check "json package tests" "packages/json/test.expected" "$out"
 out=$(cd examples/json_config && "$LUME_ABS2" run 2>&1; echo "exit: $?")
 check "json_config" "examples/json_config/main.expected" "$out"
 
+# the http package against a server on this machine (skipped where a
+# sandbox allows no local connection)
+out=$(tests/http_local.sh "$LUME" 2>&1)
+if [ "$out" = "skipped: no local connection allowed here" ]; then
+  echo "  http: skipped, no local connection allowed here"; pass=$((pass+1))
+else
+  check "http package, local server" "tests/http_local.expected" "$out"
+fi
+out=$(cd packages/http && "$LUME_ABS2" test 2>&1 | grep -v "^warning\|^ *|\|^  -->\|^  help"; echo "exit: ${PIPESTATUS[0]}")
+check "http package tests" "packages/http/test.expected" "$out"
+
 # the jobr dogfood program: dry run, a real run with its timing, broken job files
 out=$(examples/jobr/check.sh "$LUME" 2>&1)
 check "jobr" "examples/jobr/queries.expected" "$out"

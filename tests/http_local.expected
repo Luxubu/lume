@@ -1,0 +1,7 @@
+GET /hello.json: 200, application/json
+  ok is true
+GET /nope: 404, ok? false
+POST /echo: 200, sent back {"name":"lume","n":3}
+  as application/json
+port 9: no connection, an Error
+exit: 0

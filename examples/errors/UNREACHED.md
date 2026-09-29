@@ -18,6 +18,8 @@ tried; this is why there is no `examples/errors/*.lume` for it.
 
 ## Need a crate or packages
 
+- "`{}` uses up `{}`, and `{}` is still needed after it" (milestone 65): needs a crate type that cannot be cloned, used again after a method that consumes it. The crates the suite already fetches (`regex`, `hex`, `urlencoding`, `ureq`) have `Clone` on every type with such a method, so Lume copies instead of refusing.
+
 - `codegen.rs`: `{}` cannot be copied, so it cannot be a struct field — needs a crate type without `Clone`; every public type of the crates available offline (`regex`, `hex`) is `Clone`, and fetching another crate needs the network.
 - `main.rs`: `{}` asks for crate `{}` at "{}", and `{}` at "{}" — needs two packages whose `lume.toml` ask for the same crate at different versions (a packages setup).
 

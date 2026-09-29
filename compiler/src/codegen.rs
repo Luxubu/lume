@@ -2523,8 +2523,36 @@ impl Gen {
         for (a, p) in bound.iter().zip(&f.params) {
             parts.push(self.foreign_arg(a, p, &display)?);
         }
-        let r = self.expr(recv)?;
+        let mut r = self.expr(recv)?;
+        if f.consumes {
+            r = self.consumed_receiver(recv, r, key, &display, e)?;
+        }
         Ok(f.ret_conv.apply(&format!("({}).{}({})", r, name, parts.join(", "))))
+    }
+
+    /// The receiver of a crate method that uses it up (`self` by value, as a
+    /// builder's steps take it). A value just made — the middle of a chain —
+    /// is simply moved; so is a local nothing needs afterwards, by the same
+    /// rule as any move. Anything else is copied when the crate's type can be
+    /// cloned, and otherwise refused, as Rust would refuse the move.
+    fn consumed_receiver(&mut self, recv: &Expr, r: String, key: &str, display: &str, e: &Expr) -> Result<String> {
+        let place = match &recv.kind {
+            ExprKind::Ident(_) | ExprKind::SelfRef | ExprKind::Index { .. } | ExprKind::TupleIndex { .. } => true,
+            ExprKind::Method { recv: inner, name: field, args } if args.is_empty() => {
+                let it = self.ty_of(inner).materialized();
+                matches!(&it, Type::Named(s) | Type::App(s, _) if self.structs.get(&self.canon(s)).map(|i| i.fields.iter().any(|(f, _)| f == field)).unwrap_or(false))
+            }
+            _ => false,
+        };
+        if !place || self.can_consume(recv) {
+            return Ok(r);
+        }
+        if self.foreign_types.get(key).map(|t| t.clone).unwrap_or(false) {
+            return Ok(format!("({}).clone()", r));
+        }
+        let what = snippet(recv);
+        Err(LumeError::new(e.line, e.col, format!("`{}` uses up `{}`, and `{}` is still needed after it", display, what, what))
+            .with_help(format!("a `{}` cannot be copied: make this its last use, or make a new one where it is needed again", key)))
     }
 
     fn is_interface(&self, t: &Type) -> bool {
