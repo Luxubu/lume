@@ -1,10 +1,10 @@
-# Input and output: `File`, `Dir`, `Path`, `Env`, `Time`
+# Input and output: `File`, `Dir`, `Path`, `Env`, `Time`, `Process`
 
 > A reviewer asked about `Time`, `File`, `Env`, `Dir` and `Path`: they
 > appear in the examples and on no page. This is that page. Every answer
 > was checked by running it.
 
-These five are built in. There is nothing to import: `File.read(path)` works
+These six are built in. There is nothing to import: `File.read(path)` works
 in any file.
 
 **Everything that touches the disk and can fail gives `T or Error`.** The
@@ -194,6 +194,45 @@ puts "after"
 
 To end with an error from `main`, returning a failure through `?` (below) is
 usually clearer than `warn` and `Env.exit(1)`.
+
+**`Env.exit` never comes back, so it can end a branch whose other branches
+give a value**, the way Rust's `exit` has the type `!`:
+
+```lume
+def main:
+  n = match "12".to_int:
+    Ok(n) -> n
+    Error(e) ->
+      warn e.message
+      Env.exit(2)
+  puts n * 2     #=> 24
+```
+
+## `Process`
+
+| call | gives | |
+|---|---|---|
+| `Process.run(program, args)` | `(Int, Str, Str) or Error` | runs it and waits: its exit code, then what it wrote to standard output and to standard error |
+
+**Only failing to start the program is an `Error`.** A program that runs and
+exits with a non-zero code has still run: that is the code, and what it
+printed. A program ended by a signal gives `-1`. This is Rust's
+`std::process::Command`: the program and its arguments are given apart, and
+no shell is involved, so for pipes and `&&` run `sh -c`:
+
+```lume
+def main -> () or Error:
+  (code, out, _) = Process.run("echo", ["hello"])?
+  puts "#{code} #{out.trim}"            #=> 0 hello
+  (code2, out2, err) = Process.run("sh", ["-c", "echo one; echo two >&2; exit 3"])?
+  puts "#{code2} #{out2.trim} #{err.trim}"    #=> 3 one two
+  puts Process.run("no-such-program", []).error?    #=> true
+  ()
+```
+
+**Inside a task, other tasks go on while one waits for its program.** Three
+programs started from three `spawn:` bodies run at the same time.
+`examples/jobr/` is a job runner built on this.
 
 ## `Time`
 

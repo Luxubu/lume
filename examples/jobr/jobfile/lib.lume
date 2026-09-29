@@ -1,0 +1,93 @@
+# jobfile — reads a jobs file and puts its jobs in an order that can run.
+#
+#   [build]
+#   after = fetch, prepare
+#   run = make all
+#   retries = 2
+#
+# A job runs once everything in its `after` has succeeded. `plan` groups
+# the jobs into waves: every job in a wave can run at the same time.
+
+pub struct Job:
+  name: Str
+  run: Str
+  after: [Str]
+  retries: Int
+  line: Int
+
+pub def parse(text: Str) -> [Job] or Error:
+  var jobs: [Job] = []
+  var n = 0
+  for raw in text.lines:
+    n += 1
+    line = raw.trim
+    if line == "" or line.starts_with?("#"):
+      next
+    if line.starts_with?("["):
+      if not line.ends_with?("]"):
+        return Error("line #{n}: a job name goes between [ and ]")
+      name = line.slice(1, line.len - 2).trim
+      if name == "":
+        return Error("line #{n}: a job needs a name")
+      if jobs.any? { |j| j.name == name }:
+        return Error("line #{n}: `#{name}` is named twice")
+      jobs.push(Job(name: name, run: "", after: [], retries: 0, line: n))
+      next
+    if jobs.empty?:
+      return Error("line #{n}: `#{line}` comes before any [job]")
+    parts = line.split("=")
+    if parts.len < 2:
+      return Error("line #{n}: expected `key = value`")
+    key = parts.at(0).trim
+    value = parts.skip(1).to_list.join("=").trim
+    # the job being read is the last one
+    i = jobs.len - 1
+    match key:
+      "run" -> jobs[i].run = value
+      "after" -> jobs[i].after = value.split(",").map { |s| s.trim }.filter { |s| s != "" }.to_list
+      "retries" -> jobs[i].retries = value.to_int.map_error { |e| Error("line #{n}: retries: #{e.message}") }?
+      _ -> return Error("line #{n}: unknown key `#{key}`; a job has run, after and retries")
+  for j in jobs:
+    if j.run == "":
+      return Error("line #{j.line}: `#{j.name}` has nothing to run")
+  jobs
+
+# Waves of jobs: the first needs nothing, each later one only what came
+# before it. Refuses a job that waits for one that does not exist, and jobs
+# that wait for each other.
+pub def plan(jobs: [Job]) -> [[Job]] or Error:
+  names = jobs.map { |j| j.name }.to_set
+  for j in jobs:
+    for a in j.after:
+      if not names.contains?(a):
+        return Error("`#{j.name}` waits for `#{a}`, which is not a job")
+  var done: {Str} = {}
+  var left = jobs
+  var waves: [[Job]] = []
+  while not left.empty?:
+    ready = left.filter { |j| j.after.all? { |a| done.contains?(a) } }.to_list
+    if ready.empty?:
+      stuck = left.map { |j| j.name }.to_list.join(", ")
+      return Error("these jobs wait for each other: #{stuck}")
+    for j in ready:
+      done.add(j.name)
+    left = left.reject { |j| done.contains?(j.name) }.to_list
+    waves.push(ready)
+  waves
+
+test "a job file":
+  jobs = parse("[a]\nrun = echo a\n\n[b]\nafter = a\nrun = echo b\nretries = 2\n")!
+  assert jobs.len == 2
+  assert jobs.at(1).after == ["a"]
+  assert jobs.at(1).retries == 2
+
+test "waves":
+  jobs = parse("[a]\nrun=x\n[b]\nrun=x\nafter=a\n[c]\nrun=x\n[d]\nrun=x\nafter=b,c\n")!
+  waves = plan(jobs)!
+  assert waves.map { |w| w.map { |j| j.name }.to_list }.to_list == [["a", "c"], ["b"], ["d"]]
+
+test "mistakes are named":
+  assert parse("[a]\nrun=x\nretries=two\n").error.map { |e| e.message } == Some("line 3: retries: `two` is not an integer")
+  assert parse("run = x").error.map { |e| e.message } == Some("line 1: `run = x` comes before any [job]")
+  assert plan(parse("[a]\nrun=x\nafter=b\n")!).error.map { |e| e.message } == Some("`a` waits for `b`, which is not a job")
+  assert plan(parse("[a]\nrun=x\nafter=b\n[b]\nrun=x\nafter=a\n")!).error.map { |e| e.message } == Some("these jobs wait for each other: a, b")

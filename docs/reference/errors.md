@@ -338,7 +338,19 @@ def main:
 #! `Error` field `message` is `Str`, but this is a `Error`
 ```
 
-To add context, build a new `Error` from the text:
+To add context, `map_error` replaces the failure and lets a value through,
+as Rust's `map_err` does:
+
+```lume
+def retries(v: Str) -> Int or Error = v.to_int.map_error { |e| Error("retries: #{e.message}") }
+
+def main:
+  puts retries("3")    #=> Ok(3)
+  puts retries("x")    #=> Error("retries: `x` is not an integer")
+```
+
+Or, with more to do on each side, take the result apart with `match` and
+build a new `Error` from the text:
 
 ```lume
 def parse(s: Str) -> Int or Error:

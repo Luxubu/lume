@@ -1,0 +1,94 @@
+# jobr — runs the jobs in a jobs file, as many at once as their order allows.
+#
+#   lume run -- jobs.txt          run them
+#   lume run -- jobs.txt --dry    print the waves, run nothing
+#
+# Each wave's jobs run at the same time, one task each. A job that fails is
+# tried again as many times as its `retries` says, waiting longer each time.
+# A job waiting for one that failed is skipped. The exit status is 1 when
+# anything failed.
+
+import jobfile
+import jobfile.Job
+
+struct Outcome:
+  job: Str
+  code: Int
+  tries: Int
+  out: Str
+
+  def ok? -> Bool = code == 0
+
+  def line -> Str:
+    status = if code == 0: "ok" elif code == SKIPPED: "skipped" else: "FAILED (exit #{code})"
+    note = if tries > 1: ", #{tries} tries" else: ""
+    "#{job.pad_right(9)} #{status}#{note}"
+
+SKIPPED = -2
+
+async def run_job(job: Job, tries_made: shared var {Str: Int}) -> Outcome:
+  var wait = 50
+  var tries = 0
+  var last = Outcome(job: job.name, code: -1, tries: 0, out: "")
+  while tries <= job.retries:
+    tries += 1
+    tries_made[job.name] = tries
+    last = match Process.run("sh", ["-c", job.run]):
+      Ok((code, out, err)) -> Outcome(job: job.name, code: code, tries: tries, out: (out + err).trim)
+      Error(e) -> Outcome(job: job.name, code: -1, tries: tries, out: e.message)
+    if last.ok?:
+      return last
+    if tries <= job.retries:
+      await Time.sleep(wait)
+      wait = wait * 2
+  last
+
+async def main:
+  args = Env.args
+  path = args.find { |a| not a.starts_with?("--") }.or("jobs.txt")
+  text = match File.read(path):
+    Ok(t) -> t
+    Error(e) ->
+      warn e.message
+      Env.exit(2)
+  jobs = match jobfile.parse(text):
+    Ok(js) -> js
+    Error(e) ->
+      warn "#{path}: #{e.message}"
+      Env.exit(2)
+  waves = match jobfile.plan(jobs):
+    Ok(ws) -> ws
+    Error(e) ->
+      warn "#{path}: #{e.message}"
+      Env.exit(2)
+
+  if args.contains?("--dry"):
+    for (i, wave) in waves.enumerate:
+      puts "wave #{i + 1}: #{wave.map { |j| j.name }.to_list.join(", ")}"
+    return
+
+  shared var tries_made: {Str: Int} = {}
+  var failed: {Str} = {}
+  var outcomes: [Outcome] = []
+  for wave in waves:
+    var runnable: [Job] = []
+    for j in wave:
+      if j.after.any? { |a| failed.contains?(a) }:
+        failed.add(j.name)
+        outcomes.push(Outcome(job: j.name, code: SKIPPED, tries: 0, out: ""))
+      else:
+        runnable.push(j)
+    tasks = runnable.map { |j| spawn: await run_job(j, tries_made) }.to_list
+    for o in await tasks:
+      if not o.ok?:
+        failed.add(o.job)
+      outcomes.push(o)
+
+  for o in outcomes:
+    puts o.line
+    if o.out != "" and not o.ok?:
+      puts "          #{o.out}"
+  total = tries_made.values.sum
+  puts "#{outcomes.len} jobs, #{total} tries, #{failed.len} not done"
+  if not failed.empty?:
+    Env.exit(1)

@@ -1,0 +1,6 @@
+test a list read by an assert and by nothing after ... ok
+test text built from and then asserted ... ok
+test a while condition runs every time round ... ok
+
+3 tests: 3 passed, 0 failed
+exit: 0

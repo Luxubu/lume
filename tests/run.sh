@@ -113,6 +113,10 @@ check "check --json" "examples/check_json.expected" "$out"
 out=$(python3 tests/lsp_test.py "$LUME" 2>&1)
 check "lume lsp" "tests/lsp_test.expected" "$out"
 
+# the jobr dogfood program: dry run, a real run with its timing, broken job files
+out=$(examples/jobr/check.sh "$LUME" 2>&1)
+check "jobr" "examples/jobr/queries.expected" "$out"
+
 # the csvq dogfood program: queries, a pipe, its errors, and three packages' tests
 out=$(examples/csvq/queries.sh "$LUME" 2>&1)
 check "csvq" "examples/csvq/queries.expected" "$out"

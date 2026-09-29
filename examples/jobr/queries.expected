@@ -1,0 +1,37 @@
+$ jobr jobs.txt --dry
+wave 1: prepare
+wave 2: fetch-a, fetch-b, flaky, broken
+wave 3: build
+wave 4: publish
+exit: 0
+$ jobr jobs.txt
+prepare   ok
+fetch-a   ok
+fetch-b   ok
+flaky     ok, 2 tries
+broken    FAILED (exit 3), 2 tries
+          cannot reach the server
+build     ok
+publish   skipped
+7 jobs, 8 tries, 2 not done
+exit: 1
+the fetches ran side by side: True
+$ jobr <tmp>/cycle.txt
+<tmp>/cycle.txt: these jobs wait for each other: a, b
+exit: 2
+$ jobr <tmp>/unknown.txt
+<tmp>/unknown.txt: `a` waits for `nope`, which is not a job
+exit: 2
+$ jobr <tmp>/bad.txt
+<tmp>/bad.txt: line 2: retries: `two` is not an integer
+exit: 2
+$ jobr no-such-jobs.txt
+cannot read `no-such-jobs.txt`: No such file or directory (os error 2)
+exit: 2
+$ (cd jobfile && lume test)
+test a job file ... ok
+test waves ... ok
+test mistakes are named ... ok
+
+3 tests: 3 passed, 0 failed
+exit: 0

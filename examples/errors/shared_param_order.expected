@@ -1,0 +1,6 @@
+error: `shared` goes in the parameter's type, after its name
+  --> examples/errors/shared_param_order.lume:1:10
+  |
+1 | def bump(shared var n: Int):
+  |          ^
+  help: write `n: shared var T`, as in `def bump(n: shared var Int)`

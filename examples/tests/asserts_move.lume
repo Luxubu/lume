@@ -1,0 +1,22 @@
+# An `assert` writes its expression twice: once to test it, and again to
+# show the values when it fails. So nothing in it may be given away, even
+# when the statement names a value once and nothing uses it afterwards.
+# (Found by the jobr dogfood program, milestone 58.)
+
+def waves -> [[Str]] = [["a", "c"], ["b"]]
+
+test "a list read by an assert and by nothing after":
+  w = waves()
+  assert w.map { |x| x.len }.to_list == [2, 1]
+
+test "text built from and then asserted":
+  var s = "ab"
+  s = s + "c"
+  assert s.upcase == "ABC"
+
+test "a while condition runs every time round":
+  var xs = ["x", "yy", "zzz"]
+  var n = 0
+  while xs.filter { |x| x.len > n }.to_list.len > 0:
+    n += 1
+  assert n == 3

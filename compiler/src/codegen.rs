@@ -454,6 +454,15 @@ fn lume_install_panic_hook() {
     }));
 }
 
+/// `Process.run`: the program's exit code and what it wrote. Only failing to
+/// start it is an error; a program that exits non-zero has still run. A
+/// program ended by a signal has no code, and gives -1.
+fn lume_process_run(program: &str, args: &[String]) -> ::std::result::Result<(i64, String, String), Error> {
+    match std::process::Command::new(program).args(args).output() {
+        Ok(o) => Ok((o.status.code().map(|c| c as i64).unwrap_or(-1), String::from_utf8_lossy(&o.stdout).into_owned(), String::from_utf8_lossy(&o.stderr).into_owned())),
+        Err(e) => Err(Error { message: format!("cannot run `{}`: {}", program, e) }),
+    }
+}
 fn lume_now_ms() -> i64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
 }
@@ -3987,6 +3996,8 @@ impl Gen {
                             if else_block.is_none() { Type::Unit } else { bt }
                         }
                         ExprKind::Match { scrutinee, arms } => self.match_type(scrutinee, arms),
+                        // never comes back, so it says nothing of the type
+                        _ if self.is_env_exit(e) => Type::Unknown,
                         _ => self.ty_of(e).materialized(),
                     };
                 }
@@ -5564,6 +5575,8 @@ impl Gen {
                 let bt = self.lambda_body_type(params, ok, false, None, body).materialized();
                 return Type::Result(Box::new(bt), err.clone());
             }
+            // Rust's `map_err`: the value passes, the failure is replaced
+            (Type::Result(..), "map_error") => return recv.clone(),
             (Type::Map(..), "filter" | "reject") => return recv.clone(),
             (Type::Set(_), "filter" | "reject") => return recv.clone(),
             (Type::Map(k, v), "map_values") => {
@@ -6722,6 +6735,12 @@ impl Gen {
             Some(st) => st,
             None => return false,
         };
+        // an `assert` writes its expression twice (the test, and the values
+        // it shows when it fails), and a `while` condition runs every time
+        // round: neither may give anything away
+        if matches!(here, Stmt::Assert { .. } | Stmt::While { .. }) {
+            return false;
+        }
         if mention_count(here, n) != 1 {
             return false;
         }
@@ -6786,6 +6805,12 @@ impl Gen {
             Some(st) => st,
             None => return false,
         };
+        // an `assert` writes its expression twice (the test, and the values
+        // it shows when it fails), and a `while` condition runs every time
+        // round: neither may give anything away
+        if matches!(here, Stmt::Assert { .. } | Stmt::While { .. }) {
+            return false;
+        }
         let mut uses = Vec::new();
         field_uses_stmt(here, v, &mut uses);
         // a name the statement never writes — one the compiler made, such as
@@ -7780,7 +7805,7 @@ impl Gen {
                 self.is_borrowed_place(recv)
                     || self.is_borrowed_ident(recv)
                     || matches!(&recv.kind, ExprKind::Ident(n) if self.lookup(n).is_some()
-                        && !(self.dead_now(n) && self.stmt_stack.last().map(|st| mention_count(st, n) == 1).unwrap_or(false)))
+                        && !(self.dead_now(n) && self.stmt_stack.last().map(|st| mention_count(st, n) == 1 && !matches!(st, Stmt::Assert { .. } | Stmt::While { .. })).unwrap_or(false)))
             }
             _ => false,
         }
@@ -8377,6 +8402,19 @@ impl Gen {
                 let f = self.gen_lambda(params, body, &inner, false, false, true, None, lam)?;
                 return Ok(format!("({}).clone().map({})", r, f));
             }
+            (Type::Result(_, err), "map_error") => {
+                let err = (**err).clone();
+                // the block must give an `Error`: what the failure becomes
+                let bt = self.lambda_body_type(params, &err, false, None, body).materialized();
+                let gives_error = matches!(&bt, Type::Named(n) if n == "Error") || matches!(&bt, Type::Result(_, e) if matches!(&**e, Type::Named(n) if n == "Error"));
+                if !gives_error {
+                    return Err(LumeError::new(lam.line, lam.col, format!("the block of `map_error` gives {}, but it must give an `Error`", a_type(&bt)))
+                        .with_help("write the new failure, as in `r.map_error { |e| Error(\"reading the file: #{e.message}\") }`"));
+                }
+                let r = self.expr(recv)?;
+                let f = self.gen_lambda(params, body, &err, false, false, true, None, lam)?;
+                return Ok(format!("({}).clone().map_err({})", r, f));
+            }
             (Type::Map(k, v), "filter" | "reject") => {
                 let elem = Type::Tuple(vec![(**k).clone(), (**v).clone()]);
                 let r = self.expr(recv)?;
@@ -8547,12 +8585,20 @@ impl Gen {
     /// None when the branch does not produce one (it returns, breaks, ...).
     fn branch_value(&mut self, b: &Block) -> Option<(Type, usize, usize)> {
         match b.stmts.last() {
+            // `Env.exit(..)` never comes back, as Rust's `exit` gives `!`: the
+            // branch has no value to agree with the others
+            Some(Stmt::Expr(e)) if self.is_env_exit(e) => None,
             Some(Stmt::Expr(e)) => {
                 let t = self.tail_type(b);
                 if t == Type::Unknown { None } else { Some((t, e.line, e.col)) }
             }
             _ => None,
         }
+    }
+
+    fn is_env_exit(&self, e: &Expr) -> bool {
+        matches!(&e.kind, ExprKind::Method { recv, name, .. } if name == "exit"
+            && matches!(&recv.kind, ExprKind::Ident(n) if n == "Env" && self.lookup(n).is_none() && !self.is_type(&self.canon(n))))
     }
 
     /// Every branch that yields a value must agree with the first one.
@@ -10347,6 +10393,16 @@ impl Gen {
                             ("Env", "stdin") => { need(0)?; "lume_stdin()".to_string() }
                             ("Env", "args") => { need(0)?; "lume_args()".to_string() }
                             ("Env", "get") => { need(1)?; format!("std::env::var(&*{}).ok()", parts[0]) }
+                            ("Process", "run") => {
+                                need(2)?;
+                                if self.in_async {
+                                    // other tasks go on while this one waits
+                                    self.uses_async = true;
+                                    format!("tokio::task::block_in_place(|| lume_process_run(&{}, &{}))", parts[0], parts[1])
+                                } else {
+                                    format!("lume_process_run(&{}, &{})", parts[0], parts[1])
+                                }
+                            }
                             ("Time", "now") => { need(0)?; "lume_now()".to_string() }
                             ("Time", "now_ms") => { need(0)?; "lume_now_ms()".to_string() }
                             ("Time", "sleep") => {
@@ -10361,13 +10417,14 @@ impl Gen {
                             _ => unreachable!(),
                         });
                     }
-                    if self.lookup(tn).is_none() && !self.is_type(&self.canon(tn)) && matches!(tn.as_str(), "File" | "Env" | "Time" | "Dir" | "Path") {
+                    if self.lookup(tn).is_none() && !self.is_type(&self.canon(tn)) && matches!(tn.as_str(), "File" | "Env" | "Time" | "Dir" | "Path" | "Process") {
                         return Err(LumeError::new(e.line, e.col, format!("`{}` has no `{}`", tn, name))
                             .with_help(match tn.as_str() {
                                 "File" => "File has read, write, append, exists?, remove, size and modified",
                                 "Env" => "Env has args, get(name), stdin and exit(code)",
                                 "Dir" => "Dir has exists?, make, list, walk and remove",
                                 "Path" => "Path has join(a, b), dir, base, ext and stem",
+                                "Process" => "Process has run(program, args)",
                                 _ => "Time has now (seconds), now_ms and sleep(ms)",
                             }));
                     }
@@ -11192,7 +11249,7 @@ fn builtins_for(recv: &Type) -> Vec<&'static str> {
             "map", "filter", "reject", "count", "all?", "find", "fold", "join", "group_by", "partition", "flat_map", "sort_by", "min_by", "max_by",
         ],
         Type::Option(_) => vec!["or", "some?", "none?", "or_error", "map"],
-        Type::Result(..) => vec!["or", "ok?", "error?", "error", "ok", "map"],
+        Type::Result(..) => vec!["or", "ok?", "error?", "error", "ok", "map", "map_error"],
         Type::Int => vec!["to_float", "to_int", "abs", "pad", "pad_right", "max", "min", "clamp", "pow", "even?", "odd?", "to_char", "decimals"],
         Type::Float => vec!["to_int", "to_float", "sqrt", "floor", "ceil", "round", "abs", "pad", "pad_right", "max", "min", "clamp", "pow", "decimals"],
         Type::Bool => vec!["pad", "pad_right"],
@@ -11563,6 +11620,7 @@ fn builtin_namespace_params(ns: &str, name: &str) -> Option<Vec<Type>> {
         ("File", "write") | ("File", "append") | ("Path", "join") => vec![s(), s()],
         ("File", _) | ("Dir", _) | ("Path", _) | ("Env", "get") => vec![s()],
         ("Env", "exit") | ("Time", "sleep") => vec![Type::Int],
+        ("Process", "run") => vec![s(), Type::List(Box::new(s()))],
         _ => return None,
     })
 }
@@ -11584,6 +11642,7 @@ fn builtin_namespace_type(ns: &str, name: &str) -> Option<Type> {
         ("Env", "stdin") => Type::Result(Box::new(Type::Str), err()),
         ("Env", "args") => Type::List(Box::new(Type::Str)),
         ("Env", "get") => Type::Option(Box::new(Type::Str)),
+        ("Process", "run") => Type::Result(Box::new(Type::Tuple(vec![Type::Int, Type::Str, Type::Str])), err()),
         ("Time", "now") => Type::Int,
         ("Time", "now_ms") => Type::Int,
         ("Time", "sleep") => Type::Unit, // becomes `async ()` inside async code; see ty_of

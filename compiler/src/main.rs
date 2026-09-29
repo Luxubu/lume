@@ -519,7 +519,15 @@ fn fingerprint(text: &str) -> String {
 
 fn build(path: &Path, out: Option<PathBuf>, quiet: bool, test_mode: bool, mode: Mode) -> Result<PathBuf, String> {
     let t0 = Instant::now();
-    let compiled = compile_to_rust(path, test_mode)?;
+    // warnings are shown when the program is compiled, as cargo shows them,
+    // not again on every run of a program that has not changed
+    let (compiled, warnings) = diag::collecting(|| compile_to_rust(path, test_mode));
+    let compiled = compiled?;
+    let show_warnings = || {
+        for w in &warnings {
+            eprint!("{}", w);
+        }
+    };
     let rust = compiled.rust;
     let mut stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or("out".into());
     if test_mode {
@@ -538,12 +546,14 @@ fn build(path: &Path, out: Option<PathBuf>, quiet: bool, test_mode: bool, mode: 
     let stamp_path = build_dir.join(format!("{}.stamp", stem));
     let stamp = format!("{} {} {:?}\n", fingerprint(&rust), fingerprint(&format!("{:?}", compiled.deps)), mode == Mode::Ship);
     if bin.exists() && fs::read_to_string(&stamp_path).ok().as_deref() == Some(stamp.as_str()) {
+        drop(show_warnings);
         if !quiet {
             eprintln!("up to date: {}", bin.display());
         }
         return Ok(bin);
     }
     let _ = fs::remove_file(&stamp_path);
+    show_warnings();
 
     if !compiled.deps.is_empty() {
         build_with_cargo(path, &rust, &compiled.deps, &bin, compiled.has_rust_blocks, mode)?;

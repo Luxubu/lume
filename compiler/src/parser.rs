@@ -162,6 +162,17 @@ impl Parser {
                 self.advance();
                 Ok((s, l, c))
             }
+            // `shared var n: T` in a parameter list: the `shared` goes in the type
+            Tok::Ident(s) if s == "shared" && what == "a parameter name" => {
+                let name = match (self.peek_at(1), self.peek_at(2)) {
+                    (Tok::Ident(v), Tok::Ident(n)) if v == "var" => n.clone(),
+                    (Tok::Ident(n), _) => n.clone(),
+                    _ => "name".to_string(),
+                };
+                let var = if matches!(self.peek_at(1), Tok::Ident(v) if v == "var") { "var " } else { "" };
+                Err(LumeError::new(l, c, "`shared` goes in the parameter's type, after its name")
+                    .with_help(format!("write `{}: shared {}T`, as in `def bump(n: shared var Int)`", name, var)))
+            }
             Tok::Ident(s) => Err(LumeError::new(
                 l,
                 c,

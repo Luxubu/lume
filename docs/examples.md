@@ -58,6 +58,7 @@ Each one has a `FINDINGS.md` or a `README.md` saying what it exposed.
 | `lib/` | a library written in Lume — `seq` and `table` — and a report program using both |
 | `match/` | a concurrent record matcher: block, fan out across tasks, collect, report |
 | `port/` | the design document's sample programs, plus `app_async.lume` on threads |
+| `jobr/` | a job runner in two packages: waves of jobs run in tasks, retries, skips, a `shared var` tally, `Process.run` |
 | `csvq/` | a CSV query tool in three packages — `csv`, `table` and the program — with a small query language, stdin, and each package's own tests |
 
 ## Modules

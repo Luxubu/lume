@@ -1,0 +1,31 @@
+# The jobs `lume run -- jobs.txt` runs. Paths are relative to where it runs.
+
+[prepare]
+run = rm -rf out && mkdir -p out
+
+[fetch-a]
+after = prepare
+run = sleep 0.3 && echo alpha > out/a.txt
+
+[fetch-b]
+after = prepare
+run = sleep 0.3 && echo beta > out/b.txt
+
+# fails the first time, then works: a retry is what it needs
+[flaky]
+after = prepare
+run = test -f out/flaky || (touch out/flaky && echo "not yet" && exit 1)
+retries = 2
+
+[build]
+after = fetch-a, fetch-b, flaky
+run = cat out/a.txt out/b.txt > out/all.txt && wc -l < out/all.txt
+
+[broken]
+after = prepare
+run = echo "cannot reach the server" >&2 && exit 3
+retries = 1
+
+[publish]
+after = build, broken
+run = echo published

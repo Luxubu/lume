@@ -435,6 +435,7 @@ puts none.or_error("no price")      #=> Error("no price")
 | `ok` | | `T?` | the value, if it succeeded |
 | `error` | | `Error?` | the failure, if it failed |
 | `map` | block | `U or Error` | changes the value if it succeeded; a failure passes through |
+| `map_error` | block | `T or Error` | replaces the failure with the `Error` the block gives; a value passes through (Rust's `map_err`) |
 | `to_s`, `to_str` | | `Str` | `Ok(...)` or `Error(...)` |
 
 An `Error` has one field, `message`, a `Str`.
