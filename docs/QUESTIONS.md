@@ -137,6 +137,13 @@ guesses**. Most were the wording of misuse messages for the newest features
 which no page or example showed. Each now has an example in
 `examples/errors/`. See `corpus/m59/REPORT.md`.
 
+## Round thirteen
+
+`corpus/m63/` measured milestones 60–62, the `json` package and dates:
+twenty-seven programs, **31 guesses**, 20 of 21 right on the first run. Most
+guesses were about how `Time.parse` reads and what the parser's errors say;
+both are now tables. See `corpus/m63/REPORT.md`.
+
 ## What writing the answers found
 
 Four programs that the compiler accepted and then could not generate Rust for:

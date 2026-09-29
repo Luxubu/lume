@@ -1,0 +1,44 @@
+# c02_orders — a library for c02_shop: orders with nested items and a date,
+# decoded from JSON with errors that say which field and which item, and
+# written back through the json package's ToJson.
+
+import json
+import json.Json
+
+pub struct Item:
+  sku: Str
+  qty: Int
+  cents: Int
+
+  # the price is written in the document as a number of pounds, 3.5
+  def self.from_json(j: Json) -> Item or Error:
+    price = j.need_num("price")?
+    Item(sku: j.need_str("sku")?, qty: j.need_int("qty")?, cents: (price * 100.0).round.to_int)
+
+  def total -> Int = qty * cents
+
+  def to_json -> Json = json.obj([("sku", sku.to_json), ("qty", qty.to_json), ("cents", cents.to_json)])
+
+pub struct Order:
+  id: Str
+  placed: Int
+  items: [Item]
+
+  def self.from_json(j: Json) -> Order or Error:
+    id = j.need_str("id")?
+    placed = Time.parse(j.need_str("placed")?, "%Y-%m-%d").map_error { |e| Error("`placed`: #{e.message}") }?
+    var items: [Item] = []
+    for (i, it) in j.need_items("items")?.enumerate:
+      items.push(Item.from_json(it).map_error { |e| Error("item #{i + 1}: #{e.message}") }?)
+    if items.empty?:
+      return Error("order #{id} has no items")
+    Order(id: id, placed: placed, items: items)
+
+  def total -> Int = items.map { |it| it.total }.sum
+
+  def month -> Str = Time.format(placed, "%Y-%m")
+
+  def to_json -> Json = json.obj([("id", id.to_json), ("placed", Time.format(placed, "%Y-%m-%d").to_json), ("items", items.to_json), ("total", total.to_json)])
+
+# whole pence as pounds, for people: 1525 -> 15.25
+pub def money(cents: Int) -> Str = (cents.to_float / 100.0).decimals(2)

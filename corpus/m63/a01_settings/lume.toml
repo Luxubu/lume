@@ -1,0 +1,6 @@
+[package]
+name = "a01_settings"
+version = "0.1.0"
+
+[dependencies]
+json = { path = "../../../packages/json" }

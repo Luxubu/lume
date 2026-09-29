@@ -1,0 +1,8 @@
+{"name":"lume","version":"0.61.0","private":true,"scripts":{"test":"lume test","fmt":"lume fmt"},"keywords":["language","rust"]}
+version: 0.61.0 -> 0.62.0
+{"name":"lume","version":"0.62.0","private":true,"scripts":{"test":"lume test --all","fmt":"lume fmt"},"keywords":["language","rust"],"homepage":"https://example.org/lume"}
+read back: version 0.62.0, keys name, version, private, scripts, keywords, homepage
+scripts.test is "lume test --all"
+the original still says 0.61.0
+Error("`1.2` is not major.minor.patch")
+exit: 0

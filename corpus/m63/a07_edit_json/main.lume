@@ -1,0 +1,65 @@
+# a07 — editing a JSON document: read it, change one field (bump the minor
+# version), change one nested field, add a new one at the end, and write it
+# back with `json.show` — to a file and read again. Keys keep their order;
+# a replaced key keeps its place. The original value is not changed.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# {"name":"lume","version":"0.61.0","private":true,"scripts":{"test":"lume test","fmt":"lume fmt"},"keywords":["language","rust"]}
+# version: 0.61.0 -> 0.62.0
+# {"name":"lume","version":"0.62.0","private":true,"scripts":{"test":"lume test --all","fmt":"lume fmt"},"keywords":["language","rust"],"homepage":"https://example.org/lume"}
+# read back: version 0.62.0, keys name, version, private, scripts, keywords, homepage
+# scripts.test is "lume test --all"
+# the original still says 0.61.0
+# Error("`1.2` is not major.minor.patch")
+
+import json
+import json.Json
+import json.ToJson
+
+DOC = """
+  {"name": "lume", "version": "0.61.0", "private": true, "scripts": {"test": "lume test", "fmt": "lume fmt"}, "keywords": ["language", "rust"]}
+  """
+
+# the object with `key` set: replaced where it stands, or added at the end
+def with_field(doc: Json, key: Str, value: Json) -> Json:
+  var out: [(Str, Json)] = []
+  var found = false
+  for k, v in doc.pairs:
+    if k == key:
+      out.push((k, value))
+      found = true
+    else:
+      out.push((k, v))
+  out.push((key, value)) unless found
+  json.obj(out)
+
+def bump_minor(version: Str) -> Str or Error:
+  parts = version.split(".").to_list
+  if parts.len != 3:
+    return Error("`#{version}` is not major.minor.patch")
+  minor = parts.at(1).to_int?
+  "#{parts.at(0)}.#{minor + 1}.0"
+
+def main -> () or Error:
+  doc = json.parse(DOC)?
+  puts json.show(doc)
+
+  old_version = doc.need_str("version")?
+  new_version = bump_minor(old_version)?
+  scripts = doc.need("scripts")?
+  var edited = with_field(doc, "version", new_version.to_json)
+  edited = with_field(edited, "scripts", with_field(scripts, "test", "lume test --all".to_json))
+  edited = with_field(edited, "homepage", "https://example.org/lume".to_json)
+  puts "version: #{old_version} -> #{new_version}"
+
+  text = json.show(edited)
+  puts text
+  path = "/tmp/lume-m63-a07.json"
+  File.write(path, text + "\n")?
+  back = json.parse(File.read(path)?)?
+  File.remove(path)?
+  back_version = back.need_str("version")?
+  puts "read back: version #{back_version}, keys #{back.keys.join(", ")}"
+  puts "scripts.test is #{back.path("scripts.test").map(json.show).or("missing")}"
+  puts "the original still says #{doc.need_str("version").or("?")}"
+  puts bump_minor("1.2")

@@ -1,0 +1,16 @@
+big: not an int: 1e20
+edge: int 999999999999999
+top: int 1000000000000000
+xs.1: int 20
+xs.2.y.0: not an int: true
+xs.3: nothing there
+xs.-1: nothing there
+xs.y: nothing there
+xs. 1: nothing there
+xs.+1: nothing there
+big.x: nothing there
+xs.1.z: nothing there
+dup: int 1
+nothing there
+{"xs":[10,20,{"y":[true]}],"big":1e20,"edge":999999999999999,"top":1000000000000000,"dup":1,"dup":2}
+exit: 0

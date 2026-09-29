@@ -1,0 +1,41 @@
+# a08 — a report of durations: seconds turned into "2h 05m" by hand
+# (`/` and `%` on `Int`, a zero-padding helper since `pad` fills with
+# spaces), and the same seconds shown as a clock with
+# `Time.format(secs, "%H:%M:%S")`, which reads them as a time on 1 January
+# 1970 and so drops whole days.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# build     2h 05m  02:05:30
+# tests    12m 05s  00:12:05
+# lint         45s  00:00:45
+# deploy    1h 00m  01:00:00
+# backup    1d 02h  02:03:04
+# idle          0s  00:00:00
+# migrate  59m 59s  00:59:59
+# total     1d 06h
+# longest: backup (1d 02h)
+# average: 4h 20m
+
+TASKS = [("build", 7530), ("tests", 725), ("lint", 45), ("deploy", 3600), ("backup", 93784), ("idle", 0), ("migrate", 3599)]
+
+def two(n: Int) -> Str = if n < 10: "0#{n}" else: "#{n}"
+
+# the two largest units, the smaller one padded to two digits
+def human(secs: Int) -> Str:
+  if secs < 60:
+    return "#{secs}s"
+  if secs < 3600:
+    return "#{secs / 60}m #{two(secs % 60)}s"
+  if secs < 86400:
+    return "#{secs / 3600}h #{two((secs % 3600) / 60)}m"
+  "#{secs / 86400}d #{two((secs % 86400) / 3600)}h"
+
+def main:
+  for name, secs in TASKS:
+    puts "#{name.pad_right(8)} #{human(secs).pad(7)}  #{Time.format(secs, "%H:%M:%S")}"
+  total = TASKS.map { |name, secs| secs }.sum
+  puts "#{"total".pad_right(8)} #{human(total).pad(7)}"
+  match TASKS.max_by { |name, secs| secs }:
+    Some((who, s)) -> puts "longest: #{who} (#{human(s)})"
+    None -> puts "no tasks"
+  puts "average: #{human(total / TASKS.len)}"

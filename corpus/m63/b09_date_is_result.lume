@@ -1,0 +1,14 @@
+# b09 — `Time.date` gives an `Int or Error`, so adding an hour to it
+# straight away is refused.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: this value is an `Int or Error` — it may be an error, so it cannot be used with `+` directly
+#   --> corpus/m63/b09_date_is_result.lume:14:8
+#    |
+# 14 |   puts d + 3600
+#    |        ^
+#   help: unwrap it first: `?` to pass the error up, `match` on `Ok(x)`/`Error(e)`, or `.or(default)`
+
+def main:
+  d = Time.date(2000, 2, 29)
+  puts d + 3600

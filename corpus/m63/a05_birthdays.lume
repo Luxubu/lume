@@ -1,0 +1,50 @@
+# a05 — a birthday reminder: days until each birthday from a fixed "today",
+# with `Time.date` for this year's or next year's date, `Time.year` for the
+# age reached, and `Time.format` for the weekday. A 29 February birthday
+# falls on 1 March in a year without one: `Time.date` refuses the day, and
+# the program catches that.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# today is Friday 14 March 2025
+# Rosa   Fri 14 Mar 2025  turns 35, today!
+# Mia    Sat 15 Mar 2025  turns 25, tomorrow
+# Alan   Mon 23 Jun 2025  turns 113, in 101 days
+# Grace  Tue 09 Dec 2025  turns 119, in 270 days
+# Ada    Wed 10 Dec 2025  turns 210, in 271 days
+# Linus  Sun 28 Dec 2025  turns 56, in 289 days
+# Larry  Sun 01 Mar 2026  turns 30, in 352 days
+# Tim    Fri 13 Mar 2026  turns 71, in 364 days
+# 2 birthdays in the next 30 days
+# Error("February 2025 has days 1 to 28, not 29")
+
+struct Birthday:
+  name: Str
+  born: Int
+  month: Int
+  day: Int
+
+PEOPLE = [Birthday("Ada", 1815, 12, 10), Birthday("Grace", 1906, 12, 9), Birthday("Alan", 1912, 6, 23), Birthday("Rosa", 1990, 3, 14), Birthday("Mia", 2000, 3, 15), Birthday("Larry", 1996, 2, 29), Birthday("Tim", 1955, 3, 13), Birthday("Linus", 1969, 12, 28)]
+
+# the birthday in a given year; 29 February moves to 1 March when there is none
+def in_year(b: Birthday, year: Int) -> Int:
+  match Time.date(year, b.month, b.day):
+    Ok(t) -> t
+    Error(_) -> Time.date(year, 3, 1).or(0)
+
+# the next birthday on or after `today`
+def next_birthday(b: Birthday, today: Int) -> Int:
+  this_year = in_year(b, Time.year(today))
+  if this_year >= today: this_year else: in_year(b, Time.year(today) + 1)
+
+def main -> () or Error:
+  today = Time.date(2025, 3, 14)?
+  puts "today is #{Time.format(today, "%A %d %B %Y")}"
+  upcoming = PEOPLE.sort_by { |b| next_birthday(b, today) }
+  for b in upcoming:
+    t = next_birthday(b, today)
+    days = (t - today) / 86400
+    note = if days == 0: "today!" elif days == 1: "tomorrow" else: "in #{days} days"
+    puts "#{b.name.pad_right(6)} #{Time.format(t, "%a %d %b %Y")}  turns #{Time.year(t) - b.born}, #{note}"
+  soon = PEOPLE.count { |b| next_birthday(b, today) - today < 30 * 86400 }
+  puts "#{soon} birthdays in the next 30 days"
+  puts Time.date(2025, 2, 29)

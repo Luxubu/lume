@@ -1,0 +1,8 @@
+full: api on port 9000, debug, ratio 0.75, tags: blue, edge
+sparse: worker on port 8080, quiet, ratio 0.50, tags: (no tags)
+medium: cache on port 6379, debug, ratio 0.50, tags: (no tags)
+wrong port: refused: `port` is a string, not a whole number
+no name: refused: `name` is missing
+bad tag: refused: `tags` item 2 is a number, not a string
+broken: refused: expected `"`, found `}` at position 13
+exit: 0

@@ -1,0 +1,91 @@
+# a09 — a JSON path explorer: walks a nested document by building dotted
+# paths and asking `path` for each, printing every value's `kind`, the
+# `keys` of each object and the number of `items` of each array. Then some
+# direct `path` queries, including ones that miss (a position past the end,
+# a key on a string, a word where a position is wanted), and a total over
+# two levels of arrays.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# (root): object with keys store, version
+#   store: object with keys name, open, shelves, owner
+#     store.name: string "Corner Books"
+#     store.open: bool true
+#     store.shelves: array of 2
+#       store.shelves.0: object with keys label, books
+#         store.shelves.0.label: string "fiction"
+#         store.shelves.0.books: array of 2
+#           store.shelves.0.books.0: object with keys title, price
+#             store.shelves.0.books.0.title: string "Dune"
+#             store.shelves.0.books.0.price: number 9.99
+#           store.shelves.0.books.1: object with keys title, price
+#             store.shelves.0.books.1.title: string "Emma"
+#             store.shelves.0.books.1.price: number 4.5
+#       store.shelves.1: object with keys label, books
+#         store.shelves.1.label: string "science"
+#         store.shelves.1.books: array of 0
+#     store.owner: null
+#   version: number 2
+# store.shelves.0.books.1.title -> "Emma"
+# store.shelves.5 -> missing
+# store.name.first -> missing
+# store.shelves.x -> missing
+# version -> 2
+# 2 books, 14.49 in all
+# a number has 0 keys, an object has 0 items
+
+import json
+import json.Json
+
+DOC = """
+  {
+    "store": {
+      "name": "Corner Books",
+      "open": true,
+      "shelves": [
+        {"label": "fiction", "books": [{"title": "Dune", "price": 9.99}, {"title": "Emma", "price": 4.5}]},
+        {"label": "science", "books": []}
+      ],
+      "owner": null
+    },
+    "version": 2
+  }
+  """
+
+def child(at: Str, step: Str) -> Str = if at.empty?: step else: "#{at}.#{step}"
+
+# prints the value at `at` (a dotted path from the root), then everything below it
+def explore(root: Json, at: Str):
+  node = if at.empty?: root else: root.path(at).or(Json.Null)
+  depth = if at.empty?: 0 else: at.split(".").len
+  pad = "  ".repeat(depth)
+  name = if at.empty?: "(root)" else: at
+  match node.kind:
+    "object" ->
+      puts "#{pad}#{name}: object with keys #{node.keys.join(", ")}"
+      for k in node.keys:
+        explore(root, child(at, k))
+    "array" ->
+      puts "#{pad}#{name}: array of #{node.items.len}"
+      for i in 0...node.items.len:
+        explore(root, child(at, "#{i}"))
+    "null" -> puts "#{pad}#{name}: null"
+    kind -> puts "#{pad}#{name}: #{kind} #{json.show(node)}"
+
+def main -> () or Error:
+  doc = json.parse(DOC)?
+  explore(doc, "")
+
+  for q in ["store.shelves.0.books.1.title", "store.shelves.5", "store.name.first", "store.shelves.x", "version"]:
+    puts "#{q} -> #{doc.path(q).map(json.show).or("missing")}"
+
+  var count = 0
+  var total = 0.0
+  for shelf in doc.path("store.shelves").or(Json.Null).items:
+    for book in shelf.path("books").or(Json.Null).items:
+      total += book.path("price").or(Json.Null).num.or(0.0)
+      count += 1
+  puts "#{count} books, #{total.decimals(2)} in all"
+
+  number_keys = doc.path("version").or(Json.Null).keys.len
+  object_items = doc.path("store").or(Json.Null).items.len
+  puts "a number has #{number_keys} keys, an object has #{object_items} items"

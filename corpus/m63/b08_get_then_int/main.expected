@@ -1,0 +1,7 @@
+error: this value is a `json.Json?` — it may be absent, so `.int` cannot be called on it directly
+  --> corpus/m63/b08_get_then_int/main.lume:16:22
+   |
+16 |   puts doc.get("age").int
+   |                      ^
+  help: unwrap it first: `match` on `Some(x)`/`None`, or `.or(default).int`
+exit: 1

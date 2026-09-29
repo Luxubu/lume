@@ -1,0 +1,11 @@
+NAME             CITY       PHONE    AGE
+---------------- ---------- -------- ---
+Edsger Dijkstra  Nuenen     555-0142  72
+Grace Hopper     Arlington  555-0199  85
+barbara Liskov   Boston     555-0123  84
+Ada Lovelace     London     555-0100  36
+Alan Turing      Wilmslow   -         41
+5 people, 4 with a phone, average age 63.6
+oldest: Grace Hopper, 85
+refused: person 2: `age` is a string, not a whole number
+exit: 0

@@ -1,0 +1,7 @@
+error: `%y` is not a date directive
+  --> corpus/m63/b07_format_directive.lume:14:23
+   |
+14 |   puts Time.format(t, "%d/%m/%y")
+   |                       ^
+  help: `Time.format` and `Time.parse` know %Y %m %d %H %M %S %j %a %A %b %B %s, and %% for a `%`
+exit: 1

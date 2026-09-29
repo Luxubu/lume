@@ -1,0 +1,104 @@
+# c01_logs — a log analyzer: JSON lines with timestamps, bucketed by hour.
+# Probes: json.parse on each line (and the position its error gives), need_*
+# decoding with `?`, Time.parse with a time of day and its error, flooring a
+# time to the hour, Time.format with %A %B, a map tally walked in insertion
+# order, max_by on a map, avg + decimals, and a summary written with json.obj.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 13 lines, 9 read, 4 refused
+#   line 8: expected `,` or `}` at position 46
+#   line 9: `04/03/2024 11:21` does not match `%Y-%m-%d %H:%M:%S`: expected `-` at position 2
+#   line 12: `ts` is missing
+#   line 13: `ms` is a number, not a whole number
+# by hour:
+#   2024-03-04 09:00  2 ##
+#   2024-03-04 10:00  4 ####
+#   2024-03-04 11:00  1 #
+#   2024-03-04 23:00  1 #
+#   2024-03-05 00:00  1 #
+# busiest: Monday 04 March, 10:00 to 11:00, 4 requests
+# slowest: /pay at 10:30:00, 1200 ms
+# by level: info 6, warn 2, error 1
+# mean: 207.4 ms
+# {"read":9,"refused":4,"busiest":"2024-03-04T10:00","levels":{"info":6,"warn":2,"error":1}}
+
+import json
+import json.Json
+
+LOG = """
+  {\"ts\": \"2024-03-04 09:15:02\", \"level\": \"info\", \"path\": \"/\", \"ms\": 12}
+  {\"ts\": \"2024-03-04 09:47:30\", \"level\": \"info\", \"path\": \"/cart\", \"ms\": 40}
+  {\"ts\": \"2024-03-04 10:02:11\", \"level\": \"warn\", \"path\": \"/cart\", \"ms\": 250}
+  {\"ts\": \"2024-03-04 10:05:59\", \"level\": \"info\", \"path\": \"/\", \"ms\": 9}
+  {\"ts\": \"2024-03-04 10:30:00\", \"level\": \"error\", \"path\": \"/pay\", \"ms\": 1200}
+  {\"ts\": \"2024-03-04 10:59:59\", \"level\": \"info\", \"path\": \"/cart\", \"ms\": 35}
+  {\"ts\": \"2024-03-04 11:00:00\", \"level\": \"info\", \"path\": \"/\", \"ms\": 11}
+  {\"ts\": \"2024-03-04 11:20:45\", \"level\": \"info\" \"path\": \"/\", \"ms\": 5}
+  {\"ts\": \"04/03/2024 11:21\", \"level\": \"info\", \"path\": \"/\", \"ms\": 8}
+  {\"ts\": \"2024-03-04 23:59:59\", \"level\": \"warn\", \"path\": \"/pay\", \"ms\": 300}
+  {\"ts\": \"2024-03-05 00:00:01\", \"level\": \"info\", \"path\": \"/\", \"ms\": 10}
+  {\"level\": \"info\", \"path\": \"/\", \"ms\": 5}
+  {\"ts\": \"2024-03-05 00:10:00\", \"level\": \"info\", \"path\": \"/\", \"ms\": 7.5}
+  """
+
+struct Entry:
+  at: Int
+  level: Str
+  path: Str
+  ms: Int
+
+  def self.from_json(j: Json) -> Entry or Error:
+    at = Time.parse(j.need_str("ts")?, "%Y-%m-%d %H:%M:%S")?
+    Entry(at: at, level: j.need_str("level")?, path: j.need_str("path")?, ms: j.need_int("ms")?)
+
+def read_line(line: Str) -> Entry or Error:
+  doc = json.parse(line)?
+  Entry.from_json(doc)
+
+def bar(n: Int) -> Str = "#".repeat(n)
+
+def main:
+  var entries: [Entry] = []
+  var refused: [Str] = []
+  var n = 0
+  for line in LOG.lines:
+    n += 1
+    match read_line(line):
+      Ok(e) -> entries.push(e)
+      Error(e) -> refused.push("line #{n}: #{e.message}")
+  puts "#{n} lines, #{entries.len} read, #{refused.len} refused"
+  for r in refused:
+    puts "  #{r}"
+
+  # requests per hour, keyed by the start of the hour
+  var hours: {Int: Int} = {}
+  for e in entries:
+    h = e.at - e.at % 3600
+    hours[h] = hours[h].or(0) + 1
+  puts "by hour:"
+  for h, c in hours:
+    puts "  #{Time.format(h, "%Y-%m-%d %H:%M")} #{c.pad(2)} #{bar(c)}"
+
+  top = hours.max_by { |h, c| c }
+  match top:
+    Some((h, c)) -> puts "busiest: #{Time.format(h, "%A %d %B, %H:%M")} to #{Time.format(h + 3600, "%H:%M")}, #{c} requests"
+    None -> puts "busiest: none"
+  busiest = match top:
+    Some((h, _)) -> Time.format(h, "%Y-%m-%dT%H:%M")
+    None -> ""
+
+  match entries.max_by { |e| e.ms }:
+    Some(e) -> puts "slowest: #{e.path} at #{Time.format(e.at, "%H:%M:%S")}, #{e.ms} ms"
+    None -> ()
+
+  var levels: {Str: Int} = {}
+  for e in entries:
+    levels[e.level] = levels[e.level].or(0) + 1
+  level_text = levels.map { |k, v| "#{k} #{v}" }.join(", ")
+  puts "by level: #{level_text}"
+  mean = entries.map { |e| e.ms }.avg
+  puts "mean: #{mean.decimals(1)} ms"
+
+  level_pairs = levels.map { |k, v| (k, v.to_json) }.to_list
+  summary = json.obj([("read", entries.len.to_json), ("refused", refused.len.to_json), ("busiest", busiest.to_json), ("levels", json.obj(level_pairs))])
+  puts json.show(summary)

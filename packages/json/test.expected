@@ -4,7 +4,9 @@ test errors say where ... ok
 test queries ... ok
 test typed reads ... ok
 test decoding says what was wrong ... ok
+test optional fields ... ok
+test strict JSON ... ok
 test encoding ... ok
 
-7 tests: 7 passed, 0 failed
+9 tests: 9 passed, 0 failed
 exit: 0

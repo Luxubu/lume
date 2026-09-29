@@ -1,0 +1,7 @@
+error: this value is an `Int or Error` — it may be an error, so it cannot be used with `+` directly
+  --> corpus/m63/b09_date_is_result.lume:14:8
+   |
+14 |   puts d + 3600
+   |        ^
+  help: unwrap it first: `?` to pass the error up, `match` on `Ok(x)`/`Error(e)`, or `.or(default)`
+exit: 1

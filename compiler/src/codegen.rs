@@ -558,6 +558,8 @@ fn lume_time_parse(text: &str, pattern: &str) -> ::std::result::Result<i64, Erro
     let t: Vec<char> = text.chars().collect();
     let mut i = 0usize;
     let (mut y, mut mo, mut d, mut h, mut mi, mut sec) = (1970i64, 1i64, 1i64, 0i64, 0i64, 0i64);
+    // `%j`: a day of the year, turned into a month and day once the year is known
+    let mut yday: Option<i64> = None;
     let fail = |why: String| Error { message: format!("`{}` does not match `{}`: {}", text, pattern, why) };
     let mut ps = pattern.chars();
     while let Some(c) = ps.next() {
@@ -569,24 +571,38 @@ fn lume_time_parse(text: &str, pattern: &str) -> ::std::result::Result<i64, Erro
             continue;
         }
         let dir = ps.next().unwrap_or('%');
-        let mut digits = |most: usize, what: &str| -> ::std::result::Result<i64, Error> {
-            let start = i;
-            while i < t.len() && i - start < most && t[i].is_ascii_digit() {
-                i += 1;
+        // up to `most` digits at `i`, moving `i` past them
+        fn read_digits(t: &[char], i: &mut usize, most: usize) -> Option<i64> {
+            let start = *i;
+            while *i < t.len() && *i - start < most && t[*i].is_ascii_digit() {
+                *i += 1;
             }
-            if i == start {
-                return Err(fail(format!("expected the {} at position {}", what, start)));
-            }
-            Ok(t[start..i].iter().collect::<String>().parse::<i64>().unwrap_or(0))
+            if *i == start { None } else { t[start..*i].iter().collect::<String>().parse::<i64>().ok() }
+        }
+        let mut digits = |i: &mut usize, most: usize, what: &str| -> ::std::result::Result<i64, Error> {
+            let at = *i;
+            read_digits(&t, i, most).ok_or_else(|| fail(format!("expected the {} at position {}", what, at)))
         };
         match dir {
-            'Y' => y = digits(4, "year")?,
-            'm' => mo = digits(2, "month")?,
-            'd' => d = digits(2, "day")?,
-            'H' => h = digits(2, "hour")?,
-            'M' => mi = digits(2, "minute")?,
-            'S' => sec = digits(2, "second")?,
-            's' => return Ok(digits(20, "seconds")?),
+            'Y' => y = digits(&mut i, 4, "year")?,
+            'm' => mo = digits(&mut i, 2, "month")?,
+            'd' => d = digits(&mut i, 2, "day")?,
+            'H' => h = digits(&mut i, 2, "hour")?,
+            'M' => mi = digits(&mut i, 2, "minute")?,
+            'S' => sec = digits(&mut i, 2, "second")?,
+            'j' => yday = Some(digits(&mut i, 3, "day of the year")?),
+            's' => {
+                // seconds since 1970, which may be before it
+                let neg = t.get(i) == Some(&'-');
+                if neg {
+                    i += 1;
+                }
+                let n = digits(&mut i, 20, "seconds")?;
+                if i < t.len() {
+                    return Err(fail(format!("unexpected `{}` at position {}", t[i..].iter().collect::<String>(), i)));
+                }
+                return Ok(if neg { -n } else { n });
+            }
             'b' | 'B' | 'a' | 'A' => {
                 let names: &[&str] = if dir == 'b' || dir == 'B' { &LUME_MONTHS } else { &LUME_WEEKDAYS };
                 let rest: String = t[i..].iter().collect();
@@ -613,11 +629,21 @@ fn lume_time_parse(text: &str, pattern: &str) -> ::std::result::Result<i64, Erro
             other => return Err(fail(format!("`%{}` is not a date directive", other))),
         }
     }
+    // like every other mismatch, said with where it is
     if i < t.len() {
-        return Err(fail(format!("`{}` is left over", t[i..].iter().collect::<String>())));
+        return Err(fail(format!("unexpected `{}` at position {}", t[i..].iter().collect::<String>(), i)));
     }
     if h > 23 || mi > 59 || sec > 60 {
         return Err(fail(format!("{:02}:{:02}:{:02} is not a time of day", h, mi, sec)));
+    }
+    if let Some(n) = yday {
+        let last = if lume_days_in_month(y, 2) == 29 { 366 } else { 365 };
+        if n < 1 || n > last {
+            return Err(fail(format!("day {} of {} is not 1 to {}", n, y, last)));
+        }
+        let (_, m2, d2) = lume_civil_from_days(lume_days_from_civil(y, 1, 1) + n - 1);
+        mo = m2;
+        d = d2;
     }
     let day = lume_time_date(y, mo, d).map_err(|e| fail(e.message))?;
     Ok(day + h * 3600 + mi * 60 + sec)

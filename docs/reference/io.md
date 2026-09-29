@@ -321,8 +321,26 @@ def main -> () or Error:
 | `%S` | `00` | | `%s` | seconds since 1970 |
 | `%%` | `%` | | | |
 
-`Time.parse` reads what `Time.format` writes, and its error says where the
-text stopped matching: ``Error("`29/09/2024` does not match `%Y-%m-%d`:
+`Time.parse` reads what `Time.format` writes. **Any other character in the
+pattern must appear as it is** — the `T` of `%Y-%m-%dT%H:%M:%S`, a `/`, a
+space. `%Y` reads up to four digits, `%j` up to three, `%m %d %H %M %S` up to
+two, and `%s` any number, with a `-` before 1970. `%b %B %a %A` read names in
+any case, and a weekday is read and then ignored. A part the pattern leaves
+out is the start of its range: `%Y-%m` is the 1st at midnight.
+
+Its errors say where the text stopped matching, or what did not exist:
+
+| error | when |
+|---|---|
+| ``expected `-` at position 4`` | a character of the pattern is not there |
+| ``expected the month at position 5`` | a directive found no digits |
+| ``unexpected ` extra` at position 10`` | the pattern ended before the text |
+| ``month 13 is not 1 to 12`` | the parts make no date |
+| ``February 2023 has days 1 to 28, not 29`` | |
+| ``24:00:00 is not a time of day`` | |
+| ``day 367 of 2024 is not 1 to 366`` | `%j` past the end of the year |
+
+each after the text and the pattern, as in ``Error("`29/09/2024` does not match `%Y-%m-%d`:
 expected `-` at position 2")``. **A pattern written out in the program is
 checked when it is compiled**, so `%Q` is an error before anything runs:
 

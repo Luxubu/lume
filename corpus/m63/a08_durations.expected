@@ -1,0 +1,11 @@
+build     2h 05m  02:05:30
+tests    12m 05s  00:12:05
+lint         45s  00:00:45
+deploy    1h 00m  01:00:00
+backup    1d 02h  02:03:04
+idle          0s  00:00:00
+migrate  59m 59s  00:59:59
+total     1d 06h
+longest: backup (1d 02h)
+average: 4h 20m
+exit: 0

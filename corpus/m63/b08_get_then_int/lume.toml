@@ -1,0 +1,6 @@
+[package]
+name = "b08_get_then_int"
+version = "0.1.0"
+
+[dependencies]
+json = { path = "../../../packages/json" }

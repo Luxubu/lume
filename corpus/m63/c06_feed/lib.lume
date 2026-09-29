@@ -1,0 +1,35 @@
+# c06_feed — a library for c06_timeline: an interface over anything decoded
+# with a time, and generic helpers for decoding a list and writing one.
+# It depends on json itself; its own types are defined by the program.
+
+import json
+import json.Json
+import json.ToJson
+
+# Anything with a time. `stamp` and `line` are asked for; the rest come free.
+pub interface Dated:
+  def stamp -> Int
+  def line -> Str
+
+  def day -> Str = Time.format(stamp, "%Y-%m-%d")
+  def month -> Str = Time.format(stamp, "%Y-%m")
+  def when -> Str = Time.format(stamp, "%a %d %b %H:%M")
+
+pub def latest[T: Dated](xs: [T]) -> T? = xs.max_by { |x| x.stamp }
+
+pub def by_month[T: Dated](xs: [T]) -> {Str: [T]} = xs.group_by { |x| x.month }
+
+# Decodes each item with `decode`; what fails is kept as a message naming
+# what it was and where: "post 3: `words` is missing".
+pub def decode_all[T](items: [Json], what: Str, decode: (Json) -> T or Error) -> ([T], [Str]):
+  var good: [T] = []
+  var bad: [Str] = []
+  for (i, j) in items.enumerate:
+    match decode(j):
+      Ok(x) -> good.push(x)
+      Error(e) -> bad.push("#{what} #{i + 1}: #{e.message}")
+  (good, bad)
+
+# {"kind": ..., "count": n, "items": [...]} for a list of anything with `to_json`
+pub def envelope[T: ToJson](kind: Str, items: [T]) -> Json =
+  json.obj([("kind", kind.to_json), ("count", items.len.to_json), ("items", Json.Arr(items.map { |x| x.to_json }.to_list))])

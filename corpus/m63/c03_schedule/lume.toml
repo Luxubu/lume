@@ -1,0 +1,6 @@
+[package]
+name = "c03_schedule"
+version = "0.1.0"
+
+[dependencies]
+json = { path = "../../../packages/json" }

@@ -1,0 +1,72 @@
+# a02 — an address book read from JSON, sorted by surname (ignoring case)
+# and printed as a table. `need_items` and `map_error` to say which entry
+# was wrong; an optional field (`phone`) kept as a `Str?`; `pad` and
+# `pad_right` for the columns; `avg` and `max_by` for a summary line.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# NAME             CITY       PHONE    AGE
+# ---------------- ---------- -------- ---
+# Edsger Dijkstra  Nuenen     555-0142  72
+# Grace Hopper     Arlington  555-0199  85
+# barbara Liskov   Boston     555-0123  84
+# Ada Lovelace     London     555-0100  36
+# Alan Turing      Wilmslow   -         41
+# 5 people, 4 with a phone, average age 63.6
+# oldest: Grace Hopper, 85
+# refused: person 2: `age` is a string, not a whole number
+
+import json
+import json.Json
+
+BOOK = """
+  {
+    "people": [
+      {"name": "Grace Hopper", "city": "Arlington", "phone": "555-0199", "age": 85},
+      {"name": "Ada Lovelace", "city": "London", "phone": "555-0100", "age": 36},
+      {"name": "Alan Turing", "city": "Wilmslow", "age": 41},
+      {"name": "Edsger Dijkstra", "city": "Nuenen", "phone": "555-0142", "age": 72},
+      {"name": "barbara Liskov", "city": "Boston", "phone": "555-0123", "age": 84}
+    ]
+  }
+  """
+
+BAD = """
+  {"people": [{"name": "Ada", "city": "London", "age": 36}, {"name": "Bo", "city": "Oslo", "age": "40"}]}
+  """
+
+struct Person:
+  name: Str
+  city: Str
+  phone: Str?
+  age: Int
+
+  def self.from_json(j: Json) -> Person or Error:
+    phone = match j.get("phone"):
+      Some(p) -> p.str
+      None -> None
+    Person(name: j.need_str("name")?, city: j.need_str("city")?, phone: phone, age: j.need_int("age")?)
+
+  # the last word of the name, lowered, so `barbara` sorts with the capitals
+  def surname -> Str = name.split.last.or(name).downcase
+
+def load(text: Str) -> [Person] or Error:
+  doc = json.parse(text)?
+  var people: [Person] = []
+  for (i, p) in doc.need_items("people")?.enumerate:
+    people.push(Person.from_json(p).map_error { |e| Error("person #{i + 1}: #{e.message}") }?)
+  people
+
+def main -> () or Error:
+  people = load(BOOK)?
+  puts "#{"NAME".pad_right(16)} #{"CITY".pad_right(10)} #{"PHONE".pad_right(8)} #{"AGE".pad(3)}"
+  puts "#{"-".repeat(16)} #{"-".repeat(10)} #{"-".repeat(8)} #{"-".repeat(3)}"
+  for x in people.sort_by { |q| q.surname }:
+    puts "#{x.name.pad_right(16)} #{x.city.pad_right(10)} #{x.phone.or("-").pad_right(8)} #{x.age.pad(3)}"
+  with_phone = people.count { |q| q.phone.some? }
+  puts "#{people.len} people, #{with_phone} with a phone, average age #{people.map(_.age).avg.decimals(1)}"
+  match people.max_by { |q| q.age }:
+    Some(o) -> puts "oldest: #{o.name}, #{o.age}"
+    None -> puts "nobody"
+  match load(BAD):
+    Ok(ps) -> puts "accepted #{ps.len}?"
+    Error(e) -> puts "refused: #{e.message}"

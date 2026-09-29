@@ -1,0 +1,6 @@
+[package]
+name = "b06_not_tojson"
+version = "0.1.0"
+
+[dependencies]
+json = { path = "../../../packages/json" }

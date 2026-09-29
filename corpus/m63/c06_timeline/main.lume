@@ -1,0 +1,107 @@
+# c06_timeline — posts and comments decoded from one JSON document, then
+# handled through an interface and generic helpers from a library package of
+# its own (../c06_feed, which depends on json).
+# Probes: a library's generic `decode_all[T]` handed a type's `from_json` as
+# its block; a field that must not be named like the interface's method
+# (`at` holds the time, `stamp` is the method); generic functions of my own
+# bounded by the library's interface (`[T: c06_feed.Dated]`) calling its
+# defaults; a `[c06_feed.Dated]` list holding two types; the library's
+# `envelope[T: ToJson]` with my structs and with plain Ints; and the
+# Time.parse error for a `T` that is not there.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# refused:
+#   post 3: `words` is missing
+#   comment 3: `2024-10-14 08:20` does not match `%Y-%m-%dT%H:%M`: expected `T` at position 10
+# posts: 3, latest 2024-10-14
+#   2024-10: 2
+#   2024-09: 1
+# comments: 2, latest 2024-10-02
+#   2024-10: 1
+#   2024-09: 1
+# timeline:
+#   Sat 28 Sep 18:00  grace posted "JSON by hand" (800 words)
+#   Mon 30 Sep 07:45  ada on "JSON by hand": more!
+#   Wed 02 Oct 09:30  ada posted "Dates in Lume" (1200 words)
+#   Wed 02 Oct 10:05  grace on "Dates in Lume": nice
+#   Mon 14 Oct 08:15  ada posted "Tasks" (950 words)
+# {"kind":"posts","count":3,"items":[{"title":"Dates in Lume","day":"2024-10-02"},{"title":"JSON by hand","day":"2024-09-28"},{"title":"Tasks","day":"2024-10-14"}]}
+# {"kind":"words","count":3,"items":[1200,800,950]}
+# {"kind":"comments","count":2,"items":[{"post":"Dates in Lume","who":"grace"},{"post":"JSON by hand","who":"ada"}]}
+
+import json
+import json.Json
+import c06_feed
+
+DOC = """
+  {\"posts\": [
+     {\"title\": \"Dates in Lume\", \"author\": \"ada\", \"at\": \"2024-10-02T09:30\", \"words\": 1200},
+     {\"title\": \"JSON by hand\", \"author\": \"grace\", \"at\": \"2024-09-28T18:00\", \"words\": 800},
+     {\"title\": \"Untitled\", \"author\": \"linus\", \"at\": \"2024-10-05T12:00\"},
+     {\"title\": \"Tasks\", \"author\": \"ada\", \"at\": \"2024-10-14T08:15\", \"words\": 950}
+   ],
+   \"comments\": [
+     {\"post\": \"Dates in Lume\", \"who\": \"grace\", \"at\": \"2024-10-02T10:05\", \"text\": \"nice\"},
+     {\"post\": \"JSON by hand\", \"who\": \"ada\", \"at\": \"2024-09-30T07:45\", \"text\": \"more!\"},
+     {\"post\": \"Tasks\", \"who\": \"linus\", \"at\": \"2024-10-14 08:20\", \"text\": \"?\"}
+   ]}
+  """
+
+struct Post:
+  title: Str
+  author: Str
+  at: Int
+  words: Int
+
+  def self.from_json(j: Json) -> Post or Error:
+    Post(title: j.need_str("title")?, author: j.need_str("author")?, at: Time.parse(j.need_str("at")?, "%Y-%m-%dT%H:%M")?, words: j.need_int("words")?)
+
+  def stamp -> Int = at
+  def line -> Str = "#{author} posted \"#{title}\" (#{words} words)"
+  def to_json -> Json = json.obj([("title", title.to_json), ("day", Time.format(at, "%Y-%m-%d").to_json)])
+
+struct Comment:
+  post: Str
+  who: Str
+  at: Int
+  text: Str
+
+  def self.from_json(j: Json) -> Comment or Error:
+    Comment(post: j.need_str("post")?, who: j.need_str("who")?, at: Time.parse(j.need_str("at")?, "%Y-%m-%dT%H:%M")?, text: j.need_str("text")?)
+
+  def stamp -> Int = at
+  def line -> Str = "#{who} on \"#{post}\": #{text}"
+  def to_json -> Json = json.obj([("post", post.to_json), ("who", who.to_json)])
+
+# how many, the latest, and how many in each month, for anything Dated
+def report[T: c06_feed.Dated](label: Str, xs: [T]):
+  match c06_feed.latest(xs):
+    Some(x) -> puts "#{label}: #{xs.len}, latest #{x.day}"
+    None -> puts "#{label}: none"
+  for m, group in c06_feed.by_month(xs):
+    puts "  #{m}: #{group.len}"
+
+def main -> () or Error:
+  doc = json.parse(DOC)?
+  (posts, bad_posts) = c06_feed.decode_all(doc.need_items("posts")?, "post", Post.from_json)
+  (comments, bad_comments) = c06_feed.decode_all(doc.need_items("comments")?, "comment", Comment.from_json)
+  puts "refused:"
+  for b in bad_posts + bad_comments:
+    puts "  #{b}"
+
+  report("posts", posts)
+  report("comments", comments)
+
+  var timeline: [c06_feed.Dated] = []
+  for p in posts:
+    timeline.push(p)
+  for c in comments:
+    timeline.push(c)
+  rows = timeline.map { |d| (d.stamp, "#{d.when}  #{d.line}") }.to_list.sort
+  puts "timeline:"
+  for row in rows:
+    puts "  #{row.1}"
+
+  puts json.show(c06_feed.envelope("posts", posts))
+  puts json.show(c06_feed.envelope("words", posts.map { |p| p.words }.to_list))
+  puts json.show(c06_feed.envelope("comments", comments))

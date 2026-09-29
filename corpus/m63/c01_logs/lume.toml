@@ -1,0 +1,6 @@
+[package]
+name = "c01_logs"
+version = "0.1.0"
+
+[dependencies]
+json = { path = "../../../packages/json" }

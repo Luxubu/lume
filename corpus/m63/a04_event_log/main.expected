@@ -1,0 +1,15 @@
+skipped incident closed: `2024-03-10 11:02:45` does not match `%Y-%m-%dT%H:%M:%S`: expected `T` at position 10
+6 events over 3 days
+Saturday 09 March
+  08:00  standup
+  22:15  deploy started
+  22:47  deploy finished
+Sunday 10 March
+  00:05  backup
+  09:30  incident opened
+Monday 11 March
+  13:20  review
+first: 2024-03-09T08:00:00
+from first to last: 2 days, 5 hours, 20 minutes
+busiest: Saturday 09 March (3 events)
+exit: 0

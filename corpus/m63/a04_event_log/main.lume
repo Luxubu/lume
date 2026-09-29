@@ -1,0 +1,73 @@
+# a04 — an event log whose entries carry ISO timestamps, read from JSON,
+# parsed with `Time.parse`, sorted, and grouped by day with `Time.format` as
+# the key. A letter in the pattern (`T`) is matched as itself; an entry
+# whose timestamp has a space there is reported and skipped. Formatting
+# with the same pattern gives the text back.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# skipped incident closed: `2024-03-10 11:02:45` does not match `%Y-%m-%dT%H:%M:%S`: expected `T` at position 10
+# 6 events over 3 days
+# Saturday 09 March
+#   08:00  standup
+#   22:15  deploy started
+#   22:47  deploy finished
+# Sunday 10 March
+#   00:05  backup
+#   09:30  incident opened
+# Monday 11 March
+#   13:20  review
+# first: 2024-03-09T08:00:00
+# from first to last: 2 days, 5 hours, 20 minutes
+# busiest: Saturday 09 March (3 events)
+
+import json
+import json.Json
+
+ISO = "%Y-%m-%dT%H:%M:%S"
+
+LOG = """
+  [
+    {"at": "2024-03-09T22:15:00", "what": "deploy started"},
+    {"at": "2024-03-09T22:47:30", "what": "deploy finished"},
+    {"at": "2024-03-10T00:05:12", "what": "backup"},
+    {"at": "2024-03-09T08:00:00", "what": "standup"},
+    {"at": "2024-03-11T13:20:00", "what": "review"},
+    {"at": "2024-03-10 11:02:45", "what": "incident closed"},
+    {"at": "2024-03-10T09:30:00", "what": "incident opened"}
+  ]
+  """
+
+struct Event:
+  stamp: Int
+  what: Str
+
+def main -> () or Error:
+  doc = json.parse(LOG)?
+  var events: [Event] = []
+  for entry in doc.items:
+    at_text = entry.need_str("at")?
+    what = entry.need_str("what")?
+    match Time.parse(at_text, "%Y-%m-%dT%H:%M:%S"):
+      Ok(t) -> events.push(Event(stamp: t, what: what))
+      Error(e) -> puts "skipped #{what}: #{e.message}"
+
+  sorted = events.sort_by { |ev| ev.stamp }
+  groups = sorted.group_by { |ev| Time.format(ev.stamp, "%A %d %B") }
+  puts "#{sorted.len} events over #{groups.len} days"
+  for day, evs in groups:
+    puts day
+    for ev in evs:
+      puts "  #{Time.format(ev.stamp, "%H:%M")}  #{ev.what}"
+
+  first = sorted.at(0)
+  last = sorted.at(sorted.len - 1)
+  puts "first: #{Time.format(first.stamp, ISO)}"
+  span = last.stamp - first.stamp
+  days = span / 86400
+  hours = (span % 86400) / 3600
+  minutes = (span % 3600) / 60
+  puts "from first to last: #{days} days, #{hours} hours, #{minutes} minutes"
+
+  match groups.max_by { |day, evs| evs.len }:
+    Some(best) -> puts "busiest: #{best.0} (#{best.1.len} events)"
+    None -> puts "no events"

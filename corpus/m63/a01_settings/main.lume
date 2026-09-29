@@ -1,0 +1,118 @@
+# a01 — a settings file decoded into a struct, with defaults for the fields
+# that may be left out. `need_str` for the one field that must be there;
+# `get` then `int` / `bool` / `num` / `items` for the optional ones, where a
+# missing key or a `null` takes the default and a value of the wrong kind is
+# refused with a message naming the field. A whole-number float (`6379.0`)
+# is accepted by `int`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# full: api on port 9000, debug, ratio 0.75, tags: blue, edge
+# sparse: worker on port 8080, quiet, ratio 0.50, tags: (no tags)
+# medium: cache on port 6379, debug, ratio 0.50, tags: (no tags)
+# wrong port: refused: `port` is a string, not a whole number
+# no name: refused: `name` is missing
+# bad tag: refused: `tags` item 2 is a number, not a string
+# broken: refused: expected `"`, found `}` at position 13
+
+import json
+import json.Json
+
+FULL = """
+  {"name": "api", "port": 9000, "debug": true, "ratio": 0.75, "tags": ["blue", "edge"]}
+  """
+
+SPARSE = """
+  {"name": "worker", "ratio": null}
+  """
+
+MEDIUM = """
+  {"name": "cache", "port": 6379.0, "debug": true}
+  """
+
+WRONG_PORT = """
+  {"name": "cron", "port": "80"}
+  """
+
+NO_NAME = """
+  {"port": 81}
+  """
+
+BAD_TAG = """
+  {"name": "x", "tags": ["a", 2]}
+  """
+
+BROKEN = """
+  {"name": "y",}
+  """
+
+struct Settings:
+  name: Str
+  port: Int
+  debug: Bool
+  ratio: Float
+  tags: [Str]
+
+  def self.from_json(j: Json) -> Settings or Error:
+    name = j.need_str("name")?
+    port = int_or(j, "port", 8080)?
+    debug = bool_or(j, "debug", false)?
+    ratio = num_or(j, "ratio", 0.5)?
+    tags = strs_or_none(j, "tags")?
+    Settings(name: name, port: port, debug: debug, ratio: ratio, tags: tags)
+
+  def line -> Str:
+    mode = if debug: "debug" else: "quiet"
+    tag_text = if tags.empty?: "(no tags)" else: tags.join(", ")
+    "#{name} on port #{port}, #{mode}, ratio #{ratio.decimals(2)}, tags: #{tag_text}"
+
+# "a string", "an array": for messages
+def a_kind(j: Json) -> Str:
+  k = j.kind
+  if k == "array" or k == "object": "an #{k}" else: "a #{k}"
+
+# the value under `key`, when it is there and is not `null`
+def present(j: Json, key: Str) -> Json?:
+  v = j.get(key)?
+  if v.null?:
+    return None
+  Some(v)
+
+def int_or(j: Json, key: Str, default: Int) -> Int or Error:
+  v = match present(j, key):
+    Some(x) -> x
+    None -> return default
+  v.int.or_error("`#{key}` is #{a_kind(v)}, not a whole number")
+
+def bool_or(j: Json, key: Str, default: Bool) -> Bool or Error:
+  v = match present(j, key):
+    Some(x) -> x
+    None -> return default
+  v.bool.or_error("`#{key}` is #{a_kind(v)}, not true or false")
+
+def num_or(j: Json, key: Str, default: Float) -> Float or Error:
+  v = match present(j, key):
+    Some(x) -> x
+    None -> return default
+  v.num.or_error("`#{key}` is #{a_kind(v)}, not a number")
+
+def strs_or_none(j: Json, key: Str) -> [Str] or Error:
+  var out: [Str] = []
+  v = match present(j, key):
+    Some(x) -> x
+    None -> return out
+  if v.kind != "array":
+    return Error("`#{key}` is #{a_kind(v)}, not an array")
+  for (i, item) in v.items.enumerate:
+    out.push(item.str.or_error("`#{key}` item #{i + 1} is #{a_kind(item)}, not a string")?)
+  out
+
+def load(text: Str) -> Settings or Error:
+  doc = json.parse(text)?
+  Settings.from_json(doc)
+
+def main:
+  docs = [("full", FULL), ("sparse", SPARSE), ("medium", MEDIUM), ("wrong port", WRONG_PORT), ("no name", NO_NAME), ("bad tag", BAD_TAG), ("broken", BROKEN)]
+  for (label, text) in docs:
+    match load(text):
+      Ok(s) -> puts "#{label}: #{s.line}"
+      Error(e) -> puts "#{label}: refused: #{e.message}"

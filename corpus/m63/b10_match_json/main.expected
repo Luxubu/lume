@@ -1,0 +1,7 @@
+error: this `match` on `json.Json` does not cover: Obj(_)
+  --> corpus/m63/b10_match_json/main.lume:15:3
+   |
+15 |   match j:
+   |   ^
+  help: add an arm for Obj(_), or a final `_ ->` arm
+exit: 1

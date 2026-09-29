@@ -1,0 +1,36 @@
+# b12 — `Time.parse` with `%j`, with month names in lower and upper case,
+# with a weekday name, with trailing text, with `%s` below zero, before
+# 1970, on 29 February 2023, and with `%%`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 1709164800 = 2024-02-29 00:00
+# 1735603200 = 2024-12-31 00:00
+# 1735084800 = 2024-12-25 00:00
+# 1735084800 = 2024-12-25 00:00
+# 1735084800 = 2024-12-25 00:00
+# 1735084800 = 2024-12-25 00:00
+# 1727599980 = 2024-09-29 08:53
+# error: `2024-09-29 extra` does not match `%Y-%m-%d`: unexpected ` extra` at position 10
+# -1 = 1969-12-31 23:59
+# -2208988800 = 1900-01-01 00:00
+# error: `2023-02-29` does not match `%Y-%m-%d`: February 2023 has days 1 to 28, not 29
+# 1704067200 = 2024-01-01 00:00
+
+def show(r: Int or Error) -> Str:
+  match r:
+    Ok(t) -> "#{t} = #{Time.format(t, "%Y-%m-%d %H:%M")}"
+    Error(e) -> "error: #{e.message}"
+
+def main:
+  puts show(Time.parse("2024 060", "%Y %j"))
+  puts show(Time.parse("2024 366", "%Y %j"))
+  puts show(Time.parse("25 dec 2024", "%d %b %Y"))
+  puts show(Time.parse("25 DEC 2024", "%d %b %Y"))
+  puts show(Time.parse("25 december 2024", "%d %B %Y"))
+  puts show(Time.parse("Wednesday 25 December 2024", "%A %d %B %Y"))
+  puts show(Time.parse("2024-09-29 08:53", "%Y-%m-%d %H:%M"))
+  puts show(Time.parse("2024-09-29 extra", "%Y-%m-%d"))
+  puts show(Time.parse("-1", "%s"))
+  puts show(Time.parse("1900-01-01", "%Y-%m-%d"))
+  puts show(Time.parse("2023-02-29", "%Y-%m-%d"))
+  puts show(Time.parse("100% 2024", "100%% %Y"))

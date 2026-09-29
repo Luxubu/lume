@@ -1,0 +1,123 @@
+# c03_schedule — a scheduler: jobs with a start and a repeat interval are read
+# from JSON, and the next five runs after a fixed "now" are listed, across
+# the leap day of 2024 and the ends of months.
+# Probes: need / need_str / need_int on a nested object, `get(..).some?`,
+# Time.parse with %H:%M and its position error, date arithmetic in seconds,
+# Time.format with %a %d %b, Time.month / Time.day / Time.day_of_year,
+# sorting (Int, Str) tuples, a two-name block over a chain of tuples, and
+# `main -> () or Error` with `?` on the document.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# now: Tue 27 Feb 2024 12:00
+# refused:
+#   job 5 (broken): `2024/02/27 10:00` does not match `%Y-%m-%d %H:%M`: expected `-` at position 4
+#   job 6 (never): `every` needs `days` or `hours`
+#   job 7 (fast): `hours` is a number, not a whole number
+# backup, every day from Sun 25 Feb 02:00:
+#   Wed 28 Feb 02:00 | Thu 29 Feb 02:00 | Fri 01 Mar 02:00 | Sat 02 Mar 02:00 | Sun 03 Mar 02:00
+# report, every 7 days from Mon 26 Feb 09:00:
+#   Mon 04 Mar 09:00 | Mon 11 Mar 09:00 | Mon 18 Mar 09:00 | Mon 25 Mar 09:00 | Mon 01 Apr 09:00
+# sync, every 6 hours from Tue 27 Feb 10:15:
+#   Tue 27 Feb 16:15 | Tue 27 Feb 22:15 | Wed 28 Feb 04:15 | Wed 28 Feb 10:15 | Wed 28 Feb 16:15
+# rent, every 30 days from Fri 01 Mar 00:00:
+#   Fri 01 Mar 00:00 | Sun 31 Mar 00:00 | Tue 30 Apr 00:00 | Thu 30 May 00:00 | Sat 29 Jun 00:00
+# next five of all:
+#   Tue 27 Feb 16:15  sync
+#   Tue 27 Feb 22:15  sync
+#   Wed 28 Feb 02:00  backup
+#   Wed 28 Feb 04:15  sync
+#   Wed 28 Feb 10:15  sync
+# on 29 February (day 60): backup at 02:00
+# [{"job":"sync","at":"2024-02-27 16:15"},{"job":"sync","at":"2024-02-27 22:15"},{"job":"backup","at":"2024-02-28 02:00"},{"job":"sync","at":"2024-02-28 04:15"},{"job":"sync","at":"2024-02-28 10:15"}]
+
+import json
+import json.Json
+
+PLAN = """
+  {\"now\": \"2024-02-27 12:00\", \"jobs\": [
+    {\"name\": \"backup\", \"start\": \"2024-02-25 02:00\", \"every\": {\"days\": 1}},
+    {\"name\": \"report\", \"start\": \"2024-02-26 09:00\", \"every\": {\"days\": 7}},
+    {\"name\": \"sync\", \"start\": \"2024-02-27 10:15\", \"every\": {\"hours\": 6}},
+    {\"name\": \"rent\", \"start\": \"2024-03-01 00:00\", \"every\": {\"days\": 30}},
+    {\"name\": \"broken\", \"start\": \"2024/02/27 10:00\", \"every\": {\"days\": 1}},
+    {\"name\": \"never\", \"start\": \"2024-02-27 10:00\", \"every\": {}},
+    {\"name\": \"fast\", \"start\": \"2024-02-27 10:00\", \"every\": {\"hours\": 0.5}}
+  ]}
+  """
+
+DAY = 86400
+HOUR = 3600
+
+# seconds between runs, from {"days": n} or {"hours": n}
+def interval(e: Json) -> Int or Error:
+  if e.get("days").some?:
+    return e.need_int("days")? * DAY
+  if e.get("hours").some?:
+    return e.need_int("hours")? * HOUR
+  Error("`every` needs `days` or `hours`")
+
+struct Job:
+  name: Str
+  start: Int
+  step: Int
+
+  def self.from_json(j: Json) -> Job or Error:
+    name = j.need_str("name")?
+    start = Time.parse(j.need_str("start")?, "%Y-%m-%d %H:%M")?
+    step = interval(j.need("every")?)?
+    Job(name: name, start: start, step: step)
+
+  # the first `n` runs at or after `now`
+  def runs(now: Int, n: Int) -> [Int]:
+    first = if start >= now: start else: start + (now - start + step - 1) / step * step
+    (0...n).map { |i| first + i * step }.to_list
+
+  def every_text -> Str:
+    if step % DAY == 0:
+      days = step / DAY
+      if days == 1:
+        return "every day"
+      return "every #{days} days"
+    "every #{step / HOUR} hours"
+
+struct Run:
+  job: Str
+  at: Int
+
+  def to_json -> Json = json.obj([("job", job.to_json), ("at", Time.format(at, "%Y-%m-%d %H:%M").to_json)])
+
+def main -> () or Error:
+  doc = json.parse(PLAN)?
+  now = Time.parse(doc.need_str("now")?, "%Y-%m-%d %H:%M")?
+  puts "now: #{Time.format(now, "%a %d %b %Y %H:%M")}"
+
+  var jobs: [Job] = []
+  var refused: [Str] = []
+  for (i, j) in doc.need_items("jobs")?.enumerate:
+    match Job.from_json(j):
+      Ok(job) -> jobs.push(job)
+      Error(e) ->
+        name = j.need_str("name").or("?")
+        refused.push("job #{i + 1} (#{name}): #{e.message}")
+  puts "refused:"
+  for r in refused:
+    puts "  #{r}"
+
+  var all: [(Int, Str)] = []
+  for job in jobs:
+    puts "#{job.name}, #{job.every_text} from #{Time.format(job.start, "%a %d %b %H:%M")}:"
+    runs = job.runs(now, 5)
+    puts "  " + runs.map { |t| Time.format(t, "%a %d %b %H:%M") }.join(" | ")
+    for t in runs:
+      all.push((t, job.name))
+
+  puts "next five of all:"
+  soon = all.sort.take(5).map { |t, name| Run(job: name, at: t) }.to_list
+  for r in soon:
+    puts "  #{Time.format(r.at, "%a %d %b %H:%M")}  #{r.job}"
+
+  for t, name in all:
+    if Time.month(t) == 2 and Time.day(t) == 29:
+      puts "on 29 February (day #{Time.day_of_year(t)}): #{name} at #{Time.format(t, "%H:%M")}"
+
+  puts json.show(soon.to_json)

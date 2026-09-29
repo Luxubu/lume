@@ -1,0 +1,7 @@
+error: `Plain` is used as a `json.ToJson` here, but it has no `to_json` method
+  --> corpus/m63/b06_not_tojson/main.lume:22:13
+   |
+22 |   puts emit(Plain(n: 1))
+   |             ^
+  help: `json.ToJson` needs: def to_json -> json.Json. Add it to `Plain`, or `extend Plain with json.ToJson:`
+exit: 1

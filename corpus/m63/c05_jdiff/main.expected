@@ -1,0 +1,14 @@
+~ version: "0.61.0" -> "0.62.0"
+~ released: "2026-09-15" -> "2026-09-29"
++ authors.2: "linus"
+~ tags: "beta" -> ["beta"] (string to array)
+~ deps.json: "0.1.0" -> "0.2.0"
+- deps.regex: "1"
++ deps.time: "1"
+~ stats.stars: 120 -> 135
+- license: "MIT"
++ homepage: null
+10 differences: 3 added, 2 removed, 5 changed
+released 14 days later, on Tuesday 29 September 2026
+newest author: linus
+exit: 0

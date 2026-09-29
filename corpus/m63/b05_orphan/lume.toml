@@ -1,0 +1,6 @@
+[package]
+name = "b05_orphan"
+version = "0.1.0"
+
+[dependencies]
+json = { path = "../../../packages/json" }

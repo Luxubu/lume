@@ -46,7 +46,8 @@ pub enum Json:
     for step in p.split("."):
       cur = match cur:
         Obj(_) -> cur.get(step)?
-        Arr(_) -> cur.at(step.to_int.ok()?)?
+        # a position is digits only: not `+1`, not ` 1`
+        Arr(_) -> if step != "" and step.chars.all? { |c| c.digit? }: cur.at(step.to_int.ok()?)? else: return None
         _ -> return None
     cur
 
@@ -63,7 +64,7 @@ pub enum Json:
   # a number with no fraction
   def int -> Int?:
     match self:
-      Num(n) if n == n.floor and n.abs < 1e15 -> Some(n.to_int)
+      Num(n) if n == n.floor and n.abs <= BIGGEST_EXACT -> Some(n.to_int)
       _ -> None
 
   def bool -> Bool?:
@@ -108,11 +109,44 @@ pub enum Json:
 
   def need_int(key: Str) -> Int or Error:
     v = need(key)?
+    # a whole number too large for an `Int` to hold exactly is not a fraction
+    big = match v:
+      Num(n) -> n == n.floor and n.abs > BIGGEST_EXACT
+      _ -> false
+    if big:
+      return Error("`#{key}` is too large a number to be an `Int` exactly")
     v.int.or_error("`#{key}` is #{a_kind(v)}, not a whole number")
 
   def need_bool(key: Str) -> Bool or Error:
     v = need(key)?
     v.bool.or_error("`#{key}` is #{a_kind(v)}, not true or false")
+
+  # optional fields, as serde reads an `Option`: missing or `null` is
+  # `None`, the right kind is `Some`, anything else is an error:
+  # `port = j.opt_int("port")?.or(8080)`
+  def opt_str(key: Str) -> Str? or Error:
+    match get(key):
+      None -> None
+      Some(v) if v.null? -> None
+      Some(_) -> Some(need_str(key)?)
+
+  def opt_int(key: Str) -> Int? or Error:
+    match get(key):
+      None -> None
+      Some(v) if v.null? -> None
+      Some(_) -> Some(need_int(key)?)
+
+  def opt_num(key: Str) -> Float? or Error:
+    match get(key):
+      None -> None
+      Some(v) if v.null? -> None
+      Some(_) -> Some(need_num(key)?)
+
+  def opt_bool(key: Str) -> Bool? or Error:
+    match get(key):
+      None -> None
+      Some(v) if v.null? -> None
+      Some(_) -> Some(need_bool(key)?)
 
   # the items of the array under a key
   def need_items(key: Str) -> [Json] or Error:
@@ -124,7 +158,7 @@ pub enum Json:
 # "a string", "an object": for messages
 def a_kind(j: Json) -> Str:
   k = j.kind
-  if k == "object" or k == "array": "an #{k}" else: "a #{k}"
+  if k == "null": "null" elif k == "object" or k == "array": "an #{k}" else: "a #{k}"
 
 # ---- encoding: a type that can be written as JSON
 
@@ -208,6 +242,9 @@ struct Parser:
   def parse_number(var self) -> Json or Error:
     start = pos
     advance() if peek == "-"
+    # JSON writes no leading zeros: `0` alone, or `0.5`, never `01`
+    if peek == "0" and chars[pos + 1].or("\u{0}").digit?:
+      return fail("a number cannot start with `0`")
     while not at_end and peek.digit?:
       advance()
     if peek == ".":
@@ -255,18 +292,23 @@ struct Parser:
     hex = chars[pos...pos + 4].join("")
     if hex.len != 4:
       return fail("short \\u escape")
+    var code = hex_value(hex).map_error { |e| fail(e.message) }?
     pos += 4
-    var code = hex_value(hex)?
+    # a low surrogate may only follow a high one
+    if code >= 56320 and code <= 57343:
+      return fail("lone surrogate")
     # a surrogate pair: \ud83d\ude00
     if code >= 55296 and code <= 56319:
       if chars[pos...pos + 2].join("") != "\\u":
         return fail("lone surrogate")
       pos += 2
       low_hex = chars[pos...pos + 4].join("")
+      low = hex_value(low_hex).map_error { |e| fail(e.message) }?
+      if low < 56320 or low > 57343:
+        return fail("lone surrogate")
       pos += 4
-      low = hex_value(low_hex)?
       code = 65536 + (code - 55296) * 1024 + (low - 56320)
-    code.to_char.or_error("bad code point #{code}")
+    code.to_char.or_error(fail("bad code point #{code}").message)
 
   def parse_array(var self) -> Json or Error:
     expect("[")?
@@ -334,11 +376,20 @@ def quote(s: Str) -> Str:
       "\n" -> out += "\\n"
       "\t" -> out += "\\t"
       "\r" -> out += "\\r"
+      # every other character below a space is written as \u00XX
+      _ if c.code < 32 -> out += "\\u00" + hex2(c.code)
       _    -> out += c
   out + "\""
 
+def hex2(n: Int) -> Str:
+  digits = "0123456789abcdef"
+  digits.slice(n / 16, 1) + digits.slice(n % 16, 1)
+
+# whole numbers up to 2^53, which a `Float` holds exactly, have no fraction
+BIGGEST_EXACT = 9007199254740992.0
+
 def show_num(n: Float) -> Str:
-  if n == n.floor and n.abs < 1e15:
+  if n == n.floor and n.abs <= BIGGEST_EXACT:
     n.to_int.to_s
   else:
     n.to_s
@@ -439,6 +490,22 @@ test "decoding says what was wrong":
   assert doc.need_int("age").error.map { |e| e.message } == Some("`age` is a string, not a whole number")
   assert doc.need_int("height").error.map { |e| e.message } == Some("`height` is missing")
   assert Json.Num(1.0).need("x").error.map { |e| e.message } == Some("expected an object with `x`, found a number")
+
+test "optional fields":
+  doc = parse("{\"port\": 9000, \"host\": null, \"debug\": \"yes\"}")!
+  assert doc.opt_int("port")!.or(8080) == 9000
+  assert doc.opt_int("timeout")!.or(30) == 30
+  assert doc.opt_str("host")!.or("localhost") == "localhost"
+  assert doc.opt_bool("debug").error.map { |e| e.message } == Some("`debug` is a string, not true or false")
+
+test "strict JSON":
+  assert parse("01").error.map { |e| e.message } == Some("a number cannot start with `0` at position 0")
+  assert parse("\"\\ud800A\"").error.map { |e| e.message } == Some("lone surrogate at position 7")
+  assert parse("\"\\udc00\"").error.map { |e| e.message } == Some("lone surrogate at position 7")
+  assert parse("\"\\u12x4\"").error?
+  assert show(Json.Str("a\u{1}b")) == "\"a\\u0001b\""
+  assert show(parse("1e15")!) == "1000000000000000"
+  assert parse("[1, 2]")!.path("+1") == None
 
 test "encoding":
   assert show([1, 2].to_json) == "[1,2]"

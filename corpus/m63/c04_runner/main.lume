@@ -1,0 +1,91 @@
+# c04_runner — reads commands from JSON, runs the ones that are due with
+# `sh -c`, one task each, and writes what they did as JSON.
+# Probes: async def main -> () or Error with `?` on json.parse and
+# Time.parse, need_* decoding, comparing times as Int, Process.run from an
+# async def inside spawn:, awaiting a list of tasks (results in start order),
+# a struct's to_json written with json.show, and json.pretty of a nested
+# object holding an array of strings.
+# The commands are portable: wc's padding differs between systems, so its
+# output is trimmed.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# later: backup at Mon 22:00
+# job 7: `name` is a number, not a string
+# job 8: `run` is missing
+# greet  ok
+# words  ok
+# fail   exit 3
+# upper  ok
+# both   ok
+# {"name":"greet","code":0,"out":"hello","err":""}
+# {"name":"words","code":0,"out":"3","err":""}
+# {"name":"fail","code":3,"out":"","err":"oops"}
+# {"name":"upper","code":0,"out":"LUME","err":""}
+# {"name":"both","code":0,"out":"out","err":"err"}
+# {
+#   "ran": 5,
+#   "failed": [
+#     "fail"
+#   ]
+# }
+
+import json
+import json.Json
+
+JOBS = """
+  {\"now\": \"2024-09-30 09:00\", \"jobs\": [
+    {\"name\": \"greet\", \"when\": \"2024-09-30 08:00\", \"run\": \"echo hello\"},
+    {\"name\": \"words\", \"when\": \"2024-09-30 08:30\", \"run\": \"echo one two three | wc -w\"},
+    {\"name\": \"fail\", \"when\": \"2024-09-30 09:00\", \"run\": \"echo oops >&2; exit 3\"},
+    {\"name\": \"upper\", \"when\": \"2024-09-29 23:00\", \"run\": \"echo lume | tr a-z A-Z\"},
+    {\"name\": \"both\", \"when\": \"2024-09-30 07:00\", \"run\": \"echo out; echo err >&2\"},
+    {\"name\": \"backup\", \"when\": \"2024-09-30 22:00\", \"run\": \"echo later\"},
+    {\"name\": 5, \"when\": \"2024-09-30 08:00\", \"run\": \"true\"},
+    {\"name\": \"empty\", \"when\": \"2024-09-30 08:00\"}
+  ]}
+  """
+
+struct Job:
+  name: Str
+  when: Int
+  run: Str
+
+  def self.from_json(j: Json) -> Job or Error:
+    Job(name: j.need_str("name")?, when: Time.parse(j.need_str("when")?, "%Y-%m-%d %H:%M")?, run: j.need_str("run")?)
+
+struct Outcome:
+  name: Str
+  code: Int
+  out: Str
+  err: Str
+
+  def to_json -> Json = json.obj([("name", name.to_json), ("code", code.to_json), ("out", out.to_json), ("err", err.to_json)])
+
+async def run_job(job: Job) -> Outcome:
+  match Process.run("sh", ["-c", job.run]):
+    Ok((code, out, err)) -> Outcome(name: job.name, code: code, out: out.trim, err: err.trim)
+    Error(e) -> Outcome(name: job.name, code: -1, out: "", err: e.message)
+
+async def main -> () or Error:
+  doc = json.parse(JOBS)?
+  now = Time.parse(doc.need_str("now")?, "%Y-%m-%d %H:%M")?
+  var due: [Job] = []
+  for (i, j) in doc.need_items("jobs")?.enumerate:
+    match Job.from_json(j):
+      Ok(job) ->
+        if job.when <= now:
+          due.push(job)
+        else:
+          puts "later: #{job.name} at #{Time.format(job.when, "%a %H:%M")}"
+      Error(e) -> puts "job #{i + 1}: #{e.message}"
+
+  tasks = due.map { |job| spawn: await run_job(job) }.to_list
+  results = await tasks
+  for r in results:
+    status = if r.code == 0: "ok" else: "exit #{r.code}"
+    puts "#{r.name.pad_right(6)} #{status}"
+  for r in results:
+    puts json.show(r.to_json)
+
+  failed = results.filter { |r| r.code != 0 }.map { |r| r.name }.to_list
+  puts json.pretty(json.obj([("ran", results.len.to_json), ("failed", failed.to_json)]))

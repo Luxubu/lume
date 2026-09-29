@@ -1,0 +1,7 @@
+error: package `b05_orphan` cannot extend `Str` with `json.ToJson`: neither is its own
+  --> corpus/m63/b05_orphan/main.lume:16:1
+   |
+16 | extend Str with json.ToJson:
+   | ^
+  help: as in Rust, an `extend` goes in the package that defines the interface or the type; `json.ToJson` is from `json` and `Str` is built in. Wrap the type in a struct of your own and extend that
+exit: 1

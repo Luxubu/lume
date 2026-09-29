@@ -236,6 +236,35 @@ def main:
   puts sc.rest.map(_.area).to_list    #=> [3.0, 25.0]
 ```
 
+A `var` list of an interface type takes any conforming value with `push`,
+and a value held as the interface answers the interface's defaults as well
+as its required methods:
+
+```lume
+interface Named:
+  def name -> Str
+
+  def greeting -> Str = "hello, #{name}"
+
+struct Dog:
+  called: Str
+
+  def name -> Str = called
+
+struct Ship:
+  title: Str
+
+  def name -> Str = title
+
+def main:
+  var all: [Named] = []
+  all.push(Dog(called: "Rex"))
+  all.push(Ship(title: "Argo"))
+  for x in all:
+    puts x.greeting    #=> hello, Rex
+                       #=> hello, Argo
+```
+
 **The annotation on `mixed` is doing work.** A list literal of two different
 structs has no single element type, so say `[Shape]` when you mean the
 mixture:

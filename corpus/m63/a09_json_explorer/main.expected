@@ -1,0 +1,27 @@
+(root): object with keys store, version
+  store: object with keys name, open, shelves, owner
+    store.name: string "Corner Books"
+    store.open: bool true
+    store.shelves: array of 2
+      store.shelves.0: object with keys label, books
+        store.shelves.0.label: string "fiction"
+        store.shelves.0.books: array of 2
+          store.shelves.0.books.0: object with keys title, price
+            store.shelves.0.books.0.title: string "Dune"
+            store.shelves.0.books.0.price: number 9.99
+          store.shelves.0.books.1: object with keys title, price
+            store.shelves.0.books.1.title: string "Emma"
+            store.shelves.0.books.1.price: number 4.5
+      store.shelves.1: object with keys label, books
+        store.shelves.1.label: string "science"
+        store.shelves.1.books: array of 0
+    store.owner: null
+  version: number 2
+store.shelves.0.books.1.title -> "Emma"
+store.shelves.5 -> missing
+store.name.first -> missing
+store.shelves.x -> missing
+version -> 2
+2 books, 14.49 in all
+a number has 0 keys, an object has 0 items
+exit: 0

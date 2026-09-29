@@ -1,0 +1,6 @@
+[package]
+name = "a03_to_json"
+version = "0.1.0"
+
+[dependencies]
+json = { path = "../../../packages/json" }

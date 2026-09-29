@@ -1,0 +1,86 @@
+# c05_jdiff — a diff of two JSON documents: keys added, removed and changed,
+# found by walking `Obj` and `Arr` with `match` on a pair of values.
+# Probes: bare variants of json.Json in patterns from another package
+# (`Obj(xs)`, `Arr(xs)`), a tuple of two Json values in `match`, `==` on
+# Json (8.0 and 8 are the same number), a `var` list handed down a recursion,
+# `get(..).none?`, `kind`, `path("authors.2")`, json.show of every kind of
+# value, and two dates read back to count the days between them.
+# The documents are `"""` strings with bare double quotes inside.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ~ version: "0.61.0" -> "0.62.0"
+# ~ released: "2026-09-15" -> "2026-09-29"
+# + authors.2: "linus"
+# ~ tags: "beta" -> ["beta"] (string to array)
+# ~ deps.json: "0.1.0" -> "0.2.0"
+# - deps.regex: "1"
+# + deps.time: "1"
+# ~ stats.stars: 120 -> 135
+# - license: "MIT"
+# + homepage: null
+# 10 differences: 3 added, 2 removed, 5 changed
+# released 14 days later, on Tuesday 29 September 2026
+# newest author: linus
+
+import json
+import json.Json
+
+OLD = """
+  {"name": "lume", "version": "0.61.0", "released": "2026-09-15",
+   "authors": ["ada", "grace"], "tags": "beta",
+   "deps": {"json": "0.1.0", "regex": "1"},
+   "stats": {"stars": 120, "forks": 8.0, "open": true},
+   "license": "MIT"}
+  """
+
+NEW = """
+  {"name": "lume", "version": "0.62.0", "released": "2026-09-29",
+   "authors": ["ada", "grace", "linus"], "tags": ["beta"],
+   "deps": {"json": "0.2.0", "time": "1"},
+   "stats": {"stars": 135, "forks": 8, "open": true},
+   "homepage": null}
+  """
+
+# a key or a position under a path: "deps" + "json" is "deps.json"
+def under(path: Str, key: Str) -> Str = if path == "": key else: "#{path}.#{key}"
+
+def diff(path: Str, a: Json, b: Json, var out: [Str]):
+  match (a, b):
+    (Obj(xs), Obj(ys)) ->
+      for k, v in xs:
+        match b.get(k):
+          Some(w) -> diff(under(path, k), v, w, out)
+          None -> out.push("- #{under(path, k)}: #{json.show(v)}")
+      for k, w in ys:
+        if a.get(k).none?:
+          out.push("+ #{under(path, k)}: #{json.show(w)}")
+    (Arr(xs), Arr(ys)) ->
+      for i in 0...xs.len.max(ys.len):
+        p = under(path, "#{i}")
+        match (xs[i], ys[i]):
+          (Some(v), Some(w)) -> diff(p, v, w, out)
+          (Some(v), None) -> out.push("- #{p}: #{json.show(v)}")
+          (None, Some(w)) -> out.push("+ #{p}: #{json.show(w)}")
+          (None, None) -> ()
+    _ ->
+      if a != b:
+        note = if a.kind != b.kind: " (#{a.kind} to #{b.kind})" else: ""
+        out.push("~ #{path}: #{json.show(a)} -> #{json.show(b)}#{note}")
+
+def main -> () or Error:
+  old = json.parse(OLD)?
+  new = json.parse(NEW)?
+  var out: [Str] = []
+  diff("", old, new, out)
+  for line in out:
+    puts line
+  added = out.count { |l| l.starts_with?("+") }
+  removed = out.count { |l| l.starts_with?("-") }
+  changed = out.count { |l| l.starts_with?("~") }
+  puts "#{out.len} differences: #{added} added, #{removed} removed, #{changed} changed"
+
+  was = Time.parse(old.need_str("released")?, "%Y-%m-%d")?
+  now = Time.parse(new.need_str("released")?, "%Y-%m-%d")?
+  puts "released #{(now - was) / 86400} days later, on #{Time.format(now, "%A %d %B %Y")}"
+  newest = new.path("authors.2").map { |j| j.str.or("?") }.or("none")
+  puts "newest author: #{newest}"

@@ -1,0 +1,19 @@
+[[1, 2,]] unexpected character `]` at position 6
+[{"a": 1,}] expected `"`, found `}` at position 8
+["a\x"] bad escape `\x` at position 4
+["\ud800"] lone surrogate at position 7
+["\udc00"] lone surrogate at position 7
+["\ud800\u0041"] lone surrogate at position 9
+["abc] unterminated string at position 4
+[] unexpected end of input at position 0
+[  ] unexpected end of input at position 2
+[-] bad number `-` at position 1
+[1e] bad number `1e` at position 2
+[tru] expected `true` at position 3
+[[1 2]] expected `,` or `]` at position 3
+[{"a" 1}] expected `:`, found `1` at position 5
+[1 2] trailing characters at position 2
+[01] a number cannot start with `0` at position 0
+["\ud83d\ude00"] ok "😀"
+["\u12"] short \u escape at position 3
+exit: 0

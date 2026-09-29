@@ -1,0 +1,83 @@
+# a03 — a list of my own structs written out with `to_json`, `json.show` and
+# `json.pretty`, then read back and compared. A struct with
+# `def to_json -> Json` fits `ToJson`, so `[Book]` has `to_json` too; an
+# optional field is written as `null`; a whole float is written without a
+# fraction; an empty list is `[]` in both forms; text is escaped.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# [{"title":"Dune","year":1965,"price":9.99,"in_stock":true,"tags":["sf","classic"],"note":null},{"title":"Piranesi","year":2020,"price":14.5,"in_stock":false,"tags":[],"note":"signed"},{"title":"SICP","year":1985,"price":45,"in_stock":true,"tags":["cs"],"note":null}]
+# {
+#   "shelf": "front",
+#   "books": [
+#     {
+#       "title": "Dune",
+#       "year": 1965,
+#       "price": 9.99,
+#       "in_stock": true,
+#       "tags": [
+#         "sf",
+#         "classic"
+#       ],
+#       "note": null
+#     },
+#     {
+#       "title": "Piranesi",
+#       "year": 2020,
+#       "price": 14.5,
+#       "in_stock": false,
+#       "tags": [],
+#       "note": "signed"
+#     }
+#   ]
+# }
+# [[1,2],[3]]
+# [0.5,2,1e20]
+# ["tab\there","say \"hi\""]
+# read back 3 books, same as written: true
+
+import json
+import json.Json
+import json.ToJson
+
+struct Book:
+  title: Str
+  year: Int
+  price: Float
+  in_stock: Bool
+  tags: [Str]
+  note: Str?
+
+  def to_json -> Json:
+    note_json = match note:
+      Some(n) -> n.to_json
+      None -> Json.Null
+    json.obj([("title", title.to_json), ("year", year.to_json), ("price", price.to_json), ("in_stock", in_stock.to_json), ("tags", tags.to_json), ("note", note_json)])
+
+  def self.from_json(j: Json) -> Book or Error:
+    var tags: [Str] = []
+    for t in j.need_items("tags")?:
+      tags.push(t.str.or_error("a tag is #{t.kind}, not a string")?)
+    note = match j.get("note"):
+      Some(n) -> n.str
+      None -> None
+    Book(title: j.need_str("title")?, year: j.need_int("year")?, price: j.need_num("price")?, in_stock: j.need_bool("in_stock")?, tags: tags, note: note)
+
+def main -> () or Error:
+  dune = Book(title: "Dune", year: 1965, price: 9.99, in_stock: true, tags: ["sf", "classic"], note: None)
+  piranesi = Book(title: "Piranesi", year: 2020, price: 14.5, in_stock: false, tags: [], note: Some("signed"))
+  sicp = Book(title: "SICP", year: 1985, price: 45.0, in_stock: true, tags: ["cs"], note: None)
+  books = [dune, piranesi, sicp]
+
+  text = json.show(books.to_json)
+  puts text
+  puts json.pretty(json.obj([("shelf", "front".to_json), ("books", [dune, piranesi].to_json)]))
+
+  puts json.show([[1, 2], [3]].to_json)
+  puts json.show([0.5, 2.0, 1e20].to_json)
+  puts json.show(["tab\there", "say \"hi\""].to_json)
+
+  back = json.parse(text)?
+  var again: [Book] = []
+  for item in back.items:
+    again.push(Book.from_json(item)?)
+  puts "read back #{again.len} books, same as written: #{again == books}"

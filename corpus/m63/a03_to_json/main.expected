@@ -1,0 +1,30 @@
+[{"title":"Dune","year":1965,"price":9.99,"in_stock":true,"tags":["sf","classic"],"note":null},{"title":"Piranesi","year":2020,"price":14.5,"in_stock":false,"tags":[],"note":"signed"},{"title":"SICP","year":1985,"price":45,"in_stock":true,"tags":["cs"],"note":null}]
+{
+  "shelf": "front",
+  "books": [
+    {
+      "title": "Dune",
+      "year": 1965,
+      "price": 9.99,
+      "in_stock": true,
+      "tags": [
+        "sf",
+        "classic"
+      ],
+      "note": null
+    },
+    {
+      "title": "Piranesi",
+      "year": 2020,
+      "price": 14.5,
+      "in_stock": false,
+      "tags": [],
+      "note": "signed"
+    }
+  ]
+}
+[[1,2],[3]]
+[0.5,2,1e20]
+["tab\there","say \"hi\""]
+read back 3 books, same as written: true
+exit: 0

@@ -163,6 +163,9 @@ Spelled out:
 - **A type fits an interface from a package it never imports** when it has
   the methods, and the interface's defaults are then its own methods.
   Conformance is structural across packages as within one file.
+- **Messages name an imported type with its package** — `json.Json`,
+  `json.ToJson` — even where the file imported the name on its own with
+  `import json.Json`, so a message says which `Json` it means.
 - **A value prints by its bare type name**, wherever the type was defined:
   `Money(cents: 2000)`, not `units.Money(...)`.
 - **Constants from another package** can be used in your own constants:

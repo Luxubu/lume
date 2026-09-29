@@ -1,0 +1,23 @@
+# b10 — a `match` on the package's `Json` that leaves out `Obj`.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: this `match` on `Json` does not cover: Obj(_)
+#   --> corpus/m63/b10_match_json/main.lume:15:3
+#    |
+# 15 |   match j:
+#    |   ^
+#   help: add an arm for Obj(_), or a final `_ ->` arm
+
+import json
+import json.Json
+
+def describe(j: Json) -> Str:
+  match j:
+    Null -> "null"
+    Bool(b) -> "bool #{b}"
+    Num(n) -> "number #{n}"
+    Str(s) -> "string #{s}"
+    Arr(items) -> "#{items.len} items"
+
+def main -> () or Error:
+  puts describe(json.parse("{}")?)

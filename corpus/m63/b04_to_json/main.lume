@@ -1,0 +1,43 @@
+# b04 — a type of your own with `to_json`, inside a list and inside a list
+# of lists; lists of lists of text; whole and unexact floats; an object
+# holding them, with a quote and a tab in a string; a round trip through
+# `parse`; `pretty` of a list of lists of objects.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# [{"x":1,"y":2},{"x":3,"y":-4}]
+# [[{"x":0,"y":0}],[{"x":5,"y":6},{"x":7,"y":8}]]
+# [["a"],["b","c"]]
+# [1.5,2,0.30000000000000004]
+# {"points":[{"x":1,"y":2},{"x":3,"y":-4}],"count":2,"note":"say \"hi\"\tnow","ok":true}
+# true
+# [
+#   [
+#     {
+#       "x": 1,
+#       "y": 2
+#     }
+#   ]
+# ]
+
+import json
+import json.Json
+import json.ToJson
+
+struct Point:
+  x: Int
+  y: Int
+
+  def to_json -> Json = json.obj([("x", x.to_json), ("y", y.to_json)])
+
+def main -> () or Error:
+  ps = [Point(x: 1, y: 2), Point(x: 3, y: -4)]
+  puts json.show(ps.to_json)
+  grid = [[Point(x: 0, y: 0)], [Point(x: 5, y: 6), Point(x: 7, y: 8)]]
+  puts json.show(grid.to_json)
+  puts json.show([["a"], ["b", "c"]].to_json)
+  puts json.show([1.5, 2.0, 0.1 + 0.2].to_json)
+  doc = json.obj([("points", ps.to_json), ("count", ps.len.to_json), ("note", "say \"hi\"\tnow".to_json), ("ok", true.to_json)])
+  puts json.show(doc)
+  back = json.parse(json.show(doc))?
+  puts json.show(back) == json.show(doc)
+  puts json.pretty([[Point(x: 1, y: 2)]].to_json)

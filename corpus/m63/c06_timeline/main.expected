@@ -1,0 +1,25 @@
+warning: `timeline` holds values of different types behind `c06_feed.Dated`, so calls on its items go through a pointer
+  --> corpus/m63/c06_timeline/main.lume:95:3
+   |
+95 |   var timeline: [c06_feed.Dated] = []
+   |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+refused:
+  post 3: `words` is missing
+  comment 3: `2024-10-14 08:20` does not match `%Y-%m-%dT%H:%M`: expected `T` at position 10
+posts: 3, latest 2024-10-14
+  2024-10: 2
+  2024-09: 1
+comments: 2, latest 2024-10-02
+  2024-10: 1
+  2024-09: 1
+timeline:
+  Sat 28 Sep 18:00  grace posted "JSON by hand" (800 words)
+  Mon 30 Sep 07:45  ada on "JSON by hand": more!
+  Wed 02 Oct 09:30  ada posted "Dates in Lume" (1200 words)
+  Wed 02 Oct 10:05  grace on "Dates in Lume": nice
+  Mon 14 Oct 08:15  ada posted "Tasks" (950 words)
+{"kind":"posts","count":3,"items":[{"title":"Dates in Lume","day":"2024-10-02"},{"title":"JSON by hand","day":"2024-09-28"},{"title":"Tasks","day":"2024-10-14"}]}
+{"kind":"words","count":3,"items":[1200,800,950]}
+{"kind":"comments","count":2,"items":[{"post":"Dates in Lume","who":"grace"},{"post":"JSON by hand","who":"ada"}]}
+exit: 0

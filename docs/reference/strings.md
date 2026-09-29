@@ -334,6 +334,9 @@ puts r"a\nb"                  #=> a\nb
 
 ## Triple-quoted strings
 
+Inside a `"""` block a `"` needs no backslash: `say "hi"` is written as
+it is. `#{..}` still works; a raw `r"""` block has neither.
+
 A `"""` block **drops the opening line break and the common indentation of the
 lines inside**, so the text lines up with the code around it and still comes
 out flush left.

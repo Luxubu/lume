@@ -1,0 +1,20 @@
+later: backup at Mon 22:00
+job 7: `name` is a number, not a string
+job 8: `run` is missing
+greet  ok
+words  ok
+fail   exit 3
+upper  ok
+both   ok
+{"name":"greet","code":0,"out":"hello","err":""}
+{"name":"words","code":0,"out":"3","err":""}
+{"name":"fail","code":3,"out":"","err":"oops"}
+{"name":"upper","code":0,"out":"LUME","err":""}
+{"name":"both","code":0,"out":"out","err":"err"}
+{
+  "ran": 5,
+  "failed": [
+    "fail"
+  ]
+}
+exit: 0

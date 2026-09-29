@@ -1,0 +1,17 @@
+13 lines, 9 read, 4 refused
+  line 8: expected `,` or `}` at position 46
+  line 9: `04/03/2024 11:21` does not match `%Y-%m-%d %H:%M:%S`: expected `-` at position 2
+  line 12: `ts` is missing
+  line 13: `ms` is a number, not a whole number
+by hour:
+  2024-03-04 09:00  2 ##
+  2024-03-04 10:00  4 ####
+  2024-03-04 11:00  1 #
+  2024-03-04 23:00  1 #
+  2024-03-05 00:00  1 #
+busiest: Monday 04 March, 10:00 to 11:00, 4 requests
+slowest: /pay at 10:30:00, 1200 ms
+by level: info 6, warn 2, error 1
+mean: 207.4 ms
+{"read":9,"refused":4,"busiest":"2024-03-04T10:00","levels":{"info":6,"warn":2,"error":1}}
+exit: 0

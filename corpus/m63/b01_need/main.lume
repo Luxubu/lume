@@ -1,0 +1,55 @@
+# b01 — `need_int` on a number with a fraction, a string, null, an array,
+# an object, a bool, 1e20 and a missing key; `need` and `need_int` on
+# something that is not an object (an array, a string, `Json.Null`);
+# `need_items`, `need_bool` and `need_str` on the wrong kind.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# a: `a` is a number, not a whole number
+# b: `b` is a string, not a whole number
+# c: ok 7
+# d: ok -3
+# e: `e` is a number, not a whole number
+# f: `f` is a null, not a whole number
+# g: `g` is an array, not a whole number
+# h: `h` is an object, not a whole number
+# i: `i` is a bool, not a whole number
+# z: `z` is missing
+# expected an object with `a`, found an array
+# expected an object with `a`, found a string
+# `b` is a string, not an array
+# `f` is a null, not true or false
+# `h` is an object, not a string
+# expected an object with `n`, found a null
+
+import json
+import json.Json
+
+def int_or(r: Int or Error) -> Str:
+  match r:
+    Ok(n) -> "ok #{n}"
+    Error(e) -> e.message
+
+def main -> () or Error:
+  doc = json.parse("{\"a\": 2.5, \"b\": \"7\", \"c\": 7.0, \"d\": -3, \"e\": 1e20, \"f\": null, \"g\": [1], \"h\": {}, \"i\": true}")?
+  for key in ["a", "b", "c", "d", "e", "f", "g", "h", "i", "z"]:
+    puts "#{key}: #{int_or(doc.need_int(key))}"
+
+  # `need` on what is not an object, directly and through `need_int`
+  arr = json.parse("[1, 2]")?
+  puts int_or(arr.need_int("a"))
+  text = json.parse("\"hi\"")?
+  match text.need("a"):
+    Ok(j) -> puts json.show(j)
+    Error(e) -> puts e.message
+
+  # the other `need_…` on the wrong kind
+  match doc.need_items("b"):
+    Ok(xs) -> puts xs.len
+    Error(e) -> puts e.message
+  match doc.need_bool("f"):
+    Ok(b) -> puts b
+    Error(e) -> puts e.message
+  match doc.need_str("h"):
+    Ok(s) -> puts s
+    Error(e) -> puts e.message
+  puts int_or(Json.Null.need_int("n"))

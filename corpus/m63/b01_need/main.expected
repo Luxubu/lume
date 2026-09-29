@@ -1,0 +1,17 @@
+a: `a` is a number, not a whole number
+b: `b` is a string, not a whole number
+c: ok 7
+d: ok -3
+e: `e` is too large a number to be an `Int` exactly
+f: `f` is null, not a whole number
+g: `g` is an array, not a whole number
+h: `h` is an object, not a whole number
+i: `i` is a bool, not a whole number
+z: `z` is missing
+expected an object with `a`, found an array
+expected an object with `a`, found a string
+`b` is a string, not an array
+`f` is null, not true or false
+`h` is an object, not a string
+expected an object with `n`, found null
+exit: 0

@@ -1,0 +1,38 @@
+Corner Shop: 10 orders, 4 accepted
+refused:
+  order 4: `placed`: `2024-13-02` does not match `%Y-%m-%d`: month 13 is not 1 to 12
+  order 5: item 1: `qty` is a string, not a whole number
+  order 6: item 2: `sku` is missing
+  order 7: order A7 has no items
+  order 9: `id` is a number, not a string
+  order 10: `items` is an object, not an array
+accepted:
+  A1  Tue 30 Jan 2024  15.25
+  A2  Wed 31 Jan 2024   3.50
+  A3  Thu 29 Feb 2024  38.00
+  A8  Sun 31 Mar 2024  45.00
+total: 101.75
+most sold: tea (7)
+by month:
+  January 2024: 2 orders, 18.75
+  February 2024: 1 order, 38.00
+  March 2024: 1 order, 45.00
+{"id":"A2","placed":"2024-01-31","items":[{"sku":"tea","qty":1,"cents":350}],"total":350}
+[
+  {
+    "month": "2024-01",
+    "orders": 2,
+    "cents": 1875
+  },
+  {
+    "month": "2024-02",
+    "orders": 1,
+    "cents": 3800
+  },
+  {
+    "month": "2024-03",
+    "orders": 1,
+    "cents": 4500
+  }
+]
+exit: 0

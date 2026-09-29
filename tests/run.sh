@@ -192,12 +192,13 @@ for f in examples/fmt/*.lume; do
 done
 
 # The review corpus: real-user programs. A leaked rustc error is never accepted.
-for f in corpus/*.lume corpus/edge/*.lume corpus/m17/*.lume corpus/m18/*.lume corpus/m18/mod1/main.lume corpus/m26/*.lume corpus/m28/*.lume corpus/m30/*/main.lume corpus/m36/*.lume corpus/m36/*/main.lume corpus/m42/*.lume corpus/m42/*/main.lume corpus/m45/*.lume corpus/m45/*/main.lume corpus/m49/*/app/main.lume corpus/m53/*.lume corpus/m53/*/main.lume corpus/m59/*.lume corpus/m59/*/main.lume; do
+for f in corpus/*.lume corpus/edge/*.lume corpus/m17/*.lume corpus/m18/*.lume corpus/m18/mod1/main.lume corpus/m26/*.lume corpus/m28/*.lume corpus/m30/*/main.lume corpus/m36/*.lume corpus/m36/*/main.lume corpus/m42/*.lume corpus/m42/*/main.lume corpus/m45/*.lume corpus/m45/*/main.lume corpus/m49/*/app/main.lume corpus/m53/*.lume corpus/m53/*/main.lume corpus/m59/*.lume corpus/m59/*/main.lume corpus/m63/*.lume corpus/m63/*/main.lume; do
   name="corpus/${f#corpus/}"; name=${name%.lume}
   case "$f" in corpus/m30/*|corpus/m36/*/main.lume|corpus/m42/*/main.lume|corpus/m45/*/main.lume) name="${f%/main.lume}" ;; esac
   case "$f" in corpus/m49/*) name="${f%/app/main.lume}" ;; esac
   case "$f" in corpus/m53/*/main.lume) name="${f%/main.lume}" ;; esac
   case "$f" in corpus/m59/*/main.lume) name="${f%/main.lume}" ;; esac
+  case "$f" in corpus/m63/*/main.lume) name="${f%/main.lume}" ;; esac
   exp="${f%.lume}.expected"
   out=$("$LUME" run "$f" 2>&1); code=$?
   if printf '%s' "$out" | grep -q "generated Rust did not compile"; then

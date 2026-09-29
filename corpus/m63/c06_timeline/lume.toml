@@ -1,0 +1,7 @@
+[package]
+name = "c06_timeline"
+version = "0.1.0"
+
+[dependencies]
+json = { path = "../../../packages/json" }
+c06_feed = { path = "../c06_feed" }

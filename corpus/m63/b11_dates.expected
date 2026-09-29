@@ -1,0 +1,17 @@
+2024/2/29: 2024-02-29 Thu, day 60
+2023/2/29: error: February 2023 has days 1 to 28, not 29
+1900/2/29: error: February 1900 has days 1 to 28, not 29
+2000/2/29: 2000-02-29 Tue, day 60
+2100/2/29: error: February 2100 has days 1 to 28, not 29
+2024/2/30: error: February 2024 has days 1 to 29, not 30
+2023/4/31: error: April 2023 has days 1 to 30, not 31
+1900/3/1: 1900-03-01 Thu, day 60
+2024/12/31: 2024-12-31 Tue, day 366
+-1: 1969-12-31 23:59:59 Wednesday, weekday 3, day 365
+-86400: 1969-12-31 00:00:00 Wednesday, weekday 3, day 365
+-86401: 1969-12-30 23:59:59 Tuesday, weekday 2, day 364
+-2208988800: 1900-01-01 00:00:00 Monday, weekday 1, day 1
+1969 12 31 23 59 59
+-14256000 Sunday 20 July 1969 weekday 7
+6
+exit: 0

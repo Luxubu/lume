@@ -1,0 +1,39 @@
+# b02 — `int` at the edges (1e20, 999999999999999, 1e15) and how `show`
+# writes them; `path` through an array index out of range, a negative
+# index, a key on an array, an index with a space or a `+`, a step past a
+# number; `at` on an object; an object with a key written twice.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# big: not an int: 1e20
+# edge: int 999999999999999
+# top: not an int: 1000000000000000.0
+# xs.1: int 20
+# xs.2.y.0: not an int: true
+# xs.3: nothing there
+# xs.-1: nothing there
+# xs.y: nothing there
+# xs. 1: int 20
+# xs.+1: int 20
+# big.x: nothing there
+# xs.1.z: nothing there
+# dup: int 1
+# nothing there
+# {"xs":[10,20,{"y":[true]}],"big":1e20,"edge":999999999999999,"top":1000000000000000.0,"dup":1,"dup":2}
+
+import json
+import json.Json
+
+def as_int(found: Json?) -> Str:
+  match found:
+    Some(v) ->
+      match v.int:
+        Some(n) -> "int #{n}"
+        None -> "not an int: #{json.show(v)}"
+    None -> "nothing there"
+
+def main -> () or Error:
+  doc = json.parse("{\"xs\": [10, 20, {\"y\": [true]}], \"big\": 1e20, \"edge\": 999999999999999, \"top\": 1e15, \"dup\": 1, \"dup\": 2}")?
+  for p in ["big", "edge", "top", "xs.1", "xs.2.y.0", "xs.3", "xs.-1", "xs.y", "xs. 1", "xs.+1", "big.x", "xs.1.z", "dup"]:
+    puts "#{p}: #{as_int(doc.path(p))}"
+  puts as_int(doc.at(0))
+  puts json.show(doc)
