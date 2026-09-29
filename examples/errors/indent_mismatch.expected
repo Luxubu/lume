@@ -1,0 +1,6 @@
+error: this line's indentation matches no enclosing block
+  --> examples/errors/indent_mismatch.lume:4:1
+  |
+4 |   puts x
+  | ^
+  help: indent it to line up with the block it belongs to

@@ -1,0 +1,5 @@
+# A crate version must be written as a string.
+import rust.regex = 1
+
+def main:
+  puts 1

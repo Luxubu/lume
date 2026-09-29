@@ -1,4 +1,4 @@
-error: this value is a `Int or Error` — it may be an error, so it cannot be used with `+` directly
+error: this value is an `Int or Error` — it may be an error, so it cannot be used with `+` directly
   --> examples/errors/result_method.lume:3:8
   |
 3 |   puts n + 1

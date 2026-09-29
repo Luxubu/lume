@@ -81,7 +81,11 @@ every change, using the text not yet saved, and reports what `lume check`
 would. **Hover** shows what a name is: a local's type, a function's
 signature, a struct's fields, a field's or method's type, or what a built-in
 method gives back there. **Go to definition** jumps to where it was
-written, in this file, another module or another package. For tools that want data rather than text, `lume check --json`
+written, in this file, another module or another package. **Completion**
+offers, after `x.`, the fields and methods of `x`'s type; after `module.`,
+that module's items; and elsewhere, the locals, the file's own items, what
+it imports, and the keywords. It works while the file is half typed and
+does not parse, from what the last check that got far enough learned. For tools that want data rather than text, `lume check --json`
 prints every error and warning with its file, line, column, message and
 help:
 

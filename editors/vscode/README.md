@@ -17,9 +17,10 @@ setting `lume.path`. Then, from this folder:
 
 Hover over a name to see its type or signature. Go to definition
 (F12, or Cmd/Ctrl-click) jumps to where it was written, across modules and
-packages.
+packages. Completion offers a value's fields and methods after `.`, a
+module's items after its name and `.`, and the names in scope elsewhere.
 
 ## What it does not do yet
 
-Completion, rename and find-all-references. The server answers those
+Rename and find-all-references. The server answers those
 requests with "not supported", and editors carry on.

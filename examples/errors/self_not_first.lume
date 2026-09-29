@@ -1,0 +1,7 @@
+# `self` must come before the other parameters.
+struct P:
+  x: Int
+  def add(n: Int, self) -> Int = x + n
+
+def main:
+  puts 1

@@ -1,0 +1,6 @@
+error: this `{...}` started as a set, but this item has a `:` after it
+  --> examples/errors/set_then_colon.lume:3:24
+  |
+3 |   tags = {"red", "blue": 2}
+  |                        ^
+  help: a set is `{a, b, c}`; a map is `{key: value, ...}`

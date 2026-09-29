@@ -1,0 +1,6 @@
+error: interface names start with a capital letter: `shape`
+  --> examples/errors/interface_lowercase.lume:2:11
+  |
+2 | interface shape:
+  |           ^
+  help: rename it `Shape`

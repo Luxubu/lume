@@ -1,0 +1,6 @@
+# Enum names must start with a capital letter.
+enum shape:
+  Dot
+
+def main:
+  puts 1

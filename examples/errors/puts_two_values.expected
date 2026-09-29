@@ -1,0 +1,5 @@
+error: `puts` takes exactly one value
+  --> examples/errors/puts_two_values.lume:3:3
+  |
+3 |   puts(1, 2)
+  |   ^

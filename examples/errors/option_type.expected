@@ -1,0 +1,6 @@
+error: an optional value is written `T?`, not `Option[T]`
+  --> examples/errors/option_type.lume:2:24
+  |
+2 | def find(xs: [Int]) -> Option[Int] = xs.first
+  |                        ^
+  help: for example `Int?` or `User?`

@@ -1,0 +1,6 @@
+# A method an interface asks for must say what it returns.
+interface Shape:
+  def draw
+
+def main:
+  puts 1

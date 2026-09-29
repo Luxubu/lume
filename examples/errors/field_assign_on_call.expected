@@ -1,0 +1,6 @@
+error: only a named value's field can be assigned
+  --> examples/errors/field_assign_on_call.lume:8:3
+  |
+8 |   make().x = 2
+  |   ^
+  help: bind the value to a `var` first

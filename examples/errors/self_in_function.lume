@@ -1,0 +1,5 @@
+# A plain function has no `self`.
+def size(self) -> Int = 1
+
+def main:
+  puts 1

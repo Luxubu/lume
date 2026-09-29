@@ -1,0 +1,5 @@
+error: block parameter `a` is listed twice
+  --> examples/errors/block_param_twice.lume:3:29
+  |
+3 |   puts [1, 2].fold(0) { |a, a| a }
+  |                             ^

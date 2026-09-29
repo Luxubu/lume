@@ -111,6 +111,11 @@ exit: $code"
 out=$(tests/git_packages.sh "$LUME" 2>&1)
 check "packages from git" "tests/git_packages.expected" "$out"
 
+# every error message the compiler gives is shown by some test; the number
+# shown may grow and never shrink (tests/message_coverage.min holds it)
+out=$(python3 tests/message_coverage.py --check "$(cat tests/message_coverage.min)" 2>&1)
+if [ $? -eq 0 ]; then pass=$((pass+1)); else echo "FAIL message coverage: $out"; python3 tests/message_coverage.py | tail -n +2 | head -10 | sed 's/^/    /'; fail=$((fail+1)); failed+=("message coverage"); fi
+
 # editors: diagnostics as JSON, and the language server driven as an editor would
 out=$("$LUME" check examples/errors/arity.lume --json 2>&1; echo "exit: $?"; "$LUME" check examples/fib.lume --json 2>&1; echo "exit: $?")
 check "check --json" "examples/check_json.expected" "$out"

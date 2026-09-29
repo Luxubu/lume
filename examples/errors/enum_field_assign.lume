@@ -1,0 +1,8 @@
+# Assigning to a field of an enum value.
+enum Shape:
+  Circle(r: Int)
+
+def main:
+  var s = Circle(r: 1)
+  s.r = 2
+  puts s

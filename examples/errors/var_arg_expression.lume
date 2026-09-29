@@ -1,0 +1,6 @@
+# An expression passed where the function changes its argument.
+def bump(var xs: [Int]):
+  xs.push(1)
+
+def main:
+  bump([1, 2])

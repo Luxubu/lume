@@ -1,0 +1,6 @@
+error: variant `Circle` comes after a method
+  --> examples/errors/variant_after_method.lume:5:3
+  |
+5 |   Circle(r: Int)
+  |   ^
+  help: list all variants first, then the methods

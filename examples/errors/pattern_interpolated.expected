@@ -1,0 +1,5 @@
+error: a string pattern cannot contain `#{}` interpolation
+  --> examples/errors/pattern_interpolated.lume:5:5
+  |
+5 |     "#{name}" -> puts "same"
+  |     ^

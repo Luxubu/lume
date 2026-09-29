@@ -1,0 +1,5 @@
+error: only `import rust.<crate>` takes a version
+  --> examples/errors/import_version_not_crate.lume:2:15
+  |
+2 | import util = "1"
+  |               ^

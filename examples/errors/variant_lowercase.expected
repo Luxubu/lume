@@ -1,0 +1,6 @@
+error: variant names start with a capital letter: `dot`
+  --> examples/errors/variant_lowercase.lume:3:3
+  |
+3 |   dot
+  |   ^
+  help: rename it `Dot`

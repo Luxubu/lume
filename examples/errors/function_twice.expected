@@ -1,0 +1,5 @@
+error: function `f` is defined twice
+  --> examples/errors/function_twice.lume:3:1
+  |
+3 | def f -> Int = 2
+  | ^

@@ -1,0 +1,6 @@
+error: `assert` needs a `Bool`, but this is an `Int`
+  --> examples/errors/assert_not_bool.lume:3:12
+  |
+3 |   assert 1 + 1
+  |            ^
+  help: compare it to something: `assert x == 3`, `assert xs.len > 0`

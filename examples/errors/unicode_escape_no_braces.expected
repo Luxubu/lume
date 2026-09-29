@@ -1,0 +1,6 @@
+error: a unicode escape is written `\u{...}` with the code point in hex
+  --> examples/errors/unicode_escape_no_braces.lume:3:12
+  |
+3 |   puts "caf\u00e9"
+  |            ^
+  help: for example `\u{1F600}`

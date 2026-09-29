@@ -1,0 +1,5 @@
+error: `def +` cannot take `var self`: operators produce a new value
+  --> examples/errors/operator_var_self.lume:4:3
+  |
+4 |   def +(var self, other: V) -> V = other
+  |   ^

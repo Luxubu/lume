@@ -1,0 +1,6 @@
+error: a block cannot take another block as an argument
+  --> examples/errors/block_takes_block.lume:2:9
+  |
+2 | def run(f: ((Int) -> Int) -> Int) -> Int = 1
+  |         ^
+  help: pass the values it needs instead, and call the second block yourself

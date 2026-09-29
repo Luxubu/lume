@@ -1,0 +1,5 @@
+error: `self` must be the first parameter
+  --> examples/errors/self_not_first.lume:4:19
+  |
+4 |   def add(n: Int, self) -> Int = x + n
+  |                   ^

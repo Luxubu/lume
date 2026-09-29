@@ -1,0 +1,7 @@
+# A comparison operator that returns something other than Bool.
+struct V:
+  n: Int
+  def <(other: V) -> Int = n - other.n
+
+def main:
+  puts 1

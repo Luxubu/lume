@@ -1,0 +1,6 @@
+error: `for var` takes one loop variable
+  --> examples/errors/for_var_pair.lume:4:12
+  |
+4 |   for var i, x in xs.enumerate:
+  |            ^
+  help: write `for var item in items:`; pairs from `.enumerate` cannot be changed in place

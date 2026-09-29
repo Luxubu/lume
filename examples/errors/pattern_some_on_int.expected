@@ -1,0 +1,5 @@
+error: `Some` matches an optional value, but this is an `Int`
+  --> examples/errors/pattern_some_on_int.lume:6:5
+  |
+6 |     Some(n) -> puts n
+  |     ^

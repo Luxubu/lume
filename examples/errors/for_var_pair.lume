@@ -1,0 +1,5 @@
+# `for var` changes items in place and takes only one loop variable.
+def main:
+  var xs = [1, 2]
+  for var i, x in xs.enumerate:
+    x += 1

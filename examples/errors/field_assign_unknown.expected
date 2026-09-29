@@ -1,0 +1,6 @@
+error: unknown name `x`
+  --> examples/errors/field_assign_unknown.lume:3:3
+  |
+3 |   x.y = 1
+  |   ^
+  help: names must be bound with `name = value` or `var name = value` before use

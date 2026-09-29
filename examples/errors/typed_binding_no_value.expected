@@ -1,0 +1,6 @@
+error: `n: Type` needs a value
+  --> examples/errors/typed_binding_no_value.lume:3:9
+  |
+3 |   n: Int
+  |         ^
+  help: write `n: Type = ...`

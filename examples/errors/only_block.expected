@@ -1,0 +1,5 @@
+error: `map` takes only a block
+  --> examples/errors/only_block.lume:3:14
+  |
+3 |   puts [1, 2].map(3) { |x| x * 2 }
+  |              ^

@@ -1,0 +1,6 @@
+error: `main` takes no parameters and returns nothing, or `() or Error`
+  --> examples/errors/main_with_parameter.lume:2:1
+  |
+2 | def main(args: [Str]):
+  | ^
+  help: write `def main:` or `def main -> () or Error:`

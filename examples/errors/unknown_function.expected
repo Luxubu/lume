@@ -1,0 +1,5 @@
+error: unknown function `totl`
+  --> examples/errors/unknown_function.lume:3:8
+  |
+3 |   puts totl(1)
+  |        ^

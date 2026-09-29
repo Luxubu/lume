@@ -939,7 +939,7 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, module_id: &str
                 _ => None,
             });
             if let Some((what, dl)) = here {
-                return Err(LumeError::new(*line, *col, format!("`{}` is imported from `{}` and also defined in this file, as a {} on line {}", local, id, what, dl))
+                return Err(LumeError::new(*line, *col, format!("`{}` is imported from `{}` and also defined in this file, as {} {} on line {}", local, id, if what.starts_with(['a', 'e', 'i', 'o']) { "an" } else { "a" }, what, dl))
                     .with_help(format!("rename one of them, or import the module and write `{}.{}` for the other", id.rsplit('.').next().unwrap_or(id), local)));
             }
         }
@@ -948,7 +948,13 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, module_id: &str
     g.own_task = program.iter().any(|it| matches!(it, Item::Struct(d) if d.name == "Task") || matches!(it, Item::Enum(d) if d.name == "Task"))
         || deps.iter().any(|d| matches!(d, Dep::Single { local, .. } if local == "Task"));
     g.collect_def_sites(program);
-    g.program(program)?;
+    // what completion needs is recorded even when checking stops at an
+    // error, which is how a file being typed usually is
+    let r = g.program(program);
+    if crate::diag::indexing() {
+        g.note_completion_data();
+    }
+    r?;
     let mut rust_deps = Vec::new();
     for item in program {
         if let Item::Import(imp) = item {
@@ -4126,12 +4132,14 @@ impl Gen {
                     Some(k) => k,
                     None => return Ok(None),
                 };
+                // named as it was written: `shapes.Align`, not the module's full path
+                let written = format!("{}.{}", alias, name);
                 if self.enums.contains_key(&key) {
-                    return Err(LumeError::new(e.line, e.col, format!("`{}` is an enum; pick a variant like `{}.{}`", key, key, self.enums[&key].variants[0].0)));
+                    return Err(LumeError::new(e.line, e.col, format!("`{}` is an enum; pick a variant like `{}.{}`", written, written, self.enums[&key].variants[0].0)));
                 }
                 if self.consts.contains_key(&key) {
                     if !args.is_empty() {
-                        return Err(LumeError::new(e.line, e.col, format!("`{}` is a constant, not a function", key)));
+                        return Err(LumeError::new(e.line, e.col, format!("`{}` is a constant, not a function", written)));
                     }
                     return Ok(Some(Expr::new(ExprKind::Ident(key), e.line, e.col)));
                 }
@@ -6371,7 +6379,7 @@ impl Gen {
             }
             if crate::diag::indexing() {
                 let what = if p.mutable { "var " } else { "" };
-                self.note_at(p.line, p.col, &p.name, format!("{}{}: {}", what, p.name, type_name(&pty)), Some((self.this_file.clone(), p.line, p.col)));
+                self.note_typed(p.line, p.col, &p.name, format!("{}{}: {}", what, p.name, type_name(&pty)), Some((self.this_file.clone(), p.line, p.col)), Some(&pty));
             }
             self.declare(&p.name, p.mutable, borrowed, pty, p.line);
         }
@@ -6566,7 +6574,96 @@ impl Gen {
     }
 
     fn note_at(&self, line: usize, col: usize, name: &str, hover: String, def: Option<(String, usize, usize)>) {
-        crate::diag::note(crate::diag::Use { file: self.this_file.clone(), line, col, name: name.to_string(), hover, def });
+        self.note_typed(line, col, name, hover, def, None);
+    }
+
+    fn note_typed(&self, line: usize, col: usize, name: &str, hover: String, def: Option<(String, usize, usize)>, ty: Option<&Type>) {
+        let ty = ty.and_then(|t| self.member_key(t));
+        crate::diag::note(crate::diag::Use { file: self.this_file.clone(), line, col, name: name.to_string(), hover, def, ty });
+    }
+
+    /// The key completion looks members up by: a type of the program's by
+    /// its key, a built-in by its kind.
+    fn member_key(&self, t: &Type) -> Option<String> {
+        Some(match t.materialized() {
+            Type::Named(_) | Type::App(..) => self.type_key(&t.materialized()),
+            Type::Str => "Str".into(),
+            Type::Char => "Char".into(),
+            Type::Int => "Int".into(),
+            Type::Float => "Float".into(),
+            Type::Bool => "Bool".into(),
+            Type::List(_) | Type::Iter(..) => "List".into(),
+            Type::Map(..) => "Map".into(),
+            Type::Set(_) => "Set".into(),
+            Type::Option(_) => "Option".into(),
+            Type::Result(..) => "Result".into(),
+            _ => return None,
+        })
+    }
+
+    /// For completion: what every type this module knows offers after a
+    /// `.`, what each module alias offers, and the names written bare here.
+    fn note_completion_data(&self) {
+        use crate::diag::Member;
+        let sig = |g: &Self, sg: &Sig| g.hover_sig(sg);
+        for (key, info) in &self.structs {
+            let mut m: Vec<Member> = info.fields.iter().map(|(f, t)| Member { label: f.clone(), detail: type_name(t), kind: 5 }).collect();
+            if let Some(ms) = self.methods_of(key) {
+                let mut ms: Vec<_> = ms.into_iter().collect();
+                ms.sort_by(|a, b| a.0.cmp(&b.0));
+                m.extend(ms.iter().map(|(n, sg)| Member { label: n.clone(), detail: format!("def {}{}", n, sig(self, sg)), kind: 2 }));
+            }
+            crate::diag::note_members(key.clone(), m);
+        }
+        for (key, info) in &self.enums {
+            let mut m: Vec<Member> = info.variants.iter().map(|(v, _)| Member { label: v.clone(), detail: format!("{}.{}", key, v), kind: 20 }).collect();
+            if let Some(ms) = self.methods_of(key) {
+                m.extend(ms.iter().map(|(n, sg)| Member { label: n.clone(), detail: format!("def {}{}", n, sig(self, sg)), kind: 2 }));
+            }
+            crate::diag::note_members(key.clone(), m);
+        }
+        for (name, t) in [("Str", Type::Str), ("Char", Type::Char), ("Int", Type::Int), ("Float", Type::Float), ("Bool", Type::Bool), ("List", Type::List(Box::new(Type::Unknown))), ("Map", Type::Map(Box::new(Type::Unknown), Box::new(Type::Unknown))), ("Set", Type::Set(Box::new(Type::Unknown))), ("Option", Type::Option(Box::new(Type::Unknown))), ("Result", Type::Result(Box::new(Type::Unknown), Box::new(Type::Unknown)))] {
+            let m = builtins_for(&t).iter().map(|n| Member { label: n.to_string(), detail: format!("{}.{}", name, n), kind: 2 }).collect();
+            crate::diag::note_members(name.to_string(), m);
+        }
+        // what `alias.` offers, and the names written bare in this file
+        let mut bare: Vec<Member> = Vec::new();
+        let mut per_alias: HashMap<String, Vec<Member>> = HashMap::new();
+        let mut place = |key: &str, m: Member, bare: &mut Vec<Member>| match key.split_once('.') {
+            Some((alias, item)) if self.module_aliases.contains_key(alias) && !item.contains('.') => {
+                per_alias.entry(alias.to_string()).or_default().push(Member { label: item.to_string(), ..m });
+            }
+            None => bare.push(m),
+            _ => {}
+        };
+        for (k, sg) in &self.fns {
+            let short = k.rsplit('.').next().unwrap_or(k);
+            place(k, Member { label: k.clone(), detail: format!("def {}{}", short, sig(self, sg)), kind: 3 }, &mut bare);
+        }
+        for k in self.structs.keys() {
+            place(k, Member { label: k.clone(), detail: format!("struct {}", k), kind: 7 }, &mut bare);
+        }
+        for k in self.enums.keys() {
+            place(k, Member { label: k.clone(), detail: format!("enum {}", k), kind: 13 }, &mut bare);
+        }
+        for k in self.interfaces.keys() {
+            place(k, Member { label: k.clone(), detail: format!("interface {}", k), kind: 8 }, &mut bare);
+        }
+        for (k, t) in &self.consts {
+            place(k, Member { label: k.clone(), detail: format!("{}: {}", k, type_name(t)), kind: 21 }, &mut bare);
+        }
+        for (alias, items) in per_alias {
+            let mut items = items;
+            items.sort_by(|a, b| a.label.cmp(&b.label));
+            items.dedup_by(|a, b| a.label == b.label);
+            crate::diag::note_members(format!("mod:{}", alias), items);
+        }
+        for alias in self.module_aliases.keys() {
+            bare.push(Member { label: alias.clone(), detail: format!("module {}", self.module_aliases[alias]), kind: 9 });
+        }
+        bare.sort_by(|a, b| a.label.cmp(&b.label));
+        bare.dedup_by(|a, b| a.label == b.label);
+        crate::diag::note_names(self.this_file.clone(), bare);
     }
 
     /// Where each item of this module was written, and each member of its
@@ -6616,11 +6713,11 @@ impl Gen {
             ExprKind::Ident(n) => {
                 if let Some(b) = self.lookup(n).cloned() {
                     let what = if b.mutable { "var " } else { "" };
-                    self.note_at(e.line, e.col, n, format!("{}{}: {}", what, n, type_name(&b.ty)), Some((self.this_file.clone(), b.line, 0)));
+                    self.note_typed(e.line, e.col, n, format!("{}{}: {}", what, n, type_name(&b.ty)), Some((self.this_file.clone(), b.line, 0)), Some(&b.ty));
                 } else if let Some(t) = self.field_type(n) {
                     let owner = self.current_type.clone().unwrap_or_default();
                     let site = self.def_sites.get(&format!("{}::{}", owner, n)).cloned();
-                    self.note_at(e.line, e.col, n, format!("{}.{}: {}", type_name(&Type::Named(owner)), n, type_name(&t)), site);
+                    self.note_typed(e.line, e.col, n, format!("{}.{}: {}", type_name(&Type::Named(owner)), n, type_name(&t)), site, Some(&t));
                 } else {
                     let key = self.canon(n);
                     if let Some(t) = self.consts.get(&key).cloned() {
@@ -6671,19 +6768,20 @@ impl Gen {
                     if let Some(info) = self.structs.get(&key).cloned() {
                         if let Some((_, ft)) = info.fields.iter().find(|(f, _)| f == name) {
                             let ft = Self::subst(ft, &self.subst_for(&rt));
-                            self.note_at(line, col, name, format!("{}.{}: {}", shown, name, type_name(&ft)), site);
+                            self.note_typed(line, col, name, format!("{}.{}: {}", shown, name, type_name(&ft)), site, Some(&ft));
                             return;
                         }
                     }
                     if let Some(sg) = self.methods_of(&key).and_then(|m| m.get(name).cloned()) {
-                        self.note_at(line, col, name, format!("def {}.{}{}", shown, name, self.hover_sig(&sg)), site);
+                        let rt2 = self.ty_of(e).materialized();
+                        self.note_typed(line, col, name, format!("def {}.{}{}", shown, name, self.hover_sig(&sg)), site, Some(&rt2));
                         return;
                     }
                 }
                 // a built-in method: what it gives back here
                 let t = self.ty_of(e).materialized();
                 if type_is_known(&t) {
-                    self.note_at(line, col, name, format!("{}.{} -> {}", type_name(&rt), name, type_name(&t)), None);
+                    self.note_typed(line, col, name, format!("{}.{} -> {}", type_name(&rt), name, type_name(&t)), None, Some(&t));
                 }
             }
             _ => {}
@@ -6886,7 +6984,7 @@ impl Gen {
             if let Stmt::Bind { name, line, col, .. } | Stmt::Var { name, line, col, .. } = s {
                 if let Some(b) = self.lookup(name).cloned() {
                     let what = if b.mutable { "var " } else { "" };
-                    self.note_at(*line, *col, name, format!("{}{}: {}", what, name, type_name(&b.ty)), Some((self.this_file.clone(), b.line, 0)));
+                    self.note_typed(*line, *col, name, format!("{}{}: {}", what, name, type_name(&b.ty)), Some((self.this_file.clone(), b.line, 0)), Some(&b.ty));
                 }
             }
         }
@@ -7277,7 +7375,15 @@ impl Gen {
                 let sname = match &rt {
                     Type::Named(s) if self.structs.contains_key(s) => s.clone(),
                     Type::Named(s) => return Err(LumeError::new(*line, *col, format!("`{}` is an enum; its values have no assignable fields", s))),
-                    Type::Unknown => return Err(LumeError::new(*line, *col, format!("cannot tell what `.{}` belongs to here", field))),
+                    Type::Unknown => {
+                        // `x.y = 1` with no `x`: the name is the mistake
+                        if let ExprKind::Ident(n) = &recv.kind {
+                            if self.lookup(n).is_none() && self.field_type(n).is_none() {
+                                return Err(self.unknown_name(n, *line, *col));
+                            }
+                        }
+                        return Err(LumeError::new(*line, *col, format!("cannot tell what `.{}` belongs to here", field)));
+                    }
                     other => return Err(LumeError::new(*line, *col, format!("`{}` values have no fields to assign", type_name(other)))),
                 };
                 let info = self.structs[&sname].clone();
@@ -9426,6 +9532,14 @@ impl Gen {
         if q.is_empty() {
             return if rows.is_empty() { Some(Vec::new()) } else { None };
         }
+        // A pattern of the wrong shape for its value — `Some(n)` on an `Int`,
+        // `(a, b)` on three parts — is reported where the pattern is checked,
+        // after this; here it must only not be taken for a different shape.
+        if tys.len() < q.len() {
+            let mut padded = tys.to_vec();
+            padded.resize(q.len(), Type::Unknown);
+            return self.useful(rows, q, &padded);
+        }
         let t = &tys[0];
         let arity_of = |c: &str, cs: &Option<Vec<(String, Vec<Type>)>>| -> Vec<Type> {
             cs.as_ref()
@@ -9448,6 +9562,7 @@ impl Gen {
                 .filter_map(|r| match &r[0] {
                     Pat::Ctor(rc, args) if rc == c => {
                         let mut nr = args.clone();
+                        nr.resize(arity, Pat::Wild);
                         nr.extend_from_slice(&r[1..]);
                         Some(nr)
                     }
@@ -9462,13 +9577,16 @@ impl Gen {
         };
         let default_rows = || -> Vec<Vec<Pat>> { rows.iter().filter(|r| r[0] == Pat::Wild).map(|r| r[1..].to_vec()).collect() };
         let rebuild = |c: &str, arity: usize, w: Vec<Pat>| -> Vec<Pat> {
+            let arity = arity.min(w.len());
             let mut out = vec![Pat::Ctor(c.to_string(), w[..arity].to_vec())];
             out.extend_from_slice(&w[arity..]);
             out
         };
         match &q[0] {
             Pat::Ctor(c, args) => {
-                let arg_tys = arity_of(c, &cs);
+                let mut arg_tys = arity_of(c, &cs);
+                // as many parts as this pattern has, whatever the type says
+                arg_tys.resize(args.len(), Type::Unknown);
                 let mut nq = args.clone();
                 nq.extend_from_slice(&q[1..]);
                 let mut nt = arg_tys.clone();
@@ -12226,7 +12344,8 @@ fn builtin_params(recv: &Type, name: &str) -> Option<Vec<Type>> {
 /// "a `Str`" / "an `Int`", for messages that name a type mid-sentence.
 fn a_type(t: &Type) -> String {
     let n = type_name(t);
-    let article = if n.chars().next().map(|c| "AEIOU".contains(c.to_ascii_uppercase())).unwrap_or(false) { "an" } else { "a" };
+    // a vowel sound: "an `Int`", but "a `User`"
+    let article = if n.chars().next().map(|c| "AEIO".contains(c.to_ascii_uppercase())).unwrap_or(false) { "an" } else { "a" };
     format!("{} `{}`", article, n)
 }
 

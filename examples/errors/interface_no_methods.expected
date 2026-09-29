@@ -1,0 +1,6 @@
+error: interface `Shape` has no methods
+  --> examples/errors/interface_no_methods.lume:2:17
+  |
+2 | interface Shape:
+  |                 ^
+  help: indent at least one `def name -> Type` under it

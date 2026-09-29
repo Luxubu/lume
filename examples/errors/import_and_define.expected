@@ -1,0 +1,6 @@
+error: `Align` is imported from `mods.shapes` and also defined in this file, as an enum on line 4
+  --> examples/errors/import_and_define.lume:2:1
+  |
+2 | import mods.shapes.Align
+  | ^
+  help: rename one of them, or import the module and write `shapes.Align` for the other

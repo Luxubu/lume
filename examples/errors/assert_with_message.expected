@@ -1,0 +1,5 @@
+error: `assert` takes only a condition; a failing `assert` prints both sides itself
+  --> examples/errors/assert_with_message.lume:3:22
+  |
+3 |   assert 1 + 1 == 2, "math is broken"
+  |                      ^

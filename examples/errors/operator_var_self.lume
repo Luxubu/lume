@@ -1,0 +1,7 @@
+# An operator that tries to change its left-hand value.
+struct V:
+  n: Int
+  def +(var self, other: V) -> V = other
+
+def main:
+  puts 1

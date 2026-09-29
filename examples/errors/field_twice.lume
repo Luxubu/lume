@@ -1,0 +1,7 @@
+# The same field is listed twice in a struct.
+struct P:
+  x: Int
+  x: Int
+
+def main:
+  puts 1

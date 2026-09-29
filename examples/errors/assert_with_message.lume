@@ -1,0 +1,3 @@
+# `assert` does not take a message after the condition.
+test "adds":
+  assert 1 + 1 == 2, "math is broken"

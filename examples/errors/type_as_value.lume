@@ -1,0 +1,7 @@
+# A struct's name used as a value.
+struct P:
+  x: Int
+
+def main:
+  p = P
+  puts 1

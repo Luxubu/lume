@@ -1,0 +1,5 @@
+error: `g` is `(Str) -> Int`, but this parameter takes `(Int) -> Int`
+  --> examples/errors/block_type_mismatch.lume:4:41
+  |
+4 | def run(g: (Str) -> Int) -> Int = apply(g)
+  |                                         ^

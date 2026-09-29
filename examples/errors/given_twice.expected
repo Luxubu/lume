@@ -1,0 +1,5 @@
+error: argument `w` is given twice
+  --> examples/errors/given_twice.lume:6:18
+  |
+6 |   puts Box(w: 1, w: 2)
+  |                  ^

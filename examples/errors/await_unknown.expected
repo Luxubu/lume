@@ -1,0 +1,5 @@
+error: cannot tell what is being awaited here
+  --> examples/errors/await_unknown.lume:3:14
+  |
+3 |   puts await rust("1")
+  |              ^

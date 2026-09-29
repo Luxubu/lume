@@ -1,0 +1,5 @@
+error: `test` blocks go at the top level of the file, not inside a function
+  --> examples/errors/test_inside_function.lume:3:3
+  |
+3 |   test "adds":
+  |   ^

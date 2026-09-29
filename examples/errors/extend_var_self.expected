@@ -1,0 +1,5 @@
+error: methods in an `extend` block cannot take `var self`
+  --> examples/errors/extend_var_self.lume:6:3
+  |
+6 |   def bump(var self) -> Int = self + 1
+  |   ^

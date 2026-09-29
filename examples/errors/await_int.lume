@@ -1,0 +1,3 @@
+# Awaiting a plain number.
+async def main:
+  puts await 5

@@ -1,0 +1,4 @@
+# `spawn` is missing its colon.
+async def main:
+  t = spawn 1
+  puts await t

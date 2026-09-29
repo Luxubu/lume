@@ -1,0 +1,3 @@
+# Awaiting something whose type cannot be worked out.
+async def main:
+  puts await rust("1")

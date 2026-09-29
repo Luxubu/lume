@@ -1,0 +1,6 @@
+# The same function is defined twice.
+def f -> Int = 1
+def f -> Int = 2
+
+def main:
+  puts f()

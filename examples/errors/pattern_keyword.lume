@@ -1,0 +1,4 @@
+# A keyword cannot be used as a pattern name.
+def main:
+  match 3:
+    def -> puts 1

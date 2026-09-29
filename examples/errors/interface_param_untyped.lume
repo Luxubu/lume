@@ -1,0 +1,6 @@
+# A parameter of an interface method has no type.
+interface Shape:
+  def scale(k) -> Int
+
+def main:
+  puts 1

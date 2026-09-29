@@ -1,0 +1,4 @@
+# A line indented to a depth no enclosing block uses.
+def main:
+    x = 1
+  puts x

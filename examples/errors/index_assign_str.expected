@@ -1,0 +1,5 @@
+error: `Str` values cannot be indexed
+  --> examples/errors/index_assign_str.lume:4:3
+  |
+4 |   s[0] = "x"
+  |   ^

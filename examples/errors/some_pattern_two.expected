@@ -1,0 +1,5 @@
+error: `Some` takes exactly one pattern, like `Some(x)`
+  --> examples/errors/some_pattern_two.lume:6:5
+  |
+6 |     Some(a, b) -> puts a
+  |     ^

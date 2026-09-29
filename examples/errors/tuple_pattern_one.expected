@@ -1,0 +1,5 @@
+error: a tuple pattern needs at least two parts, like `(a, b)`
+  --> examples/errors/tuple_pattern_one.lume:4:5
+  |
+4 |     (a,) -> puts a
+  |     ^

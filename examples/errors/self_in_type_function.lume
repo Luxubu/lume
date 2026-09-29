@@ -1,0 +1,7 @@
+# A function of the type itself has no `self`.
+struct P:
+  x: Int
+  def self.make(self) -> P = P(x: 1)
+
+def main:
+  puts 1

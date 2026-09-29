@@ -1,0 +1,7 @@
+# A block parameter passed on where a block of another shape is wanted.
+def apply(f: (Int) -> Int) -> Int = f(1)
+
+def run(g: (Str) -> Int) -> Int = apply(g)
+
+def main:
+  puts run { |s| s.len }

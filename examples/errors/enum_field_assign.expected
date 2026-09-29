@@ -1,0 +1,5 @@
+error: `Shape` is an enum; its values have no assignable fields
+  --> examples/errors/enum_field_assign.lume:7:3
+  |
+7 |   s.r = 2
+  |   ^

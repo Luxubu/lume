@@ -1,0 +1,5 @@
+# `None` carries no value.
+def f -> Int? = None(0)
+
+def main:
+  puts f().or(1)

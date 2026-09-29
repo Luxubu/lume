@@ -1,0 +1,6 @@
+error: this `"""` string is never closed
+  --> examples/errors/triple_string_unclosed.lume:3:7
+  |
+3 |   s = """
+  |       ^
+  help: end it with a matching `"""`

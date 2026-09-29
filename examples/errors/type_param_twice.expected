@@ -1,0 +1,5 @@
+error: type parameter `T` is listed twice
+  --> examples/errors/type_param_twice.lume:2:13
+  |
+2 | def pair[T, T](a: T, b: T) -> T = a
+  |             ^

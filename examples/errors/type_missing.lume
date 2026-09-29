@@ -1,0 +1,5 @@
+# A parameter's type is a number instead of a type.
+def f(n: 3) -> Int = n
+
+def main:
+  puts 1

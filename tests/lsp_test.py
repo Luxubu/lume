@@ -139,8 +139,32 @@ for what, tok, nth, line_has in probes:
         where = "%s:%d:%d" % (d["uri"].replace("file://" + tmp, "<tmp>"), d["range"]["start"]["line"] + 1, d["range"]["start"]["character"] + 1)
     print("%-30s hover %s | definition %s" % (what, json.dumps(shown), where))
 
+print("--- completion while typing: the file does not parse, the last check is used")
+def complete(typed):
+    text = nav_text + "  " + typed + "\n"
+    send("textDocument/didChange", {"textDocument": {"uri": uri(nav), "version": 9}, "contentChanges": [{"text": text}]})
+    diagnostics_until(nav) if False else None
+    # the change starts a check whose diagnostics come first
+    while True:
+        m = recv()
+        if m.get("method") == "textDocument/publishDiagnostics" and m["params"]["uri"] == uri(nav):
+            break
+    line = len(text.split("\n")) - 2
+    send("textDocument/completion", {"textDocument": {"uri": uri(nav)}, "position": {"line": line, "character": len("  " + typed)}}, True)
+    items = recv()["result"]["items"]
+    return items
+
+for typed in ["puts later.", "puts helper.", "puts later.name.", "puts la"]:
+    items = complete(typed)
+    labels = [i["label"] for i in items]
+    if typed.endswith("."):
+        print("%-18s -> %s" % (typed, ", ".join(labels[:12]) + (" ..." if len(labels) > 12 else "")))
+    else:
+        wanted = ["ann", "later", "older", "Person", "helper", "def", "while"]
+        print("%-18s -> offers %s" % (typed, ", ".join(w for w in wanted if w in labels)))
+
 print("--- a request it does not answer, then shutdown")
-send("textDocument/completion", {"textDocument": {"uri": uri(one)}, "position": {"line": 0, "character": 0}}, True)
+send("textDocument/rename", {"textDocument": {"uri": uri(one)}, "position": {"line": 0, "character": 0}, "newName": "x"}, True)
 show(recv())
 send("shutdown", None, True)
 show(recv())

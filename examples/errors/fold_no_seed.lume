@@ -1,0 +1,3 @@
+# `fold` without its starting value.
+def main:
+  puts [1, 2].fold { |acc, x| acc + x }

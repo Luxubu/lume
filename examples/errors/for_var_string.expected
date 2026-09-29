@@ -1,0 +1,5 @@
+error: `for var` walks a list and changes its items, but this is a `{Str: P}`
+  --> examples/errors/for_var_string.lume:7:16
+  |
+7 |   for var p in m:
+  |                ^

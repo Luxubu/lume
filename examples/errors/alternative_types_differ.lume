@@ -1,0 +1,8 @@
+# The same name binds values of different types in two alternatives.
+enum V:
+  I(n: Int)
+  S(s: Str)
+
+def main:
+  match I(n: 1):
+    I(x) | S(x) -> puts x

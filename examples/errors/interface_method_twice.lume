@@ -1,0 +1,7 @@
+# The same method is listed twice in an interface.
+interface Sized:
+  def size -> Int
+  def size -> Int
+
+def main:
+  puts 1

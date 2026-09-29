@@ -1,0 +1,6 @@
+error: this parameter is `shared var Int`, but the value is a plain `Int`
+  --> examples/errors/shared_param_plain.lume:7:19
+  |
+7 |   puts await peek(n)
+  |                   ^
+  help: declare the value with `shared var` (or `shared`) where it is created

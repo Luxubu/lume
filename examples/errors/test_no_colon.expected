@@ -1,0 +1,5 @@
+error: expected `:` after the test name, found the end of the line
+  --> examples/errors/test_no_colon.lume:2:12
+  |
+2 | test "adds"
+  |            ^

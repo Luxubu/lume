@@ -1,0 +1,5 @@
+error: a tuple pattern cannot match an `Int`
+  --> examples/errors/tuple_pattern_on_int.lume:4:5
+  |
+4 |     (a, b) -> puts a
+  |     ^

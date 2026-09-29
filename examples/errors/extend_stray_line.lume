@@ -1,0 +1,9 @@
+# Only methods belong inside an `extend`.
+interface Sized:
+  def size -> Int
+
+extend Str with Sized:
+  n: Int
+
+def main:
+  puts 1

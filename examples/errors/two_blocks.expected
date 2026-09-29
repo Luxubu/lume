@@ -1,0 +1,6 @@
+error: `map` is given two blocks
+  --> examples/errors/two_blocks.lume:4:22
+  |
+4 |   puts xs.map(_ * 2) { |x| x + 1 }
+  |                      ^
+  help: use either `_` in the argument or a `{ |x| }` / `do |x|` block, not both

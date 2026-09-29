@@ -1,0 +1,3 @@
+# `assert` given a number instead of a condition.
+test "counts":
+  assert 1 + 1

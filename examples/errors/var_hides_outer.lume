@@ -1,0 +1,7 @@
+# A `var` in an inner block that would hide one outside it.
+def main:
+  var n = 1
+  if true:
+    var n = 2
+    puts n
+  puts n

@@ -320,6 +320,13 @@ impl Parser {
                 return Err(self
                     .err("unexpected indentation at the top level")
                     .with_help("top-level code goes inside `def main:`"));
+            } else if matches!(self.peek(), Tok::Ident(n) if n.chars().next().map(|c| c.is_uppercase()).unwrap_or(false)) && matches!(self.peek_at(1), Tok::Sym(":")) {
+                // `LIMIT: Int` with no value
+                let name = match self.peek() {
+                    Tok::Ident(n) => n.clone(),
+                    _ => unreachable!(),
+                };
+                return Err(self.err(format!("`{}` at the top level needs a value", name)).with_help(format!("a constant is written with its value: `{}: Type = value`, or just `{} = value`", name, name)));
             } else {
                 return Err(self
                     .err(format!("expected `def`, `struct`, `enum`, `interface`, `import` or `test`, found {}", self.describe()))

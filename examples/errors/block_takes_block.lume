@@ -1,0 +1,5 @@
+# A block type whose argument is another block.
+def run(f: ((Int) -> Int) -> Int) -> Int = 1
+
+def main:
+  puts 1

@@ -1,0 +1,5 @@
+error: a crate version is a plain string like "1.10"
+  --> examples/errors/crate_version_interpolated.lume:3:27
+  |
+3 | import rust.regex = "#{V}"
+  |                           ^

@@ -1,0 +1,6 @@
+error: only a named value can be changed, not this map
+  --> examples/errors/change_expression.lume:5:3
+  |
+5 |   ages()["bob"] = 41
+  |   ^
+  help: bind the value to a `var` first

@@ -1,0 +1,4 @@
+# A tuple pattern needs two or more parts.
+def main:
+  match (1, 2):
+    (a,) -> puts a

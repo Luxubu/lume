@@ -1,0 +1,5 @@
+error: `regex.Regex` is a type from the crate; call one of its functions, like `regex.Regex.new(...)`
+  --> examples/errors/crate_type_called.lume:5:12
+  |
+5 |   r = regex.Regex("a+")
+  |            ^

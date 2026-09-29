@@ -1,0 +1,6 @@
+error: `main` cannot take type parameters
+  --> examples/errors/main_generic.lume:2:1
+  |
+2 | def main[T]:
+  | ^
+  help: nothing calls `main`, so there is nowhere for them to come from

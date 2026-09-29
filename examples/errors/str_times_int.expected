@@ -1,4 +1,4 @@
-error: `*` cannot combine a `Str` and a `Int`
+error: `*` cannot combine a `Str` and an `Int`
   --> examples/errors/str_times_int.lume:2:12
   |
 2 |   puts "-" * 3

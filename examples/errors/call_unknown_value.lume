@@ -1,0 +1,3 @@
+# Calling the first item of an empty list whose item type is never said.
+def main:
+  puts [].first!(3)

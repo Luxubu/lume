@@ -1,0 +1,5 @@
+error: `None` matches an optional value, but this is an `Int`
+  --> examples/errors/none_pattern_on_int.lume:4:5
+  |
+4 |     None -> puts 0
+  |     ^

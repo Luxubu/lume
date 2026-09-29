@@ -1,0 +1,5 @@
+error: `Ok` takes exactly one pattern, like `Ok(x)`
+  --> examples/errors/ok_pattern_two.lume:6:5
+  |
+6 |     Ok(a, b) -> puts a
+  |     ^

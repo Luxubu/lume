@@ -1,0 +1,6 @@
+# A variant with empty parentheses.
+enum Shape:
+  Dot()
+
+def main:
+  puts 1

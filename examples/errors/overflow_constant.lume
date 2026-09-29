@@ -1,0 +1,3 @@
+# Arithmetic on constant numbers that overflows.
+def main:
+  puts 9223372036854775807 + 1

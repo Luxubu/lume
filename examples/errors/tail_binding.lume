@@ -1,0 +1,6 @@
+# A function returning Int whose last line is a binding.
+def f -> Int:
+  x = 1
+
+def main:
+  puts f()

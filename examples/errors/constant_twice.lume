@@ -1,0 +1,6 @@
+# The same constant is defined twice.
+LIMIT = 1
+LIMIT = 2
+
+def main:
+  puts LIMIT

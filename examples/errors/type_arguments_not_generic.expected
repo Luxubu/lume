@@ -1,0 +1,6 @@
+error: `P` takes no type arguments
+  --> examples/errors/type_arguments_not_generic.lume:5:10
+  |
+5 | def show(p: P[Int]) -> Int = p.x
+  |          ^
+  help: write it as `P`; only a `struct` or `enum` declared `P[T]` takes them

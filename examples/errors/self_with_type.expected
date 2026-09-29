@@ -1,0 +1,5 @@
+error: `self` takes no type; it is always the struct itself
+  --> examples/errors/self_with_type.lume:4:15
+  |
+4 |   def get(self: P) -> Int = x
+  |               ^

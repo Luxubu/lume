@@ -1,0 +1,6 @@
+# Variant names must start with a capital letter.
+enum Shape:
+  dot
+
+def main:
+  puts 1

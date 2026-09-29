@@ -1,0 +1,3 @@
+# A built-in method given a named argument.
+def main:
+  puts "a,b".split(sep: ",")

@@ -1,0 +1,6 @@
+error: `reverse` does not take a block
+  --> examples/errors/method_no_block.lume:3:14
+  |
+3 |   puts [1, 2].reverse { |x| x }
+  |              ^
+  help: block methods are: map, filter, reject, each, sum, count, any?, all?, find, take_while, sort_by, min_by, max_by, fold, group_by, partition, flat_map

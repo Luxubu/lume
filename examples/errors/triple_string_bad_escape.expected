@@ -1,0 +1,5 @@
+error: in this `"""` string: unknown escape `\q` in string
+  --> examples/errors/triple_string_bad_escape.lume:3:7
+  |
+3 |   s = """
+  |       ^

@@ -1,0 +1,5 @@
+# Assigning to a position of a string.
+def main:
+  var s = "abc"
+  s[0] = "x"
+  puts s

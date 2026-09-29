@@ -1,0 +1,5 @@
+error: `None` takes no value
+  --> examples/errors/none_with_value.lume:2:21
+  |
+2 | def f -> Int? = None(0)
+  |                     ^

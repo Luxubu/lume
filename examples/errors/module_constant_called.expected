@@ -1,0 +1,5 @@
+error: `shapes.LIMIT` is a constant, not a function
+  --> examples/errors/module_constant_called.lume:5:14
+  |
+5 |   puts shapes.LIMIT(1)
+  |              ^

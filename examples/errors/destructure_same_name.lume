@@ -1,0 +1,4 @@
+# The same name used twice when unpacking a pair.
+def main:
+  (a, a) = (1, 2)
+  puts a

@@ -1,0 +1,4 @@
+# Lume has no `nil`.
+def main:
+  x = nil
+  puts x

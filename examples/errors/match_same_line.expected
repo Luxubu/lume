@@ -1,0 +1,6 @@
+error: the arms of a `match` go on the following lines, indented
+  --> examples/errors/match_same_line.lume:3:12
+  |
+3 |   match 3: _ -> puts 1
+  |            ^
+  help: each arm is `pattern -> value`

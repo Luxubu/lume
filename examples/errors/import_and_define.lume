@@ -1,0 +1,9 @@
+# A name imported from a module and defined again in this file.
+import mods.shapes.Align
+
+enum Align:
+  Up
+  Down
+
+def main:
+  puts 1

@@ -1,0 +1,6 @@
+error: a block's arguments have no names, so `n:` does not fit here
+  --> examples/errors/block_named_argument.lume:2:35
+  |
+2 | def run(f: (Int) -> Int) -> Int = f(n: 1)
+  |                                   ^
+  help: `f` takes one value by position

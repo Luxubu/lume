@@ -1,0 +1,5 @@
+# An optional type is written with `?`, not Option.
+def find(xs: [Int]) -> Option[Int] = xs.first
+
+def main:
+  puts 1

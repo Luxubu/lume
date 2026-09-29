@@ -1,0 +1,6 @@
+error: `f` is behaviour, so it cannot be a `var` parameter
+  --> examples/errors/block_var_parameter.lume:2:13
+  |
+2 | def run(var f: (Int) -> Int) -> Int = f(1)
+  |             ^
+  help: a block is run, not changed; drop the `var`

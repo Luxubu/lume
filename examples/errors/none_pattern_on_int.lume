@@ -1,0 +1,5 @@
+# `None` used to match a plain number, which cannot be missing.
+def main:
+  match 3:
+    None -> puts 0
+    _ -> puts 1

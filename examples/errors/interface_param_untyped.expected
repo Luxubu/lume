@@ -1,0 +1,5 @@
+error: parameter `k` needs a type
+  --> examples/errors/interface_param_untyped.lume:3:14
+  |
+3 |   def scale(k) -> Int
+  |              ^

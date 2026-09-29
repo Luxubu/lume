@@ -1,0 +1,5 @@
+# A type parameter bound by an interface that does not exist.
+def biggest[T: Sortable](xs: [T]) -> Int = xs.len
+
+def main:
+  puts 1

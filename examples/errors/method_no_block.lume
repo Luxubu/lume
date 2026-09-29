@@ -1,0 +1,3 @@
+# A block given to a list method that takes none.
+def main:
+  puts [1, 2].reverse { |x| x }

@@ -1,0 +1,5 @@
+error: this pattern is a string, but the value is an `Int`
+  --> examples/errors/pattern_type_mismatch.lume:4:5
+  |
+4 |     "three" -> puts 1
+  |     ^

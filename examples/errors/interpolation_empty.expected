@@ -1,0 +1,5 @@
+error: empty interpolation `#{}`
+  --> examples/errors/interpolation_empty.lume:3:14
+  |
+3 |   puts "hi #{}"
+  |              ^

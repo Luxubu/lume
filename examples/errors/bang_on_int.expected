@@ -1,0 +1,5 @@
+error: `!` unwraps an optional or a `T or E`, but this is an `Int`
+  --> examples/errors/bang_on_int.lume:4:9
+  |
+4 |   puts n!
+  |         ^

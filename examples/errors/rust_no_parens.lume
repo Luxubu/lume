@@ -1,0 +1,4 @@
+# An inline Rust expression needs parentheses and a string.
+def main:
+  x = rust "1 + 1"
+  puts 1

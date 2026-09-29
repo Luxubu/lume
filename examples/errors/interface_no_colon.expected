@@ -1,0 +1,5 @@
+error: expected `:` after `interface Shape`
+  --> examples/errors/interface_no_colon.lume:2:16
+  |
+2 | interface Shape
+  |                ^

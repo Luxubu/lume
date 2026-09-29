@@ -1,0 +1,4 @@
+# A tuple position on a plain number.
+def main:
+  n = 5
+  puts n.0

@@ -1,0 +1,5 @@
+error: a constant cannot hold a `Task[Int]`
+  --> examples/errors/constant_shared.lume:5:1
+  |
+5 | T = spawn: 1
+  | ^

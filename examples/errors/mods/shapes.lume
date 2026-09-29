@@ -1,0 +1,9 @@
+# A module the examples in examples/errors/ import, to show mistakes with imports.
+
+pub enum Align:
+  Left
+  Right
+
+pub LIMIT = 3
+
+pub def area(w: Int, h: Int) -> Int = w * h

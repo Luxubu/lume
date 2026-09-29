@@ -1,0 +1,6 @@
+error: field `radius` of `Circle` needs a type
+  --> examples/errors/variant_field_untyped.lume:3:16
+  |
+3 |   Circle(radius)
+  |                ^
+  help: write `Circle(radius: Float)`

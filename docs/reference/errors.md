@@ -277,7 +277,7 @@ def f(s: Str) -> Int?:
 
 def main:
   puts f("3")
-#! `?` on a `Int or Error` returns the error, but `f` returns `Int?`
+#! `?` on an `Int or Error` returns the error, but `f` returns `Int?`
 ```
 
 `?` on an absence inside a `T or Error` function:
@@ -335,7 +335,7 @@ def parse(s: Str) -> Int or Error:
 
 def main:
   puts parse("21")
-#! `Error` field `message` is `Str`, but this is a `Error`
+#! `Error` field `message` is `Str`, but this is an `Error`
 ```
 
 To add context, `map_error` replaces the failure and lets a value through,

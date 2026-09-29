@@ -1,0 +1,5 @@
+# A map type needs a colon between the key and value types.
+def count(m: {Str Int}) -> Int = m.len
+
+def main:
+  puts 1

@@ -1,0 +1,6 @@
+error: expected `.` and a crate name after `import rust`
+  --> examples/errors/import_rust_no_crate.lume:2:12
+  |
+2 | import rust
+  |            ^
+  help: for example `import rust.regex`

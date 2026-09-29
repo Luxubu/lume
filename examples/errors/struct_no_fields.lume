@@ -1,0 +1,6 @@
+# A struct with only methods and no fields.
+struct Empty:
+  def hi -> Int = 1
+
+def main:
+  puts 1

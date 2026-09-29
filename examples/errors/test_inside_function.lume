@@ -1,0 +1,4 @@
+# A test block written inside a function.
+def main:
+  test "adds":
+    assert 1 + 1 == 2

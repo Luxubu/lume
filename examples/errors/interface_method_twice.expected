@@ -1,0 +1,5 @@
+error: method `size` is listed twice in `Sized`
+  --> examples/errors/interface_method_twice.lume:4:3
+  |
+4 |   def size -> Int
+  |   ^

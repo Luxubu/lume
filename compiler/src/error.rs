@@ -11,13 +11,37 @@ pub struct LumeError {
     pub help: Option<String>,
 }
 
+/// "a `Int`" is written in many messages with the type filled in later;
+/// the article follows the name: "an `Int`", "an `Error`", "a `User`".
+pub fn fix_articles(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let b: Vec<char> = s.chars().collect();
+    let mut i = 0;
+    while i < b.len() {
+        // " a `X" or a message starting "a `X", with X a vowel sound
+        let at_word = i == 0 || b[i - 1] == ' ' || b[i - 1] == '(';
+        if at_word && b[i] == 'a' && b.get(i + 1) == Some(&' ') && b.get(i + 2) == Some(&'`') {
+            if let Some(c) = b.get(i + 3) {
+                if "aeioAEIO".contains(*c) {
+                    out.push_str("an");
+                    i += 1;
+                    continue;
+                }
+            }
+        }
+        out.push(b[i]);
+        i += 1;
+    }
+    out
+}
+
 impl LumeError {
     pub fn new(line: usize, col: usize, msg: impl Into<String>) -> Self {
-        LumeError { line, col, msg: msg.into(), help: None }
+        LumeError { line, col, msg: fix_articles(&msg.into()), help: None }
     }
 
     pub fn with_help(mut self, help: impl Into<String>) -> Self {
-        self.help = Some(help.into());
+        self.help = Some(fix_articles(&help.into()));
         self
     }
 

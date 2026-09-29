@@ -1,0 +1,6 @@
+error: this alternative already matches everything, so the `|` has no effect
+  --> examples/errors/alternative_catch_all.lume:4:9
+  |
+4 |     1 | n -> puts n
+  |         ^
+  help: drop the other alternatives, or replace this one with a specific pattern

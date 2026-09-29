@@ -1,0 +1,5 @@
+error: expected `:` after `extend ... with Sized`
+  --> examples/errors/extend_no_colon.lume:5:22
+  |
+5 | extend Str with Sized
+  |                      ^

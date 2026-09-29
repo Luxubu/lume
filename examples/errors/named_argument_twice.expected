@@ -1,0 +1,5 @@
+error: argument `x` is given twice
+  --> examples/errors/named_argument_twice.lume:6:16
+  |
+6 |   puts P(x: 1, x: 2)
+  |                ^

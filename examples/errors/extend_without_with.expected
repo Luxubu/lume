@@ -1,0 +1,6 @@
+error: expected `with` and an interface name
+  --> examples/errors/extend_without_with.lume:5:11
+  |
+5 | extend Str:
+  |           ^
+  help: write `extend Str with Shape:`

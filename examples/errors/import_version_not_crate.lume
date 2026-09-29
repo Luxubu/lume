@@ -1,0 +1,5 @@
+# Only a Rust crate import takes a version.
+import util = "1"
+
+def main:
+  puts 1

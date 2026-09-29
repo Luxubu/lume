@@ -1,0 +1,5 @@
+error: indexing takes one key or position
+  --> examples/errors/index_two_keys.lume:4:14
+  |
+4 |   puts xs[0, 1]
+  |              ^

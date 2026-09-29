@@ -1,0 +1,6 @@
+error: enum names start with a capital letter: `shape`
+  --> examples/errors/enum_lowercase.lume:2:6
+  |
+2 | enum shape:
+  |      ^
+  help: rename it `Shape`

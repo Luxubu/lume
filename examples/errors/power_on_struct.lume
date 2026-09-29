@@ -1,0 +1,7 @@
+# `**` on a struct, which cannot define it.
+struct V:
+  n: Int
+  def +(other: V) -> V = V(n: n + other.n)
+
+def main:
+  puts V(n: 1) ** V(n: 2)

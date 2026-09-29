@@ -1,0 +1,7 @@
+# An interface's default method that changes the value.
+interface Counter:
+  def size -> Int
+  def bump(var self) -> Int = size + 1
+
+def main:
+  puts 1

@@ -1,0 +1,6 @@
+# The colon after the enum name is missing.
+enum Shape
+  Dot
+
+def main:
+  puts 1

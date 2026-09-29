@@ -1,0 +1,8 @@
+# A struct that takes no type arguments is given one.
+struct P:
+  x: Int
+
+def show(p: P[Int]) -> Int = p.x
+
+def main:
+  puts 1

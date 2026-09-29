@@ -1,0 +1,5 @@
+# Inline Rust code cannot use Lume interpolation.
+def main:
+  n = 1
+  x: Int = rust("#{n} + 1")
+  puts x

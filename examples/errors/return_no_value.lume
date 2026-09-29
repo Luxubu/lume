@@ -1,0 +1,8 @@
+# A bare `return` in a function that must return an Int.
+def f(n: Int) -> Int:
+  if n > 1:
+    return
+  n
+
+def main:
+  puts f(1)

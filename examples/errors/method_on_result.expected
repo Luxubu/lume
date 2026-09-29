@@ -1,0 +1,6 @@
+error: this value is an `Int or Error` — it may be an error, so `.abs` cannot be called on it directly
+  --> examples/errors/method_on_result.lume:5:18
+  |
+5 |   puts parse("1").abs
+  |                  ^
+  help: unwrap it first: `?` to pass the error up, `match` on `Ok(x)`/`Error(e)`, or `.or(default)`

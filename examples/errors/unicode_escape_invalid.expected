@@ -1,0 +1,6 @@
+error: `\u{110000}` is not a valid unicode escape
+  --> examples/errors/unicode_escape_invalid.lume:3:9
+  |
+3 |   puts "\u{110000}"
+  |         ^
+  help: write the code point in hex inside the braces, like `\u{e9}` or `\u{1F600}`

@@ -1,0 +1,5 @@
+error: `.or_error` turns an optional value into a `T or Error`, but this is a `Task[Int]`
+  --> examples/errors/task_or_error.lume:4:9
+  |
+4 |   puts t.or_error("none")
+  |         ^

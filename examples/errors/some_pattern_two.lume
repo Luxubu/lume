@@ -1,0 +1,7 @@
+# `Some` in a pattern with two inner patterns.
+def f -> Int? = None
+
+def main:
+  match f():
+    Some(a, b) -> puts a
+    None -> puts 0

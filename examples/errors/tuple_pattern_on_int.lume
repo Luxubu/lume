@@ -1,0 +1,5 @@
+# A tuple pattern used on a plain number.
+def main:
+  match 3:
+    (a, b) -> puts a
+    _ -> puts 0

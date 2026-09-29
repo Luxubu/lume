@@ -1,0 +1,4 @@
+# Matching on a value whose type cannot be worked out.
+def main:
+  match rust("1"):
+    _ -> puts 1

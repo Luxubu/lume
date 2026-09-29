@@ -1,0 +1,5 @@
+error: expected a pattern, found `+`
+  --> examples/errors/pattern_not_a_pattern.lume:4:5
+  |
+4 |     + -> puts 1
+  |     ^

@@ -1,0 +1,5 @@
+error: unknown interface `Sized`
+  --> examples/errors/extend_unknown_interface.lume:2:1
+  |
+2 | extend Str with Sized:
+  | ^

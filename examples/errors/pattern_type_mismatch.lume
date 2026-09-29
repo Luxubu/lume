@@ -1,0 +1,5 @@
+# A string pattern used on a number.
+def main:
+  match 3:
+    "three" -> puts 1
+    _ -> puts 0

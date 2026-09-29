@@ -1,0 +1,12 @@
+# An interface cannot itself be extended with another interface.
+interface Sized:
+  def size -> Int
+
+interface Named:
+  def name -> Str
+
+extend Sized with Named:
+  def name -> Str = "x"
+
+def main:
+  puts 1

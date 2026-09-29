@@ -1,0 +1,5 @@
+error: a character position is an `Int`, but this is a `Str`
+  --> examples/errors/char_position_str.lume:4:10
+  |
+4 |   puts s["a"]
+  |          ^

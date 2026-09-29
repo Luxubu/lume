@@ -1,0 +1,5 @@
+error: expected a version string after `=`, like `import rust.regex = "1.10"`
+  --> examples/errors/crate_version_not_string.lume:2:21
+  |
+2 | import rust.regex = 1
+  |                     ^

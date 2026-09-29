@@ -1,0 +1,6 @@
+error: unknown escape `\q` in string
+  --> examples/errors/unknown_escape.lume:3:12
+  |
+3 |   puts "tab\q"
+  |            ^
+  help: valid escapes are \n \t \r \0 \" \\ \# and \u{...}

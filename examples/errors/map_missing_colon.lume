@@ -1,0 +1,4 @@
+# A map literal item is missing the colon after its key.
+def main:
+  ages = {"ada": 36, "bob" 41}
+  puts ages.len

@@ -169,7 +169,7 @@ extend Sq with Shape:
 
 def main:
   puts Sq(2.0).area
-#! `Sq` already has a `area` method
+#! `Sq` already has an `area` method
 ```
 
 ### It may not add a method the interface never asked for

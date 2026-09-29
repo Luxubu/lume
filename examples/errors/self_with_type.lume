@@ -1,0 +1,7 @@
+# `self` is never given a type.
+struct P:
+  x: Int
+  def get(self: P) -> Int = x
+
+def main:
+  puts 1

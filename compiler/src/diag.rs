@@ -16,7 +16,28 @@ use std::path::{Path, PathBuf};
 thread_local! {
     static OVERLAY: RefCell<HashMap<PathBuf, String>> = RefCell::new(HashMap::new());
     static SINK: RefCell<Option<Vec<String>>> = const { RefCell::new(None) };
-    static INDEX: RefCell<Option<Vec<Use>>> = const { RefCell::new(None) };
+    static INDEX: RefCell<Option<Index>> = const { RefCell::new(None) };
+}
+
+/// What one check learned about names: every use it resolved, what each
+/// type offers after a `.`, and the names each file can use.
+#[derive(Clone, Debug, Default)]
+pub struct Index {
+    pub uses: Vec<Use>,
+    /// type or module key (`Person`, `Str`, `mod:helper`) -> its members
+    pub members: HashMap<String, Vec<Member>>,
+    /// file -> the names written bare there: its items and what it imports
+    pub names: HashMap<String, Vec<Member>>,
+}
+
+/// Something completion can offer: a label, what it is, and its kind as
+/// the protocol numbers them (2 method, 3 function, 5 field, 6 variable,
+/// 7 struct, 8 interface, 9 module, 13 enum, 20 variant, 21 constant).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Member {
+    pub label: String,
+    pub detail: String,
+    pub kind: u8,
 }
 
 /// One name the compiler resolved while checking: where it is used, what
@@ -30,6 +51,8 @@ pub struct Use {
     pub name: String,
     pub hover: String,
     pub def: Option<(String, usize, usize)>,
+    /// the key of its type, for what may follow it after a `.`
+    pub ty: Option<String>,
 }
 
 /// Is a check being indexed? Cheap enough to ask before building a note.
@@ -39,15 +62,32 @@ pub fn indexing() -> bool {
 
 pub fn note(u: Use) {
     INDEX.with(|i| {
-        if let Some(v) = i.borrow_mut().as_mut() {
-            v.push(u);
+        if let Some(ix) = i.borrow_mut().as_mut() {
+            ix.uses.push(u);
+        }
+    });
+}
+
+/// What a type or module offers; the first word on a key is kept.
+pub fn note_members(key: String, members: Vec<Member>) {
+    INDEX.with(|i| {
+        if let Some(ix) = i.borrow_mut().as_mut() {
+            ix.members.entry(key).or_insert(members);
+        }
+    });
+}
+
+pub fn note_names(file: String, names: Vec<Member>) {
+    INDEX.with(|i| {
+        if let Some(ix) = i.borrow_mut().as_mut() {
+            ix.names.insert(file, names);
         }
     });
 }
 
 /// Runs `f` with every resolved name recorded.
-pub fn indexed<T>(f: impl FnOnce() -> T) -> (T, Vec<Use>) {
-    INDEX.with(|i| *i.borrow_mut() = Some(Vec::new()));
+pub fn indexed<T>(f: impl FnOnce() -> T) -> (T, Index) {
+    INDEX.with(|i| *i.borrow_mut() = Some(Index::default()));
     let r = f();
     let got = INDEX.with(|i| i.borrow_mut().take().unwrap_or_default());
     (r, got)

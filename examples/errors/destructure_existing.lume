@@ -1,0 +1,5 @@
+# Unpacking a pair into a name that already exists.
+def main:
+  a = 0
+  (a, b) = (1, 2)
+  puts b

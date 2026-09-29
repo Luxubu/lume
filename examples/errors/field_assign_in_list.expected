@@ -1,0 +1,5 @@
+error: `Int` values have no fields to assign
+  --> examples/errors/field_assign_in_list.lume:4:3
+  |
+4 |   xs[0].x = 3
+  |   ^

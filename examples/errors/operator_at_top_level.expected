@@ -1,0 +1,5 @@
+error: `def +` defines an operator, which belongs inside a struct, enum or extend
+  --> examples/errors/operator_at_top_level.lume:2:5
+  |
+2 | def +(a: Int, b: Int) -> Int = a
+  |     ^

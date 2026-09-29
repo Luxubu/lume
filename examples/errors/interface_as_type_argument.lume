@@ -1,0 +1,11 @@
+# An interface used as the type argument of a generic struct.
+interface Shape:
+  def area -> Int
+
+struct Box[T]:
+  item: T
+
+def show(b: Box[Shape]) -> Int = 1
+
+def main:
+  puts 1

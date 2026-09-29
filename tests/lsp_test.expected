@@ -1,12 +1,12 @@
 --- initialize
-{"id": 1, "jsonrpc": "2.0", "result": {"capabilities": {"definitionProvider": true, "hoverProvider": true, "textDocumentSync": {"change": 1, "openClose": true, "save": {"includeText": false}}}, "serverInfo": {"name": "lume", "version": "0.1.0"}}}
+{"id": 1, "jsonrpc": "2.0", "result": {"capabilities": {"completionProvider": {"triggerCharacters": ["."]}, "definitionProvider": true, "hoverProvider": true, "textDocumentSync": {"change": 1, "openClose": true, "save": {"includeText": false}}}, "serverInfo": {"name": "lume", "version": "0.1.0"}}}
 --- a file with an error, then fixed
 {"jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": {"diagnostics": [{"message": "unknown name `nope`\nhelp: names must be bound with `name = value` or `var name = value` before use", "range": {"end": {"character": 11, "line": 1}, "start": {"character": 7, "line": 1}}, "severity": 1, "source": "lume"}], "uri": "<tmp>/one/hello.lume"}}
 {"jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": {"diagnostics": [], "uri": "<tmp>/one/hello.lume"}}
 --- a module, checked through the main.lume that imports it
-{"jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": {"diagnostics": [{"message": "`*` cannot combine a `Int` and a `Str`", "range": {"end": {"character": 34, "line": 0}, "start": {"character": 33, "line": 0}}, "severity": 1, "source": "lume"}], "uri": "<tmp>/mods/helper.lume"}}
+{"jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": {"diagnostics": [{"message": "`*` cannot combine an `Int` and a `Str`", "range": {"end": {"character": 34, "line": 0}, "start": {"character": 33, "line": 0}}, "severity": 1, "source": "lume"}], "uri": "<tmp>/mods/helper.lume"}}
 --- a module of a package, unsaved text
-{"jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": {"diagnostics": [{"message": "`hi` returns `Str`, but this is a `Int`\nhelp: write `\"#{42}\"` or `42.to_s`", "range": {"end": {"character": 22, "line": 0}, "start": {"character": 20, "line": 0}}, "severity": 1, "source": "lume"}], "uri": "<tmp>/pkg/util.lume"}}
+{"jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": {"diagnostics": [{"message": "`hi` returns `Str`, but this is an `Int`\nhelp: write `\"#{42}\"` or `42.to_s`", "range": {"end": {"character": 22, "line": 0}, "start": {"character": 20, "line": 0}}, "severity": 1, "source": "lume"}], "uri": "<tmp>/pkg/util.lume"}}
 {"jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": {"diagnostics": [], "uri": "<tmp>/pkg/util.lume"}}
 --- the module fixed again
 {"jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": {"diagnostics": [], "uri": "<tmp>/mods/helper.lume"}}
@@ -22,7 +22,12 @@ a field                        hover "Person.name: Str" | definition <tmp>/mods/
 a field read bare in a method  hover "Person.name: Str" | definition <tmp>/mods/nav.lume:4:3
 a built-in method              hover "Str.upcase -> Str" | definition None
 a function of another module   hover "def helper.twice(n: Int) -> Int" | definition <tmp>/mods/helper.lume:1:9
+--- completion while typing: the file does not parse, the last check is used
+puts later.        -> name, age, greet
+puts helper.       -> twice
+puts later.name.   -> len, empty?, to_int, to_float, upcase, downcase, trim, lines, split, chars, contains?, starts_with? ...
+puts la            -> offers ann, later, older, Person, helper, def, while
 --- a request it does not answer, then shutdown
-{"error": {"code": -32601, "message": "`textDocument/completion` is not supported"}, "id": 22, "jsonrpc": "2.0"}
-{"id": 23, "jsonrpc": "2.0", "result": null}
+{"error": {"code": -32601, "message": "`textDocument/rename` is not supported"}, "id": 26, "jsonrpc": "2.0"}
+{"id": 27, "jsonrpc": "2.0", "result": null}
 exit: 0

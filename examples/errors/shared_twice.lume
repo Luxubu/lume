@@ -1,0 +1,5 @@
+# The same shared name declared twice in one block.
+async def main:
+  shared var a = 1
+  shared var a = 2
+  puts a

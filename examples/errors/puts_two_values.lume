@@ -1,0 +1,3 @@
+# `puts` prints one value, not two.
+def main:
+  puts(1, 2)

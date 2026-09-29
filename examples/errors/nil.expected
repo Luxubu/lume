@@ -1,0 +1,6 @@
+error: there is no `nil` in Lume
+  --> examples/errors/nil.lume:3:7
+  |
+3 |   x = nil
+  |       ^
+  help: absence is `None`, and a value that may be absent has type `T?`

@@ -1,0 +1,5 @@
+error: `Dot` carries no values; write it without parentheses
+  --> examples/errors/pattern_empty_variant_parens.lume:8:5
+  |
+8 |     Dot(x) -> puts 1
+  |     ^

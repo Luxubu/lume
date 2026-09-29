@@ -1,0 +1,5 @@
+# `import` must be followed by a module name.
+import "util"
+
+def main:
+  puts 1

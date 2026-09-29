@@ -1,0 +1,4 @@
+# A string indexed by a string.
+def main:
+  s = "abc"
+  puts s["a"]

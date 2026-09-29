@@ -65,8 +65,10 @@ struct Server {
     /// for each program checked (by its entry file), the uris last given
     /// diagnostics, so a fixed file is cleared and another program's are not
     published: HashMap<PathBuf, HashSet<String>>,
-    /// for each program, the names its last check resolved
-    index: HashMap<PathBuf, Vec<diag::Use>>,
+    /// for each program, what its last check that got far enough learned
+    /// about names (a file that does not parse, as while typing `x.`,
+    /// leaves the one before in place)
+    index: HashMap<PathBuf, diag::Index>,
     shutting_down: bool,
 }
 
@@ -82,6 +84,7 @@ impl Server {
                     "capabilities": {
                         "textDocumentSync": { "openClose": true, "change": 1, "save": { "includeText": false } },
                         "hoverProvider": true,
+                        "completionProvider": { "triggerCharacters": ["."] },
                         "definitionProvider": true
                     },
                     "serverInfo": { "name": "lume", "version": env!("CARGO_PKG_VERSION") }
@@ -129,6 +132,16 @@ impl Server {
                     publish(&uri, Vec::new());
                 }
             }
+            "textDocument/completion" => {
+                let path = uri_to_path(&str_at(&params, &["textDocument", "uri"]));
+                let line = params.pointer("/position/line").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                let character = params.pointer("/position/character").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                let items = match path {
+                    Some(p) => self.complete(&p, line, character),
+                    None => Vec::new(),
+                };
+                send(&json!({ "jsonrpc": "2.0", "id": id, "result": { "isIncomplete": false, "items": items } }));
+            }
             "textDocument/hover" | "textDocument/definition" => {
                 let path = uri_to_path(&str_at(&params, &["textDocument", "uri"]));
                 let line = params.pointer("/position/line").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
@@ -155,8 +168,10 @@ impl Server {
         let run = std::panic::catch_unwind(|| diag::indexed(|| diag::collecting(|| crate::compile_to_rust(&entry, true))));
         let mut ds: Vec<diag::Diagnostic> = Vec::new();
         match run {
-            Ok(((r, warnings), uses)) => {
-                self.index.insert(entry.clone(), uses);
+            Ok(((r, warnings), ix)) => {
+                if !ix.uses.is_empty() || !self.index.contains_key(&entry) {
+                    self.index.insert(entry.clone(), ix);
+                }
                 ds.extend(warnings.iter().flat_map(|w| diag::parse(w)));
                 if let Err(e) = r {
                     ds.extend(diag::parse(&e));
@@ -254,7 +269,7 @@ impl Server {
             std::fs::canonicalize(&p).unwrap_or(p) == me
         };
         let uses = match self.index.get(&entry) {
-            Some(u) => u,
+            Some(ix) => &ix.uses,
             None => return Value::Null,
         };
         let here: Vec<&diag::Use> = uses.iter().filter(|u| u.line == line + 1 && u.name == word && same_file(&u.file)).collect();
@@ -286,6 +301,93 @@ impl Server {
             "start": { "line": dl, "character": utf16_col(&dtext, dl, dstart) },
             "end": { "line": dl, "character": utf16_col(&dtext, dl, dstart + word.chars().count()) }
         }})
+    }
+}
+
+impl Server {
+    /// What may be written at a position: after `x.`, what `x` offers; after
+    /// `module.`, that module's items; elsewhere, the names in scope, the
+    /// file's items and the keywords.
+    fn complete(&mut self, path: &Path, line: usize, character: usize) -> Vec<Value> {
+        let entry = entry_for(path);
+        if !self.index.contains_key(&entry) {
+            self.check(path);
+        }
+        let ix = match self.index.get(&entry) {
+            Some(ix) => ix,
+            None => return Vec::new(),
+        };
+        let text = diag::read_source(path).unwrap_or_default();
+        let l: Vec<char> = text.lines().nth(line).unwrap_or("").chars().collect();
+        // the character index of the cursor, from UTF-16 units
+        let mut at = l.len();
+        let mut units = 0;
+        for (i, c) in l.iter().enumerate() {
+            if units >= character {
+                at = i;
+                break;
+            }
+            units += c.len_utf16();
+        }
+        let is_word = |c: char| c.is_alphanumeric() || c == '_' || c == '?' || c == '!';
+        let mut start = at;
+        while start > 0 && is_word(l[start - 1]) {
+            start -= 1;
+        }
+        let me = std::fs::canonicalize(path).unwrap_or(path.to_path_buf());
+        let cwd = std::env::current_dir().unwrap_or_default();
+        let same_file = |f: &str| {
+            let p = cwd.join(f);
+            std::fs::canonicalize(&p).unwrap_or(p) == me
+        };
+        let item = |m: &diag::Member| json!({ "label": m.label, "kind": m.kind, "detail": m.detail });
+        // `recv.` — what the name before the dot offers
+        if start > 0 && l[start - 1] == '.' {
+            let mut r = start - 1;
+            while r > 0 && is_word(l[r - 1]) {
+                r -= 1;
+            }
+            let recv: String = l[r..start - 1].iter().collect();
+            if recv.is_empty() {
+                return Vec::new();
+            }
+            if let Some(items) = ix.members.get(&format!("mod:{}", recv)) {
+                return items.iter().map(item).collect();
+            }
+            // its type, from the last place before here the name was seen
+            let ty = ix
+                .uses
+                .iter()
+                .filter(|u| u.name == recv && u.ty.is_some() && same_file(&u.file) && u.line <= line + 1)
+                .max_by_key(|u| (u.line, u.col))
+                .or_else(|| ix.uses.iter().filter(|u| u.name == recv && u.ty.is_some() && same_file(&u.file)).last())
+                .and_then(|u| u.ty.clone());
+            return match ty.and_then(|t| ix.members.get(&t)) {
+                Some(items) => items.iter().map(item).collect(),
+                None => Vec::new(),
+            };
+        }
+        // a name: locals seen in this file, the file's items, keywords
+        let mut out: Vec<Value> = Vec::new();
+        let mut seen: HashSet<String> = HashSet::new();
+        for u in ix.uses.iter().filter(|u| same_file(&u.file) && u.def.as_ref().map(|d| same_file(&d.0)).unwrap_or(false)) {
+            let local = u.hover.starts_with(&format!("{}:", u.name)) || u.hover.starts_with(&format!("var {}:", u.name));
+            if local && seen.insert(u.name.clone()) {
+                out.push(json!({ "label": u.name, "kind": 6, "detail": u.hover }));
+            }
+        }
+        let file_names = ix.names.iter().find(|(f, _)| same_file(f)).map(|(_, n)| n.clone()).unwrap_or_default();
+        for m in &file_names {
+            if seen.insert(m.label.clone()) {
+                out.push(item(m));
+            }
+        }
+        for k in crate::lexer::KEYWORDS {
+            if seen.insert(k.to_string()) {
+                out.push(json!({ "label": k, "kind": 14 }));
+            }
+        }
+        out
     }
 }
 

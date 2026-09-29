@@ -1,0 +1,6 @@
+# Only methods belong inside an interface, not fields.
+interface Shape:
+  area: Int
+
+def main:
+  puts 1

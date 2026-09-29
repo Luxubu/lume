@@ -1,0 +1,6 @@
+error: `await` needs an async call or a task, but this is an `Int`
+  --> examples/errors/await_int.lume:3:8
+  |
+3 |   puts await 5
+  |        ^
+  help: `await` goes in front of a call to an `async def`, a `Task`, or a list of tasks

@@ -1,0 +1,7 @@
+# `async` must be followed by `def`.
+enum Shape:
+  Dot
+  async name -> Str = "x"
+
+def main:
+  puts 1

@@ -1,0 +1,6 @@
+# Interface names must start with a capital letter.
+interface shape:
+  def area -> Int
+
+def main:
+  puts 1

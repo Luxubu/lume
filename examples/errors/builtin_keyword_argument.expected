@@ -1,0 +1,5 @@
+error: built-in method `split` does not take keyword arguments
+  --> examples/errors/builtin_keyword_argument.lume:3:13
+  |
+3 |   puts "a,b".split(sep: ",")
+  |             ^

@@ -1,0 +1,7 @@
+# `Some(n)` matches an optional value; this one is an `Int`. (Once crashed the compiler.)
+
+def main:
+  x = 5
+  match x:
+    Some(n) -> puts n
+    _ -> puts 0

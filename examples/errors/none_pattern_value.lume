@@ -1,0 +1,7 @@
+# `None` in a pattern with a value inside.
+def f -> Int? = None
+
+def main:
+  match f():
+    None(x) -> puts 0
+    Some(n) -> puts n

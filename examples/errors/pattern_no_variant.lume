@@ -1,0 +1,9 @@
+# A qualified pattern naming a variant the enum does not have.
+enum Shape:
+  Dot
+  Box(w: Int)
+
+def main:
+  match Dot:
+    Shape.Circle -> puts 1
+    _ -> puts 0

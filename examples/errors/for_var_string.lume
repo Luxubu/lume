@@ -1,0 +1,8 @@
+# `for var` over a map, which it cannot change item by item.
+struct P:
+  x: Int
+
+def main:
+  var m = {"a": P(x: 1)}
+  for var p in m:
+    puts p

@@ -1,0 +1,6 @@
+error: `def self.make` belongs to the type, so it has no `self` parameter
+  --> examples/errors/self_in_type_function.lume:4:17
+  |
+4 |   def self.make(self) -> P = P(x: 1)
+  |                 ^
+  help: for a method of one value, write `def make(var self, ...)`

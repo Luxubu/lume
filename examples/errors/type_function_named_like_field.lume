@@ -1,0 +1,7 @@
+# A function of the type named like one of its fields.
+struct P:
+  x: Int
+  def self.x -> Int = 0
+
+def main:
+  puts 1

@@ -1,0 +1,5 @@
+error: expected `|` after the block parameters, found `x`
+  --> examples/errors/block_params_unclosed.lume:3:24
+  |
+3 |   puts [1, 2].map { |x x * 2 }
+  |                        ^

@@ -1,0 +1,5 @@
+# An enum from a module used as a value instead of one of its variants.
+import mods.shapes
+
+def main:
+  puts shapes.Align

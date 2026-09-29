@@ -1,0 +1,6 @@
+# An unknown escape inside a triple-quoted string.
+def main:
+  s = """
+    a \q b
+    """
+  puts s

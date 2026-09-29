@@ -1,0 +1,5 @@
+# A constant from a module called like a function.
+import mods.shapes
+
+def main:
+  puts shapes.LIMIT(1)

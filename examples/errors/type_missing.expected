@@ -1,0 +1,5 @@
+error: expected a type, found `3`
+  --> examples/errors/type_missing.lume:2:10
+  |
+2 | def f(n: 3) -> Int = n
+  |          ^

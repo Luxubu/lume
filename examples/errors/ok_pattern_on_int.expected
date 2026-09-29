@@ -1,0 +1,5 @@
+error: `Error` matches a `T or E` value, but this is an `Int`
+  --> examples/errors/ok_pattern_on_int.lume:4:5
+  |
+4 |     Error -> puts 0
+  |     ^

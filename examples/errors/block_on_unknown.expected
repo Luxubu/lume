@@ -1,0 +1,6 @@
+error: cannot tell what kind of value this block is applied to
+  --> examples/errors/block_on_unknown.lume:3:23
+  |
+3 |   puts rust("vec![1]").map { |x| x }
+  |                       ^
+  help: add a type to the binding or parameter it comes from

@@ -1,0 +1,3 @@
+# `assert` used as a value inside an expression.
+def main:
+  ok = assert 1 == 1

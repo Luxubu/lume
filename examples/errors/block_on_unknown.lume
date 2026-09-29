@@ -1,0 +1,3 @@
+# A block applied to inline Rust, whose type Lume cannot see.
+def main:
+  puts rust("vec![1]").map { |x| x }

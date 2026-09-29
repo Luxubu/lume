@@ -1,0 +1,7 @@
+# A variant written with a small letter looks like a binding.
+enum Shape:
+  Circle(r: Int)
+
+def main:
+  match Circle(r: 1):
+    circle(r) -> puts r

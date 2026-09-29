@@ -1,0 +1,7 @@
+# A field called with arguments, as if it were a method.
+struct P:
+  x: Int
+
+def main:
+  p = P(x: 1)
+  puts p.x(2)

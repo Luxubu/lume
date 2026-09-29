@@ -1,4 +1,4 @@
-error: `/` cannot combine a `Float` and a `Int`
+error: `/` cannot combine a `Float` and an `Int`
   --> corpus/m36/a10_basket_average.lume:35:19
    |
 35 |   average = total / prices.len

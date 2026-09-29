@@ -1,0 +1,4 @@
+# A list of arms that starts with something that is not a pattern.
+def main:
+  match 3:
+    + -> puts 1

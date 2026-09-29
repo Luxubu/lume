@@ -1,0 +1,5 @@
+# A block's arguments are given by position, not by name.
+def run(f: (Int) -> Int) -> Int = f(n: 1)
+
+def main:
+  puts run { |n| n + 1 }

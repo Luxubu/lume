@@ -1,0 +1,5 @@
+error: `Dot()` has no fields; write `Dot` without parentheses
+  --> examples/errors/variant_empty_parens.lume:3:3
+  |
+3 |   Dot()
+  |   ^

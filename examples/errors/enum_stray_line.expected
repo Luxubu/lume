@@ -1,0 +1,5 @@
+error: expected a variant or `def` inside `enum Shape`, found a string
+  --> examples/errors/enum_stray_line.lume:4:3
+  |
+4 |   "circle"
+  |   ^

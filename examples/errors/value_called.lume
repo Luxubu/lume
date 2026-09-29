@@ -1,0 +1,4 @@
+# A plain value called like a function.
+def main:
+  n = 5
+  puts n(1)

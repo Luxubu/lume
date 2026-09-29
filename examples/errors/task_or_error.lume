@@ -1,0 +1,4 @@
+# `.or_error` on a task that was never awaited.
+async def main:
+  t = spawn: 1
+  puts t.or_error("none")

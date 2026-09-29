@@ -1,0 +1,7 @@
+# The same variant is listed twice.
+enum Shape:
+  Dot
+  Dot
+
+def main:
+  puts 1

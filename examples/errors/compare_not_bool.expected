@@ -1,0 +1,5 @@
+error: `def <` must return `Bool`
+  --> examples/errors/compare_not_bool.lume:4:3
+  |
+4 |   def <(other: V) -> Int = n - other.n
+  |   ^

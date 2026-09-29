@@ -1,0 +1,7 @@
+# `?` used on a plain number.
+def f -> Int or Error:
+  n = 5
+  Ok(n?)
+
+def main:
+  puts 1

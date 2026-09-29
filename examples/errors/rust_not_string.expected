@@ -1,0 +1,5 @@
+error: `rust(...)` takes one string of Rust code
+  --> examples/errors/rust_not_string.lume:3:17
+  |
+3 |   x: Int = rust(1)
+  |                 ^

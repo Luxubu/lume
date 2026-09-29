@@ -1,0 +1,5 @@
+error: `n` already exists; a type goes only on a new binding
+  --> examples/errors/typed_rebinding.lume:4:3
+  |
+4 |   n: Int = 2
+  |   ^

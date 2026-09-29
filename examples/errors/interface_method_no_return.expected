@@ -1,0 +1,6 @@
+error: interface method `draw` needs a return type
+  --> examples/errors/interface_method_no_return.lume:3:3
+  |
+3 |   def draw
+  |   ^
+  help: there is no body to infer it from: `def area -> Float`

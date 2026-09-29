@@ -1,0 +1,5 @@
+error: `shapes.Align` is an enum; pick a variant like `shapes.Align.Left`
+  --> examples/errors/module_enum_as_value.lume:5:14
+  |
+5 |   puts shapes.Align
+  |              ^

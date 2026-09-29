@@ -1,0 +1,5 @@
+# `Some` wraps exactly one value.
+def f -> Int? = Some(1, 2)
+
+def main:
+  puts 1

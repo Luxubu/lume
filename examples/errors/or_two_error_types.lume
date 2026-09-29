@@ -1,0 +1,6 @@
+# A result type names only one error type.
+def parse(s: Str) -> Int or Error or Str:
+  s.to_int
+
+def main:
+  puts 1

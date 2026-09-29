@@ -1,0 +1,5 @@
+error: `match` is a keyword and cannot be a module name
+  --> examples/errors/import_keyword.lume:2:8
+  |
+2 | import match
+  |        ^

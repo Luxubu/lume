@@ -1,0 +1,5 @@
+error: loop variable `x` is listed twice
+  --> examples/errors/loop_var_twice.lume:3:10
+  |
+3 |   for x, x in [1, 2].enumerate:
+  |          ^

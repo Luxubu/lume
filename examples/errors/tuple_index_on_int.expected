@@ -1,0 +1,5 @@
+error: `.0` needs a tuple, but this is an `Int`
+  --> examples/errors/tuple_index_on_int.lume:4:9
+  |
+4 |   puts n.0
+  |         ^

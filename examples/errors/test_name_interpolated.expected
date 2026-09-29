@@ -1,0 +1,5 @@
+error: a test name is a plain string, without `#{}`
+  --> examples/errors/test_name_interpolated.lume:4:6
+  |
+4 | test "adds #{N}":
+  |      ^

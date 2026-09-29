@@ -1,0 +1,6 @@
+error: `Shape` is an interface, so it cannot fill the `T` of `Box`
+  --> examples/errors/interface_as_type_argument.lume:8:10
+  |
+8 | def show(b: Box[Shape]) -> Int = 1
+  |          ^
+  help: a type argument is one concrete type; a list of mixed values is written `[Interface]` instead

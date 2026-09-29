@@ -1,0 +1,5 @@
+error: `P` is a type; construct one with `P(...)`
+  --> examples/errors/type_as_value.lume:6:7
+  |
+6 |   p = P
+  |       ^

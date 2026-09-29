@@ -1,0 +1,5 @@
+error: `x` is an `Int` in one alternative and a `Str` in another
+  --> examples/errors/alternative_types_differ.lume:8:12
+  |
+8 |     I(x) | S(x) -> puts x
+  |            ^

@@ -1,0 +1,5 @@
+error: `circle` is a binding, so it takes no arguments; variants start with a capital letter
+  --> examples/errors/pattern_lowercase_variant.lume:7:11
+  |
+7 |     circle(r) -> puts r
+  |           ^

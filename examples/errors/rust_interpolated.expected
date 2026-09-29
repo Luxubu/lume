@@ -1,0 +1,5 @@
+error: Rust code cannot contain `#{}` interpolation; Lume names are visible inside it directly
+  --> examples/errors/rust_interpolated.lume:4:27
+  |
+4 |   x: Int = rust("#{n} + 1")
+  |                           ^

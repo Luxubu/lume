@@ -1,0 +1,5 @@
+error: `assert` is a statement and starts its own line
+  --> examples/errors/assert_in_expression.lume:3:8
+  |
+3 |   ok = assert 1 == 1
+  |        ^

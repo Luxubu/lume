@@ -1,0 +1,5 @@
+error: `a` is already declared in this block
+  --> examples/errors/shared_twice.lume:4:3
+  |
+4 |   shared var a = 2
+  |   ^

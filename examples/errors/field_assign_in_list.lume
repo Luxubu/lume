@@ -1,0 +1,5 @@
+# Assigning a field on an item of a list of numbers.
+def main:
+  var xs = [1, 2]
+  xs[0].x = 3
+  puts xs

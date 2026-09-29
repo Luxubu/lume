@@ -1,0 +1,5 @@
+error: `?` needs an optional value or a `T or E`, but this is an `Int`
+  --> examples/errors/question_on_int.lume:4:6
+  |
+4 |   Ok(n?)
+  |      ^

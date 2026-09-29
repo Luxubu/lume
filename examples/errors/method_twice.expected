@@ -1,0 +1,5 @@
+error: method `make` is defined twice in `P`
+  --> examples/errors/method_twice.lume:5:3
+  |
+5 |   def make -> P = P(x: 1)
+  |   ^

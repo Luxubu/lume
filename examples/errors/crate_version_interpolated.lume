@@ -1,0 +1,6 @@
+# A crate version cannot use interpolation.
+V = "1"
+import rust.regex = "#{V}"
+
+def main:
+  puts 1

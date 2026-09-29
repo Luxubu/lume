@@ -1,0 +1,5 @@
+# `Error` used to match a plain number, which cannot have failed.
+def main:
+  match 3:
+    Error -> puts 0
+    _ -> puts 1

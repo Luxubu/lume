@@ -1,0 +1,4 @@
+# A method given a block both inside the parentheses and after them.
+def main:
+  xs = [1, 2]
+  puts xs.map(_ * 2) { |x| x + 1 }

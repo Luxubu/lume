@@ -1,0 +1,6 @@
+error: expected `:` after `spawn`
+  --> examples/errors/spawn_no_colon.lume:3:13
+  |
+3 |   t = spawn 1
+  |             ^
+  help: write `t = spawn:` with the task's body indented below, or `spawn: expr`

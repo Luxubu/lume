@@ -1,0 +1,8 @@
+# All variants must come before the methods of an enum.
+enum Shape:
+  Dot
+  def name -> Str = "shape"
+  Circle(r: Int)
+
+def main:
+  puts 1

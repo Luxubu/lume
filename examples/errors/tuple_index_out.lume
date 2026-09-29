@@ -1,0 +1,4 @@
+# A tuple position that does not exist.
+def main:
+  t = (1, 2)
+  puts t.2

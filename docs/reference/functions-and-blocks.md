@@ -71,7 +71,7 @@ def label(a: Int) -> Str:
 
 def main:
   puts label(1)
-#! `label` returns `Str`, but this is a `Int`
+#! `label` returns `Str`, but this is an `Int`
 ```
 
 A function whose body is only side effects has no result. Nothing is written

@@ -1,0 +1,7 @@
+# A plain value passed where a shared one is expected.
+async def peek(n: shared var Int) -> Int:
+  n
+
+async def main:
+  var n = 1
+  puts await peek(n)

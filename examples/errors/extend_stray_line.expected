@@ -1,0 +1,5 @@
+error: expected `def` inside `extend`, found `n`
+  --> examples/errors/extend_stray_line.lume:6:3
+  |
+6 |   n: Int
+  |   ^

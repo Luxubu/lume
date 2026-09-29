@@ -1,0 +1,5 @@
+error: `Dot` carries no values; write `Shape.Dot` without parentheses
+  --> examples/errors/variant_value_parens.lume:7:12
+  |
+7 |   s = Shape.Dot(1)
+  |            ^

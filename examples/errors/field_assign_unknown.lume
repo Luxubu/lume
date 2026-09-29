@@ -1,0 +1,3 @@
+# Assigning a field of something whose type cannot be worked out.
+def main:
+  x.y = 1

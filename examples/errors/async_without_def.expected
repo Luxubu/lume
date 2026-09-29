@@ -1,0 +1,6 @@
+error: expected `def` after `async`, found `name`
+  --> examples/errors/async_without_def.lume:4:9
+  |
+4 |   async name -> Str = "x"
+  |         ^
+  help: write `async def name(...)`

@@ -1,0 +1,5 @@
+# A block parameter marked `var`.
+def run(var f: (Int) -> Int) -> Int = f(1)
+
+def main:
+  puts run { |n| n }

@@ -1,0 +1,6 @@
+error: `def self.+` cannot be an operator: an operator works on two values
+  --> examples/errors/type_function_operator.lume:4:3
+  |
+4 |   def self.+(other: V) -> V = other
+  |   ^
+  help: write `def +(other: V)` for an operator

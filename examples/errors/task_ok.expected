@@ -1,0 +1,5 @@
+error: `.ok` turns a `T or E` into an optional value, but this is a `Task[Int]`
+  --> examples/errors/task_ok.lume:4:9
+  |
+4 |   puts t.ok
+  |         ^

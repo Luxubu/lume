@@ -1,0 +1,6 @@
+error: `T or E` takes one error type
+  --> examples/errors/or_two_error_types.lume:2:35
+  |
+2 | def parse(s: Str) -> Int or Error or Str:
+  |                                   ^
+  help: group alternatives in an `enum` if a function can fail in several ways

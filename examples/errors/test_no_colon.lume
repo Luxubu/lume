@@ -1,0 +1,3 @@
+# The colon after the test name is missing.
+test "adds"
+  assert 1 + 1 == 2

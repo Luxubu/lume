@@ -1,0 +1,6 @@
+# A function with no return type whose result cannot be worked out.
+def f(n: Int):
+  f(n)
+
+def main:
+  puts 1

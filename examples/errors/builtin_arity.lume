@@ -1,0 +1,3 @@
+# A built-in method given too many arguments.
+def main:
+  puts "abc".upcase(1)

@@ -1,0 +1,5 @@
+# Type parameters must start with a capital letter.
+def first[t](xs: [t]) -> t? = xs.first
+
+def main:
+  puts 1

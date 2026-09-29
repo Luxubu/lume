@@ -1,0 +1,5 @@
+# A keyword cannot be used as a module name.
+import match
+
+def main:
+  puts 1

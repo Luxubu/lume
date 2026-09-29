@@ -1,0 +1,7 @@
+# A method named like one of the struct's fields.
+struct P:
+  x: Int
+  def x -> Int = 1
+
+def main:
+  puts 1

@@ -1,0 +1,7 @@
+# `Ok` in a pattern takes one inner pattern.
+def f -> Int or Error = Ok(1)
+
+def main:
+  match f():
+    Ok(a, b) -> puts a
+    Error(e) -> puts e.message

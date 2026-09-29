@@ -1,0 +1,6 @@
+error: `for a, b` names two variables, but the items are not pairs
+  --> examples/errors/for_two_vars_not_pairs.lume:3:3
+  |
+3 |   for a, b in [1, 2]:
+  |   ^
+  help: use `xs.enumerate` for (index, item) pairs, or a single variable

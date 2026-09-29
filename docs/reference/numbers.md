@@ -77,13 +77,13 @@ promotion. The same goes for every other operator, for comparison, for
 count = 4
 total = 10.0
 puts total / count
-#! `/` cannot combine a `Float` and a `Int`
+#! `/` cannot combine a `Float` and an `Int`
 ```
 
 ```lume-bad
 var t = 0.0
 t += 1
-#! `+` cannot combine a `Float` and a `Int`
+#! `+` cannot combine a `Float` and an `Int`
 ```
 
 Convert the side you mean. `.to_float` turns an `Int` into a `Float`, and

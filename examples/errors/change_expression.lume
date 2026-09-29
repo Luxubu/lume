@@ -1,0 +1,5 @@
+# Adding a key to the map a call returns, which has no name to keep the change.
+def ages -> {Str: Int} = {"ada": 36}
+
+def main:
+  ages()["bob"] = 41

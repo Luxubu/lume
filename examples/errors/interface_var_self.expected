@@ -1,0 +1,6 @@
+error: interface method `bump` cannot take `var self`
+  --> examples/errors/interface_var_self.lume:4:3
+  |
+4 |   def bump(var self) -> Int = size + 1
+  |   ^
+  help: interfaces describe reading behaviour; mutation stays on the concrete type

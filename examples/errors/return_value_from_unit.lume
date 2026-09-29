@@ -1,0 +1,6 @@
+# A function with no return type returns a value.
+def greet(name: Str):
+  return name
+
+def main:
+  greet("a")

@@ -1,0 +1,3 @@
+# The same block parameter is named twice.
+def main:
+  puts [1, 2].fold(0) { |a, a| a }

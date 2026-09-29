@@ -1,0 +1,5 @@
+error: `x` is both a field and a method of `P`
+  --> examples/errors/method_named_like_field.lume:4:3
+  |
+4 |   def x -> Int = 1
+  |   ^

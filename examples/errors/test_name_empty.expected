@@ -1,0 +1,5 @@
+error: a test needs a name
+  --> examples/errors/test_name_empty.lume:2:6
+  |
+2 | test "":
+  |      ^

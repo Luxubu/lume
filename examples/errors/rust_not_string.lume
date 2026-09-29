@@ -1,0 +1,4 @@
+# Inline Rust is given something other than a string.
+def main:
+  x: Int = rust(1)
+  puts x

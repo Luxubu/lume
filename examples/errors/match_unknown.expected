@@ -1,0 +1,6 @@
+error: cannot tell the type of the value being matched
+  --> examples/errors/match_unknown.lume:3:9
+  |
+3 |   match rust("1"):
+  |         ^
+  help: bind it to a name with a known type first

@@ -1,0 +1,9 @@
+# A variant without values matched with parentheses.
+enum Shape:
+  Dot
+  Box(w: Int)
+
+def main:
+  match Dot:
+    Dot(x) -> puts 1
+    _ -> puts 0

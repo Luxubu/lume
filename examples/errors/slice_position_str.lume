@@ -1,0 +1,4 @@
+# A slice from a string position.
+def main:
+  xs = [1, 2, 3]
+  puts xs["a"..2]

@@ -1,0 +1,6 @@
+# A variant's field has a name but no type.
+enum Shape:
+  Circle(radius)
+
+def main:
+  puts 1

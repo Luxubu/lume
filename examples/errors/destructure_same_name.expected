@@ -1,0 +1,5 @@
+error: `a` is named twice
+  --> examples/errors/destructure_same_name.lume:3:3
+  |
+3 |   (a, a) = (1, 2)
+  |   ^

@@ -1,0 +1,6 @@
+error: unknown bound `Sortable` on `T` of `biggest`
+  --> examples/errors/unknown_bound.lume:2:13
+  |
+2 | def biggest[T: Sortable](xs: [T]) -> Int = xs.len
+  |             ^
+  help: a bound is `Ordered`, `Hashable`, or the name of an `interface`

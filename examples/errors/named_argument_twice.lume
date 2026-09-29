@@ -1,0 +1,6 @@
+# The same named argument is given twice.
+struct P:
+  x: Int
+
+def main:
+  puts P(x: 1, x: 2)

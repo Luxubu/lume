@@ -1,0 +1,8 @@
+# Assigning a field on the result of a call.
+struct P:
+  x: Int
+
+def make -> P = P(x: 1)
+
+def main:
+  make().x = 2

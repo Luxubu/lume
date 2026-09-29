@@ -1,0 +1,3 @@
+# An escape the language does not know.
+def main:
+  puts "tab\q"

@@ -1,0 +1,5 @@
+# An operator is defined on a type, not as a free function.
+def +(a: Int, b: Int) -> Int = a
+
+def main:
+  puts 1

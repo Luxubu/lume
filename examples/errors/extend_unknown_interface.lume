@@ -1,0 +1,6 @@
+# `extend` names an interface that does not exist.
+extend Str with Sized:
+  def size -> Int = self.len
+
+def main:
+  puts 1

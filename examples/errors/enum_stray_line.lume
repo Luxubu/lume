@@ -1,0 +1,7 @@
+# Only variants and methods belong inside an enum.
+enum Shape:
+  Dot
+  "circle"
+
+def main:
+  puts 1

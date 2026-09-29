@@ -1,0 +1,5 @@
+error: expected the fields of the struct on the following lines
+  --> examples/errors/struct_fields_same_line.lume:2:15
+  |
+2 | struct Point: x: Int
+  |               ^

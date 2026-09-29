@@ -1,0 +1,5 @@
+error: this function returns `Int`, so `return` needs a value
+  --> examples/errors/return_no_value.lume:4:5
+  |
+4 |     return
+  |     ^

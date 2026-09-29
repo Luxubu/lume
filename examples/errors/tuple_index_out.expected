@@ -1,0 +1,5 @@
+error: this tuple has 2 parts, so `.2` does not exist
+  --> examples/errors/tuple_index_out.lume:4:9
+  |
+4 |   puts t.2
+  |         ^

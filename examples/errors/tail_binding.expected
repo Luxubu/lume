@@ -1,0 +1,6 @@
+error: the last line of a function returning `Int` must be a value, not a binding
+  --> examples/errors/tail_binding.lume:3:3
+  |
+3 |   x = 1
+  |   ^
+  help: put the value on its own line after the binding

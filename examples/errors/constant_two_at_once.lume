@@ -1,0 +1,5 @@
+# Two constants cannot be declared on one line.
+MAX: Int, MIN: Int = 10, 1
+
+def main:
+  puts MAX

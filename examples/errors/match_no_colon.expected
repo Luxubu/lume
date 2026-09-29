@@ -1,0 +1,5 @@
+error: expected `:` after the value to match, found the end of the line
+  --> examples/errors/match_no_colon.lume:3:10
+  |
+3 |   match 3
+  |          ^

@@ -1,0 +1,6 @@
+error: `n` is declared on line 3, outside this block; a new `var n` here would hide it and be lost when the block ends
+  --> examples/errors/var_hides_outer.lume:5:5
+  |
+5 |     var n = 2
+  |     ^
+  help: to change it from here, declare it `var n` on line 3; to make a separate value, give it another name

@@ -1,0 +1,5 @@
+# `import rust` must name a crate after a dot.
+import rust
+
+def main:
+  puts 1

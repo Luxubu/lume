@@ -1,0 +1,5 @@
+error: this tuple has 3 parts, but the pattern names 2
+  --> examples/errors/pattern_tuple_short.lume:5:5
+  |
+5 |     (a, b) -> puts a
+  |     ^

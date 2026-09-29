@@ -1,0 +1,5 @@
+error: expected a field or `def` inside `struct Point`, found a string
+  --> examples/errors/struct_stray_line.lume:4:3
+  |
+4 |   "origin"
+  |   ^

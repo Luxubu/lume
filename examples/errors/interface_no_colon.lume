@@ -1,0 +1,6 @@
+# The colon after the interface name is missing.
+interface Shape
+  def area -> Int
+
+def main:
+  puts 1

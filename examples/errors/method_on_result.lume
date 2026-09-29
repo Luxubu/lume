@@ -1,0 +1,5 @@
+# A method called on a value that may be an error.
+def parse(s: Str) -> Int or Error = s.to_int
+
+def main:
+  puts parse("1").abs

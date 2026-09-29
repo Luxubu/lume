@@ -1,0 +1,5 @@
+error: `self` is only allowed in a method inside a struct
+  --> examples/errors/self_in_function.lume:2:10
+  |
+2 | def size(self) -> Int = 1
+  |          ^

@@ -1,0 +1,5 @@
+error: a map type is written `{Key: Value}` and a set type `{Item}`, like `{Str: Int}` or `{Str}`
+  --> examples/errors/map_type_no_colon.lume:2:19
+  |
+2 | def count(m: {Str Int}) -> Int = m.len
+  |                   ^

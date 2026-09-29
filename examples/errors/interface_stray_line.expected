@@ -1,0 +1,5 @@
+error: expected `def` inside `interface Shape`, found `area`
+  --> examples/errors/interface_stray_line.lume:3:3
+  |
+3 |   area: Int
+  |   ^

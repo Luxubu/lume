@@ -1,0 +1,5 @@
+error: a range pattern needs a number after `..`
+  --> examples/errors/range_pattern_open.lume:4:9
+  |
+4 |     1.. -> puts "big"
+  |         ^

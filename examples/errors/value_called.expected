@@ -1,0 +1,5 @@
+error: `n` is a value, not a function
+  --> examples/errors/value_called.lume:4:8
+  |
+4 |   puts n(1)
+  |        ^

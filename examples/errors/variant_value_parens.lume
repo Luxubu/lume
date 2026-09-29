@@ -1,0 +1,8 @@
+# A variant without values built with empty parentheses.
+enum Shape:
+  Dot
+  Box(w: Int)
+
+def main:
+  s = Shape.Dot(1)
+  puts s

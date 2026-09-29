@@ -1,0 +1,4 @@
+# Indexing takes a single key or position.
+def main:
+  xs = [1, 2]
+  puts xs[0, 1]

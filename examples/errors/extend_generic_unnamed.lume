@@ -1,0 +1,10 @@
+# An `extend` with a generic interface whose parameter nothing in the block pins down.
+interface Bag[T]:
+  def size -> Int
+  def items -> [T] = []
+
+extend Str with Bag:
+  def size -> Int = 1
+
+def main:
+  puts "a".size

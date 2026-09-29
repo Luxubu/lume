@@ -1,0 +1,3 @@
+# `main` takes no parameters.
+def main(args: [Str]):
+  puts args.len

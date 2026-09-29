@@ -1,0 +1,4 @@
+# An interpolation that is never closed.
+def main:
+  name = "ada"
+  puts "hi #{name"

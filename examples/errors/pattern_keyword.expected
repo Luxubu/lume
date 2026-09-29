@@ -1,0 +1,5 @@
+error: `def` is a keyword and cannot be a pattern
+  --> examples/errors/pattern_keyword.lume:4:5
+  |
+4 |     def -> puts 1
+  |     ^

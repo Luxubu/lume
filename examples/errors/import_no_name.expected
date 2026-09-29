@@ -1,0 +1,5 @@
+error: expected a module name after `import`, found a string
+  --> examples/errors/import_no_name.lume:2:8
+  |
+2 | import "util"
+  |        ^

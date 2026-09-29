@@ -1,0 +1,6 @@
+error: `9223372036854775807 + 1` overflows `Int`
+  --> examples/errors/overflow_constant.lume:3:28
+  |
+3 |   puts 9223372036854775807 + 1
+  |                            ^
+  help: Int is 64-bit; the largest value is 9223372036854775807

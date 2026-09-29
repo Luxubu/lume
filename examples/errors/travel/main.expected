@@ -1,4 +1,4 @@
-error: `[T]` is already a `one.Bag[T]`
+error: `[T]` is already an `one.Bag[T]`
   --> examples/errors/travel/two.lume:6:1
   |
 6 | extend [T] with one.Bag[T]:

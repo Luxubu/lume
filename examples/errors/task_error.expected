@@ -1,0 +1,5 @@
+error: `.error` reads the error of a `T or E`, but this is a `Task[Int]`
+  --> examples/errors/task_error.lume:4:9
+  |
+4 |   puts t.error
+  |         ^

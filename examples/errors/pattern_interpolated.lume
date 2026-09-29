@@ -1,0 +1,6 @@
+# A string pattern cannot use interpolation.
+def main:
+  name = "ada"
+  match "bob":
+    "#{name}" -> puts "same"
+    _ -> puts "other"

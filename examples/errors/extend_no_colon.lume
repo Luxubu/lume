@@ -1,0 +1,9 @@
+# The colon after `extend ... with Name` is missing.
+interface Sized:
+  def size -> Int
+
+extend Str with Sized
+  def size -> Int = self.len
+
+def main:
+  puts 1

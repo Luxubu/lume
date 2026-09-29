@@ -1,0 +1,5 @@
+error: expected `rust("...")` or `rust:` followed by an indented block
+  --> examples/errors/rust_no_parens.lume:3:12
+  |
+3 |   x = rust "1 + 1"
+  |            ^

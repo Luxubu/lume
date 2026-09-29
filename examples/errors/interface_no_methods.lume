@@ -1,0 +1,5 @@
+# An interface with nothing indented under it.
+interface Shape:
+
+def main:
+  puts 1

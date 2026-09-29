@@ -1,0 +1,5 @@
+error: expected a number after `-` in the pattern
+  --> examples/errors/pattern_minus_word.lume:4:6
+  |
+4 |     -x -> puts x
+  |      ^

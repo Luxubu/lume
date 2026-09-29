@@ -1,0 +1,5 @@
+error: `.or` supplies a default for an optional value or a `T or E`, but this is a `Task[Int]`
+  --> examples/errors/task_or.lume:4:9
+  |
+4 |   puts t.or(0)
+  |         ^

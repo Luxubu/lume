@@ -1,0 +1,5 @@
+# A struct's fields go on the lines below it, not after the colon.
+struct Point: x: Int
+
+def main:
+  puts 1

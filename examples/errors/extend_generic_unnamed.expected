@@ -1,0 +1,6 @@
+error: cannot tell what `T` stands for in `Bag`
+  --> examples/errors/extend_generic_unnamed.lume:6:1
+  |
+6 | extend Str with Bag:
+  | ^
+  help: name it: `extend Str with Bag[Str]:`

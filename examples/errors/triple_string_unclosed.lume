@@ -1,0 +1,5 @@
+# A triple-quoted string that is never closed.
+def main:
+  s = """
+    hello
+  puts s

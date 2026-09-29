@@ -1,0 +1,10 @@
+# A function of the type itself put in an `extend` block.
+interface Sized:
+  def size -> Int
+
+extend Str with Sized:
+  def size -> Int = self.len
+  def self.empty -> Str = ""
+
+def main:
+  puts 1

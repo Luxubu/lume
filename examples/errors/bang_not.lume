@@ -1,0 +1,4 @@
+# `!` is not how to negate a Bool in Lume.
+def main:
+  ok = true
+  puts !ok

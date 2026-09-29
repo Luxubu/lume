@@ -1,0 +1,4 @@
+# The same loop variable is named twice.
+def main:
+  for x, x in [1, 2].enumerate:
+    puts x

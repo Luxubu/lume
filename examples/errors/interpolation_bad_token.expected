@@ -1,0 +1,5 @@
+error: in interpolation: unexpected character `$`
+  --> examples/errors/interpolation_bad_token.lume:3:20
+  |
+3 |   puts "total: #{1 $ 2}"
+  |                    ^

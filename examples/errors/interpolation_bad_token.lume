@@ -1,0 +1,3 @@
+# The code inside an interpolation does not lex.
+def main:
+  puts "total: #{1 $ 2}"

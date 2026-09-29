@@ -1,0 +1,5 @@
+# A test's name cannot use interpolation.
+N = 2
+
+test "adds #{N}":
+  assert 1 + 1 == N

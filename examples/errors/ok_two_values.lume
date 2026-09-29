@@ -1,0 +1,5 @@
+# `Ok` wraps exactly one value.
+def f -> Int or Error = Ok(1, 2)
+
+def main:
+  puts 1

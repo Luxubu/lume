@@ -1,0 +1,6 @@
+error: interpolation `#{` is not closed
+  --> examples/errors/interpolation_unclosed.lume:4:14
+  |
+4 |   puts "hi #{name"
+  |              ^
+  help: add the closing `}`

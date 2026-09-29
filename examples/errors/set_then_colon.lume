@@ -1,0 +1,4 @@
+# A set literal item followed by a colon, as if it were a map.
+def main:
+  tags = {"red", "blue": 2}
+  puts tags.len

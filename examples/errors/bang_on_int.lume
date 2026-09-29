@@ -1,0 +1,4 @@
+# `!` used on a plain number.
+def main:
+  n = 5
+  puts n!

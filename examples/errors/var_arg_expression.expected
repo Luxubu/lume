@@ -1,0 +1,6 @@
+error: `bump` changes its `xs` argument, so it needs a named `var` value, not an expression
+  --> examples/errors/var_arg_expression.lume:6:8
+  |
+6 |   bump([1, 2])
+  |        ^
+  help: bind the value to a `var` first

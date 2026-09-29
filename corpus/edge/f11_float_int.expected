@@ -1,4 +1,4 @@
-error: `/` cannot combine a `Float` and a `Int`
+error: `/` cannot combine a `Float` and an `Int`
   --> corpus/edge/f11_float_int.lume:3:12
   |
 3 |   puts 7.0 / 2

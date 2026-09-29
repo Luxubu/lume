@@ -1,0 +1,8 @@
+# A method and a function of the type share a name.
+struct P:
+  x: Int
+  def self.make -> P = P(x: 0)
+  def make -> P = P(x: 1)
+
+def main:
+  puts 1

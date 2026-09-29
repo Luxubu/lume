@@ -1,0 +1,4 @@
+# Two loop variables over a list of plain numbers.
+def main:
+  for a, b in [1, 2]:
+    puts a

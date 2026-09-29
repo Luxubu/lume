@@ -1,0 +1,6 @@
+error: type parameters start with a capital letter: `t`
+  --> examples/errors/type_param_lowercase.lume:2:11
+  |
+2 | def first[t](xs: [t]) -> t? = xs.first
+  |           ^
+  help: `def name[T]` is the usual spelling; `[K, V]` when there are two

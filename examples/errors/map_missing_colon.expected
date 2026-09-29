@@ -1,0 +1,6 @@
+error: expected `:` between a map key and its value
+  --> examples/errors/map_missing_colon.lume:3:28
+  |
+3 |   ages = {"ada": 36, "bob" 41}
+  |                            ^
+  help: a map literal is `{key: value, ...}`; a set is `{a, b, c}`

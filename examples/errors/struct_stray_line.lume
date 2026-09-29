@@ -1,0 +1,7 @@
+# Only fields and methods belong inside a struct, not a loose value.
+struct Point:
+  x: Int
+  "origin"
+
+def main:
+  puts 1

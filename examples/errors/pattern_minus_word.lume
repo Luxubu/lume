@@ -1,0 +1,5 @@
+# A minus sign in a pattern must be followed by a number.
+def main:
+  match 3:
+    -x -> puts x
+    _ -> puts 0

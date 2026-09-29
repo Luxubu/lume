@@ -1,0 +1,8 @@
+# Unpacking a pair into a field, instead of new names.
+struct P:
+  x: Int
+
+def main:
+  p = P(x: 1)
+  (p.x, b) = (1, 2)
+  puts b

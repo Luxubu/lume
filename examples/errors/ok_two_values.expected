@@ -1,0 +1,5 @@
+error: `Ok` takes exactly one value
+  --> examples/errors/ok_two_values.lume:2:25
+  |
+2 | def f -> Int or Error = Ok(1, 2)
+  |                         ^

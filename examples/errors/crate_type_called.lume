@@ -1,0 +1,6 @@
+# A type from a Rust crate called as if it were a function.
+import rust.regex = "1"
+
+def main:
+  r = regex.Regex("a+")
+  puts 1

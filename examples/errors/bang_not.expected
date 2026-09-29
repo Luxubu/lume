@@ -1,0 +1,6 @@
+error: `!` is not the boolean not
+  --> examples/errors/bang_not.lume:4:8
+  |
+4 |   puts !ok
+  |        ^
+  help: write `not x`

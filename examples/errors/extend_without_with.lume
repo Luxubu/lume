@@ -1,0 +1,9 @@
+# `extend` needs `with` and the interface it brings.
+interface Sized:
+  def size -> Int
+
+extend Str:
+  def size -> Int = self.len
+
+def main:
+  puts 1

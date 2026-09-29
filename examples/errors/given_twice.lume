@@ -1,0 +1,6 @@
+# The same field given twice when building a variant.
+enum Shape:
+  Box(w: Int, h: Int)
+
+def main:
+  puts Box(w: 1, w: 2)

@@ -1,0 +1,6 @@
+error: `assert` needs a condition
+  --> examples/errors/assert_empty.lume:3:9
+  |
+3 |   assert
+  |         ^
+  help: write `assert x == 3`

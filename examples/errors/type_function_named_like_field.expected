@@ -1,0 +1,5 @@
+error: `x` is both a field and a function of `P`
+  --> examples/errors/type_function_named_like_field.lume:4:3
+  |
+4 |   def self.x -> Int = 0
+  |   ^

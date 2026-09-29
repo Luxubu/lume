@@ -1,0 +1,7 @@
+# A function of the type that tries to be an operator.
+struct V:
+  n: Int
+  def self.+(other: V) -> V = other
+
+def main:
+  puts 1

@@ -1,0 +1,5 @@
+error: `.upcase` takes 0 arguments, but 1 was given
+  --> examples/errors/builtin_arity.lume:3:13
+  |
+3 |   puts "abc".upcase(1)
+  |             ^

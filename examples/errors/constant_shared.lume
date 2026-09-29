@@ -1,0 +1,8 @@
+# A constant cannot hold a task.
+async def f -> Int:
+  1
+
+T = spawn: 1
+
+async def main:
+  puts 1

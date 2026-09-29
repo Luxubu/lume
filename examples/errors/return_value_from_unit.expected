@@ -1,0 +1,6 @@
+error: this function returns nothing, but `return` has a value
+  --> examples/errors/return_value_from_unit.lume:3:3
+  |
+3 |   return name
+  |   ^
+  help: add `-> Type` to the function signature

@@ -1,0 +1,5 @@
+error: a slice position is an `Int`, but this is a `Str`
+  --> examples/errors/slice_position_str.lume:4:11
+  |
+4 |   puts xs["a"..2]
+  |           ^

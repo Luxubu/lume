@@ -1,0 +1,5 @@
+error: expected `:` after `enum Shape`
+  --> examples/errors/enum_no_colon.lume:2:11
+  |
+2 | enum Shape
+  |           ^

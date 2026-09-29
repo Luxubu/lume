@@ -1,0 +1,5 @@
+# A tuple pattern names every part: this tuple has three. (Once crashed the compiler.)
+
+def main:
+  match (1, 2, 3):
+    (a, b) -> puts a

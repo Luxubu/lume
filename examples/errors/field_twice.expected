@@ -1,0 +1,5 @@
+error: field `x` is listed twice in `P`
+  --> examples/errors/field_twice.lume:4:3
+  |
+4 |   x: Int
+  |   ^

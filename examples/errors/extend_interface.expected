@@ -1,0 +1,5 @@
+error: an interface cannot be extended with another; extend the concrete types
+  --> examples/errors/extend_interface.lume:8:1
+  |
+8 | extend Sized with Named:
+  | ^

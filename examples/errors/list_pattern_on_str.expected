@@ -1,0 +1,5 @@
+error: a list pattern cannot match a `Str`
+  --> examples/errors/list_pattern_on_str.lume:3:3
+  |
+3 |   match "ab":
+  |   ^

@@ -1,0 +1,9 @@
+# A method in an `extend` block tries to change the value.
+interface Bump:
+  def bump -> Int
+
+extend Int with Bump:
+  def bump(var self) -> Int = self + 1
+
+def main:
+  puts 1

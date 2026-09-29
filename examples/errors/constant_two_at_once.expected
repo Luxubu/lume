@@ -1,0 +1,5 @@
+error: `MAX` at the top level needs a value: `MAX = ...`
+  --> examples/errors/constant_two_at_once.lume:2:9
+  |
+2 | MAX: Int, MIN: Int = 10, 1
+  |         ^

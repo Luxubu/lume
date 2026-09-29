@@ -1,0 +1,6 @@
+error: cannot work out what `f` returns
+  --> examples/errors/return_type_unknown.lume:2:1
+  |
+2 | def f(n: Int):
+  | ^
+  help: add the return type to the signature: `def f(...) -> Type`

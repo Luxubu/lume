@@ -1,0 +1,5 @@
+# A range pattern has no number after `..`.
+def main:
+  match 3:
+    1.. -> puts "big"
+    _ -> puts "small"

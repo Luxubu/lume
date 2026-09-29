@@ -1,0 +1,4 @@
+# The colon after the value to match is missing.
+def main:
+  match 3
+    _ -> puts 1

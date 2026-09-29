@@ -1,0 +1,6 @@
+error: `Shape` has no variant `Circle`
+  --> examples/errors/pattern_no_variant.lume:8:5
+  |
+8 |     Shape.Circle -> puts 1
+  |     ^
+  help: the variants are: Dot, Box

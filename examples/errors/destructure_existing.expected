@@ -1,0 +1,6 @@
+error: `a` already exists (line 3); `(a, b) = ...` makes new names
+  --> examples/errors/destructure_existing.lume:4:3
+  |
+4 |   (a, b) = (1, 2)
+  |   ^
+  help: pick new names, or assign the parts one by one: `x = pair.0`

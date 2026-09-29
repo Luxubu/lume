@@ -1,0 +1,6 @@
+error: `def self.empty` belongs in the type's own definition, not in an `extend`
+  --> examples/errors/extend_type_function.lume:7:3
+  |
+7 |   def self.empty -> Str = ""
+  |   ^
+  help: an `extend` gives a type the methods an interface asks of its values

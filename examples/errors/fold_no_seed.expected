@@ -1,0 +1,5 @@
+error: `fold` takes the starting value and a block: `xs.fold(0) { |acc, x| acc + x }`
+  --> examples/errors/fold_no_seed.lume:3:14
+  |
+3 |   puts [1, 2].fold { |acc, x| acc + x }
+  |              ^

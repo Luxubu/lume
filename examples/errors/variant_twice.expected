@@ -1,0 +1,5 @@
+error: variant `Dot` is listed twice
+  --> examples/errors/variant_twice.lume:4:3
+  |
+4 |   Dot
+  |   ^

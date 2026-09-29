@@ -1,0 +1,4 @@
+# A binding with a type but no value.
+def main:
+  n: Int
+  puts 1

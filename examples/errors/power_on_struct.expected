@@ -1,0 +1,6 @@
+error: `V` has no `**` operator
+  --> examples/errors/power_on_struct.lume:7:16
+  |
+7 |   puts V(n: 1) ** V(n: 2)
+  |                ^
+  help: `**` is not overloadable; write a method such as `def pow(n: Int)`

@@ -1,0 +1,5 @@
+error: each part on the left of `(a, b) = ...` must be a new name, or `_` to skip it
+  --> examples/errors/destructure_field.lume:7:5
+  |
+7 |   (p.x, b) = (1, 2)
+  |     ^

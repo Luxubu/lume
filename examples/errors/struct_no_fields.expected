@@ -1,0 +1,6 @@
+error: struct `Empty` has no fields
+  --> examples/errors/struct_no_fields.lume:2:1
+  |
+2 | struct Empty:
+  | ^
+  help: a struct needs at least one `name: Type` field

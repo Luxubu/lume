@@ -1,0 +1,5 @@
+error: `Some` takes exactly one value
+  --> examples/errors/some_two_values.lume:2:17
+  |
+2 | def f -> Int? = Some(1, 2)
+  |                 ^
