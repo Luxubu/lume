@@ -16,6 +16,41 @@ use std::path::{Path, PathBuf};
 thread_local! {
     static OVERLAY: RefCell<HashMap<PathBuf, String>> = RefCell::new(HashMap::new());
     static SINK: RefCell<Option<Vec<String>>> = const { RefCell::new(None) };
+    static INDEX: RefCell<Option<Vec<Use>>> = const { RefCell::new(None) };
+}
+
+/// One name the compiler resolved while checking: where it is used, what
+/// to show on hover, and where it was defined (a column of 0 means "find
+/// the name on that line").
+#[derive(Clone, Debug)]
+pub struct Use {
+    pub file: String,
+    pub line: usize,
+    pub col: usize,
+    pub name: String,
+    pub hover: String,
+    pub def: Option<(String, usize, usize)>,
+}
+
+/// Is a check being indexed? Cheap enough to ask before building a note.
+pub fn indexing() -> bool {
+    INDEX.with(|i| i.borrow().is_some())
+}
+
+pub fn note(u: Use) {
+    INDEX.with(|i| {
+        if let Some(v) = i.borrow_mut().as_mut() {
+            v.push(u);
+        }
+    });
+}
+
+/// Runs `f` with every resolved name recorded.
+pub fn indexed<T>(f: impl FnOnce() -> T) -> (T, Vec<Use>) {
+    INDEX.with(|i| *i.borrow_mut() = Some(Vec::new()));
+    let r = f();
+    let got = INDEX.with(|i| i.borrow_mut().take().unwrap_or_default());
+    (r, got)
 }
 
 fn key(path: &Path) -> PathBuf {

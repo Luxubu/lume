@@ -596,6 +596,8 @@ enum BindKind {
 #[derive(Clone, Default)]
 pub struct Exports {
     pub rust_mod: String,
+    /// Where this module's items and their members were written.
+    def_sites: HashMap<String, (String, usize, usize)>,
     structs: HashMap<String, StructInfo>,
     enums: HashMap<String, EnumInfo>,
     fns: HashMap<String, Sig>,
@@ -768,6 +770,9 @@ pub struct Gen {
     /// With the depth of `rest_stack` and `barriers` where the statement
     /// began: only statements and loops inside the value can still use it.
     dying: Option<(String, usize, usize)>,
+    /// Where each definition this module can name was written, keyed as
+    /// `fns`/`structs` are (`Item`, `model.Item`), members as `Item::field`.
+    def_sites: HashMap<String, (String, usize, usize)>,
     /// Which `rest_stack` levels are a call's arguments still to come, not
     /// later statements: a field move has already checked those.
     arg_rest_levels: Vec<usize>,
@@ -883,6 +888,7 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, module_id: &str
         stmt_stack: Vec::new(),
         dying: None,
         arg_rest_levels: Vec::new(),
+        def_sites: HashMap::new(),
         paths: HashMap::new(),
         canon: HashMap::new(),
         module_aliases: HashMap::new(),
@@ -925,6 +931,7 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, module_id: &str
         }
     }
     g.register_deps(deps)?;
+    g.collect_def_sites(program);
     g.program(program)?;
     let mut rust_deps = Vec::new();
     for item in program {
@@ -937,7 +944,8 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, module_id: &str
     if g.uses_async {
         rust_deps.push(("tokio".to_string(), "{ version = \"1\", features = [\"rt-multi-thread\", \"macros\", \"time\", \"sync\"] }".to_string()));
     }
-    let exports = g.exports(program, rust_mod.unwrap_or("main"));
+    let mut exports = g.exports(program, rust_mod.unwrap_or("main"));
+    exports.def_sites = g.def_sites.iter().filter(|(k, _)| !k.contains('.')).map(|(k, v)| (k.clone(), v.clone())).collect();
     let uses = if g.trait_uses.is_empty() {
         String::new()
     } else {
@@ -2993,6 +3001,9 @@ impl Gen {
     /// Makes an imported module's public items visible under `key_prefix`
     /// ("model" for an alias, "users.model" for the full id).
     fn register_module_items(&mut self, key_prefix: &str, id: &str, ex: &Exports, line: usize, col: usize) -> Result<()> {
+        for (k, site) in &ex.def_sites {
+            self.def_sites.insert(format!("{}.{}", key_prefix, k), site.clone());
+        }
         for (n, info) in &ex.structs {
             let key = format!("{}.{}", key_prefix, n);
             let qualified = StructInfo {
@@ -6323,6 +6334,10 @@ impl Gen {
             if self.is_interface(&pty) {
                 self.iface_params.insert(p.name.clone());
             }
+            if crate::diag::indexing() {
+                let what = if p.mutable { "var " } else { "" };
+                self.note_at(p.line, p.col, &p.name, format!("{}{}: {}", what, p.name, type_name(&pty)), Some((self.this_file.clone(), p.line, p.col)));
+            }
             self.declare(&p.name, p.mutable, borrowed, pty, p.line);
         }
         self.current_ret = sig.ret.clone();
@@ -6513,6 +6528,141 @@ impl Gen {
         r
     }
 
+    fn note_at(&self, line: usize, col: usize, name: &str, hover: String, def: Option<(String, usize, usize)>) {
+        crate::diag::note(crate::diag::Use { file: self.this_file.clone(), line, col, name: name.to_string(), hover, def });
+    }
+
+    /// Where each item of this module was written, and each member of its
+    /// types: what "go to definition" jumps to.
+    fn collect_def_sites(&mut self, program: &[Item]) {
+        let f = self.this_file.clone();
+        let mut put = |k: String, line: usize, col: usize| {
+            self.def_sites.insert(k, (f.clone(), line, col));
+        };
+        for item in program {
+            match item {
+                Item::Fn(d) => put(d.name.clone(), d.line, 0),
+                Item::Const(c) => put(c.name.clone(), c.line, c.col),
+                Item::Struct(s) => {
+                    put(s.name.clone(), s.line, 0);
+                    for p in &s.fields {
+                        put(format!("{}::{}", s.name, p.name), p.line, p.col);
+                    }
+                    for m in &s.methods {
+                        put(format!("{}::{}", s.name, m.name), m.line, 0);
+                    }
+                }
+                Item::Enum(en) => {
+                    put(en.name.clone(), en.line, 0);
+                    for v in &en.variants {
+                        put(format!("{}::{}", en.name, v.name), v.line, v.col);
+                    }
+                    for m in &en.methods {
+                        put(format!("{}::{}", en.name, m.name), m.line, 0);
+                    }
+                }
+                Item::Interface(i) => {
+                    put(i.name.clone(), i.line, 0);
+                    for m in i.required.iter().chain(&i.defaults) {
+                        put(format!("{}::{}", i.name, m.name), m.line, 0);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// Records what `e` names, when it names something: a local, a
+    /// function, a type, or a member reached with `.`.
+    fn note_expr(&mut self, e: &Expr) {
+        match &e.kind {
+            ExprKind::Ident(n) => {
+                if let Some(b) = self.lookup(n).cloned() {
+                    let what = if b.mutable { "var " } else { "" };
+                    self.note_at(e.line, e.col, n, format!("{}{}: {}", what, n, type_name(&b.ty)), Some((self.this_file.clone(), b.line, 0)));
+                } else if let Some(t) = self.field_type(n) {
+                    let owner = self.current_type.clone().unwrap_or_default();
+                    let site = self.def_sites.get(&format!("{}::{}", owner, n)).cloned();
+                    self.note_at(e.line, e.col, n, format!("{}.{}: {}", type_name(&Type::Named(owner)), n, type_name(&t)), site);
+                } else {
+                    let key = self.canon(n);
+                    if let Some(t) = self.consts.get(&key).cloned() {
+                        let site = self.def_sites.get(&key).cloned();
+                        self.note_at(e.line, e.col, n, format!("{}: {}", n, type_name(&t)), site);
+                    }
+                }
+            }
+            ExprKind::Call { name, .. } => {
+                if let Some(b) = self.lookup(name).cloned() {
+                    self.note_at(e.line, e.col, name, format!("{}: {}", name, type_name(&b.ty)), Some((self.this_file.clone(), b.line, 0)));
+                    return;
+                }
+                let key = self.canon(name);
+                let site = self.def_sites.get(&key).cloned();
+                if let Some(info) = self.structs.get(&key).cloned() {
+                    let fields: Vec<String> = info.fields.iter().map(|(f, t)| format!("  {}: {}", f, type_name(t))).collect();
+                    self.note_at(e.line, e.col, name, format!("struct {}\n{}", name, fields.join("\n")), site);
+                } else if let Some(sg) = self.fns.get(&key).cloned() {
+                    self.note_at(e.line, e.col, name, format!("def {}{}", name, self.hover_sig(&sg)), site);
+                }
+            }
+            ExprKind::Method { recv, name, .. } if name != "()" => {
+                let (line, col) = (e.line, e.col + 1);
+                // `model.Item`, `helpers.twice(..)`: an item through its module
+                if let ExprKind::Ident(alias) = &recv.kind {
+                    if self.lookup(alias).is_none() && self.module_aliases.contains_key(alias) {
+                        let key = self.canon(&format!("{}.{}", alias, name));
+                        let site = self.def_sites.get(&key).cloned().or_else(|| self.def_sites.get(&format!("{}.{}", alias, name)).cloned());
+                        let hover = if let Some(sg) = self.fns.get(&key).cloned() {
+                            format!("def {}.{}{}", alias, name, self.hover_sig(&sg))
+                        } else if let Some(t) = self.consts.get(&key).cloned() {
+                            format!("{}.{}: {}", alias, name, type_name(&t))
+                        } else if self.structs.contains_key(&key) || self.enums.contains_key(&key) || self.interfaces.contains_key(&key) {
+                            format!("{}.{}", alias, name)
+                        } else {
+                            return;
+                        };
+                        self.note_at(line, col, name, hover, site);
+                        return;
+                    }
+                }
+                let rt = self.ty_of(recv).materialized();
+                if let Type::Named(_) | Type::App(..) = &rt {
+                    let key = self.type_key(&rt);
+                    let site = self.def_sites.get(&format!("{}::{}", key, name)).cloned();
+                    let shown = type_name(&rt);
+                    if let Some(info) = self.structs.get(&key).cloned() {
+                        if let Some((_, ft)) = info.fields.iter().find(|(f, _)| f == name) {
+                            let ft = Self::subst(ft, &self.subst_for(&rt));
+                            self.note_at(line, col, name, format!("{}.{}: {}", shown, name, type_name(&ft)), site);
+                            return;
+                        }
+                    }
+                    if let Some(sg) = self.methods_of(&key).and_then(|m| m.get(name).cloned()) {
+                        self.note_at(line, col, name, format!("def {}.{}{}", shown, name, self.hover_sig(&sg)), site);
+                        return;
+                    }
+                }
+                // a built-in method: what it gives back here
+                let t = self.ty_of(e).materialized();
+                if type_is_known(&t) {
+                    self.note_at(line, col, name, format!("{}.{} -> {}", type_name(&rt), name, type_name(&t)), None);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// `(a: Int, b: Str) -> Bool`, as hover shows a signature.
+    fn hover_sig(&self, sg: &Sig) -> String {
+        let ps: Vec<String> = sg.params.iter().map(|(n, t)| format!("{}: {}", n, type_name(t))).collect();
+        let gens = if sg.generics.is_empty() { String::new() } else { format!("[{}]", sg.generics.iter().map(|g| g.name.clone()).collect::<Vec<_>>().join(", ")) };
+        let ret = if sg.ret == Type::Unit { String::new() } else { format!(" -> {}", type_name(&sg.ret)) };
+        // written as Lume writes it: no brackets when there is nothing in them
+        let ps = if ps.is_empty() { String::new() } else { format!("({})", ps.join(", ")) };
+        format!("{}{}{}", gens, ps, ret)
+    }
+
     /// Can the list named by `e` be given away here instead of read through
     /// a borrow — its items moved out rather than copied? Yes for an owned
     /// local that nothing uses afterwards and this statement names once, or
@@ -6683,6 +6833,14 @@ impl Gen {
         let saved = std::mem::replace(&mut self.dying, replacing);
         let r = self.stmt_inner(s, is_tail);
         self.dying = saved;
+        if crate::diag::indexing() {
+            if let Stmt::Bind { name, line, col, .. } | Stmt::Var { name, line, col, .. } = s {
+                if let Some(b) = self.lookup(name).cloned() {
+                    let what = if b.mutable { "var " } else { "" };
+                    self.note_at(*line, *col, name, format!("{}{}: {}", what, name, type_name(&b.ty)), Some((self.this_file.clone(), b.line, 0)));
+                }
+            }
+        }
         r
     }
 
@@ -9378,6 +9536,9 @@ impl Gen {
     }
 
     fn expr(&mut self, e: &Expr) -> Result<String> {
+        if crate::diag::indexing() {
+            self.note_expr(e);
+        }
         // `text.shout` / `Temp.from_f` where a kept block is wanted
         if let Some((ins, out)) = self.wanted_fn() {
             if let Some(key) = self.module_fn_ref(e) {

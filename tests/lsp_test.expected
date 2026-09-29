@@ -1,5 +1,5 @@
 --- initialize
-{"id": 1, "jsonrpc": "2.0", "result": {"capabilities": {"textDocumentSync": {"change": 1, "openClose": true, "save": {"includeText": false}}}, "serverInfo": {"name": "lume", "version": "0.1.0"}}}
+{"id": 1, "jsonrpc": "2.0", "result": {"capabilities": {"definitionProvider": true, "hoverProvider": true, "textDocumentSync": {"change": 1, "openClose": true, "save": {"includeText": false}}}, "serverInfo": {"name": "lume", "version": "0.1.0"}}}
 --- a file with an error, then fixed
 {"jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": {"diagnostics": [{"message": "unknown name `nope`\nhelp: names must be bound with `name = value` or `var name = value` before use", "range": {"end": {"character": 11, "line": 1}, "start": {"character": 7, "line": 1}}, "severity": 1, "source": "lume"}], "uri": "<tmp>/one/hello.lume"}}
 {"jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": {"diagnostics": [], "uri": "<tmp>/one/hello.lume"}}
@@ -8,7 +8,21 @@
 --- a module of a package, unsaved text
 {"jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": {"diagnostics": [{"message": "`hi` returns `Str`, but this is a `Int`\nhelp: write `\"#{42}\"` or `42.to_s`", "range": {"end": {"character": 22, "line": 0}, "start": {"character": 20, "line": 0}}, "severity": 1, "source": "lume"}], "uri": "<tmp>/pkg/util.lume"}}
 {"jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": {"diagnostics": [], "uri": "<tmp>/pkg/util.lume"}}
+--- the module fixed again
+{"jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": {"diagnostics": [], "uri": "<tmp>/mods/helper.lume"}}
+--- hover and go to definition
+{"jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": {"diagnostics": [], "uri": "<tmp>/mods/nav.lume"}}
+a local                        hover "ann: Person" | definition <tmp>/mods/nav.lume:12:3
+a var                          hover "var later: Person" | definition <tmp>/mods/nav.lume:13:7
+a parameter                    hover "by: Int" | definition <tmp>/mods/nav.lume:9:22
+a function                     hover "def older(p: Person, by: Int) -> Person" | definition <tmp>/mods/nav.lume:9:5
+a constructor                  hover "struct Person\n  name: Str\n  age: Int" | definition <tmp>/mods/nav.lume:3:8
+a method                       hover "def Person.greet -> Str" | definition <tmp>/mods/nav.lume:7:7
+a field                        hover "Person.name: Str" | definition <tmp>/mods/nav.lume:4:3
+a field read bare in a method  hover "Person.name: Str" | definition <tmp>/mods/nav.lume:4:3
+a built-in method              hover "Str.upcase -> Str" | definition None
+a function of another module   hover "def helper.twice(n: Int) -> Int" | definition <tmp>/mods/helper.lume:1:9
 --- a request it does not answer, then shutdown
-{"error": {"code": -32601, "message": "`textDocument/hover` is not supported"}, "id": 2, "jsonrpc": "2.0"}
-{"id": 3, "jsonrpc": "2.0", "result": null}
+{"error": {"code": -32601, "message": "`textDocument/completion` is not supported"}, "id": 22, "jsonrpc": "2.0"}
+{"id": 23, "jsonrpc": "2.0", "result": null}
 exit: 0

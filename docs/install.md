@@ -75,7 +75,10 @@ errors and warnings as you type. Its README says how to install it.
 Other editors can use the same server. `lume lsp` speaks the Language Server
 Protocol over stdin and stdout. It checks the program a file belongs to on
 every change, using the text not yet saved, and reports what `lume check`
-would. For tools that want data rather than text, `lume check --json`
+would. **Hover** shows what a name is: a local's type, a function's
+signature, a struct's fields, a field's or method's type, or what a built-in
+method gives back there. **Go to definition** jumps to where it was
+written, in this file, another module or another package. For tools that want data rather than text, `lume check --json`
 prints every error and warning with its file, line, column, message and
 help:
 

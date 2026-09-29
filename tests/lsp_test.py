@@ -78,8 +78,69 @@ diagnostics_until(util)
 send("textDocument/didClose", {"textDocument": {"uri": uri(util)}})
 diagnostics_until(util)
 
+print("--- the module fixed again")
+send("textDocument/didChange", {"textDocument": {"uri": uri(helper), "version": 2}, "contentChanges": [{"text": "pub def twice(n: Int) -> Int = n * 2\n"}]})
+diagnostics_until(helper)
+
+print("--- hover and go to definition")
+nav_text = """import helper
+
+struct Person:
+  name: Str
+  age: Int
+
+  def greet -> Str = "hi #{name}"
+
+def older(p: Person, by: Int) -> Person = Person(name: p.name, age: p.age + by)
+
+def main:
+  ann = Person(name: "ann", age: 30)
+  var later = older(ann, 1)
+  puts later.greet
+  puts later.name.upcase
+  puts helper.twice(2)
+"""
+nav = write("mods/nav.lume", nav_text)
+send("textDocument/didOpen", {"textDocument": {"uri": uri(nav), "languageId": "lume", "version": 1, "text": nav_text}})
+diagnostics_until(nav)
+lines = nav_text.split("\n")
+
+def at(token, nth=1, line_has=None):
+    """The position of the `nth` `token` on the first line containing `line_has`."""
+    for i, l in enumerate(lines):
+        if line_has is None or line_has in l:
+            k = -1
+            for _ in range(nth):
+                k = l.index(token, k + 1)
+            return {"line": i, "character": k}
+    raise KeyError(token)
+
+probes = [
+    ("a local", "ann", 1, "older(ann"),
+    ("a var", "later", 1, "puts later.greet"),
+    ("a parameter", "by", 2, "def older"),
+    ("a function", "older", 1, "var later"),
+    ("a constructor", "Person", 1, "ann = Person"),
+    ("a method", "greet", 1, "puts later.greet"),
+    ("a field", "name", 1, "later.name"),
+    ("a field read bare in a method", "name", 1, "hi #{name}"),
+    ("a built-in method", "upcase", 1, "upcase"),
+    ("a function of another module", "twice", 1, "helper.twice"),
+]
+for what, tok, nth, line_has in probes:
+    pos = at(tok, nth, line_has)
+    send("textDocument/hover", {"textDocument": {"uri": uri(nav)}, "position": pos}, True)
+    h = recv().get("result")
+    shown = h["contents"]["value"].replace("```lume\n", "").replace("\n```", "") if h else None
+    send("textDocument/definition", {"textDocument": {"uri": uri(nav)}, "position": pos}, True)
+    d = recv().get("result")
+    where = None
+    if d:
+        where = "%s:%d:%d" % (d["uri"].replace("file://" + tmp, "<tmp>"), d["range"]["start"]["line"] + 1, d["range"]["start"]["character"] + 1)
+    print("%-30s hover %s | definition %s" % (what, json.dumps(shown), where))
+
 print("--- a request it does not answer, then shutdown")
-send("textDocument/hover", {"textDocument": {"uri": uri(one)}, "position": {"line": 0, "character": 0}}, True)
+send("textDocument/completion", {"textDocument": {"uri": uri(one)}, "position": {"line": 0, "character": 0}}, True)
 show(recv())
 send("shutdown", None, True)
 show(recv())

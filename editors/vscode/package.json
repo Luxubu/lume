@@ -1,7 +1,7 @@
 {
   "name": "lume",
   "displayName": "Lume",
-  "description": "Lume: syntax highlighting, and errors as you type from `lume lsp`",
+  "description": "Lume: syntax highlighting, errors as you type, hover and go to definition, from `lume lsp`",
   "version": "0.1.0",
   "publisher": "luxubu",
   "license": "MIT",

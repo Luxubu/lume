@@ -19,7 +19,7 @@ use crate::{diag, loader, manifest};
 pub fn serve() {
     let stdin = std::io::stdin();
     let mut input = stdin.lock();
-    let mut server = Server { open: HashMap::new(), published: HashMap::new(), shutting_down: false };
+    let mut server = Server { open: HashMap::new(), published: HashMap::new(), index: HashMap::new(), shutting_down: false };
     loop {
         let msg = match read_message(&mut input) {
             Some(m) => m,
@@ -65,6 +65,8 @@ struct Server {
     /// for each program checked (by its entry file), the uris last given
     /// diagnostics, so a fixed file is cleared and another program's are not
     published: HashMap<PathBuf, HashSet<String>>,
+    /// for each program, the names its last check resolved
+    index: HashMap<PathBuf, Vec<diag::Use>>,
     shutting_down: bool,
 }
 
@@ -78,7 +80,9 @@ impl Server {
             "initialize" => {
                 send(&json!({ "jsonrpc": "2.0", "id": id, "result": {
                     "capabilities": {
-                        "textDocumentSync": { "openClose": true, "change": 1, "save": { "includeText": false } }
+                        "textDocumentSync": { "openClose": true, "change": 1, "save": { "includeText": false } },
+                        "hoverProvider": true,
+                        "definitionProvider": true
                     },
                     "serverInfo": { "name": "lume", "version": env!("CARGO_PKG_VERSION") }
                 }}));
@@ -125,6 +129,16 @@ impl Server {
                     publish(&uri, Vec::new());
                 }
             }
+            "textDocument/hover" | "textDocument/definition" => {
+                let path = uri_to_path(&str_at(&params, &["textDocument", "uri"]));
+                let line = params.pointer("/position/line").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                let character = params.pointer("/position/character").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                let result = match path {
+                    Some(p) => self.answer(method, &p, line, character),
+                    None => Value::Null,
+                };
+                send(&json!({ "jsonrpc": "2.0", "id": id, "result": result }));
+            }
             _ => {
                 // a request we do not answer still gets an answer
                 if id.is_some() && !method.is_empty() {
@@ -138,10 +152,11 @@ impl Server {
     /// Checks the program `path` belongs to and publishes its diagnostics.
     fn check(&mut self, path: &Path) {
         let entry = entry_for(path);
-        let run = std::panic::catch_unwind(|| diag::collecting(|| crate::compile_to_rust(&entry, true)));
+        let run = std::panic::catch_unwind(|| diag::indexed(|| diag::collecting(|| crate::compile_to_rust(&entry, true))));
         let mut ds: Vec<diag::Diagnostic> = Vec::new();
         match run {
-            Ok((r, warnings)) => {
+            Ok(((r, warnings), uses)) => {
+                self.index.insert(entry.clone(), uses);
                 ds.extend(warnings.iter().flat_map(|w| diag::parse(w)));
                 if let Err(e) = r {
                     ds.extend(diag::parse(&e));
@@ -217,6 +232,106 @@ fn to_lsp(d: &diag::Diagnostic, text: &str) -> Value {
         "source": "lume",
         "message": message
     })
+}
+
+impl Server {
+    /// Hover or definition at a position: the name under the cursor, looked
+    /// up among the names the last check of its program resolved.
+    fn answer(&mut self, method: &str, path: &Path, line: usize, character: usize) -> Value {
+        let entry = entry_for(path);
+        if !self.index.contains_key(&entry) {
+            self.check(path);
+        }
+        let text = diag::read_source(path).unwrap_or_default();
+        let (word, start) = match word_at(&text, line, character) {
+            Some(w) => w,
+            None => return Value::Null,
+        };
+        let me = std::fs::canonicalize(path).unwrap_or(path.to_path_buf());
+        let cwd = std::env::current_dir().unwrap_or_default();
+        let same_file = |f: &str| {
+            let p = cwd.join(f);
+            std::fs::canonicalize(&p).unwrap_or(p) == me
+        };
+        let uses = match self.index.get(&entry) {
+            Some(u) => u,
+            None => return Value::Null,
+        };
+        let here: Vec<&diag::Use> = uses.iter().filter(|u| u.line == line + 1 && u.name == word && same_file(&u.file)).collect();
+        let hit = here.iter().find(|u| u.col == start + 1).or_else(|| here.first());
+        let u = match hit {
+            Some(u) => *u,
+            None => return Value::Null,
+        };
+        let range = json!({ "start": { "line": line, "character": utf16_col(&text, line, start) }, "end": { "line": line, "character": utf16_col(&text, line, start + word.chars().count()) } });
+        if method == "textDocument/hover" {
+            return json!({ "contents": { "kind": "markdown", "value": format!("```lume\n{}\n```", u.hover) }, "range": range });
+        }
+        let (file, dline, dcol) = match &u.def {
+            Some(d) => d.clone(),
+            None => return Value::Null,
+        };
+        let target = cwd.join(&file);
+        let target = std::fs::canonicalize(&target).unwrap_or(target);
+        let dtext = diag::read_source(&target).unwrap_or_default();
+        // a column of 0: the name's first appearance on that line
+        let dstart = if dcol > 0 {
+            dcol - 1
+        } else {
+            let l = dtext.lines().nth(dline.saturating_sub(1)).unwrap_or("");
+            find_word(l, &word).unwrap_or(0)
+        };
+        let dl = dline.saturating_sub(1);
+        json!({ "uri": path_to_uri(&target), "range": {
+            "start": { "line": dl, "character": utf16_col(&dtext, dl, dstart) },
+            "end": { "line": dl, "character": utf16_col(&dtext, dl, dstart + word.chars().count()) }
+        }})
+    }
+}
+
+/// The name under a cursor, and the character it starts at.
+fn word_at(text: &str, line: usize, character: usize) -> Option<(String, usize)> {
+    let l = text.lines().nth(line)?;
+    let chars: Vec<char> = l.chars().collect();
+    // the editor counts UTF-16 units; turn that into a character index
+    let mut units = 0;
+    let mut at = chars.len();
+    for (i, c) in chars.iter().enumerate() {
+        if units >= character {
+            at = i;
+            break;
+        }
+        units += c.len_utf16();
+    }
+    let is_word = |c: char| c.is_alphanumeric() || c == '_' || c == '?' || c == '!';
+    let mut start = at.min(chars.len());
+    if start == chars.len() || !is_word(chars[start]) {
+        if start > 0 && is_word(chars[start - 1]) {
+            start -= 1;
+        } else {
+            return None;
+        }
+    }
+    while start > 0 && is_word(chars[start - 1]) {
+        start -= 1;
+    }
+    let mut end = start;
+    while end < chars.len() && is_word(chars[end]) {
+        end += 1;
+    }
+    Some((chars[start..end].iter().collect(), start))
+}
+
+/// Where `word` first stands on its own in `line`, in characters.
+fn find_word(line: &str, word: &str) -> Option<usize> {
+    let chars: Vec<char> = line.chars().collect();
+    let w: Vec<char> = word.chars().collect();
+    let is_word = |c: char| c.is_alphanumeric() || c == '_';
+    (0..chars.len()).find(|&i| chars[i..].starts_with(&w) && (i == 0 || !is_word(chars[i - 1])) && chars.get(i + w.len()).map(|c| !is_word(*c)).unwrap_or(true))
+}
+
+fn utf16_col(text: &str, line: usize, character: usize) -> usize {
+    text.lines().nth(line).unwrap_or("").chars().take(character).map(|c| c.len_utf16()).sum()
 }
 
 /// Which file to check so that `path` is checked as part of its program:
