@@ -37,7 +37,7 @@ compiler/target/release/lume run examples/fib.lume
 
 ```sh
 lume run   file.lume [-- args...]   compile and run it
-lume build file.lume [-o binary]    compile it, fully optimised
+lume build file.lume [-o binary]    compile it, fully optimised (--checked keeps overflow checks)
 lume test  file.lume                run the file's `test` blocks
 lume check file.lume                parse and type-check only
 lume fmt   file.lume                rewrite in the canonical layout
@@ -55,7 +55,10 @@ rest use the package the current folder is in. See
 [Packages](reference/packages.md).
 
 `lume run` trades some of the program's optimisation for compile speed, so
-edit-and-run takes about 0.2 s. `lume build` is the one to measure.
+edit-and-run takes about 0.2 s. `lume build` is the one to measure. As in
+Rust, `lume run` and `lume test` stop the program when an `Int` overflows,
+and `lume build` does not check, unless given `--checked`; see
+[Numbers](reference/numbers.md#what-stops-the-program).
 
 Warnings are shown when a program is compiled, as cargo shows them, not
 again each time an unchanged program runs. `lume check` always shows them.

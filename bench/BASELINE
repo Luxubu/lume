@@ -1,6 +1,6 @@
 # lume time as a percentage of the same program in Rust, best of 5.
 # tests/bench.sh fails a benchmark that is more than 25% over its number here.
-b1_generic_blocks 115
+b1_generic_blocks 100
 b2_interface_values 100
 b3_wordcount 113
 b4_text 100

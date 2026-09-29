@@ -1,0 +1,8 @@
+# One overflow, three builds. `lume run` checks it, as a debug build does;
+# `lume build` wraps, as `cargo build --release` does; `--checked` keeps the
+# check in a fully optimised binary. Division by zero stops every build.
+
+def main:
+  big = 9223372036854775807
+  puts big - 1
+  puts big + 1

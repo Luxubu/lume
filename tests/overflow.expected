@@ -1,0 +1,11 @@
+9223372036854775806
+error: Int overflow in `+`
+  (set LUME_BACKTRACE=1 to see where in the generated Rust)
+exit: 101
+9223372036854775806
+-9223372036854775808
+exit: 0
+9223372036854775806
+error: Int overflow in `+`
+  (set LUME_BACKTRACE=1 to see where in the generated Rust)
+exit: 101

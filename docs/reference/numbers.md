@@ -277,9 +277,18 @@ equality. Use an `Int` (cents, thousandths) or a `Str`.
 
 ## What stops the program
 
-**`Int` overflow stops the program.** It does not wrap around, and there is
-no undefined behaviour, in a built binary as much as under `lume run`.
-Division or `%` by an `Int` zero stops it too:
+**Under `lume run` and `lume test`, `Int` overflow stops the program.** It
+does not wrap around, and there is no undefined behaviour. **`lume build`
+leaves the checks out**, as `cargo build --release` does, and there an
+overflow wraps around: `9223372036854775807 + 1` is
+`-9223372036854775808`. This is Rust's rule. Overflows are found while the
+program is developed, under `run` and `test`, and the finished binary does
+its arithmetic at full speed. **`lume build --checked`** keeps the checks in
+a fully optimised binary, for a program that must stop rather than wrap.
+`**` checks its result in every build.
+
+Division or `%` by an `Int` zero stops the program in every build, as it does
+in Rust:
 
 ```lume-skip
 big = 9223372036854775807

@@ -35,6 +35,7 @@ Then:
 - **[The examples](docs/examples.md)** — 5,000 lines of working programs, in a
   reading order.
 - **[Installing](docs/install.md)** — and what each command does.
+- **[Changes](CHANGELOG.md)** — what each release holds; 0.1.0 is the first.
 
 Every example in the documentation is compiled, run, and checked against the
 output it claims, by `tests/docs.sh`. An answer that stops being true fails
@@ -82,24 +83,26 @@ work itself rather than the process start or the file read.
 
 | benchmark | Lume | Rust | |
 | --- | --- | --- | --- |
-| generic helpers taking blocks, ten rounds over 2M ints | 44 ms | 37 ms | 118% |
-| 4M interface values, dispatched in a loop, ten rounds | 55 ms | 56 ms | 98% |
-| counting a million words into a `{Str: Int}` | 41 ms | 36 ms | 113% |
-| building 200k lines with interpolation and `join` | 28 ms | 28 ms | 100% |
-| printing 200k lines | 87 ms | 84 ms | 103% |
+| generic helpers taking blocks, ten rounds over 2M ints | 36 ms | 36 ms | 100% |
+| 4M interface values, dispatched in a loop, ten rounds | 59 ms | 59 ms | 100% |
+| counting a million words into a `{Str: Int}` | 15 ms | 14 ms | 107% |
+| building 200k lines with interpolation and `join` | 11 ms | 11 ms | 100% |
+| printing 200k lines | 91 ms | 91 ms | 100% |
 
-Two are above parity. Word count is a deliberate trade: Lume's map keeps
+(`tests/bench.sh`, best of five, `lume build` against `rustc -O`, measured at
+milestone 64.)
+
+One is above parity. Word count is a deliberate trade: Lume's map keeps
 insertion order, which Rust's `HashMap` does not, so a lookup reads a
 key-to-position index and then the ordered entries. That is one hash and one
 compare, the same as Rust's, plus one indirection.
 
-Generic helpers taking blocks is the price of a guarantee. An `Int` that
-overflows stops a Lume program rather than wrapping, so Lume builds with
-overflow checks on; the Rust beside it is built the way most Rust is, with
-them off. This benchmark is almost nothing but arithmetic, so the checks show:
-built with the same setting, the two run at the same speed (37 ms and 37 ms
-unchecked, 43 ms and 43 ms checked). The benchmark read 100% only while it
-was too short to measure.
+Overflow checks follow Rust. `lume run` and `lume test` stop the program
+when an `Int` overflows, as a debug build does. `lume build` leaves the
+checks out, as `cargo build --release` does, unless it is given `--checked`.
+Until milestone 64 Lume kept them in every build, and the benchmark of
+generic helpers taking blocks, which is almost nothing but arithmetic, read
+115% because of them; built the way Rust builds, it reads 100%.
 
 ```sh
 tests/bench.sh            # build both sides, best of five, compare to bench/BASELINE
@@ -188,10 +191,11 @@ case, values shared between threads: 5 `shared` words in 97 lines of async
 code, all of them at the declaration of the shared thing (`shared var
 store`), none at its uses. That is the one ownership word in Lume.
 
-Speed: computation runs at Rust speed (`fib(35)`: 56 ms with Lume's always-on
-integer overflow checks, 27 ms without them; Python 1.04 s). Overflow, division
+Speed: computation runs at Rust speed (`fib(35)`: 27 ms from `lume build`,
+56 ms with overflow checks on as under `lume run`; Python 1.04 s). Division
 by zero and an out-of-range position stop the program with a one-line Lume
-message (`error: Int overflow in `+``), never a silent wrap and never a Rust
+message in every build, and so does overflow under `lume run`, `lume test`
+and `lume build --checked` (`error: Int overflow in `+``), never with a Rust
 trace unless `LUME_BACKTRACE=1` is set.
 String-and-map code is within 20% of hand-written Rust after milestone 8
 (word count over 360k words: hand-written Rust 19 ms, Lume 23 ms, Python

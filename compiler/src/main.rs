@@ -40,7 +40,7 @@ fn help_text() -> String {
     format!(
         "lume {}\n\nusage:\n  \
          lume run   <file.lume> [-- <args>...]   compile and run it\n  \
-         lume build <file.lume> [-o <binary>]    compile it, fully optimised\n  \
+         lume build <file.lume> [-o <binary>] [--checked]   compile it, fully optimised\n  \
          lume test  <file.lume>                  run the file's `test` blocks\n  \
          lume check <file.lume>                  parse and type-check only\n  \
          lume fmt   <file.lume> [--check | --stdout]   rewrite in the canonical layout\n  \
@@ -446,7 +446,7 @@ fn write_cargo_project(path: &Path, deps: &[(String, String)]) -> Result<PathBuf
     }
     // `release` is what `lume run` uses: the program at opt-level 1 with an
     // incremental cache, every crate at opt-level 3. `ship` is `lume build`.
-    toml.push_str("\n[profile.release]\nopt-level = 1\ndebug = false\nincremental = true\noverflow-checks = true\n\n[profile.release.package.\"*\"]\nopt-level = 3\noverflow-checks = false\n\n[profile.ship]\ninherits = \"release\"\nopt-level = 3\nincremental = false\n");
+    toml.push_str("\n[profile.release]\nopt-level = 1\ndebug = false\nincremental = true\noverflow-checks = true\n\n[profile.release.package.\"*\"]\nopt-level = 3\noverflow-checks = false\n\n[profile.ship]\ninherits = \"release\"\nopt-level = 3\nincremental = false\noverflow-checks = false\n\n[profile.ship-checked]\ninherits = \"ship\"\noverflow-checks = true\n");
     let toml_path = proj.join("Cargo.toml");
     if fs::read_to_string(&toml_path).ok().as_deref() != Some(toml.as_str()) {
         fs::write(&toml_path, toml).map_err(|e| format!("error: cannot write Cargo.toml: {}", e))?;
@@ -482,7 +482,11 @@ fn build_with_cargo(path: &Path, rust: &str, deps: &[(String, String)], bin: &Pa
     let src_dir = proj.join("src");
     let pkg = stem.replace(|c: char| !c.is_alphanumeric() && c != '_', "_");
     fs::write(src_dir.join("main.rs"), rust).map_err(|e| format!("error: cannot write main.rs: {}", e))?;
-    let profile = if mode == Mode::Ship { "ship" } else { "release" };
+    let profile = match mode {
+        Mode::Ship => "ship",
+        Mode::ShipChecked => "ship-checked",
+        Mode::Iterate => "release",
+    };
     let out = cargo_in(&proj)
         .args(["build", "--profile", profile, "-q"])
         .stdout(Stdio::piped())
@@ -505,7 +509,10 @@ fn build_with_cargo(path: &Path, rust: &str, deps: &[(String, String)], bin: &Pa
 #[derive(Clone, Copy, PartialEq)]
 enum Mode {
     Iterate,
+    /// `lume build`: as `cargo build --release` has it, no overflow checks
     Ship,
+    /// `lume build --checked`: fully optimised, and an overflow still stops
+    ShipChecked,
 }
 
 /// A small stable hash of the generated program, to skip compiling when
@@ -544,7 +551,7 @@ fn build(path: &Path, out: Option<PathBuf>, quiet: bool, test_mode: bool, mode: 
 
     // Nothing changed since the last build of this program in this mode? Run what we have.
     let stamp_path = build_dir.join(format!("{}.stamp", stem));
-    let stamp = format!("{} {} {:?}\n", fingerprint(&rust), fingerprint(&format!("{:?}", compiled.deps)), mode == Mode::Ship);
+    let stamp = format!("{} {} {:?}\n", fingerprint(&rust), fingerprint(&format!("{:?}", compiled.deps)), mode as u8);
     if bin.exists() && fs::read_to_string(&stamp_path).ok().as_deref() == Some(stamp.as_str()) {
         drop(show_warnings);
         if !quiet {
@@ -565,8 +572,11 @@ fn build(path: &Path, out: Option<PathBuf>, quiet: bool, test_mode: bool, mode: 
     }
 
     let mut cmd = Command::new("rustc");
-    // overflow checks stay on in every mode: Int arithmetic that overflows stops the program
-    cmd.args(["--edition", "2021", "-O", "-C", "debuginfo=0", "-C", "overflow-checks=on"]);
+    // As Rust has it: `lume run` and `lume test` check every `Int` operation
+    // for overflow, as a debug build does; `lume build` does not, as
+    // `cargo build --release` does not, unless it is given `--checked`.
+    let checks = if mode == Mode::Ship { "overflow-checks=off" } else { "overflow-checks=on" };
+    cmd.args(["--edition", "2021", "-O", "-C", "debuginfo=0", "-C", checks]);
     if mode == Mode::Iterate {
         // rustc's incremental cache: a rebuild after an edit takes a fraction of a fresh compile
         let inc = build_dir.join(format!("inc-{}", stem));
@@ -847,16 +857,20 @@ fn main() {
         },
         "build" => {
             let mut out = None;
+            let mut mode = Mode::Ship;
             let mut i = 2;
             while i < args.len() {
                 if args[i] == "-o" {
                     out = args.get(i + 1).map(PathBuf::from);
                     i += 2;
+                } else if args[i] == "--checked" {
+                    mode = Mode::ShipChecked;
+                    i += 1;
                 } else {
                     usage();
                 }
             }
-            if let Err(e) = build(&file, out, false, false, Mode::Ship) {
+            if let Err(e) = build(&file, out, false, false, mode) {
                 eprint!("{}", e);
                 process::exit(1);
             }

@@ -116,6 +116,14 @@ check "packages from git" "tests/git_packages.expected" "$out"
 out=$(python3 tests/message_coverage.py --check "$(cat tests/message_coverage.min)" 2>&1)
 if [ $? -eq 0 ]; then pass=$((pass+1)); else echo "FAIL message coverage: $out"; python3 tests/message_coverage.py | tail -n +2 | head -10 | sed 's/^/    /'; fail=$((fail+1)); failed+=("message coverage"); fi
 
+# overflow, as Rust has it: checked by run, wrapped by build, checked by build --checked
+tmpo=$(mktemp -d)
+out=$("$LUME" run tests/overflow.lume 2>&1; echo "exit: $?"
+  "$LUME" build tests/overflow.lume -o "$tmpo/fast" >/dev/null 2>&1 && "$tmpo/fast" 2>&1; echo "exit: $?"
+  "$LUME" build tests/overflow.lume -o "$tmpo/safe" --checked >/dev/null 2>&1 && "$tmpo/safe" 2>&1; echo "exit: $?")
+rm -rf "$tmpo" tests/.lume
+check "overflow by build mode" "tests/overflow.expected" "$out"
+
 # editors: diagnostics as JSON, and the language server driven as an editor would
 out=$("$LUME" check examples/errors/arity.lume --json 2>&1; echo "exit: $?"; "$LUME" check examples/fib.lume --json 2>&1; echo "exit: $?")
 check "check --json" "examples/check_json.expected" "$out"
