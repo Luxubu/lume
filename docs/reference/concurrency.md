@@ -149,6 +149,30 @@ A task that is never awaited still runs, but nothing waits for it: when
 `main` ends, the program ends, and an unfinished task is cut off without a
 word. Await every task whose work matters.
 
+## A task that waits without `await`
+
+**A `spawn:` body with no `await` in it runs on a thread pool of its own**,
+as Rust's `spawn_blocking` does: Lume sees that it has nothing to wait for
+asynchronously, so it is blocking work — a request with the `http` package,
+a program run, a long computation. Such a task holds up no other task, and
+as many run at once as there are tasks, not as there are cores:
+
+```lume-skip
+import http
+
+def fetch(url: Str) -> Int = http.get(url).map { |r| r.status }.or(0)
+
+async def main:
+  urls = ["http://a.example/", "http://b.example/", "http://c.example/"]
+  statuses = await urls.map { |u| spawn: fetch(u) }.to_list    # all at once
+  puts statuses
+```
+
+A body that awaits anything is an ordinary task, and there a function that
+blocks holds its thread while it waits: fine for a few, a queue for many.
+`examples/healthcheck/` checks forty slow services in the time of one this
+way.
+
 ## What a `spawn:` body may contain
 
 **A `spawn:` body is a block of statements, like a function body.** A task

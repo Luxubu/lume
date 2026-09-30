@@ -1,0 +1,14 @@
+up   home
+up   slow-a
+up   slow-b
+up   slow-c
+DOWN boom    : status 500, wanted 200 (tried 2 times)
+up   flaky    (tried 2 times)
+DOWN text    : the body has no "welcome" (tried 2 times)
+DOWN strict  : slow: over 100 ms (tried 2 times)
+5 of 8 up
+[{"name":"home","up":true,"why":"","tries":1},{"name":"slow-a","up":true,"why":"","tries":1},{"name":"slow-b","up":true,"why":"","tries":1},{"name":"slow-c","up":true,"why":"","tries":1},{"name":"boom","up":false,"why":"status 500, wanted 200","tries":2},{"name":"flaky","up":true,"why":"","tries":2},{"name":"text","up":false,"why":"the body has no \"welcome\"","tries":2},{"name":"strict","up":false,"why":"slow: over 100 ms","tries":2}]
+exit: 1
+the slow checks ran together: True
+<tmp>/bad.json: check 1: `status` is a string, not a whole number
+exit: 2

@@ -148,6 +148,14 @@ fi
 out=$(cd packages/http && "$LUME_ABS2" test 2>&1 | grep -v "^warning\|^ *|\|^  -->\|^  help"; echo "exit: ${PIPESTATUS[0]}")
 check "http package tests" "packages/http/test.expected" "$out"
 
+# the healthcheck dogfood program, against a server on this machine
+out=$(examples/healthcheck/check.sh "$LUME" 2>&1)
+if [ "$out" = "skipped: no local connection allowed here" ]; then
+  echo "  healthcheck: skipped, no local connection allowed here"; pass=$((pass+1))
+else
+  check "healthcheck" "examples/healthcheck/check.expected" "$out"
+fi
+
 # the jobr dogfood program: dry run, a real run with its timing, broken job files
 out=$(examples/jobr/check.sh "$LUME" 2>&1)
 check "jobr" "examples/jobr/queries.expected" "$out"

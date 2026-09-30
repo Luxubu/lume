@@ -10,6 +10,10 @@
   them.
 - **Docs**: new pages [HTTP](docs/reference/http.md) and
   [Rust crates](docs/reference/crates.md).
+- **Blocking tasks**: a `spawn:` body that awaits nothing runs on a pool for
+  blocking work, as Rust's `spawn_blocking` does, so requests, program runs
+  and computations in tasks all run at once.
+- **`examples/healthcheck/`**: a service checker built on `http` and `json`.
 
 ## 0.1.0 — the first release
 

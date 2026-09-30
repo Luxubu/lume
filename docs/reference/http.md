@@ -52,10 +52,18 @@ have it: look at `ok?` or `status`.
 | `headers` | `[(Str, Str)]`, names in lower case, in the order sent |
 | `json` | `Json or Error`: the body, parsed with the `json` package |
 
+## Many requests at once
+
+A request waits for its answer. To make many at once, make each in a
+`spawn:` body that awaits nothing, and it runs on a pool of its own; see
+[Concurrency](concurrency.md#a-task-that-waits-without-await).
+`examples/healthcheck/` does this.
+
 ## Not yet
 
 - **Streaming:** a request is made and waited for in full, so there is no
-  streaming of large bodies, and no `async` call.
+  streaming of large bodies, and no `async` call; a task, as above, is how
+  to wait for many.
 - **Fixed timeout:** it is 30 seconds, with no way to change it.
 - **Encoding and cookies:** there are no form or URL helpers and no
   cookies. Build the body as text, and send headers with `send`.

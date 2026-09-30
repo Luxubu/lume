@@ -59,6 +59,7 @@ Each one has a `FINDINGS.md` or a `README.md` saying what it exposed.
 | `match/` | a concurrent record matcher: block, fan out across tasks, collect, report |
 | `port/` | the design document's sample programs, plus `app_async.lume` on threads |
 | `jobr/` | a job runner in two packages: waves of jobs run in tasks, retries, skips, a `shared var` tally, `Process.run` |
+| `healthcheck/` | checks services at once with `http` and `json`: a task per check, retries, a JSON report |
 | `http_demo/` | the `http` package against a local server: JSON, a 404, a POST echoed back, no connection |
 | `csvq/` | a CSV query tool in three packages — `csv`, `table` and the program — with a small query language, stdin, and each package's own tests |
 

@@ -234,11 +234,10 @@ def main -> () or Error:
 ```
 
 **Inside a task, other tasks go on while one waits for its program.** Three
-programs started from three `spawn:` bodies, or from `async def`s they call,
-run at the same time. A plain `def` called from a task works too, but it
-holds on to its thread while the program runs, so make a helper that runs
-programs an `async def`, as `examples/jobr/` does.
-`examples/jobr/` is a job runner built on this.
+programs started from three `spawn:` bodies, or from functions they call,
+run at the same time; see [Concurrency](concurrency.md#a-task-that-waits-without-await)
+for why that holds for a plain `def` too. `examples/jobr/` is a job runner
+built on this.
 
 ## `Time`
 

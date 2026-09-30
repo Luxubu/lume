@@ -1,0 +1,94 @@
+# healthcheck — checks a list of services at once and says which are down.
+#
+#   lume run -- checks.json            the checks, one task each
+#   lume run -- checks.json --json     the results as JSON as well
+#
+# checks.json holds the base URL once and a list of checks:
+#
+#   {"base": "http://127.0.0.1:8080",
+#    "checks": [{"name": "home", "path": "/", "status": 200,
+#                "within_ms": 500, "contains": "welcome"}]}
+#
+# `status` is what the service must answer (200 if left out); `within_ms`
+# and `contains` are optional. A check that fails is tried once more. The
+# exit status is 1 when anything is down.
+
+import http
+import json
+import json.Json
+
+struct Check:
+  name: Str
+  path: Str
+  status: Int
+  within_ms: Int?
+  contains: Str?
+
+  def self.from_json(j: Json) -> Check or Error:
+    Check(name: j.need_str("name")?, path: j.need_str("path")?, status: j.opt_int("status")?.or(200), within_ms: j.opt_int("within_ms")?, contains: j.opt_str("contains")?)
+
+struct Outcome:
+  name: Str
+  up: Bool
+  why: Str
+  tries: Int
+
+  def to_json -> Json = json.obj([("name", name.to_json), ("up", up.to_json), ("why", why.to_json), ("tries", tries.to_json)])
+
+# What is wrong with one answer, if anything.
+def fault(c: Check, r: http.Response, ms: Int) -> Str?:
+  if r.status != c.status:
+    return Some("status #{r.status}, wanted #{c.status}")
+  match c.within_ms:
+    Some(limit) if ms > limit -> return Some("slow: over #{limit} ms")
+    _ -> ()
+  match c.contains:
+    Some(text) if not r.body.contains?(text) -> return Some("the body has no \"#{text}\"")
+    _ -> ()
+  None
+
+# Blocking work, on purpose: a task that awaits nothing runs on a pool of
+# its own, so every check waits for its answer at the same time.
+def run_check(base: Str, c: Check) -> Outcome:
+  var tries = 0
+  var why = ""
+  while tries < 2:
+    tries += 1
+    start = Time.now_ms
+    match http.get(base + c.path):
+      Ok(r) ->
+        match fault(c, r, Time.now_ms - start):
+          None -> return Outcome(name: c.name, up: true, why: "", tries: tries)
+          Some(w) -> why = w
+      Error(e) -> why = e.message
+  Outcome(name: c.name, up: false, why: why, tries: tries)
+
+def load(path: Str) -> (Str, [Check]) or Error:
+  doc = json.parse(File.read(path)?).map_error { |e| Error("#{path}: #{e.message}") }?
+  base = doc.need_str("base")?
+  var checks: [Check] = []
+  for (i, j) in doc.need_items("checks")?.enumerate:
+    checks.push(Check.from_json(j).map_error { |e| Error("#{path}: check #{i + 1}: #{e.message}") }?)
+  (base, checks)
+
+async def main:
+  args = Env.args
+  path = args.find { |a| not a.starts_with?("--") }.or("checks.json")
+  (base, checks) = match load(path):
+    Ok(loaded) -> loaded
+    Error(e) ->
+      warn e.message
+      Env.exit(2)
+  tasks = checks.map { |c| spawn: run_check(base, c) }.to_list
+  outcomes = await tasks
+  for o in outcomes:
+    mark = if o.up: "up  " else: "DOWN"
+    retried = if o.tries > 1: " (tried #{o.tries} times)" else: ""
+    note = if o.up: "" else: ": #{o.why}"
+    puts "#{mark} #{o.name.pad_right(8)}#{note}#{retried}".trim_right
+  down = outcomes.filter { |o| not o.up }.to_list
+  puts "#{outcomes.len - down.len} of #{outcomes.len} up"
+  if args.contains?("--json"):
+    puts json.show(outcomes.to_json)
+  if not down.empty?:
+    Env.exit(1)

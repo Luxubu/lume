@@ -5558,10 +5558,15 @@ impl Gen {
         let saved_async = self.in_async;
         let saved_captured = std::mem::take(&mut self.spawn_captured);
         let saved_fn = std::mem::replace(&mut self.current_fn, "this task".to_string());
+        // A task that awaits nothing is blocking work — a request, a program
+        // run, a computation — and goes to Tokio's pool for such work, as
+        // Rust's `spawn_blocking` does: it holds up no other task, and as
+        // many run at once as there are tasks, not as there are cores.
+        let blocking = { let d = format!("{:?}", body); !d.contains("Await(") && !d.contains("Spawn(") };
         self.loop_depth = 0;
         self.in_block = false;
         self.tail_of_fn = true;
-        self.in_async = true;
+        self.in_async = !blocking;
         self.push_scope();
         for (n, b) in &captured {
             self.declare(n, false, false, b.ty.clone(), b.line);
@@ -5569,7 +5574,7 @@ impl Gen {
         }
         let saved_out = std::mem::take(&mut self.out);
         let base = self.indent;
-        self.out.push_str("tokio::spawn(async move {\n");
+        self.out.push_str(if blocking { "tokio::task::spawn_blocking(move || {\n" } else { "tokio::spawn(async move {\n" });
         // a task that can fail says its type, so `?` inside knows what to
         // return: the async block's value is this annotated binding
         let tries = body.stmts.iter().any(|st| stmt_first_try(st).is_some()) && matches!(ret, Type::Result(..) | Type::Option(_));

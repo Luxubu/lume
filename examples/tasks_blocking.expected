@@ -1,0 +1,11 @@
+warning: `done` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> examples/tasks_blocking.lume:24:3
+   |
+24 |   shared var done = 0
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+9455
+true
+[Ok(42), Error("`x` is not an integer")]
+55
+10
