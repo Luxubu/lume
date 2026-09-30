@@ -1,0 +1,6 @@
+error: `Shelf` values cannot take a block; only lists and ranges can
+  --> examples/errors/chain_no_items.lume:7:27
+  |
+7 |   puts Shelf(books: ["a"]).map { |b| b.upcase }
+  |                           ^
+  help: a type with `def items -> [T]` takes the list's methods too; give `Shelf` one

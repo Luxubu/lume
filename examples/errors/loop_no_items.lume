@@ -1,0 +1,8 @@
+# A type of your own is looped over through `def items -> [T]`; this one has none.
+
+struct Shelf:
+  books: [Str]
+
+def main:
+  for b in Shelf(books: ["a"]):
+    puts b

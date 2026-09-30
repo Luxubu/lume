@@ -49,7 +49,7 @@ were written. Match on it, or ask for what you expect:
 | `path("users.0.name")` | `Json?` | keys and positions separated by dots |
 | `str`, `num`, `int`, `bool` | `Str?`, `Float?`, `Int?`, `Bool?` | the value, when it is that kind (`int` wants a number with no fraction, up to 2^53 either way, which a `Float` holds exactly) |
 | `null?` | `Bool` | |
-| `items` | `[Json]` | an array's items, or none |
+| `items` | `[Json]` | an array's items, or none; so `for x in doc` walks an array, and `doc.filter { .. }` works on it |
 | `pairs`, `keys` | `[(Str, Json)]`, `[Str]` | an object's entries, or none |
 | `kind` | `Str` | `"null"`, `"bool"`, `"number"`, `"string"`, `"array"` or `"object"` |
 

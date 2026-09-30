@@ -14,6 +14,8 @@
   blocking work, as Rust's `spawn_blocking` does, so requests, program runs
   and computations in tasks all run at once.
 - **`examples/healthcheck/`**: a service checker built on `http` and `json`.
+- **Iterating your own types**: a type with `def items -> [T]` works with
+  `for` and every list method, and a bound `[C: Iterable[T]]` takes it.
 
 ## 0.1.0 — the first release
 

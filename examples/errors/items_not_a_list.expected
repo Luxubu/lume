@@ -1,0 +1,6 @@
+error: cannot loop over a `Shelf`
+  --> examples/errors/items_not_a_list.lume:9:12
+  |
+9 |   for b in Shelf(books: ["a"]):
+  |            ^
+  help: `Shelf`'s `items` gives an `Int`; to loop over it, `items` gives a list

@@ -138,6 +138,39 @@ none: {Str} = {}
 puts none.len    #=> 0
 ```
 
+## Types of your own: `items`
+
+**A type with `def items -> [T]` is looped over with `for`, and takes every
+method a list has**, working on `items`. This is Lume's `Iterable[T]`, as
+Rust's `IntoIterator`:
+
+```lume
+struct Shelf:
+  books: [Str]
+
+  def items -> [Str] = books.sort
+
+def main:
+  s = Shelf(books: ["pear", "fig", "apple"])
+  for b in s:
+    puts b                 #=> apple
+                           #=> fig
+                           #=> pear
+  puts s.filter { |b| b.len > 3 }.to_list    #=> ["apple", "pear"]
+  puts s.len                                 #=> 3
+```
+
+- **Its own methods come first:** a method or field of the type's own with
+  the same name as a list method (`len`, `first`) is used instead.
+- **Pairs:** `def items -> [(Str, Int)]` makes `for k, v in value` work, as
+  over a map.
+- **Generic code:** a bound `[C: Iterable[Int]]` takes any such type, and
+  lists and sets as well. A value can be held as an `[Iterable[Int]]`.
+  Messages name the interface `lume.Iterable`.
+- **Not `for var`:** `items` gives a new list, so there is nothing in place
+  to change. Change the type itself with a `var self` method.
+- **More:** `examples/iterable.lume` shows each of these.
+
 ## Where `[]` and `{}` need a type
 
 An empty literal has nothing to infer from. It is fine wherever the type is

@@ -1,0 +1,9 @@
+# A bound `[C: Iterable[Int]]` asks for `def items -> [Int]`.
+
+struct Plain:
+  n: Int
+
+def total[C: Iterable[Int]](c: C) -> Int = c.sum
+
+def main:
+  puts total(Plain(n: 1))

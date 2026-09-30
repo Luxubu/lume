@@ -1,0 +1,56 @@
+# A type of your own is looped over, and takes the list's methods, when it
+# has `def items -> [T]` — Lume's `Iterable[T]`, as Rust's `IntoIterator`.
+# A bound `[C: Iterable[Int]]` takes any such type, and lists and sets too.
+
+struct Book:
+  title: Str
+  pages: Int
+
+struct Shelf:
+  books: [Book]
+
+  # kept in whatever order; looped over by title
+  def items -> [Book] = books.sort_by { |b| b.title }
+
+  # a method of its own comes before the list's
+  def len -> Int = books.len
+
+struct Stack[T]:
+  vals: [T]
+
+  def items -> [T] = vals.reverse
+
+struct Tally:
+  counts: {Str: Int}
+
+  def items -> [(Str, Int)] = counts.to_list
+
+struct Evens:
+  upto: Int
+
+  def items -> [Int] = (0..upto).filter { |n| n % 2 == 0 }.to_list
+
+def total[C: Iterable[Int]](c: C) -> Int:
+  var t = 0
+  for x in c:
+    t += x
+  t
+
+def main:
+  shelf = Shelf(books: [Book(title: "Dune", pages: 412), Book(title: "Emma", pages: 280), Book(title: "Beowulf", pages: 120)])
+  for b in shelf:
+    puts b.title
+  for i, b in shelf.enumerate:
+    puts "#{i + 1}. #{b.title} (#{b.pages})"
+  puts shelf.filter { |b| b.pages > 200 }.map { |b| b.title }.to_list
+  puts shelf.map { |b| b.pages }.sum
+  puts shelf.len
+
+  puts Stack(vals: [1, 2, 3]).to_list
+  for word, n in Tally(counts: {"a": 2, "b": 5}):
+    puts "#{word}=#{n}"
+
+  # one function over anything with items of Int
+  puts total(Evens(upto: 10))
+  puts total([10, 20, 30])
+  puts total({1, 2})

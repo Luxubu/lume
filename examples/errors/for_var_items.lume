@@ -1,0 +1,11 @@
+# `for var` changes the items of a list in place; `items` gives a new list, so there is nothing to change.
+
+struct Shelf:
+  books: [Str]
+
+  def items -> [Str] = books
+
+def main:
+  var s = Shelf(books: ["a"])
+  for var b in s:
+    b = b.upcase

@@ -1,0 +1,10 @@
+# `items` must give a list to loop over; this one gives a count.
+
+struct Shelf:
+  books: [Str]
+
+  def items -> Int = books.len
+
+def main:
+  for b in Shelf(books: ["a"]):
+    puts b

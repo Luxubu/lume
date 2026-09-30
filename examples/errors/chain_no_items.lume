@@ -1,0 +1,7 @@
+# The list methods reach a type of your own through `items`; this one has none.
+
+struct Shelf:
+  books: [Str]
+
+def main:
+  puts Shelf(books: ["a"]).map { |b| b.upcase }

@@ -177,6 +177,7 @@ pub fn load_updating(entry: &Path, update: Update) -> Result<(Loaded, Vec<(Strin
             out.push(m);
         }
     }
+    add_iterable(&mut out)?;
     Ok((Loaded { modules: out, packages: l.packages }, moved))
 }
 
@@ -395,4 +396,39 @@ impl Loader {
             Some(format!("a package offers what its `lib.lume` defines with `pub` and passes on with `pub import`: see `{}`", lib.display())),
         ))
     }
+}
+
+/// Lume's `Iterable[T]`, written in Lume: what a bound `[C: Iterable[T]]`
+/// asks for, and lists and sets having it. `for` and the chain methods over a
+/// type with `items` need none of this; it is loaded only for a program that
+/// names `Iterable`, and every file then sees it by that name.
+const ITERABLE_SRC: &str = "\
+pub interface Iterable[T]:
+  def items -> [T]
+
+extend [T] with Iterable[T]:
+  def items -> [T] = self
+
+extend {T} with Iterable[T]:
+  def items -> [T] = self.to_list
+";
+
+fn add_iterable(modules: &mut Vec<Module>) -> Result<(), String> {
+    let wanted = modules.iter().any(|m| m.src.contains("Iterable"));
+    if !wanted {
+        return Ok(());
+    }
+    let path = PathBuf::from("<lume>/iterable.lume");
+    let toks = lexer::lex(ITERABLE_SRC).map_err(|e| render(&e, &path, ITERABLE_SRC))?;
+    let items = parser::parse_program(toks).map_err(|e| render(&e, &path, ITERABLE_SRC))?;
+    for m in modules.iter_mut() {
+        // a file with an `Iterable` of its own, or one it imports, keeps it
+        let own = m.items.iter().any(|it| matches!(it, Item::Interface(i) if i.name == "Iterable"))
+            || m.imports.iter().any(|r| matches!(r, Resolved::Single { local, .. } | Resolved::Module { alias: local, .. } if local == "Iterable"));
+        if !own {
+            m.imports.push(Resolved::Single { local: "Iterable".into(), id: "lume".into(), item: "Iterable".into(), line: 0, col: 0 });
+        }
+    }
+    modules.insert(0, Module { id: "lume".into(), path, src: ITERABLE_SRC.into(), items, imports: Vec::new(), package: None, from_dependency: false });
+    Ok(())
 }

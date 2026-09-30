@@ -1,0 +1,6 @@
+error: cannot loop over a `Shelf`
+  --> examples/errors/loop_no_items.lume:7:12
+  |
+7 |   for b in Shelf(books: ["a"]):
+  |            ^
+  help: `for` needs a list, a set, a map, a range, or a type with `def items -> [T]`; give `Shelf` one to loop over it

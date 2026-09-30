@@ -1,0 +1,6 @@
+error: `for var` changes the items of a list in place, and `Shelf`'s `items` gives a new list
+  --> examples/errors/for_var_items.lume:10:16
+   |
+10 |   for var b in s:
+   |                ^
+  help: change `Shelf` itself with a `var self` method, or loop without `var`

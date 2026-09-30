@@ -4558,6 +4558,9 @@ impl Gen {
         if let Some(ne) = self.static_rewrite(e) {
             return self.ty_of(&ne);
         }
+        if let Some(ne) = self.iterable_rewrite(e) {
+            return self.ty_of(&ne);
+        }
         if matches!(&e.kind, ExprKind::Ident(_) | ExprKind::Call { .. }) {
             if let Some(ne) = self.split_ident_try(e) {
                 return self.ty_of(&ne);
@@ -7737,6 +7740,16 @@ impl Gen {
                 self.line("}");
             }
             Stmt::For { vars, mutable, iter, filter, body, line, col } => {
+                // a value of your own with `items` is looped over by them
+                if let Some(items) = self.items_of(iter) {
+                    if *mutable {
+                        let tn = type_name(&self.ty_of(iter).materialized());
+                        return Err(LumeError::new(iter.line, iter.col, format!("`for var` changes the items of a list in place, and `{}`'s `items` gives a new list", tn))
+                            .with_help(format!("change `{}` itself with a `var self` method, or loop without `var`", tn)));
+                    }
+                    let st = Stmt::For { vars: vars.clone(), mutable: false, iter: items, filter: filter.clone(), body: body.clone(), line: *line, col: *col };
+                    return self.stmt_inner(&st, is_tail);
+                }
                 let it_ty = self.ty_of(iter);
                 if *mutable {
                     // `for var a in xs`: each element is changed in place
@@ -7829,7 +7842,11 @@ impl Gen {
                     Type::Set(elem) => (format!("({}).iter()", self.expr(iter)?), (**elem).clone(), true),
                     Type::Unknown => (format!("({}).iter().cloned()", self.expr(iter)?), Type::Unknown, false),
                     other => {
-                        return Err(LumeError::new(iter.line, iter.col, format!("cannot loop over a `{}`", type_name(other))).with_help("`for` needs a list, a set, a map or a range"));
+                        let err = LumeError::new(iter.line, iter.col, format!("cannot loop over a `{}`", type_name(other)));
+                        return Err(match self.items_problem(other) {
+                            Some(why) => err.with_help(why),
+                            None => err.with_help(format!("`for` needs a list, a set, a map, a range, or a type with `def items -> [T]`; give `{}` one to loop over it", type_name(other))),
+                        });
                     }
                 };
                 let pattern = if vars.len() == 1 {
@@ -8426,7 +8443,16 @@ impl Gen {
             }
             Type::Unknown => Err(LumeError::new(e.line, e.col, "cannot tell what kind of value this block is applied to")
                 .with_help("add a type to the binding or parameter it comes from")),
-            other => Err(LumeError::new(e.line, e.col, format!("`{}` values cannot take a block; only lists and ranges can", type_name(&other)))),
+            other => {
+                let err = LumeError::new(e.line, e.col, format!("`{}` values cannot take a block; only lists and ranges can", type_name(&other)));
+                Err(match &other {
+                    Type::Named(_) | Type::App(..) => match self.items_problem(&other) {
+                        Some(why) => err.with_help(why),
+                        None => err.with_help(format!("a type with `def items -> [T]` takes the list's methods too; give `{}` one", type_name(&other))),
+                    },
+                    _ => err,
+                })
+            }
         }
     }
 
@@ -9973,6 +9999,9 @@ impl Gen {
             }
         }
         if let Some(ne) = self.static_rewrite(e) {
+            return self.expr(&ne);
+        }
+        if let Some(ne) = self.iterable_rewrite(e) {
             return self.expr(&ne);
         }
         Ok(match &e.kind {
@@ -11592,6 +11621,70 @@ impl Gen {
 
     /// A call of a type's function, in any of its spellings, as a plain call
     /// of the key it is filed under.
+    /// `value.items`, when `value` is of a type of the program's own with a
+    /// method `items` that takes nothing and gives a list: what `for` and the
+    /// chain methods walk (the `Iterable` interface, as Rust's `IntoIterator`).
+    fn items_of(&mut self, e: &Expr) -> Option<Expr> {
+        let t = self.ty_of(e).materialized();
+        // a type of the program's, a value held as an interface, or a type
+        // parameter whose bound has `items` (`[C: Iterable[Int]]`)
+        let key = match &t {
+            Type::Named(_) | Type::App(..) | Type::Var(_) => self.type_key(&t),
+            _ => return None,
+        };
+        let m = match self.methods_of(&key).and_then(|ms| ms.get("items").cloned()) {
+            Some(m) => m,
+            None => self.interfaces.get(&key).and_then(|i| i.methods.get("items").cloned())?,
+        };
+        if !m.params.is_empty() {
+            return None;
+        }
+        let sub = self.subst_for(&t);
+        if !matches!(Self::subst(&m.ret, &sub).materialized(), Type::List(_)) {
+            return None;
+        }
+        Some(Expr::new(ExprKind::Method { recv: Box::new(e.clone()), name: "items".into(), args: Vec::new() }, e.line, e.col))
+    }
+
+    /// Why a type's `items` does not make it something to loop over, when it
+    /// has one of the wrong shape.
+    fn items_problem(&self, t: &Type) -> Option<String> {
+        let key = match t {
+            Type::Named(_) | Type::App(..) => self.type_key(t),
+            _ => return None,
+        };
+        let m = self.methods_of(&key)?.get("items").cloned()?;
+        if !m.params.is_empty() {
+            return Some(format!("`{}`'s `items` takes arguments; to loop over it, `items` takes none and gives a list", type_name(t)));
+        }
+        Some(format!("`{}`'s `items` gives {}; to loop over it, `items` gives a list", type_name(t), a_type(&m.ret)))
+    }
+
+    /// `shelf.filter { .. }` on a type with `items` and no `filter` of its
+    /// own: the list's method, on `shelf.items`.
+    fn iterable_rewrite(&mut self, e: &Expr) -> Option<Expr> {
+        let (recv, name, args) = match &e.kind {
+            ExprKind::Method { recv, name, args } if name != "items" && name != "()" => (recv, name, args),
+            _ => return None,
+        };
+        if !builtins_for(&Type::List(Box::new(Type::Unknown))).contains(&name.as_str()) {
+            return None;
+        }
+        let t = self.ty_of(recv).materialized();
+        if let Type::Named(_) | Type::App(..) | Type::Var(_) = &t {
+            let key = self.type_key(&t);
+            // its own method or field of that name comes first
+            if self.methods_of(&key).map(|m| m.contains_key(name)).unwrap_or(false) {
+                return None;
+            }
+            if self.structs.get(&key).map(|i| i.fields.iter().any(|(f, _)| f == name)).unwrap_or(false) {
+                return None;
+            }
+        }
+        let items = self.items_of(recv)?;
+        Some(Expr::new(ExprKind::Method { recv: Box::new(items), name: name.clone(), args: args.clone() }, e.line, e.col))
+    }
+
     fn static_rewrite(&self, e: &Expr) -> Option<Expr> {
         match &e.kind {
             ExprKind::Method { .. } => self.static_ref(e),
