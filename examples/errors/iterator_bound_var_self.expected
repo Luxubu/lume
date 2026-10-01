@@ -1,0 +1,6 @@
+error: `total` needs `S: Iterator[Int]`, and `Ones` is not Iterator[Int]
+  --> examples/errors/iterator_bound_var_self.lume:11:8
+   |
+11 |   puts total(Ones(n: 1))
+   |        ^
+  help: its `next` is `-> Int?`, and `Iterator[Int]` asks for `(var self) -> Int?`

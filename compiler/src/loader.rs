@@ -411,10 +411,13 @@ extend [T] with Iterable[T]:
 
 extend {T} with Iterable[T]:
   def items -> [T] = self.to_list
+
+pub interface Iterator[T]:
+  def next(var self) -> T?
 ";
 
 fn add_iterable(modules: &mut Vec<Module>) -> Result<(), String> {
-    let wanted = modules.iter().any(|m| m.src.contains("Iterable"));
+    let wanted = modules.iter().any(|m| m.src.contains("Iterable") || m.src.contains("Iterator"));
     if !wanted {
         return Ok(());
     }
@@ -422,11 +425,13 @@ fn add_iterable(modules: &mut Vec<Module>) -> Result<(), String> {
     let toks = lexer::lex(ITERABLE_SRC).map_err(|e| render(&e, &path, ITERABLE_SRC))?;
     let items = parser::parse_program(toks).map_err(|e| render(&e, &path, ITERABLE_SRC))?;
     for m in modules.iter_mut() {
-        // a file with an `Iterable` of its own, or one it imports, keeps it
-        let own = m.items.iter().any(|it| matches!(it, Item::Interface(i) if i.name == "Iterable"))
-            || m.imports.iter().any(|r| matches!(r, Resolved::Single { local, .. } | Resolved::Module { alias: local, .. } if local == "Iterable"));
-        if !own {
-            m.imports.push(Resolved::Single { local: "Iterable".into(), id: "lume".into(), item: "Iterable".into(), line: 0, col: 0 });
+        for name in ["Iterable", "Iterator"] {
+            // a file with one of its own, or one it imports, keeps it
+            let own = m.items.iter().any(|it| matches!(it, Item::Interface(i) if i.name == name))
+                || m.imports.iter().any(|r| matches!(r, Resolved::Single { local, .. } | Resolved::Module { alias: local, .. } if local == name));
+            if !own {
+                m.imports.push(Resolved::Single { local: name.into(), id: "lume".into(), item: name.into(), line: 0, col: 0 });
+            }
         }
     }
     modules.insert(0, Module { id: "lume".into(), path, src: ITERABLE_SRC.into(), items, imports: Vec::new(), package: None, from_dependency: false });

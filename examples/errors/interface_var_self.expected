@@ -3,4 +3,4 @@ error: interface method `bump` cannot take `var self`
   |
 4 |   def bump(var self) -> Int = size + 1
   |   ^
-  help: interfaces describe reading behaviour; mutation stays on the concrete type
+  help: a default method only reads the value; a required one may take `var self`, and each type writes its own

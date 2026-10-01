@@ -16,6 +16,13 @@
 - **`examples/healthcheck/`**: a service checker built on `http` and `json`.
 - **Iterating your own types**: a type with `def items -> [T]` works with
   `for` and every list method, and a bound `[C: Iterable[T]]` takes it.
+- **Lazy sequences of your own**: a type with `def next(var self) -> T?`
+  works with `for` and every chain method, one item at a time, so it may be
+  endless; it compiles to a Rust `impl Iterator`. A bound
+  `[S: Iterator[T]]` takes it.
+- **Interfaces**: a required method may take `var self`. A type fits only
+  when its method agrees about `var self`.
+- **`zip` on a lazy chain** stays lazy.
 
 ## 0.1.0 — the first release
 

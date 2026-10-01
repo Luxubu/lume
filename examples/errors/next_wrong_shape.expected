@@ -1,0 +1,6 @@
+error: cannot loop over a `Counter`
+  --> examples/errors/next_wrong_shape.lume:11:12
+   |
+11 |   for x in Counter(n: 0):
+   |            ^
+  help: `Counter`'s `next` gives an `Int`; to loop over it, write `def next(var self) -> T?`

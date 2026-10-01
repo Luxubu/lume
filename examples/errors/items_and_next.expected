@@ -1,0 +1,6 @@
+error: `Deck` has both `items` and `next`, so a `for` over it could mean either
+  --> examples/errors/items_and_next.lume:8:3
+  |
+8 |   def next(var self) -> Str?:
+  |   ^
+  help: keep one: `items` gives a list to walk, `next` works items out one at a time; rename the other

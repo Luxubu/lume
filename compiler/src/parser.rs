@@ -465,10 +465,18 @@ impl Parser {
                     return Err(self.err(format!("an interface says what a value can do, so `def self.{}` does not belong in one", n))
                         .with_help("put the function in the struct or enum that has it"));
                 }
-                let (name, _, _) = self.ident("a method name")?;
+                let name = self.member_name("a method name")?.0;
                 let generics = self.generic_params("def name")?;
                 let mut params = Vec::new();
+                let mut self_kind = SelfKind::Read;
                 if self.eat_sym("(") {
+                    // `var self` first: a method that changes the value
+                    if self.at_kw("var") && matches!(self.peek_at(1), Tok::Ident(x) if x == "self") {
+                        self.advance();
+                        self.advance();
+                        self_kind = SelfKind::Mutate;
+                        self.eat_sym(",");
+                    }
                     while !self.at_sym(")") {
                         let mutable = self.eat_kw("var");
                         let (pname, pl, pc) = self.ident("a parameter name")?;
@@ -488,7 +496,7 @@ impl Parser {
                     return Err(e);
                 }
                 self.end_stmt()?;
-                Ok((FnDef { name, public: true, is_async, generics, params, ret, self_kind: SelfKind::Read, body: Block::default(), line, col }, false))
+                Ok((FnDef { name, public: true, is_async, generics, params, ret, self_kind, body: Block::default(), line, col }, false))
             }
         }
     }

@@ -1,0 +1,15 @@
+# `for var` changes the items of a list in place; a sequence works its items out with `next`, so there is nothing stored to change.
+
+struct Countdown:
+  n: Int
+
+  def next(var self) -> Int?:
+    if n == 0:
+      return None
+    n -= 1
+    Some(n + 1)
+
+def main:
+  var c = Countdown(n: 3)
+  for var x in c:
+    x += 1

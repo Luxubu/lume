@@ -64,6 +64,33 @@ def main:
 own methods afterwards — `Sq(2.0).report` is called directly, with no
 interface named anywhere.
 
+**A required method may take `var self`**, as a Rust trait method may take
+`&mut self`, and a type fits only if its own method takes `var self` too. A
+default only reads the value, so it cannot:
+
+```lume
+interface Ticker:
+  def tick(var self) -> Int
+
+struct Clock:
+  t: Int
+
+  def tick(var self) -> Int:
+    t += 1
+    t
+
+def twice[T: Ticker](var x: T) -> Int:
+  x.tick
+  x.tick
+
+def main:
+  var c = Clock(t: 0)
+  puts twice(c)    #=> 2
+```
+
+The built-in `Iterator[T]` is one of these: `def next(var self) -> T?`. See
+[Collections](collections.md#types-of-your-own-next).
+
 ## `extend T with I:`
 
 `extend` gives a type methods it did not define, so a type you do not own can

@@ -1,0 +1,85 @@
+# A type of your own is a lazy sequence when it has
+# `def next(var self) -> T?` — Lume's `Iterator[T]`, and in the Rust it
+# compiles to, an `impl Iterator`. `for` and every chain method work it out
+# one item at a time, so a sequence may go on for ever.
+
+# ends by itself
+struct Countdown:
+  n: Int
+
+  def next(var self) -> Int?:
+    if n == 0:
+      return None
+    n -= 1
+    Some(n + 1)
+
+# never ends: only `take`, `find`, `break` and the like stop it
+struct Fib:
+  a: Int
+  b: Int
+
+  def next(var self) -> Int?:
+    x = a
+    a = b
+    b = x + b
+    Some(x)
+
+# generic: round and round a list
+struct Cycle[T]:
+  xs: [T]
+  i: Int
+
+  def next(var self) -> T?:
+    x = xs[i % xs.len]?
+    i += 1
+    Some(x)
+
+# any sequence of numbers: the parameter takes `for` and chains as well
+def total[S: Iterator[Int]](s: S) -> Int:
+  var t = 0
+  for x in s:
+    t += x
+  t
+
+def evens[S: Iterator[Int]](s: S) -> [Int] = s.filter { |x| x % 2 == 0 }.to_list
+
+def main:
+  c = Countdown(n: 3)
+  for x in c:
+    puts x
+  # the loop walked a copy: `c` is where it was
+  puts c.n
+  puts c.map { |x| x * 10 }.to_list
+  puts c.sum
+
+  fib = Fib(a: 0, b: 1)
+  puts fib.take(10).to_list
+  puts fib.filter { |x| x % 2 == 0 }.take(5).to_list
+  puts fib.find { |x| x > 100 }
+  puts fib.take_while { |x| x < 20 }.to_list
+  puts fib.any? { |x| x == 21 }
+  puts fib.skip(10).first
+  for x in fib:
+    if x > 10:
+      break
+    puts x
+
+  # `zip` stays lazy too: the endless side stops with the other
+  colors = Cycle(xs: ["red", "blue"], i: 0)
+  puts colors.zip(1..5).to_list
+  puts colors.take(3).join(", ")
+  puts colors.enumerate.take(2).to_list
+
+  # moved along by hand, one item at a time
+  var d = Countdown(n: 2)
+  puts d.next
+  puts d.next
+  puts d.next
+
+  puts total(Countdown(n: 4))
+  puts evens(Countdown(n: 6))
+
+  # held as an interface value
+  var s: Iterator[Int] = Countdown(n: 2)
+  puts s.next
+  puts s.take(5).to_list

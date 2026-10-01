@@ -1,0 +1,12 @@
+# A type with both `items` and `next`: a `for` over it could mean either.
+
+struct Deck:
+  cards: [Str]
+
+  def items -> [Str] = cards
+
+  def next(var self) -> Str?:
+    cards.pop
+
+def main:
+  puts Deck(cards: ["a"])

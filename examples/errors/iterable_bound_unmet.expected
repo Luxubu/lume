@@ -1,6 +1,6 @@
-error: `total` needs `C: lume.Iterable[Int]`, and `Plain` is not lume.Iterable[Int]
+error: `total` needs `C: Iterable[Int]`, and `Plain` is not Iterable[Int]
   --> examples/errors/iterable_bound_unmet.lume:9:8
   |
 9 |   puts total(Plain(n: 1))
   |        ^
-  help: `Plain` has no `items` method; add it, or `extend Plain with lume.Iterable[Int]:`
+  help: `Plain` has no `items` method; add it, or `extend Plain with Iterable[Int]:`

@@ -1,0 +1,11 @@
+# `Iterator[Int]` asks for `next(var self)`; a `next` that only reads the value could never move on.
+
+struct Ones:
+  n: Int
+
+  def next(self) -> Int? = Some(n)
+
+def total[S: Iterator[Int]](s: S) -> Int = s.take(3).sum
+
+def main:
+  puts total(Ones(n: 1))

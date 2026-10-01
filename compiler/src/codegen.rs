@@ -1287,7 +1287,8 @@ pub fn type_name(t: &Type) -> String {
         Type::Str => "Str".into(),
         Type::Unit => "()".into(),
         Type::List(i) => format!("[{}]", type_name(i)),
-        Type::Named(n) => n.clone(),
+        // the built-in interfaces are named as a program writes them
+        Type::Named(n) => n.strip_prefix("lume.").unwrap_or(n).to_string(),
         // a block's own arrow would swallow the `?`: `((Int) -> Int)?`
         Type::Option(i) if matches!(**i, Type::Fn(..)) => format!("({})?", type_name(i)),
         Type::Option(i) => format!("{}?", type_name(i)),
@@ -1301,7 +1302,7 @@ pub fn type_name(t: &Type) -> String {
         Type::Future(i) => format!("async {}", type_name(i)),
         Type::Shared(i, true) => format!("shared var {}", type_name(i)),
         Type::Shared(i, false) => format!("shared {}", type_name(i)),
-        Type::App(n, args) => format!("{}[{}]", n, args.iter().map(type_name).collect::<Vec<_>>().join(", ")),
+        Type::App(n, args) => format!("{}[{}]", n.strip_prefix("lume.").unwrap_or(n), args.iter().map(type_name).collect::<Vec<_>>().join(", ")),
         Type::Fn(ps, r) => format!("({}) -> {}", ps.iter().map(type_name).collect::<Vec<_>>().join(", "), type_name(r)),
         Type::Var(n) => n.clone(),
         Type::Unknown => "?".into(),
@@ -3052,7 +3053,9 @@ impl Gen {
                 Some(got) => {
                     let same = got.params.len() == want.params.len()
                         && got.params.iter().zip(&want.params).all(|((_, a), (_, b))| a == b || *a == Type::Unknown || *b == Type::Unknown)
-                        && (got.ret == want.ret || got.ret == Type::Unknown || want.ret == Type::Unknown);
+                        && (got.ret == want.ret || got.ret == Type::Unknown || want.ret == Type::Unknown)
+                        // `var self` or not must agree, as `&mut self` must in Rust
+                        && (got.self_kind == SelfKind::Mutate) == (want.self_kind == SelfKind::Mutate);
                     if !same {
                         return (Conformance::Mismatch { method: name.clone(), expected: self.describe_sig(&want), actual: self.describe_sig(got) }, Vec::new());
                     }
@@ -3080,7 +3083,10 @@ impl Gen {
     }
 
     fn describe_sig(&self, s: &Sig) -> String {
-        let ps: Vec<String> = s.params.iter().map(|(n, t)| format!("{}: {}", n, type_name(t))).collect();
+        let mut ps: Vec<String> = s.params.iter().map(|(n, t)| format!("{}: {}", n, type_name(t))).collect();
+        if s.self_kind == SelfKind::Mutate {
+            ps.insert(0, "var self".into());
+        }
         if ps.is_empty() { format!("-> {}", type_name(&s.ret)) } else { format!("({}) -> {}", ps.join(", "), type_name(&s.ret)) }
     }
 
@@ -3286,7 +3292,8 @@ impl Gen {
             };
             self.interfaces.insert(key.clone(), qualified);
             self.paths.insert(key, format!("{}::{}", ex.rust_mod, n));
-            let u = format!("use crate::{}::{};", ex.rust_mod, n);
+            // `Iterator` would hide Rust's own, whose methods every chain uses
+            let u = if n == "Iterator" { format!("use crate::{}::{} as _;", ex.rust_mod, n) } else { format!("use crate::{}::{};", ex.rust_mod, n) };
             if !self.trait_uses.contains(&u) {
                 self.trait_uses.push(u);
             }
@@ -3630,7 +3637,11 @@ impl Gen {
                     self.local_types.insert(e.name.clone());
                 }
                 Item::Interface(i) => {
-                    reserved_type_name(&i.name, i.line, i.col)?;
+                    // the built-in `Iterator[T]` takes Rust's name; its trait
+                    // is only ever named with its path, or imported `as _`
+                    if !(self.module_id == "lume" && i.name == "Iterator") {
+                        reserved_type_name(&i.name, i.line, i.col)?;
+                    }
                     if !seen.insert(i.name.clone()) {
                         return Err(LumeError::new(i.line, i.col, format!("`{}` is defined twice", i.name)));
                     }
@@ -3641,9 +3652,11 @@ impl Gen {
                             return Err(LumeError::new(m.line, m.col, format!("an interface says what a value can do, so `def self.{}` does not belong in one", m.name))
                                 .with_help("put the function in the struct or enum that has it"));
                         }
-                        if m.self_kind == SelfKind::Mutate {
+                        // a required method may change the value (`next`), as a
+                        // trait's `&mut self` may; a default one only reads
+                        if m.self_kind == SelfKind::Mutate && i.defaults.iter().any(|d| std::ptr::eq(d, m)) {
                             return Err(LumeError::new(m.line, m.col, format!("interface method `{}` cannot take `var self`", m.name))
-                                .with_help("interfaces describe reading behaviour; mutation stays on the concrete type"));
+                                .with_help("a default method only reads the value; a required one may take `var self`, and each type writes its own"));
                         }
                         if methods.insert(m.name.clone(), self.sig_of(m)).is_some() {
                             return Err(LumeError::new(m.line, m.col, format!("method `{}` is listed twice in `{}`", m.name, i.name)));
@@ -4561,6 +4574,12 @@ impl Gen {
         if let Some(ne) = self.iterable_rewrite(e) {
             return self.ty_of(&ne);
         }
+        if let ExprKind::Method { recv, name, .. } = &e.kind {
+            if name == "lume_seq" {
+                let el = self.next_item(recv).unwrap_or(Type::Unknown);
+                return Type::Iter(Box::new(el), false);
+            }
+        }
         if matches!(&e.kind, ExprKind::Ident(_) | ExprKind::Call { .. }) {
             if let Some(ne) = self.split_ident_try(e) {
                 return self.ty_of(&ne);
@@ -4792,6 +4811,9 @@ impl Gen {
                 if name == "zip" && args.len() == 1 {
                     let other = self.ty_of(&args[0].value);
                     if let (Some((a, _)), Some((b, _))) = (self.elem_of(&rt), self.elem_of(&other)) {
+                        if matches!(rt, Type::Iter(..)) {
+                            return Type::Iter(Box::new(Type::Tuple(vec![a, b])), false);
+                        }
                         return Type::List(Box::new(Type::Tuple(vec![a, b])));
                     }
                 }
@@ -5991,7 +6013,7 @@ impl Gen {
     fn sig_params_rust_as(&self, sg: &Sig, decl: Option<&[Type]>, with_self: bool) -> String {
         let mut parts: Vec<String> = Vec::new();
         if with_self {
-            parts.push("&self".into());
+            parts.push(if sg.self_kind == SelfKind::Mutate { "&mut self" } else { "&self" }.into());
         }
         for (i, (n, t)) in sg.params.iter().enumerate() {
             // a block given to an interface method is lent as `&mut dyn
@@ -6363,6 +6385,27 @@ impl Gen {
             self.line(&format!("impl{} PartialEq for {}{} {{ fn eq(&self, o: &Self) -> bool {{ {} }} }}", gen, s.name, gargs, parts.join(" && ")));
         }
         self.op_impls(&s.name, &s.methods, &gen, &gargs);
+        // `def next(var self) -> T?`: a lazy sequence, so Rust's `Iterator`,
+        // whose `next` is this one
+        let nexts: Vec<&FnDef> = s.methods.iter().filter(|m| m.name == "next").collect();
+        if let Some(m) = nexts.first() {
+            let item = match m.ret.as_ref().map(|t| self.ct(t)) {
+                Some(Type::Option(inner)) if m.params.is_empty() && m.self_kind == SelfKind::Mutate => Some(*inner),
+                _ => None,
+            };
+            match item {
+                Some(inner) => {
+                    if s.methods.iter().any(|x| x.name == "items") {
+                        return Err(LumeError::new(m.line, m.col, format!("`{}` has both `items` and `next`, so a `for` over it could mean either", s.name))
+                            .with_help("keep one: `items` gives a list to walk, `next` works items out one at a time; rename the other"));
+                    }
+                    let it = self.rt(&inner);
+                    self.line(&format!("impl{} Iterator for {}{} {{ type Item = {}; fn next(&mut self) -> Option<{}> {{ {}{}::next(self) }} }}", gen, s.name, gargs, it, it, s.name, gargs.replace('<', "::<")));
+                }
+                // a `next` of another shape is only a method, as in Rust
+                None => {}
+            }
+        }
         if !s.methods.is_empty() {
             self.line(&format!("impl{} {}{} {{", gen, s.name, gargs));
             self.indent += 1;
@@ -7740,6 +7783,16 @@ impl Gen {
                 self.line("}");
             }
             Stmt::For { vars, mutable, iter, filter, body, line, col } => {
+                // a lazy sequence of your own: `def next(var self) -> T?`
+                if !matches!(&iter.kind, ExprKind::Method { name, .. } if name == "lume_seq") && self.next_item(iter).is_some() {
+                    if *mutable {
+                        let tn = type_name(&self.ty_of(iter).materialized());
+                        return Err(LumeError::new(iter.line, iter.col, format!("`for var` changes the items of a list in place, and `{}` works out new ones with `next`", tn))
+                            .with_help("loop without `var`"));
+                    }
+                    let st = Stmt::For { vars: vars.clone(), mutable: false, iter: self.as_sequence(iter), filter: filter.clone(), body: body.clone(), line: *line, col: *col };
+                    return self.stmt_inner(&st, is_tail);
+                }
                 // a value of your own with `items` is looped over by them
                 if let Some(items) = self.items_of(iter) {
                     if *mutable {
@@ -10004,6 +10057,19 @@ impl Gen {
         if let Some(ne) = self.iterable_rewrite(e) {
             return self.expr(&ne);
         }
+        if let ExprKind::Method { recv, name, .. } = &e.kind {
+            if name == "lume_seq" {
+                // a copy moves along, so the value itself is left as it was
+                let r = self.expr(recv)?;
+                let rt = self.ty_of(recv).materialized();
+                if matches!(rt, Type::Var(_)) || self.is_interface(&rt) {
+                    // a type parameter or an interface value is no Rust
+                    // `Iterator`: walk its `next`
+                    return Ok(format!("{{ let mut lume_it = ({}).clone(); std::iter::from_fn(move || lume_it.next()) }}", r));
+                }
+                return Ok(format!("({}).clone()", r));
+            }
+        }
         Ok(match &e.kind {
             ExprKind::Int(v) => format!("{}i64", v),
             ExprKind::Float(v) => {
@@ -10897,6 +10963,13 @@ impl Gen {
                             let x = if *by_ref { "x.clone()" } else { "x" };
                             return Ok(format!("{}.enumerate().map(|(i, x)| (i as i64, {}))", r, x));
                         }
+                        "zip" if args.len() == 1 => {
+                            // stays lazy, so an endless chain stops with the other side
+                            let (o, _, o_ref) = self.iter_base(&args[0].value, e)?;
+                            let a = if *by_ref { "a.clone()" } else { "a" };
+                            let b = if o_ref { "b.clone()" } else { "b" };
+                            return Ok(format!("{}.zip({}).map(|(a, b)| ({}, {}))", r, o, a, b));
+                        }
                         "len" if args.is_empty() => return Ok(format!("({}.count() as i64)", r)),
                         "to_list" if args.is_empty() => return Ok(self.collect_iter_t(&r, *by_ref, elem)),
                         "sum" if args.is_empty() => {
@@ -11646,6 +11719,40 @@ impl Gen {
         Some(Expr::new(ExprKind::Method { recv: Box::new(e.clone()), name: "items".into(), args: Vec::new() }, e.line, e.col))
     }
 
+    /// The item type of a value whose type has `def next(var self) -> T?`:
+    /// a lazy sequence of its own.
+    fn next_item(&mut self, e: &Expr) -> Option<Type> {
+        let t = self.ty_of(e).materialized();
+        // a struct of the program's, a type parameter whose bound has
+        // `next` (`[S: Iterator[Int]]`), or a value held as an interface
+        let key = match &t {
+            Type::Named(_) | Type::App(..) | Type::Var(_) => self.type_key(&t),
+            _ => return None,
+        };
+        let m = if matches!(t, Type::Var(_)) || self.is_interface(&t) {
+            match self.methods_of(&key).and_then(|ms| ms.get("next").cloned()) {
+                Some(m) => m,
+                None => self.interfaces.get(&key).and_then(|i| i.methods.get("next").cloned())?,
+            }
+        } else {
+            self.structs.get(&key)?;
+            self.methods_of(&key)?.get("next").cloned()?
+        };
+        if !m.params.is_empty() || m.self_kind != SelfKind::Mutate {
+            return None;
+        }
+        match Self::subst(&m.ret, &self.subst_for(&t)).materialized() {
+            Type::Option(inner) => Some(*inner),
+            _ => None,
+        }
+    }
+
+    /// `value` as the start of a lazy chain: a copy of it, which the chain
+    /// moves along without changing `value`.
+    fn as_sequence(&self, e: &Expr) -> Expr {
+        Expr::new(ExprKind::Method { recv: Box::new(e.clone()), name: "lume_seq".into(), args: Vec::new() }, e.line, e.col)
+    }
+
     /// Why a type's `items` does not make it something to loop over, when it
     /// has one of the wrong shape.
     fn items_problem(&self, t: &Type) -> Option<String> {
@@ -11653,7 +11760,20 @@ impl Gen {
             Type::Named(_) | Type::App(..) => self.type_key(t),
             _ => return None,
         };
-        let m = self.methods_of(&key)?.get("items").cloned()?;
+        let ms = self.methods_of(&key)?;
+        if let Some(n) = ms.get("next") {
+            if ms.get("items").is_none() {
+                let how = if !n.params.is_empty() {
+                    "takes arguments".to_string()
+                } else if n.self_kind != SelfKind::Mutate {
+                    "does not change `self`, so it could not move on".to_string()
+                } else {
+                    format!("gives {}", a_type(&n.ret))
+                };
+                return Some(format!("`{}`'s `next` {}; to loop over it, write `def next(var self) -> T?`", type_name(t), how));
+            }
+        }
+        let m = ms.get("items").cloned()?;
         if !m.params.is_empty() {
             return Some(format!("`{}`'s `items` takes arguments; to loop over it, `items` takes none and gives a list", type_name(t)));
         }
@@ -11681,8 +11801,14 @@ impl Gen {
                 return None;
             }
         }
-        let items = self.items_of(recv)?;
-        Some(Expr::new(ExprKind::Method { recv: Box::new(items), name: name.clone(), args: args.clone() }, e.line, e.col))
+        if let Some(items) = self.items_of(recv) {
+            return Some(Expr::new(ExprKind::Method { recv: Box::new(items), name: name.clone(), args: args.clone() }, e.line, e.col));
+        }
+        if matches!(&recv.kind, ExprKind::Method { name, .. } if name == "lume_seq") {
+            return None;
+        }
+        self.next_item(recv)?;
+        Some(Expr::new(ExprKind::Method { recv: Box::new(self.as_sequence(recv)), name: name.clone(), args: args.clone() }, e.line, e.col))
     }
 
     fn static_rewrite(&self, e: &Expr) -> Option<Expr> {

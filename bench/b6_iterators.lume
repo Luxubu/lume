@@ -1,0 +1,22 @@
+# A sequence of your own (`def next(var self) -> T?`) in a lazy chain.
+# Milestone 68.
+
+# a linear congruential generator: endless, so only `take` stops it
+struct Rng:
+  s: Int
+
+  def next(var self) -> Int?:
+    s = (s * 1103515245 + 12345) % 2147483648
+    Some(s)
+
+def main:
+  # ten rounds, each from its own seed, so no round can be worked out from
+  # another
+  t0 = Time.now_ms
+  var total = 0
+  for round in 0...10:
+    total += Rng(s: round + 1).filter { |x| x % 3 == 0 }.map { |x| x % 1000 }.take(2000000).sum
+  t1 = Time.now_ms
+
+  puts "#{total}"
+  puts "#{t1 - t0} ms"

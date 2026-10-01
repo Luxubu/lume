@@ -166,10 +166,64 @@ def main:
   over a map.
 - **Generic code:** a bound `[C: Iterable[Int]]` takes any such type, and
   lists and sets as well. A value can be held as an `[Iterable[Int]]`.
-  Messages name the interface `lume.Iterable`.
 - **Not `for var`:** `items` gives a new list, so there is nothing in place
   to change. Change the type itself with a `var self` method.
 - **More:** `examples/iterable.lume` shows each of these.
+
+## Types of your own: `next`
+
+**A type with `def next(var self) -> T?` is a lazy sequence**: `for` and
+every chain method work it out one item at a time, and it ends at the first
+`None`. This is Lume's `Iterator[T]`, and in the Rust it compiles to, the
+type *is* an `Iterator`:
+
+```lume
+struct Fib:
+  a: Int
+  b: Int
+
+  def next(var self) -> Int?:
+    x = a
+    a = b
+    b = x + b
+    Some(x)
+
+def main:
+  fib = Fib(a: 0, b: 1)
+  puts fib.take(8).to_list                          #=> [0, 1, 1, 2, 3, 5, 8, 13]
+  puts fib.filter { |x| x % 2 == 0 }.take(4).to_list #=> [0, 2, 8, 34]
+  puts fib.find { |x| x > 100 }                      #=> Some(144)
+  for x in fib:
+    if x > 3:
+      break
+    puts x                 #=> 0
+                           #=> 1
+                           #=> 1
+                           #=> 2
+                           #=> 3
+```
+
+- **Endless is fine.** Nothing is worked out before it is asked for, so
+  `take`, `take_while`, `find`, `first`, `any?`, `zip` and `break` stop a
+  sequence that never ends. A method that needs every item (`to_list`,
+  `len`, `sum`, `sort`) on an endless one never returns.
+- **A loop or chain walks a copy.** `fib` above is still at its start after
+  each line, as a list is after a `for`. To move a value along yourself,
+  call `next` on a `var`: `var f = Fib(a: 0, b: 1)`, then `f.next` gives
+  `Some(0)` and `f` has moved on.
+- **The shape is exact:** `next` takes nothing but `var self` and gives an
+  optional. A `next` of another shape is just a method, and a `for` over the
+  type says what is wrong with it.
+- **Not both:** a type with `items` and `next` is refused, since a `for`
+  over it could mean either.
+- **Not `for var`:** the items are worked out, not stored.
+- **Generic code:** a bound `[S: Iterator[Int]]` takes any such type, and
+  `for` and chains work on the parameter. A value can be held as an
+  `Iterator[Int]`. An interface of your own may also ask for a `var self`
+  method; each type that fits writes it.
+- **Speed:** a chain over a sequence is the Rust iterator chain you would
+  write by hand; `bench/b6_iterators.lume` measures it against a hand-written `impl Iterator`.
+- **More:** `examples/iterators.lume` shows each of these.
 
 ## Where `[]` and `{}` need a type
 

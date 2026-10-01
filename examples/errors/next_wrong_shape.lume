@@ -1,0 +1,12 @@
+# A `next` that gives a plain `Int`, not an `Int?`: it cannot say the sequence has ended, so the type is not one.
+
+struct Counter:
+  n: Int
+
+  def next(var self) -> Int:
+    n += 1
+    n
+
+def main:
+  for x in Counter(n: 0):
+    puts x

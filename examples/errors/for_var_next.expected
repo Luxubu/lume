@@ -1,0 +1,6 @@
+error: `for var` changes the items of a list in place, and `Countdown` works out new ones with `next`
+  --> examples/errors/for_var_next.lume:14:16
+   |
+14 |   for var x in c:
+   |                ^
+  help: loop without `var`
