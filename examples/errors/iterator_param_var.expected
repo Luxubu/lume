@@ -1,0 +1,6 @@
+error: `xs` is taken by move, so it is already the function's own: `var` would change nothing the caller sees
+  --> examples/errors/iterator_param_var.lume:3:15
+  |
+3 | def drain(var xs: Iterator[Int]) -> Int = xs.sum
+  |               ^
+  help: drop `var`; `next` works on it as it is

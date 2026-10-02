@@ -3,4 +3,4 @@ error: a generator cannot fill the `S` of `total` yet: a type parameter may be c
   |
 9 |   puts total(ones())
   |        ^
-  help: take the items as a list instead, `xs: [T]`: a generator given where a list is wanted gives its items
+  help: take it as a parameter `xs: Iterator[T]` instead, which takes any sequence by move

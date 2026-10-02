@@ -50,6 +50,15 @@ def indexed(xs: [Str]) -> Iterator[(Int, Str)]:
   return
   yield (0, "never")
 
+# a parameter `Iterator[T]` takes any sequence by move, so generators chain
+def evens(xs: Iterator[Int]) -> Iterator[Int]:
+  for x in xs:
+    yield x if x % 2 == 0
+
+def first_and_rest(xs: Iterator[Str]) -> Str:
+  first = xs.next.or("-")
+  "#{first}, then #{xs.to_list}"
+
 def main:
   for x in countdown(3):
     puts x
@@ -85,3 +94,10 @@ def main:
   puts countdown(3)
   xs: [Int] = countdown(2)
   puts xs
+
+  # sequences handed on
+  puts evens(naturals()).take(3).to_list
+  puts evens(evens(countdown(9))).to_list
+  words = ["a", "b", "c"]
+  puts first_and_rest(words)
+  puts words

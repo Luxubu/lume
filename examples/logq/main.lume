@@ -1,0 +1,122 @@
+# logq — questions about an access log, answered lazily.
+#
+#   logq summary FILE      how many requests, how many failed, how fast
+#   logq top N FILE        the N busiest paths
+#   logq errors FILE       failed requests, by path
+#   logq slow MS FILE      requests slower than MS milliseconds
+#   logq since TIME FILE   requests at or after TIME (2025-09-30T10:01:00Z)
+#
+# FILE `-` reads standard input. A line logq cannot read is counted and
+# skipped, never fatal.
+
+struct Entry:
+  at: Int
+  ip: Str
+  method: Str
+  path: Str
+  status: Int
+  ms: Int
+
+  def failed? -> Bool = status >= 500
+
+STAMP = "%Y-%m-%dT%H:%M:%SZ"
+
+# One line of the log, or why it is not one.
+def parse(line: Str) -> Entry or Error:
+  parts = line.split(" ")
+  if parts.len != 6:
+    return Error("expected 6 fields, found #{parts.len}")
+  at = Time.parse(parts.at(0), STAMP)?
+  status = parts.at(4).to_int?
+  took = parts.at(5)
+  if not took.ends_with?("ms"):
+    return Error("expected a time like `12ms`, found `#{took}`")
+  ms = took.slice(0, took.len - 2).to_int?
+  Entry(at: at, ip: parts.at(1), method: parts.at(2), path: parts.at(3), status: status, ms: ms)
+
+# Every line, read or not, numbered from 1.
+def lines_of(text: Str) -> Iterator[(Int, Entry or Error)]:
+  var n = 0
+  for line in text.lines:
+    n += 1
+    yield (n, parse(line)) if not line.trim.empty?
+
+# The entries that could be read. A line that could not is reported on
+# standard error and skipped.
+def entries(lines: Iterator[(Int, Entry or Error)]) -> Iterator[Entry]:
+  for n, read in lines:
+    match read:
+      Ok(e) -> yield e
+      Error(why) -> warn "line #{n}: #{why.message}"
+
+# What a percentile of a list of times is: the nearest rank.
+def percentile(sorted: [Int], p: Int) -> Int:
+  if sorted.empty?:
+    return 0
+  rank = (p * sorted.len + 99) / 100
+  sorted.at((rank - 1).max(0))
+
+def summary(seq: Iterator[Entry]):
+  entries = seq.to_list
+  times = entries.map { |e| e.ms }.sort
+  failed = entries.count { |e| e.failed? }
+  puts "requests  #{entries.len}"
+  puts "failed    #{failed} (#{(failed * 1000 / entries.len.max(1)).to_float / 10.0}%)"
+  puts "p50       #{percentile(times, 50)}ms"
+  puts "p95       #{percentile(times, 95)}ms"
+  puts "slowest   #{times.last.or(0)}ms"
+  by_minute = entries.group_by { |e| Time.format(e.at, "%H:%M") }
+  match by_minute.max_by { |m, es| es.len }:
+    Some((m, es)) -> puts "busiest   #{m} (#{es.len} requests)"
+    None -> puts "busiest   -"
+
+def top(entries: Iterator[Entry], n: Int):
+  by_path = entries.group_by { |e| e.path }
+  ranked = by_path.to_list.sort_by { |p| (0 - p.1.len, p.0) }
+  for path, es in ranked.take(n):
+    avg = es.map { |e| e.ms }.sum / es.len
+    puts "#{es.len.pad(4)}  #{path.pad_right(16)} avg #{avg}ms"
+
+def errors(entries: Iterator[Entry]):
+  failed = entries.filter { |e| e.failed? }.to_list
+  if failed.empty?:
+    puts "no failed requests"
+    return
+  for path, es in failed.group_by { |e| e.path }:
+    codes = es.map { |e| e.status.to_s }.uniq.join(", ")
+    puts "#{path}: #{es.len} (#{codes})"
+    for e in es:
+      puts "  #{Time.format(e.at, "%H:%M:%S")} #{e.ip} #{e.method}"
+
+def slow(entries: Iterator[Entry], limit: Int):
+  over = entries.filter { |e| e.ms > limit }.sort_by { |e| 0 - e.ms }.to_list
+  puts "#{over.len} requests over #{limit}ms"
+  for e in over.take(5):
+    puts "  #{e.ms.pad(5)}ms #{e.method} #{e.path}"
+
+def read_input(name: Str) -> Str or Error:
+  if name == "-":
+    return Env.stdin
+  File.read(name)
+
+def usage:
+  warn "usage: logq summary|errors FILE | logq top N FILE | logq slow MS FILE | logq since TIME FILE"
+  Env.exit(2)
+
+def main -> () or Error:
+  args = Env.args
+  if args.len < 2:
+    usage()
+  command = args.at(0)
+  text = read_input(args.last.or("-"))?
+
+  read = entries(lines_of(text))
+  match command:
+    "summary" -> summary(read)
+    "errors" -> errors(read)
+    "top" -> top(read, args.at(1).to_int?)
+    "slow" -> slow(read, args.at(1).to_int?)
+    "since" ->
+      from = Time.parse(args.at(1), STAMP)?
+      summary(read.filter { |e| e.at >= from })
+    _ -> usage()

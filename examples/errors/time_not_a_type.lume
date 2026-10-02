@@ -1,0 +1,8 @@
+# A time is seconds since 1970, an `Int`; `Time` holds the functions that make and read one.
+
+struct Event:
+  name: Str
+  at: Time
+
+def main:
+  puts Event(name: "x", at: 0)

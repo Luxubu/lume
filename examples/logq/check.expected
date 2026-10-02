@@ -1,0 +1,64 @@
+$ logq summary data/access.log
+line 12: expected 6 fields, found 4
+line 30: expected a time like `12ms`, found `13`
+requests  38
+failed    4 (10.5%)
+p50       19ms
+p95       415ms
+slowest   422ms
+busiest   10:00 (34 requests)
+(exit 0)
+$ logq top 3 data/access.log
+line 12: expected 6 fields, found 4
+line 30: expected a time like `12ms`, found `13`
+  11  /static/app.js   avg 25ms
+   8  /api/orders/42   avg 30ms
+   8  /api/users       avg 23ms
+(exit 0)
+$ logq errors data/access.log
+line 12: expected 6 fields, found 4
+line 30: expected a time like `12ms`, found `13`
+/api/users: 2 (500, 503)
+  10:00:38 203.0.113.1 GET
+  10:00:56 203.0.113.8 GET
+/static/app.js: 2 (500)
+  10:00:49 203.0.113.4 GET
+  10:00:53 203.0.113.2 GET
+(exit 0)
+$ logq slow 100 data/access.log
+line 12: expected 6 fields, found 4
+line 30: expected a time like `12ms`, found `13`
+5 requests over 100ms
+    422ms GET /api/search
+    415ms GET /api/search
+    406ms GET /api/search
+    107ms GET /static/app.js
+    101ms GET /api/orders/42
+(exit 0)
+$ logq since 2025-09-30T10:01:00Z data/access.log
+line 12: expected 6 fields, found 4
+line 30: expected a time like `12ms`, found `13`
+requests  4
+failed    0 (0.0%)
+p50       32ms
+p95       422ms
+slowest   422ms
+busiest   10:01 (4 requests)
+(exit 0)
+$ grep /api data/access.log | logq top 2 -
+line 20: expected a time like `12ms`, found `13`
+   8  /api/orders/42   avg 30ms
+   8  /api/users       avg 23ms
+(exit 0)
+$ logq top many data/access.log
+error: `many` is not an integer
+(exit 1)
+$ logq summary missing.log
+error: cannot read `missing.log`: No such file or directory (os error 2)
+(exit 1)
+$ logq since yesterday data/access.log
+error: `yesterday` does not match `%Y-%m-%dT%H:%M:%SZ`: expected the year at position 0
+(exit 1)
+$ logq 
+usage: logq summary|errors FILE | logq top N FILE | logq slow MS FILE | logq since TIME FILE
+(exit 2)

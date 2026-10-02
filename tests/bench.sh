@@ -31,10 +31,12 @@ b4_text:bench/b4_text.lume:bench/b4.rs
 b5_printing:bench/b5_printing.lume:bench/b5.rs
 b6_iterators:bench/b6_iterators.lume:bench/b6.rs
 b7_generators:bench/b7_generators.lume:bench/b6.rs
+b8_logq:bench/b8_logq.lume:bench/b8.rs
 b3c_split_only:bench/b3c_split_only.lume:
 "
 
 [ -f bench/words.txt ] || python3 bench/gen.py
+[ -f bench/access.log ] || python3 examples/logq/gen_log.py 500000 > bench/access.log
 mkdir -p bench/.build
 
 # The last line of a run is "<n> ms"; take the smallest of RUNS.

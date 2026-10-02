@@ -1,0 +1,38 @@
+# logq's parse-and-summarise path over a 500,000-line access log: lines
+# parsed lazily by generators, then counted, sorted and grouped.
+# Milestone 71. `tests/bench.sh` writes bench/access.log when it is missing.
+
+struct Entry:
+  at: Int
+  path: Str
+  status: Int
+  ms: Int
+
+def parse(line: Str) -> Entry or Error:
+  parts = line.split(" ")
+  if parts.len != 6:
+    return Error("expected 6 fields, found #{parts.len}")
+  at = Time.parse(parts.at(0), "%Y-%m-%dT%H:%M:%SZ")?
+  took = parts.at(5)
+  ms = took.slice(0, took.len - 2).to_int?
+  Entry(at: at, path: parts.at(3), status: parts.at(4).to_int?, ms: ms)
+
+def entries(text: Str) -> Iterator[Entry]:
+  for line in text.lines:
+    match parse(line):
+      Ok(e) -> yield e
+      Error(_) -> next
+
+def main -> () or Error:
+  text = File.read("bench/access.log")?
+  t0 = Time.now_ms
+  all = entries(text).to_list
+  times = all.map { |e| e.ms }.sort
+  failed = all.count { |e| e.status >= 500 }
+  p95 = times.at((95 * times.len + 99) / 100 - 1)
+  by_path = all.group_by { |e| e.path }
+  top = by_path.to_list.sort_by { |p| 0 - p.1.len }.first.map { |p| p.0 }.or("-")
+  span = all.last.map { |e| e.at }.or(0) - all.first.map { |e| e.at }.or(0)
+  t1 = Time.now_ms
+  puts "#{all.len} #{failed} #{p95} #{top} #{span}"
+  puts "#{t1 - t0} ms"

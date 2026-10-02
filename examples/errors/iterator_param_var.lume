@@ -1,0 +1,6 @@
+# A sequence parameter is taken by move: it is already the function's own, so `var` would change nothing the caller sees.
+
+def drain(var xs: Iterator[Int]) -> Int = xs.sum
+
+def main:
+  puts drain([1, 2])

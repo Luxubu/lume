@@ -404,6 +404,12 @@ fn lume_clamp<T: PartialOrd + LumeShow + Copy>(x: T, lo: T, hi: T) -> T {
     if x < lo { lo } else if x > hi { hi } else { x }
 }
 /// `xs.at(i)`: the item, when the caller has already checked the bound.
+fn lume_at_ref<T>(xs: &[T], i: i64) -> &T {
+    match usize::try_from(i).ok().and_then(|u| xs.get(u)) {
+        Some(x) => x,
+        None => panic!("no item at {} — the list has {}", i, xs.len()),
+    }
+}
 fn lume_at<T: Clone>(xs: &[T], i: i64) -> T {
     match usize::try_from(i).ok().and_then(|u| xs.get(u)) {
         Some(x) => x.clone(),
@@ -555,7 +561,20 @@ fn lume_time_date(y: i64, m: i64, d: i64) -> ::std::result::Result<i64, Error> {
 }
 /// `Time.parse`: reads `text` by the same directives `Time.format` writes.
 fn lume_time_parse(text: &str, pattern: &str) -> ::std::result::Result<i64, Error> {
-    let t: Vec<char> = text.chars().collect();
+    // a time is short: its characters go on the stack, not the heap
+    let mut stack = ['\0'; 64];
+    let heap: Vec<char>;
+    let t: &[char] = if text.len() <= stack.len() {
+        let mut n = 0;
+        for c in text.chars() {
+            stack[n] = c;
+            n += 1;
+        }
+        &stack[..n]
+    } else {
+        heap = text.chars().collect();
+        &heap
+    };
     let mut i = 0usize;
     let (mut y, mut mo, mut d, mut h, mut mi, mut sec) = (1970i64, 1i64, 1i64, 0i64, 0i64, 0i64);
     // `%j`: a day of the year, turned into a month and day once the year is known
@@ -577,11 +596,12 @@ fn lume_time_parse(text: &str, pattern: &str) -> ::std::result::Result<i64, Erro
             while *i < t.len() && *i - start < most && t[*i].is_ascii_digit() {
                 *i += 1;
             }
-            if *i == start { None } else { t[start..*i].iter().collect::<String>().parse::<i64>().ok() }
+            // at most 20 digits for `%s`, so the number is built as it is read
+            if *i == start { None } else { t[start..*i].iter().try_fold(0i64, |n, c| n.checked_mul(10)?.checked_add(c.to_digit(10)? as i64)) }
         }
         let mut digits = |i: &mut usize, most: usize, what: &str| -> ::std::result::Result<i64, Error> {
             let at = *i;
-            read_digits(&t, i, most).ok_or_else(|| fail(format!("expected the {} at position {}", what, at)))
+            read_digits(t, i, most).ok_or_else(|| fail(format!("expected the {} at position {}", what, at)))
         };
         match dir {
             'Y' => y = digits(&mut i, 4, "year")?,
@@ -1045,6 +1065,8 @@ pub struct Gen {
     /// Inside a generator: the item type, and how many blocks deep the
     /// generator's own body is, so a `yield` in a block it passes is caught.
     gen_item: Option<(Type, usize)>,
+    /// The arguments being written are for a generator.
+    arg_for_gen: bool,
     /// The program uses async somewhere: tokio goes in the dependencies.
     uses_async: bool,
     /// Set by `iter_base` for a map: its items are `(key, value)` pairs of
@@ -1128,6 +1150,7 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, module_id: &str
         current_ret: Type::Unit,
         current_fn: String::new(),
         gen_item: None,
+        arg_for_gen: false,
         fn_params: Vec::new(),
         loop_depth: 0,
         in_block: false,
@@ -1502,7 +1525,7 @@ impl Gen {
 
     fn sig_of(&self, f: &FnDef) -> Sig {
         Sig {
-            params: f.params.iter().map(|p| (p.name.clone(), Self::as_vars(&self.ct(&p.ty), &f.generics))).collect(),
+            params: f.params.iter().map(|p| (p.name.clone(), param_type(Self::as_vars(&self.ct(&p.ty), &f.generics)))).collect(),
             var_params: f.params.iter().map(|p| p.mutable).collect(),
             ret: match f.ret.as_ref().map(|t| Self::as_vars(&self.ct(t), &f.generics)) {
                 // a `def` with `yield` that gives `Iterator[T]` is a generator
@@ -1580,6 +1603,24 @@ impl Gen {
     }
 
     /// `Stack[Int]` seen against `struct Stack[T]` gives `T -> Int`.
+    /// The item a struct of the program's hands out through
+    /// `def next(var self) -> T?`, by its type alone.
+    fn seq_item_of_type(&self, t: &Type) -> Option<Type> {
+        let key = match t {
+            Type::Named(_) | Type::App(..) => self.type_key(t),
+            _ => return None,
+        };
+        self.structs.get(&key)?;
+        let m = self.methods_of(&key)?.get("next").cloned()?;
+        if !m.params.is_empty() || m.self_kind != SelfKind::Mutate {
+            return None;
+        }
+        match Self::subst(&m.ret, &self.subst_for(t)).materialized() {
+            Type::Option(inner) => Some(*inner),
+            _ => None,
+        }
+    }
+
     fn subst_for(&self, t: &Type) -> HashMap<String, Type> {
         let mut m = HashMap::new();
         match t {
@@ -1812,7 +1853,7 @@ impl Gen {
         for (p, a) in gs.iter().zip(args) {
             if let Type::Gen(_) = a {
                 return Err(LumeError::new(line, col, format!("a generator cannot fill the `{}` of {} yet: a type parameter may be copied, and a generator is used up as it is walked", p.name, what))
-                    .with_help(format!("take the items as a list instead, `xs: [T]`: a generator given where a list is wanted gives its items")));
+                    .with_help(format!("take it as a parameter `xs: Iterator[T]` instead, which takes any sequence by move")));
             }
             if self.is_interface(a) {
                 return Err(LumeError::new(line, col, format!("`{}` is an interface, so it cannot fill the `{}` of {}", type_name(a), p.name, what))
@@ -4097,6 +4138,15 @@ impl Gen {
                         }
                     }
                 }
+                // the built-in namespaces hold functions, not values of their own
+                if matches!(n.as_str(), "Time" | "File" | "Dir" | "Path" | "Env" | "Process" | "Math") {
+                    let help = if n == "Time" {
+                        "a time is an `Int`: seconds since 1970, in UTC, which `Time.parse` and `Time.date` give".to_string()
+                    } else {
+                        format!("`{}` holds functions, not values: what each gives has a type of its own, as `File.read` gives `Str or Error`", n)
+                    };
+                    return Err(LumeError::new(line, col, format!("`{}` is not a type", n)).with_help(help));
+                }
                 let e = LumeError::new(line, col, format!("unknown type `{}`", n));
                 let cands = self
                     .structs
@@ -4243,10 +4293,15 @@ impl Gen {
         self.current_type = self.owner_type(owner);
         self.current_self_ty = owner.and_then(|o| self.ext_targets.get(o).cloned());
         for p in &f.params {
-            let pty = self.ct(&p.ty);
+            let pty = param_type(self.ct(&p.ty));
             self.declare(&p.name, false, !pty.is_copy(), pty, p.line);
         }
-        let t = self.tail_type(&f.body);
+        let mut t = self.tail_type(&f.body);
+        // a function that ends by leaving the program gives nothing, as
+        // Rust's `-> !` coerces to `()`
+        if t == Type::Unknown && matches!(f.body.stmts.last(), Some(Stmt::Expr(e)) if self.is_env_exit(e)) {
+            t = Type::Unit;
+        }
         self.current_type = saved;
         self.current_self_ty = saved_self;
         self.pop_generics(saved_gs);
@@ -5312,6 +5367,9 @@ impl Gen {
             (Type::Iter(a, _), Type::List(b)) | (Type::List(a), Type::Iter(b, _)) | (Type::List(a), Type::List(b)) | (Type::Iter(a, _), Type::Iter(b, _)) => self.assign_ok_n(a, b),
             // where a list is wanted, a generator gives its items, as a chain does
             (Type::Gen(a), Type::List(b)) | (Type::Gen(a), Type::Gen(b)) => self.assign_ok_n(a, b),
+            // a parameter `Iterator[T]` takes any sequence of `T`s
+            (Type::Iter(a, _), Type::Gen(b)) | (Type::List(a), Type::Gen(b)) | (Type::Set(a), Type::Gen(b)) => self.assign_ok_n(a, b),
+            (h @ (Type::Named(_) | Type::App(..)), Type::Gen(b)) if self.seq_item_of_type(h).is_some() => self.assign_ok_n(&self.seq_item_of_type(h).unwrap(), b),
             (Type::Option(a), Type::Option(b)) | (Type::Task(a), Type::Task(b)) => self.assign_ok_n(a, b),
             (Type::Result(a, b), Type::Result(c, d)) | (Type::Map(a, b), Type::Map(c, d)) => self.assign_ok_n(a, c) && self.assign_ok_n(b, d),
             (Type::Set(a), Type::Set(b)) => self.assign_ok_n(a, b),
@@ -5454,6 +5512,13 @@ impl Gen {
 
     fn expr_arg_named(&mut self, a: &Expr, t: &Type, callee: &str, pname: &str) -> Result<String> {
         self.check_assign(a, t, &format!("`{}` takes `{}: {}`", callee, pname, type_name(t)))?;
+        if let Type::Gen(_) = t {
+            // unknown callees count as generators: working a chain out first is always safe
+            self.arg_for_gen = self.fns.get(&self.canon(callee)).map(|s| matches!(s.ret, Type::Gen(_))).unwrap_or(true);
+            let r = self.seq_arg(a);
+            self.arg_for_gen = false;
+            return r;
+        }
         let have = self.ty_of(a);
         // a plain value where `T?` / `T or E` is expected: wrap it
         match t {
@@ -6606,7 +6671,7 @@ impl Gen {
                 return Err(LumeError::new(p.line, p.col, format!("a generator takes a copy of what it is given, so `var {}` would change nothing the caller sees", p.name))
                     .with_help(format!("drop `var`; to change `{}` inside, bind it to a `var` of another name there", p.name)));
             }
-            if let Some(p) = f.params.iter().find(|p| matches!(p.ty, Type::Fn(..)) || self.is_interface(&self.ct(&p.ty))) {
+            if let Some(p) = f.params.iter().find(|p| matches!(p.ty, Type::Fn(..)) || (self.is_interface(&self.ct(&p.ty)) && !matches!(param_type(self.ct(&p.ty)), Type::Gen(_)))) {
                 return Err(LumeError::new(p.line, p.col, format!("a generator cannot take `{}` yet: it keeps what it is given, and a block or an interface value cannot be kept that way", p.name))
                     .with_help("pass the values the generator needs instead"));
             }
@@ -6668,6 +6733,15 @@ impl Gen {
                 return Err(LumeError::new(p.line, p.col, format!("parameter `{}` is listed twice", p.name)));
             }
             let pty = self.ct(&p.ty);
+            if let Type::Gen(item) = param_type(pty.clone()) {
+                // `xs: Iterator[T]` — taken by move, as Rust's `impl Iterator`
+                if p.mutable {
+                    return Err(LumeError::new(p.line, p.col, format!("`{}` is taken by move, so it is already the function's own: `var` would change nothing the caller sees", p.name))
+                        .with_help("drop `var`; `next` works on it as it is"));
+                }
+                parts.push(format!("mut {}: impl Iterator<Item = {}> + Send", rust_name(&p.name), self.rt(&item)));
+                continue;
+            }
             if self.is_interface(&pty) && !self.in_trait_impl {
                 // `s: Shape` — one generic parameter per interface-typed parameter (static dispatch)
                 let g = format!("Iface{}", generics.len());
@@ -6753,7 +6827,10 @@ impl Gen {
             // the generator keeps its own copy of everything it was given,
             // since it runs after the call has returned
             for p in &f.params {
-                let pty = self.ct(&p.ty);
+                let pty = param_type(self.ct(&p.ty));
+                if matches!(pty, Type::Gen(_)) {
+                    continue;
+                }
                 if pty == Type::Str {
                     self.line(&format!("let {} = {}.to_string();", rust_name(&p.name), rust_name(&p.name)));
                 } else if !pty.is_copy() {
@@ -6766,9 +6843,11 @@ impl Gen {
         self.push_scope();
         self.fn_params = f.params.iter().map(|p| (p.name.clone(), p.line, self.ct(&p.ty))).collect();
         for p in &f.params {
-            let pty = self.ct(&p.ty);
-            // a generator's parameters are its own copies, not borrows
-            let borrowed = gen_item.is_none() && (!pty.is_copy() || lent_params.get(&p.name).copied().unwrap_or(false));
+            let pty = param_type(self.ct(&p.ty));
+            // a sequence taken by move is the function's own, and so is
+            // everything a generator is given
+            let own_seq = matches!(pty, Type::Gen(_));
+            let borrowed = gen_item.is_none() && !own_seq && (!pty.is_copy() || lent_params.get(&p.name).copied().unwrap_or(false));
             if self.is_interface(&pty) {
                 self.iface_params.insert(p.name.clone());
             }
@@ -6776,7 +6855,7 @@ impl Gen {
                 let what = if p.mutable { "var " } else { "" };
                 self.note_typed(p.line, p.col, &p.name, format!("{}{}: {}", what, p.name, type_name(&pty)), Some((self.this_file.clone(), p.line, p.col)), Some(&pty));
             }
-            self.declare(&p.name, p.mutable, borrowed, pty, p.line);
+            self.declare(&p.name, p.mutable || own_seq, borrowed, pty, p.line);
         }
         self.current_ret = if gen_item.is_some() { Type::Unit } else { sig.ret.clone() };
         let saved_gen = std::mem::replace(&mut self.gen_item, gen_item.clone().map(|t| (t, self.closure_barriers.len())));
@@ -8496,6 +8575,31 @@ impl Gen {
             .with_help("keep its items with `.to_list`, or keep a struct with `def next(var self) -> T?`, which can be copied")
     }
 
+    /// An argument for a parameter `Iterator[T]`: a Rust iterator of owned
+    /// items. A generator moves in; a list, a set or a sequence of your own
+    /// gives a copy to walk. A lazy chain stays lazy, except into a
+    /// generator, which outlives the call and so cannot hold what the chain
+    /// borrows: there it is worked out first.
+    fn seq_arg(&mut self, e: &Expr) -> Result<String> {
+        let at = self.ty_of(e);
+        match at.clone() {
+            Type::Gen(_) => self.give_away(e),
+            Type::Iter(elem, by_ref) => {
+                let s = self.expr(e)?;
+                if self.arg_for_gen {
+                    Ok(format!("{}.into_iter()", self.collect_iter_t(&s, by_ref, &elem)))
+                } else if by_ref {
+                    Ok(format!("{}.cloned()", s))
+                } else {
+                    Ok(s)
+                }
+            }
+            Type::List(_) | Type::Set(_) => Ok(format!("{}.into_iter()", self.expr_owned(e)?)),
+            _ if self.seq_item_of_type(&at.materialized()).is_some() => self.expr_owned(e),
+            other => Err(LumeError::new(e.line, e.col, format!("a sequence is wanted here, and this is {}", a_type(&other)))),
+        }
+    }
+
     /// A value that cannot be copied — a task, a generator — moves, as in
     /// Rust, and a name that gave it away cannot be used after.
     fn give_away(&mut self, e: &Expr) -> Result<String> {
@@ -8588,6 +8692,9 @@ impl Gen {
     }
 
     fn expr_arg_inner(&mut self, e: &Expr, t: &Type) -> Result<String> {
+        if let Type::Gen(_) = t {
+            return self.seq_arg(e);
+        }
         // a slot the definition spelled `T`, filled in with `Str`: Rust
         // wants a `&String` there, and Lume's strings travel as `&str`
         if matches!(t, Type::Var(_)) && self.ty_of(e).materialized() == Type::Str {
@@ -11088,7 +11195,24 @@ impl Gen {
                             }
                         }
                         let mut parts = Vec::new();
+                        // `Time.parse` and `Time.format` only read their text:
+                        // a literal is passed as it is, an item of a list where it is
+                        let reads_text = tn == "Time" && matches!(name.as_str(), "parse" | "format");
                         for a in args {
+                            if reads_text {
+                                if let Some(t) = str_literal(&a.value) {
+                                    parts.push(t);
+                                    continue;
+                                }
+                                if let ExprKind::Method { recv: list, name: at, args: at_args } = &a.value.kind {
+                                    if at == "at" && at_args.len() == 1 && self.ty_of(list).materialized() == Type::List(Box::new(Type::Str)) {
+                                        let l = self.expr(list)?;
+                                        let i = self.expr_val(&at_args[0].value)?;
+                                        parts.push(format!("(*lume_at_ref(&{}, {}))", l, i));
+                                        continue;
+                                    }
+                                }
+                            }
                             parts.push(self.expr_val(&a.value)?);
                         }
                         let need = |n: usize| -> Result<()> {
@@ -11264,6 +11388,17 @@ impl Gen {
                     }
                 }
                 let mut r = self.expr(recv)?;
+                // `parts.at(4).to_int`: every method of text only reads it,
+                // so the item is read where it is, not copied out first
+                if rt == Type::Str {
+                    if let ExprKind::Method { recv: list, name: at, args: at_args } = &recv.kind {
+                        if at == "at" && at_args.len() == 1 && matches!(self.ty_of(list).materialized(), Type::List(_)) {
+                            let l = self.expr(list)?;
+                            let i = self.expr_val(&at_args[0].value)?;
+                            r = format!("(*lume_at_ref(&{}, {}))", l, i);
+                        }
+                    }
+                }
                 // `.or(default)` consumes the optional: take a copy when the place lives on
                 if matches!(name.as_str(), "or" | "or_error") {
                     let inner_copy = match &rt {
@@ -12805,6 +12940,15 @@ fn stmt_mentions(s: &Stmt, name: &str) -> bool {
 /// `Iterator` as a program writes it, or as the built-in is known inside.
 fn is_iterator_name(n: &str) -> bool {
     n == "Iterator" || n == "lume.Iterator"
+}
+
+/// A parameter declared `Iterator[T]` takes a sequence by move, as Rust's
+/// `impl Iterator<Item = T>` does: inside, it is walked like a generator.
+fn param_type(t: Type) -> Type {
+    match t {
+        Type::App(n, args) if args.len() == 1 && is_iterator_name(&n) => Type::Gen(Box::new(args[0].clone())),
+        other => other,
+    }
 }
 
 /// Whether a function body hands out items with `yield`: in its own

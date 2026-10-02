@@ -23,6 +23,11 @@
 - **Generators**: a function that gives `Iterator[T]` hands out items with
   `yield`, lazily, and may be endless.
 - **Docs**: lists, maps and calls may be written across lines.
+- **Sequence parameters**: `xs: Iterator[T]` takes a generator, a chain, a
+  list, a set or a type with `next`, by move, so generators chain.
+- **`examples/logq/`**: a log analyzer built on generators.
+- **Faster**: `Time.parse` (2.7×), and text methods on a list's item.
+- **Fixed**: a function ending in `Env.exit` with no return type.
 - **Interfaces**: a required method may take `var self`. A type fits only
   when its method agrees about `var self`.
 - **`zip` on a lazy chain** stays lazy, and `zip` takes a sequence of your

@@ -160,6 +160,10 @@ fi
 out=$(examples/jobr/check.sh "$LUME" 2>&1)
 check "jobr" "examples/jobr/queries.expected" "$out"
 
+# the logq dogfood program: every command, a pipe, and its errors
+out=$(examples/logq/check.sh "$LUME" 2>&1)
+check "logq" "examples/logq/check.expected" "$out"
+
 # the csvq dogfood program: queries, a pipe, its errors, and three packages' tests
 out=$(examples/csvq/queries.sh "$LUME" 2>&1)
 check "csvq" "examples/csvq/queries.expected" "$out"

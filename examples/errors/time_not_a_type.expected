@@ -1,0 +1,6 @@
+error: `Time` is not a type
+  --> examples/errors/time_not_a_type.lume:5:3
+  |
+5 |   at: Time
+  |   ^
+  help: a time is an `Int`: seconds since 1970, in UTC, which `Time.parse` and `Time.date` give

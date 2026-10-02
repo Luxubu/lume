@@ -290,9 +290,9 @@ where a list is wanted, it gives its items. Where it differs:
   is refused. Keep the items with `.to_list` to walk them twice. A sequence
   of your own (`def next(var self)`) is copied instead, because its state is
   fields that can be copied; a generator's state is where its body stopped.
-- **So it is kept only in a local.** Not in a list, a tuple or a field, and
-  not as an `Iterator[Int]` value or a `[S: Iterator[Int]]` argument, which
-  are copied.
+- **So it is kept in a local, or handed on.** Not in a list, a tuple or a
+  field, and not as an `Iterator[Int]` value or a `[S: Iterator[Int]]`
+  argument, which are copied. A parameter `xs: Iterator[T]` takes it (below).
 - **It has its own copy of its arguments,** taken at the call, since it runs
   after the call has returned. A `var` parameter is refused.
 - **`return` alone ends it.** Its items come only from `yield`.
@@ -301,6 +301,39 @@ where a list is wanted, it gives its items. Where it differs:
   `spawn:`. Use `for` there instead.
 - **Not yet:** a method with `yield`, an `async` generator, and a generator
   that takes a block or an interface value.
+
+### Taking a sequence: `xs: Iterator[T]`
+
+**A parameter declared `Iterator[T]` takes any sequence of `T`s, by move**,
+as Rust's `impl Iterator<Item = T>` does: a generator, a lazy chain, a list,
+a set, or a type of your own with `next`. Inside, it is walked like a
+generator, once, and `xs.next` works on it as it is. So generators chain
+into each other, lazily:
+
+```lume
+def naturals -> Iterator[Int]:
+  var n = 0
+  while true:
+    yield n
+    n += 1
+
+def evens(xs: Iterator[Int]) -> Iterator[Int]:
+  for x in xs:
+    yield x if x % 2 == 0
+
+def total(xs: Iterator[Int]) -> Int = xs.sum
+
+def main:
+  puts evens(naturals()).take(3).to_list    #=> [0, 2, 4]
+  puts total([1, 2, 3])                      #=> 6
+  puts total(evens(1..6))                    #=> 12
+```
+
+A generator moves in; a list, a set or a sequence of your own is copied in,
+so the caller's value is as it was. A lazy chain stays lazy into a plain
+function. Into a generator, which outlives the call, it is worked out first,
+since what it reads might not live as long: pass a generator itself to stay
+lazy there.
 - **Speed:** `bench/b7_generators.lume` is `b6` as a generator; it runs at
   about 1.3 times the hand-written Rust iterator.
 - **More:** `examples/generators.lume` shows each of these.
