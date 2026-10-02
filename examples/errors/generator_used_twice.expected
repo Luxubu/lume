@@ -1,0 +1,6 @@
+error: `e` is a generator, and it is used up here, so it cannot be used after
+  --> examples/errors/generator_used_twice.lume:9:8
+  |
+9 |   puts e.sum
+  |        ^
+  help: a generator hands out each item once: to walk the items twice, keep them with `.to_list` first

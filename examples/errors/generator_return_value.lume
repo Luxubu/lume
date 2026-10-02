@@ -1,0 +1,10 @@
+# A generator's items come from `yield`; `return` only ends it.
+
+def firsts(xs: [Int]) -> Iterator[Int]:
+  for x in xs:
+    if x < 0:
+      return x
+    yield x
+
+def main:
+  puts firsts([1, -1, 2]).to_list

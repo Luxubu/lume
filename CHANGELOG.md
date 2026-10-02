@@ -20,6 +20,9 @@
   works with `for` and every chain method, one item at a time, so it may be
   endless; it compiles to a Rust `impl Iterator`. A bound
   `[S: Iterator[T]]` takes it.
+- **Generators**: a function that gives `Iterator[T]` hands out items with
+  `yield`, lazily, and may be endless.
+- **Docs**: lists, maps and calls may be written across lines.
 - **Interfaces**: a required method may take `var self`. A type fits only
   when its method agrees about `var self`.
 - **`zip` on a lazy chain** stays lazy, and `zip` takes a sequence of your

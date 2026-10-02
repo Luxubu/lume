@@ -1,0 +1,6 @@
+error: a generator cannot take `f` yet: it keeps what it is given, and a block or an interface value cannot be kept that way
+  --> examples/errors/generator_block_param.lume:3:23
+  |
+3 | def mapped(xs: [Int], f: (Int) -> Int) -> Iterator[Int]:
+  |                       ^
+  help: pass the values the generator needs instead

@@ -1,0 +1,11 @@
+# A task runs apart from the generator that started it, so a `yield` in it has nowhere to go.
+
+def squares(xs: [Int]) -> Iterator[Int]:
+  for x in xs:
+    t = spawn:
+      yield x * x
+      0
+    yield x
+
+async def main:
+  puts squares([1, 2]).to_list

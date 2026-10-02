@@ -37,6 +37,9 @@ pub enum Type {
     Iter(Box<Type>, bool),
     /// `Task[T]` — a spawned task that will produce a `T`
     Task(Box<Type>),
+    /// What calling a generator (a `def` with `yield`) gives: a lazy
+    /// sequence that moves, as a Rust iterator does. Written `Iterator[T]`.
+    Gen(Box<Type>),
     /// The value of calling an `async def` before `await`. Internal.
     Future(Box<Type>),
     /// `shared T` (one value, many handles) / `shared var T` (behind a lock)
@@ -296,6 +299,8 @@ pub enum Stmt {
     IndexAssign { recv: Expr, index: Expr, op: Option<&'static str>, value: Expr, line: usize, col: usize },
     Expr(Expr),
     Return { value: Option<Expr>, line: usize, col: usize },
+    /// `yield value` in a generator: hands out the next item and pauses
+    Yield { value: Expr, line: usize, col: usize },
     While { cond: Expr, body: Block },
     /// `for x in xs` or `for i, x in xs.enumerate` (vars.len() == 2 destructures a tuple);
     /// `for var x in xs` lets the body change each element in place

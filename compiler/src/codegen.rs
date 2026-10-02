@@ -667,6 +667,54 @@ impl<F: ?std::marker::Sized> Clone for LumeFn<F> { fn clone(&self) -> Self { Lum
 impl<F: ?std::marker::Sized> std::fmt::Debug for LumeFn<F> { fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { f.write_str("<block>") } }
 impl<F: ?std::marker::Sized> PartialEq for LumeFn<F> { fn eq(&self, o: &Self) -> bool { std::sync::Arc::ptr_eq(&self.0, &o.0) } }
 impl<F: ?std::marker::Sized> LumeShow for LumeFn<F> { fn lume_str(&self) -> String { String::from("<block>") } }
+/// What a generator gives. Its body is a Rust `async` block, which rustc
+/// turns into a state machine; each `yield` pauses it with the item, until
+/// the next item is asked for. Nothing else ever pauses it.
+///
+/// The item goes from the paused body to `next` through the waker: `next`
+/// makes one whose data is the address of its own slot, and the pause writes
+/// the item there. Only a generator's own `next` ever polls its body, so the
+/// address always has the item's type.
+struct LumeGen<T, F> { slot: Option<T>, body: Option<std::pin::Pin<::std::boxed::Box<F>>> }
+struct LumeYield<T>(std::marker::PhantomData<fn(T)>);
+struct LumePause<T>(Option<T>);
+impl<T> Unpin for LumePause<T> {}
+static LUME_GEN_VTABLE: std::task::RawWakerVTable = std::task::RawWakerVTable::new(|p| std::task::RawWaker::new(p, &LUME_GEN_VTABLE), |_| {}, |_| {}, |_| {});
+impl<T> std::future::Future for LumePause<T> {
+    type Output = ();
+    fn poll(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<()> {
+        match self.get_mut().0.take() {
+            Some(v) => {
+                unsafe { *(cx.waker().data() as *mut Option<T>) = Some(v); }
+                std::task::Poll::Pending
+            }
+            None => std::task::Poll::Ready(()),
+        }
+    }
+}
+impl<T> LumeYield<T> {
+    #[inline]
+    fn put(&self, v: T) -> LumePause<T> { LumePause(Some(v)) }
+}
+impl<T, F: std::future::Future<Output = ()>> LumeGen<T, F> {
+    fn new(make: impl FnOnce(LumeYield<T>) -> F) -> Self {
+        LumeGen { slot: None, body: Some(::std::boxed::Box::pin(make(LumeYield(std::marker::PhantomData)))) }
+    }
+}
+impl<T, F: std::future::Future<Output = ()>> Iterator for LumeGen<T, F> {
+    type Item = T;
+    #[inline]
+    fn next(&mut self) -> Option<T> {
+        let body = self.body.as_mut()?;
+        let raw = std::task::RawWaker::new(&mut self.slot as *mut Option<T> as *const (), &LUME_GEN_VTABLE);
+        let waker = unsafe { std::task::Waker::from_raw(raw) };
+        let mut cx = std::task::Context::from_waker(&waker);
+        if body.as_mut().poll(&mut cx).is_ready() {
+            self.body = None;
+        }
+        self.slot.take()
+    }
+}
 // ---- end prelude ----
 "#;
 
@@ -994,6 +1042,9 @@ pub struct Gen {
     src_lines: Vec<String>,
     /// Inside an `async def` or a `spawn:` block: `await` is allowed.
     in_async: bool,
+    /// Inside a generator: the item type, and how many blocks deep the
+    /// generator's own body is, so a `yield` in a block it passes is caught.
+    gen_item: Option<(Type, usize)>,
     /// The program uses async somewhere: tokio goes in the dependencies.
     uses_async: bool,
     /// Set by `iter_base` for a map: its items are `(key, value)` pairs of
@@ -1076,6 +1127,7 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, module_id: &str
         current_self: SelfKind::Read,
         current_ret: Type::Unit,
         current_fn: String::new(),
+        gen_item: None,
         fn_params: Vec::new(),
         loop_depth: 0,
         in_block: false,
@@ -1272,6 +1324,7 @@ pub fn rust_type(t: &Type) -> String {
         Type::Set(t) => format!("LumeSet<{}>", rust_type(t)),
         Type::Iter(inner, _) => format!("Vec<{}>", rust_type(inner)),
         Type::Task(inner) => format!("tokio::task::JoinHandle<{}>", rust_type(inner)),
+        Type::Gen(inner) => format!("impl Iterator<Item = {}> + Send", rust_type(inner)),
         Type::Future(inner) => format!("impl std::future::Future<Output = {}>", rust_type(inner)),
         Type::Shared(inner, true) => format!("std::sync::Arc<std::sync::Mutex<{}>>", rust_type(inner)),
         Type::Shared(inner, false) => format!("std::sync::Arc<{}>", rust_type(inner)),
@@ -1303,6 +1356,7 @@ pub fn type_name(t: &Type) -> String {
         Type::Set(t) => format!("{{{}}}", type_name(t)),
         Type::Iter(i, _) => format!("[{}]", type_name(i)),
         Type::Task(i) => format!("Task[{}]", type_name(i)),
+        Type::Gen(i) => format!("Iterator[{}]", type_name(i)),
         Type::Future(i) => format!("async {}", type_name(i)),
         Type::Shared(i, true) => format!("shared var {}", type_name(i)),
         Type::Shared(i, false) => format!("shared {}", type_name(i)),
@@ -1356,6 +1410,7 @@ impl Gen {
             Type::Set(t) => format!("LumeSet<{}>", self.rt(t)),
             Type::Iter(inner, _) => format!("Vec<{}>", self.rt(inner)),
             Type::Task(inner) => format!("tokio::task::JoinHandle<{}>", self.rt(inner)),
+            Type::Gen(inner) => format!("impl Iterator<Item = {}> + Send", self.rt(inner)),
             Type::Shared(inner, true) => format!("std::sync::Arc<std::sync::Mutex<{}>>", self.rt(inner)),
             Type::Shared(inner, false) => format!("std::sync::Arc<{}>", self.rt(inner)),
             Type::Fn(ins, out) => format!("LumeFn<{}>", self.dyn_fn(ins, out)),
@@ -1401,6 +1456,7 @@ impl Gen {
             // your own `Task[T]`, when you have one
             Type::Task(i) if self.own_task => Type::App(self.canon("Task"), vec![self.ct(i)]),
             Type::Task(i) => Type::Task(Box::new(self.ct(i))),
+            Type::Gen(i) => Type::Gen(Box::new(self.ct(i))),
             Type::Future(i) => Type::Future(Box::new(self.ct(i))),
             Type::Shared(i, m) => Type::Shared(Box::new(self.ct(i)), *m),
             Type::Fn(ps, r) => Type::Fn(ps.iter().map(|x| self.ct(x)).collect(), Box::new(self.ct(r))),
@@ -1422,6 +1478,7 @@ impl Gen {
             Type::Option(i) => Type::Option(go(i)),
             Type::Set(i) => Type::Set(go(i)),
             Type::Task(i) => Type::Task(go(i)),
+            Type::Gen(i) => Type::Gen(go(i)),
             Type::Future(i) => Type::Future(go(i)),
             Type::Iter(i, b) => Type::Iter(go(i), *b),
             Type::Shared(i, b) => Type::Shared(go(i), *b),
@@ -1447,7 +1504,12 @@ impl Gen {
         Sig {
             params: f.params.iter().map(|p| (p.name.clone(), Self::as_vars(&self.ct(&p.ty), &f.generics))).collect(),
             var_params: f.params.iter().map(|p| p.mutable).collect(),
-            ret: f.ret.as_ref().map(|t| Self::as_vars(&self.ct(t), &f.generics)).unwrap_or(Type::Unknown),
+            ret: match f.ret.as_ref().map(|t| Self::as_vars(&self.ct(t), &f.generics)) {
+                // a `def` with `yield` that gives `Iterator[T]` is a generator
+                Some(Type::App(n, args)) if args.len() == 1 && is_iterator_name(&n) && block_yields(&f.body) => Type::Gen(Box::new(args[0].clone())),
+                Some(t) => t,
+                None => Type::Unknown,
+            },
             self_kind: f.self_kind,
             is_async: f.is_async,
             generics: self.norm_generics(&f.generics),
@@ -1554,6 +1616,7 @@ impl Gen {
             Type::Option(i) => Type::Option(go(i)),
             Type::Set(i) => Type::Set(go(i)),
             Type::Task(i) => Type::Task(go(i)),
+            Type::Gen(i) => Type::Gen(go(i)),
             Type::Future(i) => Type::Future(go(i)),
             Type::Iter(i, b) => Type::Iter(go(i), *b),
             Type::Shared(i, b) => Type::Shared(go(i), *b),
@@ -1747,6 +1810,10 @@ impl Gen {
     /// parameter, each satisfying its bound, none of them an interface.
     fn check_type_args(&self, gs: &[TypeParam], args: &[Type], what: &str, line: usize, col: usize) -> Result<()> {
         for (p, a) in gs.iter().zip(args) {
+            if let Type::Gen(_) = a {
+                return Err(LumeError::new(line, col, format!("a generator cannot fill the `{}` of {} yet: a type parameter may be copied, and a generator is used up as it is walked", p.name, what))
+                    .with_help(format!("take the items as a list instead, `xs: [T]`: a generator given where a list is wanted gives its items")));
+            }
             if self.is_interface(a) {
                 return Err(LumeError::new(line, col, format!("`{}` is an interface, so it cannot fill the `{}` of {}", type_name(a), p.name, what))
                     .with_help("a type argument is one concrete type; a list of mixed values is written `[Interface]` instead"));
@@ -3096,6 +3163,10 @@ impl Gen {
 
     /// Error for a value of type `t` used where interface `iface` is needed.
     fn require_conforms(&self, t: &Type, iface: &Type, line: usize, col: usize) -> Result<()> {
+        if let Type::Gen(_) = t {
+            return Err(LumeError::new(line, col, format!("a generator cannot be held as an `{}` value: it is used up as it is walked, and such a value is copied", type_name(iface)))
+                .with_help("make this a generator too, handing on the items: `for x in other(): yield x`"));
+        }
         let key = self.type_key(iface);
         // Check against the interface as it was asked for, arguments and
         // all: re-checking against the bare name lets the arguments be
@@ -5239,6 +5310,8 @@ impl Gen {
             (Type::Shared(h, _), w) => self.assign_ok_n(h, w),
             (h, Type::Shared(w, _)) => self.assign_ok_n(h, w),
             (Type::Iter(a, _), Type::List(b)) | (Type::List(a), Type::Iter(b, _)) | (Type::List(a), Type::List(b)) | (Type::Iter(a, _), Type::Iter(b, _)) => self.assign_ok_n(a, b),
+            // where a list is wanted, a generator gives its items, as a chain does
+            (Type::Gen(a), Type::List(b)) | (Type::Gen(a), Type::Gen(b)) => self.assign_ok_n(a, b),
             (Type::Option(a), Type::Option(b)) | (Type::Task(a), Type::Task(b)) => self.assign_ok_n(a, b),
             (Type::Result(a, b), Type::Result(c, d)) | (Type::Map(a, b), Type::Map(c, d)) => self.assign_ok_n(a, c) && self.assign_ok_n(b, d),
             (Type::Set(a), Type::Set(b)) => self.assign_ok_n(a, b),
@@ -5547,6 +5620,11 @@ impl Gen {
     /// copied in (a `shared` handle is cloned, which is the point of it).
     fn spawn_expr(&mut self, body: &Block, e: &Expr) -> Result<String> {
         self.uses_async = true;
+        if block_yields(body) {
+            let at = first_yield(body).unwrap_or((e.line, e.col));
+            return Err(LumeError::new(at.0, at.1, "`yield` inside `spawn:` hands nothing out: the task runs apart from the generator")
+                .with_help("work the item out in the generator itself; a generator cannot be `async`, so it cannot wait for a task"));
+        }
         if self.current_type.is_some() && (block_mentions_self(body) || self.field_names().iter().any(|f| body.stmts.iter().any(|st| stmt_mentions(st, f)))) {
             return Err(LumeError::new(e.line, e.col, "a `spawn:` block inside a method cannot use `self` or its fields")
                 .with_help("bind the fields the task needs to names before `spawn:`; a `shared var` field can be bound and passed in"));
@@ -6508,6 +6586,31 @@ impl Gen {
         };
         let is_main = f.name == "main" && owner.is_none() && self.is_entry;
         let main_result = is_main && matches!(sig.ret, Type::Result(..));
+        let gen_item = match &sig.ret {
+            Type::Gen(t) => Some((**t).clone()),
+            _ => None,
+        };
+        if gen_item.is_none() && block_yields(&f.body) {
+            return Err(LumeError::new(f.line, f.col, format!("`{}` hands out items with `yield`, so it gives `Iterator[T]`", f.name))
+                .with_help(format!("say what it gives: `def {}(...) -> Iterator[Int]:`, with the type its `yield`s have", f.name)));
+        }
+        if gen_item.is_some() {
+            let refuse = |why: &str, help: &str| Err(LumeError::new(f.line, f.col, why.to_string()).with_help(help.to_string()));
+            if owner.is_some() {
+                return refuse(&format!("`{}` is a method, and a method cannot be a generator yet", f.name), "write it as a function that takes the value, or give the type `def next(var self) -> T?`");
+            }
+            if f.is_async {
+                return refuse(&format!("`{}` cannot be both `async` and a generator", f.name), "a generator's items are worked out when they are asked for; drop `async`");
+            }
+            if let Some(p) = f.params.iter().find(|p| p.mutable) {
+                return Err(LumeError::new(p.line, p.col, format!("a generator takes a copy of what it is given, so `var {}` would change nothing the caller sees", p.name))
+                    .with_help(format!("drop `var`; to change `{}` inside, bind it to a `var` of another name there", p.name)));
+            }
+            if let Some(p) = f.params.iter().find(|p| matches!(p.ty, Type::Fn(..)) || self.is_interface(&self.ct(&p.ty))) {
+                return Err(LumeError::new(p.line, p.col, format!("a generator cannot take `{}` yet: it keeps what it is given, and a block or an interface value cannot be kept that way", p.name))
+                    .with_help("pass the values the generator needs instead"));
+            }
+        }
         // `-> () or E`: the body ends with statements, and finishes with Ok(()).
         let unit_result = matches!(&sig.ret, Type::Result(t, _) if **t == Type::Unit);
         if is_main {
@@ -6646,11 +6749,26 @@ impl Gen {
         if is_main && !self.test_mode {
             self.line("lume_install_panic_hook();");
         }
+        if let Some(item) = &gen_item {
+            // the generator keeps its own copy of everything it was given,
+            // since it runs after the call has returned
+            for p in &f.params {
+                let pty = self.ct(&p.ty);
+                if pty == Type::Str {
+                    self.line(&format!("let {} = {}.to_string();", rust_name(&p.name), rust_name(&p.name)));
+                } else if !pty.is_copy() {
+                    self.line(&format!("let {} = {}.clone();", rust_name(&p.name), rust_name(&p.name)));
+                }
+            }
+            self.line(&format!("LumeGen::new(move |lume_co: LumeYield<{}>| async move {{", self.rt(item)));
+            self.indent += 1;
+        }
         self.push_scope();
         self.fn_params = f.params.iter().map(|p| (p.name.clone(), p.line, self.ct(&p.ty))).collect();
         for p in &f.params {
             let pty = self.ct(&p.ty);
-            let borrowed = !pty.is_copy() || lent_params.get(&p.name).copied().unwrap_or(false);
+            // a generator's parameters are its own copies, not borrows
+            let borrowed = gen_item.is_none() && (!pty.is_copy() || lent_params.get(&p.name).copied().unwrap_or(false));
             if self.is_interface(&pty) {
                 self.iface_params.insert(p.name.clone());
             }
@@ -6660,13 +6778,14 @@ impl Gen {
             }
             self.declare(&p.name, p.mutable, borrowed, pty, p.line);
         }
-        self.current_ret = sig.ret.clone();
+        self.current_ret = if gen_item.is_some() { Type::Unit } else { sig.ret.clone() };
+        let saved_gen = std::mem::replace(&mut self.gen_item, gen_item.clone().map(|t| (t, self.closure_barriers.len())));
         self.current_type = self.owner_type(owner);
         self.current_self_ty = owner.and_then(|o| self.ext_targets.get(o).cloned());
         self.current_self = f.self_kind;
         self.current_fn = f.name.clone();
         let saved_static_only = std::mem::replace(&mut self.current_static_only, Self::static_only(&sig));
-        let want_value = sig.ret != Type::Unit;
+        let want_value = sig.ret != Type::Unit && gen_item.is_none();
         self.tail_of_fn = true;
         if unit_result {
             self.block_body(&f.body, false)?;
@@ -6675,6 +6794,11 @@ impl Gen {
             self.block_body(&f.body, want_value)?;
         }
         self.tail_of_fn = false;
+        self.gen_item = saved_gen;
+        if gen_item.is_some() {
+            self.indent -= 1;
+            self.line("})");
+        }
         self.current_static_only = saved_static_only;
         self.in_async = saved_async;
         self.pop_scope();
@@ -7751,6 +7875,29 @@ impl Gen {
                     self.line(&format!("{};", v));
                 }
             }
+            Stmt::Yield { value, line, col } => {
+                let (item, depth) = match &self.gen_item {
+                    Some(g) => g.clone(),
+                    None if !self.closure_barriers.is_empty() => {
+                        return Err(LumeError::new(*line, *col, "`yield` inside a block hands nothing out: the block runs inside a call, not in the generator")
+                            .with_help("loop with `for` instead of a block method, so the `yield` is the generator's own"));
+                    }
+                    None => {
+                        return Err(LumeError::new(*line, *col, format!("`yield` hands out an item of a generator, and {} is not one", self.who()))
+                            .with_help("a generator says what it gives: `def numbers -> Iterator[Int]:`, with `yield` in its body"));
+                    }
+                };
+                if self.closure_barriers.len() > depth {
+                    return Err(LumeError::new(*line, *col, "`yield` inside a block hands nothing out: the block runs inside a call, not in the generator")
+                        .with_help("loop with `for` instead of a block method, so the `yield` is the generator's own"));
+                }
+                self.check_assign(value, &item, &format!("{} gives `Iterator[{}]`", self.who(), type_name(&item)))?;
+                let v = self.expr_owned_as(value, &item)?;
+                self.line(&format!("lume_co.put({}).await;", v));
+                if is_tail {
+                    return self.tail_unit(*line, *col);
+                }
+            }
             Stmt::Return { value, line, col } => {
                 if self.in_block {
                     self.warnings.push(
@@ -7765,6 +7912,10 @@ impl Gen {
                         None => self.line("return;"),
                     }
                     return Ok(());
+                }
+                if let (Some(_), Some((item, _))) = (value, &self.gen_item) {
+                    return Err(LumeError::new(*line, *col, format!("a generator's items come from `yield`, so its `return` takes no value"))
+                        .with_help(format!("`yield` the value first if it is an item, then `return` alone ends the `Iterator[{}]`", type_name(item))));
                 }
                 match value {
                     Some(e) => {
@@ -8291,6 +8442,11 @@ impl Gen {
     /// interpolating): lazy chains are collected, everything else passes.
     fn expr_val(&mut self, e: &Expr) -> Result<String> {
         let t = self.ty_of(e);
+        // a generator read as a value is its items, as a chain is: it is used up
+        if let Type::Gen(_) = t {
+            let s = self.give_away(e)?;
+            return Ok(format!("({}).collect::<Vec<_>>()", s));
+        }
         if let Type::Iter(elem, by_ref) = t {
             let s = self.expr(e)?;
             return Ok(self.collect_iter_t(&s, by_ref, &elem));
@@ -8316,18 +8472,11 @@ impl Gen {
             let s = self.expr(e)?;
             return Ok(self.collect_iter_t(&s, by_ref, &elem));
         }
+        if matches!(t, Type::Task(_) | Type::Gen(_)) {
+            return self.give_away(e);
+        }
         let s = self.expr(e)?;
-        if matches!(t, Type::Task(_)) {
-            // a task's handle cannot be copied, as a Rust `JoinHandle`
-            // cannot: it moves wherever it goes, and is gone afterwards
-            if let ExprKind::Ident(n) = &e.kind {
-                if self.lookup(n).is_some() && self.rest_stack.iter().any(|rest| reads_before_rebind(rest, n)) {
-                    return Err(LumeError::new(e.line, e.col, format!("`{}` is a task, and it is given away here, so it cannot be used after", n))
-                        .with_help("a task is awaited once, wherever it ends up: await it here or there, not both"));
-                }
-            }
-            Ok(s)
-        } else if !t.is_copy() && self.can_move_field(e) {
+        if !t.is_copy() && self.can_move_field(e) {
             // a field of a struct nothing needs afterwards moves out
             Ok(s)
         } else if !t.is_copy() && self.is_borrowed_place(e) {
@@ -8341,6 +8490,29 @@ impl Gen {
         }
     }
 
+    /// A generator put where it would be kept alongside other values.
+    fn gen_kept(&self, e: &Expr) -> LumeError {
+        LumeError::new(e.line, e.col, "a generator cannot be kept in a list or a tuple: it is used up as it is walked")
+            .with_help("keep its items with `.to_list`, or keep a struct with `def next(var self) -> T?`, which can be copied")
+    }
+
+    /// A value that cannot be copied — a task, a generator — moves, as in
+    /// Rust, and a name that gave it away cannot be used after.
+    fn give_away(&mut self, e: &Expr) -> Result<String> {
+        let t = self.ty_of(e).materialized();
+        if let ExprKind::Ident(n) = &e.kind {
+            if self.lookup(n).is_some() && self.rest_stack.iter().any(|rest| reads_before_rebind(rest, n)) {
+                return Err(match t {
+                    Type::Gen(_) => LumeError::new(e.line, e.col, format!("`{}` is a generator, and it is used up here, so it cannot be used after", n))
+                        .with_help("a generator hands out each item once: to walk the items twice, keep them with `.to_list` first"),
+                    _ => LumeError::new(e.line, e.col, format!("`{}` is a task, and it is given away here, so it cannot be used after", n))
+                        .with_help("a task is awaited once, wherever it ends up: await it here or there, not both"),
+                });
+            }
+        }
+        self.expr(e)
+    }
+
     /// `expr_owned` for a position whose type is known: boxes a concrete
     /// value stored as an interface, element by element for list literals.
     fn expr_owned_as(&mut self, e: &Expr, expected: &Type) -> Result<String> {
@@ -8351,6 +8523,9 @@ impl Gen {
     }
 
     fn expr_owned_as_inner(&mut self, e: &Expr, expected: &Type) -> Result<String> {
+        if let (Type::List(_), Type::Gen(_)) = (expected, self.ty_of(e).materialized()) {
+            return self.expr_val(e);
+        }
         if let Type::Shared(_, mutable) = expected {
             return match self.ty_of(e) {
                 Type::Shared(..) => Ok(format!("{}.clone()", self.handle_expr(e)?)),
@@ -8461,6 +8636,9 @@ impl Gen {
             let s = self.expr(e)?;
             let c = self.collect_iter_t(&s, by_ref, &elem);
             return Ok(format!("&{}", c));
+        }
+        if let Type::Gen(_) = self.ty_of(e) {
+            return Ok(format!("&{}", self.expr_val(e)?));
         }
         if *t == Type::Char {
             if let Some(c) = char_literal(e) {
@@ -10108,8 +10286,12 @@ impl Gen {
         if let ExprKind::Method { recv, name, .. } = &e.kind {
             if name == "lume_seq" {
                 // a copy moves along, so the value itself is left as it was
-                let r = self.expr(recv)?;
                 let rt = self.ty_of(recv).materialized();
+                if matches!(rt, Type::Gen(_)) {
+                    // a generator is walked itself, not a copy: it moves
+                    return self.give_away(recv);
+                }
+                let r = self.expr(recv)?;
                 if matches!(rt, Type::Var(_)) || self.is_interface(&rt) {
                     // a type parameter or an interface value is no Rust
                     // `Iterator`: walk its `next`
@@ -10202,6 +10384,9 @@ impl Gen {
                     Type::List(t) => *t,
                     _ => Type::Unknown,
                 };
+                if let Type::Gen(_) = et {
+                    return Err(self.gen_kept(e));
+                }
                 // `[{ |x| ... }, ...]` says nothing of its own; `[(Int) -> Int]` does
                 if !type_is_known(&et) {
                     if let Some(Type::List(w)) = self.want.last().cloned() {
@@ -10236,6 +10421,9 @@ impl Gen {
                 format!("vec![{}]", parts.join(", "))
             }
             ExprKind::Tuple(items) => {
+                if let Some(g) = items.iter().find(|i| matches!(self.ty_of(i).materialized(), Type::Gen(_))) {
+                    return Err(self.gen_kept(g));
+                }
                 // a part that is a block takes its type from the tuple wanted
                 let wanted: Vec<Type> = match self.want.last() {
                     Some(Type::Tuple(ts)) if ts.len() == items.len() && ts.iter().any(mentions_fn) => ts.clone(),
@@ -11288,7 +11476,7 @@ impl Gen {
                         want_types = want;
                     }
                 }
-                if matches!(name.as_str(), "push" | "pop" | "insert" | "remove_at" | "add") || (name == "remove" && matches!(rt, Type::Map(..) | Type::Set(_))) {
+                if matches!(name.as_str(), "push" | "pop" | "insert" | "remove_at" | "add") || (name == "remove" && matches!(rt, Type::Map(..) | Type::Set(_))) || (name == "next" && matches!(rt, Type::Gen(_))) {
                     self.check_receiver_mutable(recv, name, e.line, e.col)?;
                 }
                 let mut parts = Vec::new();
@@ -11446,6 +11634,8 @@ impl Gen {
             }
         };
         Ok(match name {
+            // a generator moved on by hand
+            "next" if matches!(rt, Type::Gen(_)) => { need(0)?; format!("{}.next()", recv) }
             "pad" => { need(1)?; format!("lume_pad(&({}), {})", recv, args[0]) }
             "pad_right" => { need(1)?; format!("lume_pad_right(&({}), {})", recv, args[0]) }
             "capitalize" => { need(0)?; format!("lume_capitalize(&{})", recv) }
@@ -11786,6 +11976,9 @@ impl Gen {
     /// a lazy sequence of its own.
     fn next_item(&mut self, e: &Expr) -> Option<Type> {
         let t = self.ty_of(e).materialized();
+        if let Type::Gen(item) = &t {
+            return Some((**item).clone());
+        }
         // a struct of the program's, a type parameter whose bound has
         // `next` (`[S: Iterator[Int]]`), or a value held as an interface
         let key = match &t {
@@ -11931,6 +12124,12 @@ fn builtins_for(recv: &Type) -> Vec<&'static str> {
             "zip", "flatten", "uniq", "index_of", "avg", "group_by", "partition", "flat_map", "to_set",
         ],
         Type::Map(..) => vec!["len", "empty?", "any?", "contains?", "keys", "values", "to_list", "remove", "get", "merge", "filter", "reject", "map_values", "each", "count", "all?", "find"],
+        // `next`, and through a chain every method a list has
+        Type::Gen(_) => {
+            let mut v = vec!["next"];
+            v.extend(builtins_for(&Type::List(Box::new(Type::Unknown))).into_iter().filter(|m| !matches!(*m, "push" | "pop" | "insert" | "remove_at" | "to_s" | "to_str")));
+            v
+        }
         Type::Set(_) => vec![
             "len", "empty?", "any?", "contains?", "add", "remove", "to_list", "union", "intersect", "diff", "subset?", "superset?", "sort", "max", "min", "sum", "first", "each",
             "map", "filter", "reject", "count", "all?", "find", "fold", "join", "group_by", "partition", "flat_map", "sort_by", "min_by", "max_by",
@@ -11989,6 +12188,7 @@ fn keeps_name(body: &Block, name: &str, g: &Gen) -> bool {
             Stmt::OpAssign { value, .. } => expr(value, name, true, g),
             Stmt::Expr(e) => expr(e, name, tail, g),
             Stmt::Return { value, .. } => value.as_ref().map(|v| expr(v, name, true, g)).unwrap_or(false),
+            Stmt::Yield { value, .. } => expr(value, name, true, g),
             Stmt::While { cond, body } => expr(cond, name, false, g) || block(body, name, false, g),
             Stmt::For { iter, filter, body, .. } => expr(iter, name, false, g) || filter.as_ref().map(|f| expr(f, name, false, g)).unwrap_or(false) || block(body, name, false, g),
             Stmt::Assert { cond, .. } => expr(cond, name, false, g),
@@ -12056,6 +12256,7 @@ fn rename_ext_vars(t: &Type, prefix: &str) -> Type {
         Type::Option(i) => Type::Option(Box::new(rename_ext_vars(i, prefix))),
         Type::Set(i) => Type::Set(Box::new(rename_ext_vars(i, prefix))),
         Type::Task(i) => Type::Task(Box::new(rename_ext_vars(i, prefix))),
+        Type::Gen(i) => Type::Gen(Box::new(rename_ext_vars(i, prefix))),
         Type::Map(a, b) => Type::Map(Box::new(rename_ext_vars(a, prefix)), Box::new(rename_ext_vars(b, prefix))),
         Type::Result(a, b) => Type::Result(Box::new(rename_ext_vars(a, prefix)), Box::new(rename_ext_vars(b, prefix))),
         Type::Tuple(ts) => Type::Tuple(ts.iter().map(|x| rename_ext_vars(x, prefix)).collect()),
@@ -12073,6 +12274,7 @@ fn strip_ext_vars(t: &Type) -> Type {
         Type::Option(i) => Type::Option(Box::new(strip_ext_vars(i))),
         Type::Set(i) => Type::Set(Box::new(strip_ext_vars(i))),
         Type::Task(i) => Type::Task(Box::new(strip_ext_vars(i))),
+        Type::Gen(i) => Type::Gen(Box::new(strip_ext_vars(i))),
         Type::Map(a, b) => Type::Map(Box::new(strip_ext_vars(a)), Box::new(strip_ext_vars(b))),
         Type::Result(a, b) => Type::Result(Box::new(strip_ext_vars(a)), Box::new(strip_ext_vars(b))),
         Type::Tuple(ts) => Type::Tuple(ts.iter().map(strip_ext_vars).collect()),
@@ -12099,6 +12301,7 @@ fn normalize_vars(t: &Type) -> Type {
             Type::Option(i) => Type::Option(Box::new(go(i, seen))),
             Type::Set(i) => Type::Set(Box::new(go(i, seen))),
             Type::Task(i) => Type::Task(Box::new(go(i, seen))),
+            Type::Gen(i) => Type::Gen(Box::new(go(i, seen))),
             Type::Map(a, b) => {
                 let a = go(a, seen);
                 Type::Map(Box::new(a), Box::new(go(b, seen)))
@@ -12126,6 +12329,7 @@ fn overlap_resolve(t: &Type, sub: &HashMap<String, Type>) -> Type {
         Type::Option(i) => Type::Option(Box::new(overlap_resolve(i, sub))),
         Type::Set(i) => Type::Set(Box::new(overlap_resolve(i, sub))),
         Type::Task(i) => Type::Task(Box::new(overlap_resolve(i, sub))),
+        Type::Gen(i) => Type::Gen(Box::new(overlap_resolve(i, sub))),
         Type::Map(a, b) => Type::Map(Box::new(overlap_resolve(a, sub)), Box::new(overlap_resolve(b, sub))),
         Type::Result(a, b) => Type::Result(Box::new(overlap_resolve(a, sub)), Box::new(overlap_resolve(b, sub))),
         Type::Tuple(ts) => Type::Tuple(ts.iter().map(|x| overlap_resolve(x, sub)).collect()),
@@ -12271,6 +12475,7 @@ fn stmt_first_try(s: &Stmt) -> Option<&Expr> {
         Stmt::IndexAssign { recv, index, value, .. } => ex(recv).or_else(|| ex(index)).or_else(|| ex(value)),
         Stmt::Expr(e) => ex(e),
         Stmt::Return { value, .. } => value.as_ref().and_then(ex),
+        Stmt::Yield { value, .. } => ex(value),
         Stmt::While { cond, body } => ex(cond).or_else(|| body.stmts.iter().find_map(stmt_first_try)),
         Stmt::For { iter, filter, body, .. } => ex(iter).or_else(|| filter.as_ref().and_then(ex)).or_else(|| body.stmts.iter().find_map(stmt_first_try)),
         Stmt::Assert { cond, .. } => ex(cond),
@@ -12346,6 +12551,9 @@ fn builtin_namespace_type(ns: &str, name: &str) -> Option<Type> {
 
 /// Result type of a built-in method on a value of type `recv`.
 fn builtin_method_type(recv: &Type, name: &str) -> Type {
+    if let (Type::Gen(item), "next") = (recv, name) {
+        return Type::Option(item.clone());
+    }
     let elem = match recv {
         Type::List(e) | Type::Iter(e, _) => Some((**e).clone()),
         _ => None,
@@ -12584,6 +12792,7 @@ fn stmt_mentions(s: &Stmt, name: &str) -> bool {
         Stmt::IndexAssign { recv, index, value, .. } => expr_mentions(recv, name) || expr_mentions(index, name) || expr_mentions(value, name),
         Stmt::Expr(e) => expr_mentions(e, name),
         Stmt::Return { value, .. } => value.as_ref().map(|e| expr_mentions(e, name)).unwrap_or(false),
+        Stmt::Yield { value, .. } => expr_mentions(value, name),
         Stmt::While { cond, body } => expr_mentions(cond, name) || blk(body),
         Stmt::For { iter, filter, body, .. } => expr_mentions(iter, name) || filter.as_ref().map(|f| expr_mentions(f, name)).unwrap_or(false) || blk(body),
         Stmt::Break { .. } | Stmt::Next { .. } => false,
@@ -12593,6 +12802,49 @@ fn stmt_mentions(s: &Stmt, name: &str) -> bool {
 }
 
 /// `stmt_mentions`, plus names that are assigned to (`x += 1`, `x = v`).
+/// `Iterator` as a program writes it, or as the built-in is known inside.
+fn is_iterator_name(n: &str) -> bool {
+    n == "Iterator" || n == "lume.Iterator"
+}
+
+/// Whether a function body hands out items with `yield`: in its own
+/// statements, loops and branches, not in a block it passes elsewhere.
+fn block_yields(b: &Block) -> bool {
+    fn expr_y(e: &Expr) -> bool {
+        match &e.kind {
+            ExprKind::If { branches, else_block } => branches.iter().any(|(_, b)| block_yields(b)) || else_block.as_ref().map(block_yields).unwrap_or(false),
+            ExprKind::Match { arms, .. } => arms.iter().any(|a| block_yields(&a.body)),
+            _ => false,
+        }
+    }
+    b.stmts.iter().any(|st| match st {
+        Stmt::Yield { .. } => true,
+        Stmt::While { body, .. } | Stmt::For { body, .. } => block_yields(body),
+        Stmt::Expr(e) => expr_y(e),
+        _ => false,
+    })
+}
+
+/// Where the first `yield` of a block is, for a message.
+fn first_yield(b: &Block) -> Option<(usize, usize)> {
+    for st in &b.stmts {
+        let found = match st {
+            Stmt::Yield { line, col, .. } => Some((*line, *col)),
+            Stmt::While { body, .. } | Stmt::For { body, .. } => first_yield(body),
+            Stmt::Expr(e) => match &e.kind {
+                ExprKind::If { branches, else_block } => branches.iter().find_map(|(_, b)| first_yield(b)).or_else(|| else_block.as_ref().and_then(first_yield)),
+                ExprKind::Match { arms, .. } => arms.iter().find_map(|a| first_yield(&a.body)),
+                _ => None,
+            },
+            _ => None,
+        };
+        if found.is_some() {
+            return found;
+        }
+    }
+    None
+}
+
 /// Whether `stmts` read `name` before a new binding of it hides the one
 /// that is meant: `t = spawn: ..` in a later loop is another `t`.
 fn reads_before_rebind(stmts: &[Stmt], name: &str) -> bool {
@@ -12986,6 +13238,7 @@ fn mention_count(s: &Stmt, name: &str) -> usize {
         Stmt::IndexAssign { recv, index, value, .. } => e(recv) + e(index) + e(value),
         Stmt::Expr(x) => e(x),
         Stmt::Return { value, .. } => value.as_ref().map(e).unwrap_or(0),
+        Stmt::Yield { value, .. } => e(value),
         Stmt::While { cond, body } => e(cond) + blk(body),
         Stmt::For { iter, filter, body, .. } => e(iter) + filter.as_ref().map(e).unwrap_or(0) + blk(body),
         Stmt::Break { .. } | Stmt::Next { .. } => 0,
@@ -13066,6 +13319,7 @@ fn field_uses_stmt(s: &Stmt, name: &str, out: &mut Vec<Option<String>>) {
                 e(v, out);
             }
         }
+        Stmt::Yield { value, .. } => e(value, out),
         Stmt::While { cond, body } => {
             e(cond, out);
             blk(body, out);

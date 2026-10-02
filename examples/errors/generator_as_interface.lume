@@ -1,0 +1,9 @@
+# An `Iterator[Int]` value is copied like any value; a generator is used up as it is walked, so it cannot be one.
+
+def ones -> Iterator[Int]:
+  yield 1
+
+def more -> Iterator[Int] = ones()
+
+def main:
+  puts more().to_list

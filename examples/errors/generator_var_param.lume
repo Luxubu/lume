@@ -1,0 +1,9 @@
+# A generator runs after the call has returned, on its own copy of what it was given.
+
+def fill(var xs: [Int]) -> Iterator[Int]:
+  for x in xs:
+    yield x
+
+def main:
+  var xs = [1]
+  puts fill(xs).to_list

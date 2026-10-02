@@ -1,0 +1,8 @@
+# A generator cannot be kept in a list: copying the list would copy it, and it is used up as it is walked.
+
+def ones -> Iterator[Int]:
+  yield 1
+
+def main:
+  gens = [ones(), ones()]
+  puts gens.len

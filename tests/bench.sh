@@ -30,6 +30,7 @@ b3_wordcount:bench/b3_wordcount.lume:bench/b3b.rs
 b4_text:bench/b4_text.lume:bench/b4.rs
 b5_printing:bench/b5_printing.lume:bench/b5.rs
 b6_iterators:bench/b6_iterators.lume:bench/b6.rs
+b7_generators:bench/b7_generators.lume:bench/b6.rs
 b3c_split_only:bench/b3c_split_only.lume:
 "
 

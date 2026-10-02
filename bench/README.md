@@ -1,6 +1,6 @@
 # Benchmarks
 
-Six programs, each with the Rust a person would have written sitting beside
+Seven programs, each with the Rust a person would have written sitting beside
 it. Run them with `tests/bench.sh`, which builds both sides, takes the best of
 five, and compares the ratio against `BASELINE`.
 
@@ -12,6 +12,7 @@ five, and compares the ratio against `BASELINE`.
 | `b4_text` | `.lume` | `b4.rs` | 200k lines built with interpolation and `join` |
 | `b5_printing` | `.lume` | `b5.rs` | 200k lines printed |
 | `b6_iterators` | `.lume` | `b6.rs` | an endless sequence of your own, filtered, mapped and taken: 20M items |
+| `b7_generators` | `.lume` | `b6.rs` | `b6` written as a generator with `yield`, against the same hand-written iterator |
 
 `b3c_split_only.lume` is `b3` without the map, so the map's share can be told
 apart. `b3.rs` is word count with borrowed keys — not the comparison, since

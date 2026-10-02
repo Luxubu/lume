@@ -59,6 +59,7 @@ pub fn stmt_pos(s: &Stmt) -> (usize, usize) {
         | Stmt::FieldAssign { line, col, .. }
         | Stmt::IndexAssign { line, col, .. }
         | Stmt::Return { line, col, .. }
+        | Stmt::Yield { line, col, .. }
         | Stmt::For { line, col, .. }
         | Stmt::Break { line, col }
         | Stmt::Next { line, col }
@@ -1144,6 +1145,15 @@ impl Parser {
             self.end_stmt()?;
             return Ok(s);
         }
+        if self.eat_kw("yield") {
+            if matches!(self.peek(), Tok::Newline | Tok::Dedent | Tok::Eof) {
+                return Err(self.err("`yield` needs a value: `yield x` hands out the next item"));
+            }
+            let value = self.expr()?;
+            let s = self.trailing_condition(Stmt::Yield { value, line, col })?;
+            self.end_stmt()?;
+            return Ok(s);
+        }
         if self.eat_kw("break") {
             let s = self.trailing_condition(Stmt::Break { line, col })?;
             self.end_stmt()?;
@@ -1672,8 +1682,8 @@ impl Parser {
         }
         if matches!(self.peek(), Tok::Newline) {
             self.block()
-        } else if self.at_kw("return") || self.at_kw("break") || self.at_kw("next") {
-            // `if done: return x` / `if x < 0: next`
+        } else if self.at_kw("return") || self.at_kw("break") || self.at_kw("next") || self.at_kw("yield") {
+            // `if done: return x` / `if x < 0: next` / `if even: yield x`
             let (l, c) = self.here();
             let kw = match self.advance().tok {
                 Tok::Ident(k) => k,
@@ -1685,6 +1695,7 @@ impl Parser {
                     Stmt::Return { value, line: l, col: c }
                 }
                 "break" => Stmt::Break { line: l, col: c },
+                "yield" => Stmt::Yield { value: self.expr()?, line: l, col: c },
                 _ => Stmt::Next { line: l, col: c },
             };
             let b = Block { stmts: vec![st] };

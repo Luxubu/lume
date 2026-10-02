@@ -1,0 +1,5 @@
+error: `yield` needs a value: `yield x` hands out the next item
+  --> examples/errors/yield_no_value.lume:4:8
+  |
+4 |   yield
+  |        ^

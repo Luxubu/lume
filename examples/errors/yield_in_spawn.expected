@@ -1,0 +1,6 @@
+error: `yield` inside `spawn:` hands nothing out: the task runs apart from the generator
+  --> examples/errors/yield_in_spawn.lume:6:7
+  |
+6 |       yield x * x
+  |       ^
+  help: work the item out in the generator itself; a generator cannot be `async`, so it cannot wait for a task

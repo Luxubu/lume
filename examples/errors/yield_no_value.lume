@@ -1,0 +1,7 @@
+# `yield` hands out an item, so it needs one.
+
+def ticks -> Iterator[Int]:
+  yield
+
+def main:
+  puts ticks().to_list

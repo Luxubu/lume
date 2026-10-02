@@ -1,0 +1,7 @@
+# A `yield` inside a block is in the block, which runs inside `each`, not in the generator.
+
+def doubled(xs: [Int]) -> Iterator[Int]:
+  xs.each { |x| yield x * 2 }
+
+def main:
+  puts doubled([1, 2]).to_list

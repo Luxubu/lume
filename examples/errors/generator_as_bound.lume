@@ -1,0 +1,9 @@
+# A type parameter's value may be copied, and a generator cannot be.
+
+def ones -> Iterator[Int]:
+  yield 1
+
+def total[S: Iterator[Int]](s: S) -> Int = s.sum
+
+def main:
+  puts total(ones())

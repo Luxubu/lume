@@ -1,0 +1,6 @@
+error: a generator cannot fill the `S` of `total` yet: a type parameter may be copied, and a generator is used up as it is walked
+  --> examples/errors/generator_as_bound.lume:9:8
+  |
+9 |   puts total(ones())
+  |        ^
+  help: take the items as a list instead, `xs: [T]`: a generator given where a list is wanted gives its items

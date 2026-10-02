@@ -1,0 +1,8 @@
+# `yield` in a function that does not say it gives `Iterator[T]`.
+
+def numbers -> [Int]:
+  yield 1
+  yield 2
+
+def main:
+  puts numbers()

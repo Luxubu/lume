@@ -1,0 +1,6 @@
+error: a generator cannot be kept in a list or a tuple: it is used up as it is walked
+  --> examples/errors/generator_in_list.lume:7:10
+  |
+7 |   gens = [ones(), ones()]
+  |          ^
+  help: keep its items with `.to_list`, or keep a struct with `def next(var self) -> T?`, which can be copied

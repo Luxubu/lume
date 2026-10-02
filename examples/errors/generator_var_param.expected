@@ -1,0 +1,6 @@
+error: a generator takes a copy of what it is given, so `var xs` would change nothing the caller sees
+  --> examples/errors/generator_var_param.lume:3:14
+  |
+3 | def fill(var xs: [Int]) -> Iterator[Int]:
+  |              ^
+  help: drop `var`; to change `xs` inside, bind it to a `var` of another name there

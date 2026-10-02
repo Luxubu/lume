@@ -1,0 +1,6 @@
+error: `yield` hands out an item of a generator, and `test "counts"` is not one
+  --> examples/errors/yield_in_test.lume:7:3
+  |
+7 |   yield 1
+  |   ^
+  help: a generator says what it gives: `def numbers -> Iterator[Int]:`, with `yield` in its body

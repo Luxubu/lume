@@ -1,0 +1,6 @@
+error: a generator's items come from `yield`, so its `return` takes no value
+  --> examples/errors/generator_return_value.lume:6:7
+  |
+6 |       return x
+  |       ^
+  help: `yield` the value first if it is an item, then `return` alone ends the `Iterator[Int]`

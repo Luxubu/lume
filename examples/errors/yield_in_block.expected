@@ -1,0 +1,6 @@
+error: `yield` inside a block hands nothing out: the block runs inside a call, not in the generator
+  --> examples/errors/yield_in_block.lume:4:17
+  |
+4 |   xs.each { |x| yield x * 2 }
+  |                 ^
+  help: loop with `for` instead of a block method, so the `yield` is the generator's own

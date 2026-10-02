@@ -1,0 +1,7 @@
+# `yield` belongs in a generator; a test is not one.
+
+def main:
+  puts 1
+
+test "counts":
+  yield 1

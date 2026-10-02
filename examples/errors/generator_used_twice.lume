@@ -1,0 +1,10 @@
+# A generator hands out each item once: walking it uses it up, as a Rust iterator is moved.
+
+def evens -> Iterator[Int]:
+  for n in 0..4:
+    yield n if n % 2 == 0
+
+def main:
+  e = evens()
+  puts e.sum
+  puts e.len

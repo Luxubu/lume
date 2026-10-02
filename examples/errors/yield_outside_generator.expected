@@ -1,0 +1,6 @@
+error: `numbers` hands out items with `yield`, so it gives `Iterator[T]`
+  --> examples/errors/yield_outside_generator.lume:3:1
+  |
+3 | def numbers -> [Int]:
+  | ^
+  help: say what it gives: `def numbers(...) -> Iterator[Int]:`, with the type its `yield`s have

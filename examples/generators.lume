@@ -1,0 +1,87 @@
+# A function with `yield` is a generator: it says it gives `Iterator[T]`,
+# and each `yield` hands out the next item. Nothing in it runs until an
+# item is asked for, and it stops where it is until the next one is, so a
+# generator may go on for ever. In Rust it is a function that gives
+# `impl Iterator`.
+
+def countdown(n: Int) -> Iterator[Int]:
+  var k = n
+  while k > 0:
+    yield k
+    k -= 1
+
+# never ends: `take`, `find`, `break` and the like stop it
+def naturals -> Iterator[Int]:
+  var n = 0
+  while true:
+    yield n
+    n += 1
+
+# what it is given is its own copy
+def long_words(text: Str, min: Int) -> Iterator[Str]:
+  for w in text.split(" "):
+    yield w.upcase if w.len >= min
+
+# generic, and handing on another generator's items
+def repeat[T](x: T, times: Int) -> Iterator[T]:
+  for i in 0...times:
+    yield x
+
+def padded -> Iterator[Str]:
+  for w in repeat("ab", 2):
+    yield w
+  yield "end"
+
+# a tree walked depth first, by a generator that calls itself
+struct Node:
+  name: Str
+  kids: [Node]
+
+def walk(n: Node, depth: Int) -> Iterator[Str]:
+  yield "#{"  ".repeat(depth)}#{n.name}"
+  for k in n.kids:
+    for line in walk(k, depth + 1):
+      yield line
+
+# pairs: `for a, b in` and two-name blocks take them apart
+def indexed(xs: [Str]) -> Iterator[(Int, Str)]:
+  for i, x in xs.enumerate:
+    yield (i + 1, x)
+  return
+  yield (0, "never")
+
+def main:
+  for x in countdown(3):
+    puts x
+  puts countdown(5).sum
+  puts naturals().filter { |n| n % 3 == 0 }.take(4).to_list
+  puts naturals().find { |n| n * n > 50 }
+  for n in naturals():
+    break if n > 2
+    puts n
+
+  text = "the quick brown fox"
+  puts long_words(text, 5).to_list
+  puts text
+
+  puts repeat(7, 3).to_list
+  puts padded().join(" ")
+
+  tree = Node(name: "root", kids: [Node(name: "a", kids: [Node(name: "b", kids: [])]), Node(name: "c", kids: [])])
+  for line in walk(tree, 0):
+    puts line
+
+  for i, x in indexed(["x", "y"]):
+    puts "#{i}. #{x}"
+  puts indexed(["p", "q"]).map { |i, x| "#{x}#{i}" }.to_list
+
+  # moved along by hand, on a `var`
+  var g = countdown(2)
+  puts g.next
+  puts g.next
+  puts g.next
+
+  # printed, or given where a list is wanted: its items
+  puts countdown(3)
+  xs: [Int] = countdown(2)
+  puts xs

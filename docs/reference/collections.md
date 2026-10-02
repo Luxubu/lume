@@ -36,6 +36,19 @@ puts [1, 2].join("+")      #=> 1+2
 **`sort` is ascending and stable.** There is no `sort_by_desc`; `.reverse`
 after a sort is the descending form.
 
+**A literal may span lines.** Inside `[...]`, `{...}` or the parentheses of
+a call, a line break does not end the statement, so long lists, maps and
+argument lists are written one item to a line. A comma after the last item
+is fine, and `lume fmt` writes one:
+
+```lume
+moves = [
+  ("north", 3),
+  ("east", 1),
+]
+puts moves.len    #=> 2
+```
+
 A position may be out of range, so `xs[i]` gives a `T?`. When you know it is
 good, `.at(i)` gives the item and stops the program if it is not:
 
@@ -239,6 +252,58 @@ def main:
 - **Speed:** a chain over a sequence is the Rust iterator chain you would
   write by hand; `bench/b6_iterators.lume` measures it against a hand-written `impl Iterator`.
 - **More:** `examples/iterators.lume` shows each of these.
+
+## Generators: `yield`
+
+**A function with `yield` in it is a generator.** It says it gives
+`Iterator[T]`, and each `yield` hands out the next item. Nothing in it runs
+until an item is asked for, and it stops where it is until the next one is,
+so a generator may go on for ever. In Rust it is a function that gives
+`impl Iterator`, with the body compiled to a state machine:
+
+```lume
+def naturals -> Iterator[Int]:
+  var n = 0
+  while true:
+    yield n
+    n += 1
+
+def words(text: Str) -> Iterator[Str]:
+  for w in text.split(" "):
+    yield w.upcase if w.len > 2
+
+def main:
+  puts naturals().filter { |n| n % 3 == 0 }.take(4).to_list   #=> [0, 3, 6, 9]
+  puts words("a cat sat on the mat").join(" ")                #=> CAT SAT THE MAT
+  for n in naturals():
+    break if n > 1
+    puts n             #=> 0
+                       #=> 1
+```
+
+What a sequence of your own does, a generator does: `for`, every chain
+method, pairs, `zip`, printing (its items), and `next` on a `var`. Given
+where a list is wanted, it gives its items. Where it differs:
+
+- **It is used up as it is walked**, as a Rust iterator is moved. After
+  `for x in g`, `g.sum` or `puts g`, the name `g` is gone, and using it again
+  is refused. Keep the items with `.to_list` to walk them twice. A sequence
+  of your own (`def next(var self)`) is copied instead, because its state is
+  fields that can be copied; a generator's state is where its body stopped.
+- **So it is kept only in a local.** Not in a list, a tuple or a field, and
+  not as an `Iterator[Int]` value or a `[S: Iterator[Int]]` argument, which
+  are copied.
+- **It has its own copy of its arguments,** taken at the call, since it runs
+  after the call has returned. A `var` parameter is refused.
+- **`return` alone ends it.** Its items come only from `yield`.
+- **`yield` belongs to the generator's own body**: its loops, `if`s and
+  `match`es, not a block it hands to a method (`xs.each { .. }`) or a
+  `spawn:`. Use `for` there instead.
+- **Not yet:** a method with `yield`, an `async` generator, and a generator
+  that takes a block or an interface value.
+- **Speed:** `bench/b7_generators.lume` is `b6` as a generator; it runs at
+  about 1.3 times the hand-written Rust iterator.
+- **More:** `examples/generators.lume` shows each of these.
 
 ## Where `[]` and `{}` need a type
 

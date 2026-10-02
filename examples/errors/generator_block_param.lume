@@ -1,0 +1,8 @@
+# A generator keeps what it is given until it is walked, and a block is only lent for the call.
+
+def mapped(xs: [Int], f: (Int) -> Int) -> Iterator[Int]:
+  for x in xs:
+    yield f(x)
+
+def main:
+  puts mapped([1, 2]) { |x| x * 2 }.to_list
