@@ -316,6 +316,21 @@ async def main:
 
 If you need `ts.len` afterwards, read it before the `await`.
 
+**Putting a task somewhere gives it away, too.** `tasks.push(t)` moves `t`
+into the list, as a Rust `JoinHandle` moves: a task is never copied. The
+list awaits it now, so `t` cannot be awaited as well:
+
+```lume-bad
+async def main:
+  var tasks: [Task[Int]] = []
+  t = spawn: 1 + 1
+  tasks.push(t)
+  puts await t
+#! `t` is a task, and it is given away here, so it cannot be used after
+```
+
+A later loop with its own `t = spawn: ..` is another `t`, and is fine.
+
 ## A failure inside a task
 
 **A task whose body gives `T or Error` is a `Task[T or Error]`, and the

@@ -300,8 +300,9 @@ puts 10 / x
 # error: division by zero
 ```
 
-The message goes to standard error and the program exits with a failure
-status. `Float` arithmetic never stops the program: it gives `inf` or `NaN`
+The message names the operator (`+`, `-`, `*`, and `-` for negating),
+goes to standard error after whatever the program printed before it, and the
+program exits with status 101, as a Rust program that panics does. `Float` arithmetic never stops the program: it gives `inf` or `NaN`
 instead.
 
 A literal too large for an `Int` is refused before the program runs:

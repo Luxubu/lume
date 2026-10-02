@@ -1,0 +1,30 @@
+num   12
+op    *
+paren (
+num   3
+op    +
+num   45
+paren )
+op    -
+num   6
+0
+12 * ( 3 + 45 ) - 6
+3
+{"num": 4, "op": 2, "paren": 2, "bad": 1}
+Some(Num(value: 3))
+Some(Op(sym: "+"))
+[Num(value: 4)]
+1 + 2 * 3 = 7
+(1 + 2) * 3 = 9
+2 * (3 + 4) - 5 = 9
+100 / 7 / 2 = 7
+-4 * -(2 + 1) = 12
+8 / (3 - 3) : division by zero
+7 $ 2 # 1 : bad characters: ?$ ?#
+(1 + 2 : missing )
+4 4 : trailing 4
+2 + : unexpected end
+* 3 : unexpected *
+{"+", "*", "-", "/"}
+* + - /
+exit: 0

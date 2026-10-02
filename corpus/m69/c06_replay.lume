@@ -1,0 +1,87 @@
+# c06_replay — a text-adventure log replayer whose reader forgot `var self`.
+# Probes: a `next` that reads the value but cannot move it on (`def next ->
+# Event?`, no `var self`) handed to a bound `[S: Iterator[Event]]`. The
+# docs say such a `next` is "just a method", and a bound asks for
+# `(var self) -> T?`, so the call is refused, as in
+# examples/errors/iterator_bound_var_self.lume. Everything else is meant
+# to be fine: split list patterns, an enum of events, a world with a set
+# inventory and a map of visits changed through `var self`.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `replay` needs `S: Iterator[Event]`, and `Replay` is not Iterator[Event]
+#   --> corpus/m69/c06_replay.lume:82:11
+#    |
+# 82 |   world = replay(Replay(lines: LOG, at: 0))
+#    |           ^
+#   help: its `next` is `-> Event?`, and `Iterator[Event]` asks for `(var self) -> Event?`
+
+enum Event:
+  Go(room: Str)
+  Take(item: Str)
+  Drop(item: Str)
+  Say(text: Str)
+  Noise(line: Str)
+
+def parse(line: Str) -> Event?:
+  match line.split:
+    [] -> None
+    ["#", ..] -> None
+    ["go", room] -> Some(Go(room))
+    ["take", item] -> Some(Take(item))
+    ["drop", item] -> Some(Drop(item))
+    ["say", ..words] -> Some(Say(words.join(" ")))
+    _ -> Some(Noise(line))
+
+struct World:
+  room: Str
+  inventory: {Str}
+  visits: {Str: Int}
+  log: [Str]
+
+  def self.start -> World = World(room: "hall", inventory: {}, visits: {"hall": 1}, log: [])
+
+  def apply(var self, e: Event):
+    match e:
+      Go(r) ->
+        room = r
+        visits[r] = visits[r].or(0) + 1
+        log.push("went to #{r}")
+      Take(item) ->
+        inventory.add(item)
+        log.push("took #{item}")
+      Drop(item) ->
+        if inventory.remove(item):
+          log.push("dropped #{item}")
+        else:
+          log.push("no #{item} to drop")
+      Say(t) -> log.push("said \"#{t}\"")
+      Noise(l) -> log.push("??? #{l}")
+
+  def report -> Str:
+    held = inventory.sort.join(", ")
+    "in #{room}, holding #{held}, #{visits.len} rooms seen"
+
+# BUG: reads the line at `at` but has no `var self`, so it can never move on
+struct Replay:
+  lines: [Str]
+  at: Int
+
+  def next -> Event?:
+    line = lines[at]?
+    parse(line)
+
+def replay[S: Iterator[Event]](s: S) -> World:
+  var w = World.start
+  for e in s:
+    w.apply(e)
+  w
+
+LOG = ["# a short game", "go cellar", "take lamp", "take key", "go hall", "say open sesame", "drop sword", "go vault", "drop key", "dance wildly", ""]
+
+def main:
+  world = replay(Replay(lines: LOG, at: 0))
+  for line in world.log:
+    puts line
+  puts world.report
+  for room, n in world.visits:
+    puts "#{room} #{n}"

@@ -88,6 +88,12 @@ def main:
   puts twice(c)    #=> 2
 ```
 
+Either way round, a mismatch is refused: a `tick` that only reads does not
+fit `def tick(var self)`, and a `tick(var self)` does not fit an interface
+whose `tick` only reads. Calling a `var self` method needs something that may
+change: a `var` binding, a `var` parameter (`var x: T`, as above), or a
+`for var` over a `var` list of the interface.
+
 The built-in `Iterator[T]` is one of these: `def next(var self) -> T?`. See
 [Collections](collections.md#types-of-your-own-next).
 

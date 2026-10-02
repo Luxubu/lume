@@ -22,7 +22,9 @@ pub fn fix_articles(s: &str) -> String {
         let at_word = i == 0 || b[i - 1] == ' ' || b[i - 1] == '(';
         if at_word && b[i] == 'a' && b.get(i + 1) == Some(&' ') && b.get(i + 2) == Some(&'`') {
             if let Some(c) = b.get(i + 3) {
-                if "aeioAEIO".contains(*c) {
+                // "one" and "once" start with a w sound: a `OneShot`, a `Ones`
+                let word: String = b[i + 3..].iter().take(3).collect::<String>().to_lowercase();
+                if "aeioAEIO".contains(*c) && word != "one" && word != "onc" {
                     out.push_str("an");
                     i += 1;
                     continue;

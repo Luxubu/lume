@@ -1,0 +1,36 @@
+# a09_queue_var_self: an interface whose required method takes `var self`,
+# and a struct whose method of that name only reads the value. The docs say
+# "a type fits only if its own method takes `var self` too", so the bound
+# `[Q: Queue]` is not met at the call. The message is predicted from
+# examples/errors/iterator_bound_var_self.expected, the built-in case of the
+# same rule.
+# Meant to FAIL.
+# EXPECTED OUTPUT (lume check corpus/m69/a09_queue_var_self.lume):
+# error: `drain` needs `Q: Queue`, and `Fixed` is not Queue
+#   --> corpus/m69/a09_queue_var_self.lume:36:8
+#    |
+# 36 |   puts drain(f)
+#    |        ^
+#   help: its `take_one` is `-> Int?`, and `Queue` asks for `(var self) -> Int?`
+
+interface Queue:
+  def take_one(var self) -> Int?
+
+  def name -> Str = "queue"
+
+struct Fixed:
+  xs: [Int]
+
+  def take_one -> Int? = xs.first
+
+def drain[Q: Queue](var q: Q) -> Int:
+  var t = 0
+  while true:
+    match q.take_one:
+      Some(x) -> t += x
+      None -> break
+  t
+
+def main:
+  var f = Fixed(xs: [1, 2])
+  puts drain(f)

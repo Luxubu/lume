@@ -1,0 +1,30 @@
+# b13_extra_var_self: the other direction of "a type whose method doesn't
+# agree about `var self`": the interface asks for a read-only `size`, and
+# the type's `size` takes `var self` (it really changes a field). Used
+# where a `Sized` is expected (a parameter typed as the interface). The
+# docs only say a `var self` requirement needs a `var self` method; they
+# are silent on an extra `var self`. Predicted refused, in the shape of
+# examples/errors/iface_mismatch (which has no help line).
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `Bag` is used as a `Sized`, but its `size` is `(var self) -> Int` and `Sized` needs `-> Int`
+#   --> corpus/m69/b13_extra_var_self.lume:30:13
+#    |
+# 30 |   puts show(Bag(xs: [1, 2], asked: 0))
+#    |             ^
+
+interface Sized:
+  def size -> Int
+
+struct Bag:
+  xs: [Int]
+  asked: Int
+
+  def size(var self) -> Int:
+    asked += 1
+    xs.len
+
+def show(x: Sized) -> Str = "size #{x.size}"
+
+def main:
+  puts show(Bag(xs: [1, 2], asked: 0))

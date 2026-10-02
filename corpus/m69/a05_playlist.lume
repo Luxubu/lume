@@ -1,0 +1,83 @@
+# a05_playlist: a playlist looped over with `items` (Iterable[Song]) and a
+# radio that cycles it for ever with `next` (Iterator[Song]).
+# Probes: `for` over the playlist, `sum` with a block, `max_by` then `.map`
+# on the optional, `group_by` through `items` walked as a map, a
+# `[C: Iterable[Song]]` bound taking the playlist and a plain list (with the
+# first-on-a-tie rule of `max_by`), an endless `Repeat` stopped by `take`,
+# by `break` in a `for`, and by `enumerate.skip.first`; the radio's own
+# position unchanged afterwards.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# Blue 3:05
+# Rain 4:02
+# Dust 3:19
+# Hum  1:01
+# 11:27
+# Some("Rain")
+# Ana: Blue, Dust
+# Bo: Rain
+# Cy: Hum
+# Blue
+# Hum
+# 4
+# Blue Rain Dust Hum Blue Rain
+# Blue, Rain
+# 2:53 left
+# Some((4, Song(title: "Blue", artist: "Ana", secs: 185)))
+# 0
+
+struct Song:
+  title: Str
+  artist: Str
+  secs: Int
+
+struct Playlist:
+  name: Str
+  songs: [Song]
+
+  def items -> [Song] = songs
+
+struct Repeat:
+  songs: [Song]
+  at: Int
+
+  def next(var self) -> Song?:
+    s = songs[at % songs.len]?
+    at += 1
+    s
+
+def two(n: Int) -> Str = if n < 10: "0#{n}" else: "#{n}"
+
+def mmss(secs: Int) -> Str = "#{secs / 60}:#{two(secs % 60)}"
+
+def longest_title[C: Iterable[Song]](c: C) -> Str = c.map(_.title).max_by(_.len).or("")
+
+def main:
+  a = Song("Blue", "Ana", 185)
+  b = Song("Rain", "Bo", 242)
+  c = Song("Dust", "Ana", 199)
+  d = Song("Hum", "Cy", 61)
+  p = Playlist(name: "mix", songs: [a, b, c, d])
+  for s in p:
+    puts "#{s.title.pad_right(5)}#{mmss(s.secs)}"
+  puts mmss(p.sum { |s| s.secs })
+  puts p.max_by { |s| s.secs }.map(_.title)
+  by = p.group_by { |s| s.artist }
+  for artist, tracks in by:
+    puts "#{artist}: #{tracks.map(_.title).join(", ")}"
+  puts longest_title(p)
+  puts longest_title([d])
+  puts p.len
+
+  radio = Repeat(songs: p.to_list, at: 0)
+  puts radio.take(6).map(_.title).join(" ")
+  var left = 600
+  var played: [Str] = []
+  for s in radio:
+    break if s.secs > left
+    left -= s.secs
+    played.push(s.title)
+  puts played.join(", ")
+  puts "#{mmss(left)} left"
+  puts radio.enumerate.skip(4).first
+  puts radio.at

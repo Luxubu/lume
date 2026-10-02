@@ -1,0 +1,15 @@
+["ada", "bo", "cy", "dee"]
+5
+6. fay
+7. gus
+dee,eve
+Some("fay")
+None
+0
+Some("ada")
+1
+["dee", "eve"]
+Some("bo")
+3
+None
+exit: 0

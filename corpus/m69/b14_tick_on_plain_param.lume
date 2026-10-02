@@ -1,0 +1,30 @@
+# b14_tick_on_plain_param: calling an interface's required `var self`
+# method on a binding that is not `var` — here a plain (not `var`)
+# parameter of a bound type, `[T: Ticker](x: T)`. The caller's own binding
+# is a `var`, so the only thing wrong is the parameter. Probes the message
+# and help for a parameter (the documented examples are all local bindings,
+# whose help names the line of the `=`).
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `x` is immutable, but `tick` changes it
+#   --> corpus/m69/b14_tick_on_plain_param.lume:26:37
+#    |
+# 26 | def once[T: Ticker](x: T) -> Int = x.tick
+#    |                                     ^
+#   help: declare the parameter `var x: T` to change the caller's value
+
+interface Ticker:
+  def tick(var self) -> Int
+
+struct Clock:
+  t: Int
+
+  def tick(var self) -> Int:
+    t += 1
+    t
+
+def once[T: Ticker](x: T) -> Int = x.tick
+
+def main:
+  var c = Clock(t: 0)
+  puts once(c)

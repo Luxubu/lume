@@ -1,0 +1,27 @@
+# b10_next_takes_param: a `next(var self, step: Int) -> Int?` — right
+# receiver, right optional return, but a parameter. Called by hand with an
+# argument it is an ordinary method (docs: "a `next` of another shape is
+# just a method"); a `for` over the type is refused. Probes the help line
+# for the extra parameter.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: cannot loop over a `Stepper`
+#   --> corpus/m69/b10_next_takes_param.lume:26:12
+#    |
+# 26 |   for x in s:
+#    |            ^
+#   help: `Stepper`'s `next` takes `step`; to loop over it, write `def next(var self) -> T?`
+
+struct Stepper:
+  n: Int
+
+  def next(var self, step: Int) -> Int?:
+    n += step
+    Some(n)
+
+def main:
+  var s = Stepper(n: 0)
+  puts s.next(5)
+  puts s.next(5)
+  for x in s:
+    puts x

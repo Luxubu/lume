@@ -1,0 +1,65 @@
+# b02_endless_stops: an endless `next` sequence, and every way the docs say
+# stops one: take, take_while, find, first, any?, zip (with a list, not a
+# range), skip followed by first, enumerate followed by skip/first, break
+# (with and without `where`, and with `for i, x in .enumerate`). Also all?
+# (not in the docs' list of stoppers), take(0), and that a chain on a `var`
+# that was moved by hand starts where it is and leaves it there.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# [1, 2, 3, 4]
+# [1, 2, 3, 4, 5]
+# Some(7)
+# Some(1)
+# true
+# [6, 7, 8]
+# Some((2, 3))
+# [(1, "a"), (2, "b"), (3, "c")]
+# 1,9,25
+# false
+# 6
+# []
+# Some(12)
+# 3
+# 6
+# 9
+# 0:1
+# 1:2
+# 0
+# Some(1)
+# [2, 3]
+# Some(2)
+
+struct Nat:
+  i: Int
+
+  def next(var self) -> Int?:
+    i += 1
+    Some(i)
+
+def main:
+  nat = Nat(i: 0)
+  puts nat.take(4).to_list
+  puts nat.take_while { |x| x * x < 30 }.to_list
+  puts nat.find { |x| x % 7 == 0 }
+  puts nat.first
+  puts nat.any? { |x| x > 1000 }
+  puts nat.skip(5).take(3).to_list
+  puts nat.enumerate.skip(2).first
+  puts nat.zip(["a", "b", "c"]).to_list
+  puts nat.map { |x| x * x }.filter { |x| x % 2 == 1 }.take(3).join(",")
+  puts nat.all? { |x| x < 3 }
+  puts nat.take(3).sum
+  puts nat.take(0).to_list
+  puts nat.find { |x| x > 5 }.map { |x| x * 2 }
+  for x in nat where x % 3 == 0:
+    break if x > 10
+    puts x
+  for i, x in nat.enumerate:
+    break if i == 2
+    puts "#{i}:#{x}"
+  puts nat.i
+
+  var m = Nat(i: 0)
+  puts m.next
+  puts m.take(2).to_list
+  puts m.next

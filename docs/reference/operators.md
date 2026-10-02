@@ -95,8 +95,10 @@ puts 3.7.round           #=> 4.0
 `round`, `floor` and `ceil` on a `Float` give a **`Float`**. `.to_int` is how
 you cross over.
 
-**Overflow stops the program.** It is not wrapped and not undefined, in a
-built binary as much as under `lume run`.
+**Overflow stops the program under `lume run` and `lume test`.** A binary
+made with `lume build` wraps around instead, as Rust's release builds do,
+unless it is built with `--checked`; see
+[Numbers](numbers.md#what-stops-the-program).
 
 An `Int` raised to a power — `2 ** 10`, `2.pow(10)` — needs a power of 0 or
 more, since the answer has to be a whole number. A negative power written as a

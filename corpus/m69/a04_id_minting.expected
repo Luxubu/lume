@@ -1,0 +1,17 @@
+["INV-0001", "INV-0002", "INV-0003"]
+3
+minter
+["y0", "z0", "a1", "b1"]
+28
+letters
+a0
+b0
+letters
+["ORD-0101", "ORD-0102"]
+ORD-0101 tea
+ORD-0102 jam
+ORD-0103 oats
+Some("ORD-0107")
+Some("ORD-0104")
+100
+exit: 0

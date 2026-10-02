@@ -1,0 +1,21 @@
+[0, 1, 2, 3, 4, 5, 6, 7]
+[Red, Red, Red, Green, Green, Yellow, Red, Red]
+{Red: 6, Green: 4, Yellow: 2}
+Some(Snap(tick: 3, light: Red))
+[0, 1, 2, 3]
+{Red, Green}
+2 Red 2
+passed 8, waiting 2
+[2, 2, 3, 4, 2, 2, 3, 5, 5, 3, 1, 2]
+Coin -> unlocked
+Push -> pass
+Push -> blocked
+Coin -> unlocked
+Coin -> thanks
+Push -> pass
+Coin -> unlocked
+Push -> pass
+Turnstile(state: Locked, coins: 4, blocked: 1)
+0
+[(0, Coin), (1, Push), (2, Push)]
+exit: 0

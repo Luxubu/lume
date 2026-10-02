@@ -1,0 +1,15 @@
+10
+the cat sat the
+{"the": 3, "cat": 1, "sat": 2, "dog": 1, "too": 1, "and": 1, "end": 1}
+the x3
+sat x2
+the,cat,sat,dog,too,and,end
+false
+true
+[0, 3, 8]
+{"t": 4, "c": 1, "s": 2, "d": 1, "a": 1, "e": 1}
+["cat", "dog", "end"]
+the
+ccc
+[]
+exit: 0

@@ -1,0 +1,7 @@
+error: `x` is immutable, but `tick` changes it
+  --> corpus/m69/b14_tick_on_plain_param.lume:26:37
+   |
+26 | def once[T: Ticker](x: T) -> Int = x.tick
+   |                                     ^
+  help: declare the parameter `var x: T` on line 26 to change the caller's value, or copy it into a `var` of another name first
+exit: 1

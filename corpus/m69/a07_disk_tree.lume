@@ -1,0 +1,66 @@
+# a07_disk_tree: a folder tree (a recursive enum holding a list of itself)
+# walked depth-first into `(path, size)` pairs by `def items`.
+# Probes: `items -> [(Str, Int)]` built by a recursive helper with a `var`
+# list parameter; `for path, size in disk`; two-name blocks on sum, filter,
+# map, max_by, sort_by, find; `Some((p, s))` as a nested pattern; group_by
+# keyed by `split(...).at(1)` then map_values; a `[C: Iterable[(Str, Int)]]`
+# bound with a tuple type argument, taking the disk and a plain list of
+# pairs; `+=` with a trailing `if`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+#   120 /src/main.lume
+#    40 /src/util.lume
+#     8 /README
+#   300 /docs/ref/a.md
+#    75 /docs/b.md
+# 5
+# 543
+# ["/docs/ref/a.md", "/docs/b.md"]
+# Some(("/docs/ref/a.md", 300))
+# [8, 40, 75, 120, 300]
+# first big: /src/main.lume
+# {"src": 2, "README": 1, "docs": 2}
+# 375
+# 1
+
+enum Node:
+  Leaf(name: Str, size: Int)
+  Folder(name: Str, kids: [Node])
+
+def walk(n: Node, prefix: Str, var out: [(Str, Int)]):
+  match n:
+    Leaf(name, size) -> out.push(("#{prefix}#{name}", size))
+    Folder(name, kids) ->
+      for k in kids:
+        walk(k, "#{prefix}#{name}/", out)
+
+struct Disk:
+  root: Node
+
+  def items -> [(Str, Int)]:
+    var out: [(Str, Int)] = []
+    walk(root, "", out)
+    out
+
+def total_under[C: Iterable[(Str, Int)]](c: C, dir: Str) -> Int:
+  var t = 0
+  for path, size in c:
+    t += size if path.starts_with?(dir)
+  t
+
+def main:
+  tree = Folder("", [Folder("src", [Leaf("main.lume", 120), Leaf("util.lume", 40)]), Leaf("README", 8), Folder("docs", [Folder("ref", [Leaf("a.md", 300)]), Leaf("b.md", 75)])])
+  disk = Disk(root: tree)
+  for path, size in disk:
+    puts "#{size.pad(5)} #{path}"
+  puts disk.len
+  puts disk.sum { |p, s| s }
+  puts disk.filter { |p, s| p.ends_with?(".md") }.map { |p, s| p }.to_list
+  puts disk.max_by { |p, s| s }
+  puts disk.sort_by { |p, s| s }.map { |p, s| s }.to_list
+  match disk.find { |p, s| s > 100 }:
+    Some((p, s)) -> puts "first big: #{p}"
+    None -> puts "none big"
+  puts disk.group_by { |p, s| p.split("/").at(1) }.map_values { |v| v.len }
+  puts total_under(disk, "/docs/")
+  puts total_under([("/docs/x", 1), ("/src/y", 2)], "/docs/")

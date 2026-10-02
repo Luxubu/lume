@@ -1,0 +1,149 @@
+# c03_numbers — a small number-theory toolkit built from sequences.
+# Probes: an endless prime sequence that keeps state in a list field; a
+# sequence that ends by itself (Collatz) and one that ends when a number is
+# used up (prime factors); two sequences of your own zipped together;
+# `skip`, `first`, `take_while`, `to_set`, `len`, `max` on sequences; a type
+# looped over through `def items -> [Int]` and given to a bound
+# `[C: Iterable[Int]]`; bounds `[S: Iterator[Int]]`; a map of lists built
+# by writing through missing keys; `map` over a map's pairs.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# [2, 3, 5, 7, 11, 13, 17, 19, 23, 29]
+# Some(541)
+# [(1, 2), (2, 3), (3, 5), (4, 7), (5, 11)]
+# [(3, 5), (5, 7), (11, 13), (17, 19)]
+# [6, 3, 10, 5, 16, 8, 4, 2, 1]
+# 8 steps, peak Some(16)
+# 27: 111 steps
+# [2, 2, 2, 3, 3, 5]
+# 360 = 2^3 * 3^2 * 5
+# 9973 = 9973
+# [1, 2, 3, 4, 6, 12]
+# 6 divisors, sum 28
+# [6]
+# [6, 28, 496]
+# deficient [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 13, 14, 15, 16, 17, 19]
+# perfect [6]
+# abundant [12, 18, 20]
+# 10
+# false
+# {2, 3, 5}
+
+struct Primes:
+  found: [Int]
+  n: Int
+
+  def self.fresh -> Primes = Primes(found: [], n: 1)
+
+  def next(var self) -> Int?:
+    while true:
+      n += 1
+      k = n
+      if not found.any? { |p| k % p == 0 }:
+        found.push(k)
+        return Some(k)
+    None
+
+struct Naturals:
+  k: Int
+
+  def next(var self) -> Int?:
+    k += 1
+    Some(k)
+
+struct Collatz:
+  n: Int
+  done: Bool
+
+  def next(var self) -> Int?:
+    if done:
+      return None
+    x = n
+    if n == 1:
+      done = true
+    elif n % 2 == 0:
+      n = n / 2
+    else:
+      n = 3 * n + 1
+    Some(x)
+
+struct Factors:
+  n: Int
+  p: Int
+
+  def next(var self) -> Int?:
+    if n == 1:
+      return None
+    while n % p != 0:
+      p += 1
+    n = n / p
+    Some(p)
+
+struct Divisors:
+  n: Int
+
+  def items -> [Int]:
+    m = n
+    (1..m).filter { |d| m % d == 0 }.to_list
+
+def total[C: Iterable[Int]](c: C) -> Int:
+  var t = 0
+  for x in c:
+    t += x
+  t
+
+def twins[S: Iterator[Int]](s: S, count: Int) -> [(Int, Int)]:
+  var out: [(Int, Int)] = []
+  var prev = 0 - 10
+  for p in s:
+    if p - prev == 2:
+      out.push((prev, p))
+    break if out.len == count
+    prev = p
+  out
+
+def steps[S: Iterator[Int]](s: S) -> Int = s.len - 1
+
+def factored(n: Int) -> Str:
+  var powers: {Int: Int} = {}
+  for p in Factors(n: n, p: 2):
+    powers[p] = powers[p].or(0) + 1
+  parts = powers.map { |p, e| if e == 1: "#{p}" else: "#{p}^#{e}" }
+  "#{n} = #{parts.join(" * ")}"
+
+def classify(k: Int) -> Str:
+  s = total(Divisors(n: k)) - k
+  if s < k: "deficient" elif s == k: "perfect" else: "abundant"
+
+def main:
+  primes = Primes.fresh
+  puts primes.take(10).to_list
+  puts primes.skip(99).first
+  puts Naturals(k: 0).zip(primes).take(5).to_list
+  puts twins(primes, 4)
+
+  c6 = Collatz(n: 6, done: false)
+  puts c6.to_list
+  puts "#{steps(c6)} steps, peak #{c6.max}"
+  puts "27: #{steps(Collatz(n: 27, done: false))} steps"
+
+  puts Factors(n: 360, p: 2).to_list
+  puts factored(360)
+  puts factored(9973)
+
+  d12 = Divisors(n: 12)
+  puts d12.to_list
+  puts "#{d12.len} divisors, sum #{total(d12)}"
+  puts Divisors(n: 36).filter { |d| d * d == 36 }.to_list
+  puts Naturals(k: 1).filter { |k| total(Divisors(n: k)) == 2 * k }.take(3).to_list
+
+  var kinds: {Str: [Int]} = {}
+  for k in 1..20:
+    kinds[classify(k)].push(k)
+  for kind, ks in kinds:
+    puts "#{kind} #{ks}"
+
+  small = primes.take_while { |p| p < 30 }.to_set
+  puts small.len
+  puts small.contains?(21)
+  puts Factors(n: 360, p: 2).to_set.intersect(small)

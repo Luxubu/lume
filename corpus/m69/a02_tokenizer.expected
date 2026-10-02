@@ -1,0 +1,22 @@
+word let
+word x
+sym =
+num 12
+sym +
+word y
+num 2
+sym *
+num 345
+sym ;
+10
+359
+word let | word x | sym =
+["word let", "word x", "word y"]
+Some(Num(value: 2))
+Some((7, Sym(op: "*")))
+Some(Word(text: "a"))
+Some(Num(value: 1))
+None
+4
+[]
+exit: 0

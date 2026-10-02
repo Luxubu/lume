@@ -1,0 +1,88 @@
+# a04_id_minting: ID generators. An interface `Minter` whose required method
+# takes `var self`, with a reading default; two structs that fit it; a
+# generic `[M: Minter]` function taking the minter as a `var` parameter (so
+# the caller's minter moves on); a minter held as a `var` binding of the
+# interface type; and `Serial` is also an endless Iterator[Str] (its `next`
+# calls its own `var self` method by bare name), zipped with a list, searched
+# with `find`, and `skip`ped.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ["INV-0001", "INV-0002", "INV-0003"]
+# 3
+# minter
+# ["y0", "z0", "a1", "b1"]
+# 28
+# letters
+# a0
+# b0
+# letters
+# ["ORD-0101", "ORD-0102"]
+# ORD-0101 tea
+# ORD-0102 jam
+# ORD-0103 oats
+# Some("ORD-0107")
+# Some("ORD-0104")
+# 100
+
+interface Minter:
+  def mint(var self) -> Str
+
+  def kind -> Str = "minter"
+
+def zpad(n: Int, width: Int) -> Str:
+  s = n.to_s
+  "0".repeat(width - s.len) + s
+
+struct Serial:
+  prefix: Str
+  n: Int
+
+  def mint(var self) -> Str:
+    n += 1
+    "#{prefix}-#{zpad(n, 4)}"
+
+  def next(var self) -> Str? = Some(mint)
+
+struct Letters:
+  i: Int
+
+  def mint(var self) -> Str:
+    c = (97 + i % 26).to_char.or("?")
+    tag = "#{c}#{i / 26}"
+    i += 1
+    tag
+
+  def kind -> Str = "letters"
+
+def batch[M: Minter](var m: M, count: Int) -> [Str]:
+  var out: [Str] = []
+  var k = 0
+  while k < count:
+    out.push(m.mint)
+    k += 1
+  out
+
+def main:
+  var inv = Serial(prefix: "INV", n: 0)
+  puts batch(inv, 3)
+  puts inv.n
+  puts inv.kind
+
+  var tags = Letters(i: 24)
+  puts batch(tags, 4)
+  puts tags.i
+  puts tags.kind
+
+  var held: Minter = Letters(i: 0)
+  puts held.mint
+  puts held.mint
+  puts held.kind
+
+  ids = Serial(prefix: "ORD", n: 100)
+  puts ids.take(2).to_list
+  orders = ["tea", "jam", "oats"]
+  for id, item in ids.zip(orders):
+    puts "#{id} #{item}"
+  puts ids.find { |id| id.ends_with?("7") }
+  puts ids.skip(3).first
+  puts ids.n

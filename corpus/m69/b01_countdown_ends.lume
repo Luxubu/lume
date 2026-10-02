@@ -1,0 +1,65 @@
+# b01_countdown_ends: a `next(var self) -> T?` sequence that ends by itself.
+# Probes: the methods that need every item (len, sort, sum, to_list, max,
+# join, reverse, count) on a finite sequence; that `for` and chains walk a
+# copy (the field is unchanged afterwards); `next` by hand on a `var` past
+# the end (None, and None again, never a crash); a sequence empty from the
+# start; and chains on a value that was moved to its end by hand.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 3
+# [1, 2, 3]
+# Some(3)
+# Some(3)
+# 3-2-1
+# 2
+# [30, 20, 10]
+# [1, 2, 3]
+# 3
+# 2
+# 1
+# 3
+# Some(1)
+# None
+# None
+# 0
+# []
+# None
+# 0
+# empty done
+
+struct Countdown:
+  n: Int
+
+  def next(var self) -> Int?:
+    if n == 0:
+      return None
+    n -= 1
+    Some(n + 1)
+
+def main:
+  c = Countdown(n: 3)
+  puts c.len
+  puts c.sort
+  puts c.first
+  puts c.max
+  puts c.join("-")
+  puts c.count { |x| x > 1 }
+  puts c.map { |x| x * 10 }.to_list
+  puts c.reverse
+  for x in c:
+    puts x
+  puts c.n
+
+  var d = Countdown(n: 1)
+  puts d.next
+  puts d.next
+  puts d.next
+  puts d.n
+  puts d.to_list
+  puts d.first
+  puts d.sum
+
+  e = Countdown(n: 0)
+  for x in e:
+    puts x
+  puts "empty done"

@@ -1,0 +1,7 @@
+error: `drain` needs `Q: Queue`, and `Fixed` is not Queue
+  --> corpus/m69/a09_queue_var_self.lume:36:8
+   |
+36 |   puts drain(f)
+   |        ^
+  help: its `take_one` is `-> Int?`, and `Queue` asks for `(var self) -> Int?`
+exit: 1

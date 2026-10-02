@@ -936,6 +936,9 @@ pub struct Gen {
     current_self: SelfKind,
     current_ret: Type,
     current_fn: String,
+    /// The parameters of the function being compiled, with their lines, so
+    /// a message can tell a parameter from a local.
+    fn_params: Vec<(String, usize, Type)>,
     loop_depth: usize,
     in_block: bool,
     /// True while emitting statements whose value is the function's result
@@ -1073,6 +1076,7 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, module_id: &str
         current_self: SelfKind::Read,
         current_ret: Type::Unit,
         current_fn: String::new(),
+        fn_params: Vec::new(),
         loop_depth: 0,
         in_block: false,
         tail_of_fn: false,
@@ -3148,7 +3152,7 @@ impl Gen {
         }
         if let Some(iface) = boxed_iface(self, t) {
             self.warnings.push(
-                LumeError::new(line, col, format!("`{}` holds values of different types behind `{}`, so calls on its items go through a pointer", name, iface))
+                LumeError::new(line, col, format!("`{}` holds values of different types behind `{}`, so calls on its items go through a pointer", name, iface.strip_prefix("lume.").unwrap_or(iface)))
                     .with_help("fine for most code; use a single concrete type or an enum if this is a hot loop"),
             );
         }
@@ -4810,7 +4814,15 @@ impl Gen {
                 }
                 if name == "zip" && args.len() == 1 {
                     let other = self.ty_of(&args[0].value);
-                    if let (Some((a, _)), Some((b, _))) = (self.elem_of(&rt), self.elem_of(&other)) {
+                    // the other side may be a type of your own: a sequence, or items
+                    let mut other_el = self.elem_of(&other).map(|(b, _)| b).or_else(|| self.next_item(&args[0].value));
+                    if other_el.is_none() {
+                        if let Some(items) = self.items_of(&args[0].value) {
+                            let it = self.ty_of(&items);
+                            other_el = self.elem_of(&it).map(|(b, _)| b);
+                        }
+                    }
+                    if let (Some((a, _)), Some(b)) = (self.elem_of(&rt), other_el) {
                         if matches!(rt, Type::Iter(..)) {
                             return Type::Iter(Box::new(Type::Tuple(vec![a, b])), false);
                         }
@@ -6635,6 +6647,7 @@ impl Gen {
             self.line("lume_install_panic_hook();");
         }
         self.push_scope();
+        self.fn_params = f.params.iter().map(|p| (p.name.clone(), p.line, self.ct(&p.ty))).collect();
         for p in &f.params {
             let pty = self.ct(&p.ty);
             let borrowed = !pty.is_copy() || lent_params.get(&p.name).copied().unwrap_or(false);
@@ -7392,6 +7405,16 @@ impl Gen {
                     return self.tail_unit(*line, *col);
                 }
             }
+            // `_ = value`: run it and drop what it gives, as often as wanted
+            Stmt::Bind { name, ty: None, value, line, col } if name == "_" => {
+                let vt = self.ty_of(value);
+                self.no_future(&vt, value)?;
+                let v = self.expr(value)?;
+                self.line(&format!("let _ = {};", v));
+                if is_tail {
+                    return self.tail_unit(*line, *col);
+                }
+            }
             Stmt::Bind { name, ty, value, line, col } => {
                 Self::not_a_constructor_name(name, *line, *col)?;
                 let vt0 = self.ty_of(value);
@@ -7452,7 +7475,8 @@ impl Gen {
                             .with_help(format!("declare it `shared var {}` on line {} if tasks change it", name, bl)));
                     }
                     Some(b) if b.mutable => {
-                        let v = self.expr_owned(value)?;
+                        // a `var` held as an interface boxes the new value as it did the first
+                        let v = self.expr_owned_as(value, &b.ty)?;
                         self.line(&format!("{} = {};", rust_name(name), v));
                     }
                     Some(b) => {
@@ -7478,7 +7502,8 @@ impl Gen {
                     None => {
                         if self.field_type(name).is_some() {
                             self.require_var_self(name, *line, *col)?;
-                            let v = self.expr_owned(value)?;
+                            let ft = self.field_type(name).unwrap_or(Type::Unknown);
+                            let v = self.expr_owned_as(value, &ft)?;
                             self.line(&format!("self.{} = {};", rust_name(name), v));
                         } else {
                             let v = self.expr_owned_as(value, &vt)?;
@@ -7602,12 +7627,15 @@ impl Gen {
                     let k = self.expr_val(index)?;
                     let movable = matches!(&index.kind, ExprKind::Ident(n) if self.dead_after_this(n) && !self.is_borrowed_ident(index));
                     let k = if k_ty.is_copy() || matches!(index.kind, ExprKind::Str(_) | ExprKind::Int(_)) || movable { k } else if **k_ty == Type::Str { format!("({}).to_string()", k) } else { format!("({}).clone()", k) };
-                    let v = self.expr_owned(value)?;
+                    // a map of interface values boxes what goes in
+                    let vt = match self.ty_of(recv).materialized() { Type::Map(_, v) => *v, _ => Type::Unknown };
+                    let v = self.expr_owned_as(value, &vt)?;
                     let tmp = self.fresh("v");
                     self.line(&format!("{{ let {} = {}; {}.insert({}, {}); }}", tmp, v, place, k, tmp));
                 } else {
                     let place = self.mutable_place(&target, "this position", *line, *col)?;
-                    let v = if op.is_some() { self.expr(value)? } else { self.expr_owned(value)? };
+                    let et = match self.ty_of(recv).materialized() { Type::List(e) => *e, _ => Type::Unknown };
+                    let v = if op.is_some() { self.expr(value)? } else { self.expr_owned_as(value, &et)? };
                     self.line(&format!("{} {} {};", place, op.unwrap_or("="), v));
                 }
                 if is_tail {
@@ -7675,7 +7703,9 @@ impl Gen {
                     }
                 }
                 let r = self.expr(recv)?;
-                let v = if op.is_some() { self.expr(value)? } else { self.expr_owned(value)? };
+                // a field held as an interface boxes the new value
+                let ft = info.fields.iter().find(|(n, _)| n == field).map(|(_, t)| self.ct(t)).filter(|t| self.is_interface(t)).unwrap_or(Type::Unknown);
+                let v = if op.is_some() { self.expr(value)? } else { self.expr_owned_as(value, &ft)? };
                 self.line(&format!("{}.{} {} {};", r, rust_name(field), op.unwrap_or("="), v));
                 if is_tail {
                     return self.tail_unit(*line, *col);
@@ -8287,7 +8317,17 @@ impl Gen {
             return Ok(self.collect_iter_t(&s, by_ref, &elem));
         }
         let s = self.expr(e)?;
-        if !t.is_copy() && self.can_move_field(e) {
+        if matches!(t, Type::Task(_)) {
+            // a task's handle cannot be copied, as a Rust `JoinHandle`
+            // cannot: it moves wherever it goes, and is gone afterwards
+            if let ExprKind::Ident(n) = &e.kind {
+                if self.lookup(n).is_some() && self.rest_stack.iter().any(|rest| reads_before_rebind(rest, n)) {
+                    return Err(LumeError::new(e.line, e.col, format!("`{}` is a task, and it is given away here, so it cannot be used after", n))
+                        .with_help("a task is awaited once, wherever it ends up: await it here or there, not both"));
+                }
+            }
+            Ok(s)
+        } else if !t.is_copy() && self.can_move_field(e) {
             // a field of a struct nothing needs afterwards moves out
             Ok(s)
         } else if !t.is_copy() && self.is_borrowed_place(e) {
@@ -8463,6 +8503,14 @@ impl Gen {
 
     /// The iterator a list, range or chain yields: (rust, elem type, by_ref).
     fn iter_base(&mut self, recv: &Expr, e: &Expr) -> Result<(String, Type, bool)> {
+        // a type of your own: its sequence, or its items
+        if !matches!(&recv.kind, ExprKind::Method { name, .. } if name == "lume_seq") && self.next_item(recv).is_some() {
+            let seq = self.as_sequence(recv);
+            return self.iter_base(&seq, e);
+        }
+        if let Some(items) = self.items_of(recv) {
+            return self.iter_base(&items, e);
+        }
         if let Some(inner) = self.chars_source(recv) {
             let r = self.expr_val(&inner)?;
             return Ok((format!("({}).chars()", r), Type::Char, false));
@@ -10950,6 +10998,15 @@ impl Gen {
                     }
                 }
                 let rt = self.ty_of(recv);
+                // a list zipped with a sequence: walked side by side, so an
+                // endless sequence stops with the list
+                if name == "zip" && args.len() == 1 && matches!(rt, Type::List(_)) && !matches!(self.ty_of(&args[0].value), Type::List(_)) {
+                    let (r, _, r_ref) = self.iter_base(recv, e)?;
+                    let (o, _, o_ref) = self.iter_base(&args[0].value, e)?;
+                    let a = if r_ref { "a.clone()" } else { "a" };
+                    let b = if o_ref { "b.clone()" } else { "b" };
+                    return Ok(format!("{}.zip({}).map(|(a, b)| ({}, {})).collect::<Vec<_>>()", r, o, a, b));
+                }
                 // Lazy chains: a few methods stay lazy, the rest collect first.
                 if let Type::Iter(elem, by_ref) = &rt {
                     let r = self.expr(recv)?;
@@ -11332,8 +11389,14 @@ impl Gen {
                 Some(b) if b.mutable => Ok(()),
                 Some(Binding { ty: Type::Shared(_, false), line: bl, .. }) => Err(LumeError::new(line, col, format!("`{}` is `shared` and read-only, but `{}` changes it", n, method))
                     .with_help(format!("declare it `shared var {}` on line {} if tasks change it", n, bl))),
-                Some(b) => Err(LumeError::new(line, col, format!("`{}` is immutable, but `{}` changes it", n, method))
-                    .with_help(format!("declare it with `var {} = ...` on line {}", n, b.line))),
+                Some(b) => {
+                    let err = LumeError::new(line, col, format!("`{}` is immutable, but `{}` changes it", n, method));
+                    Err(match self.fn_params.iter().find(|(p, l, _)| p == n && *l == b.line) {
+                        // a parameter is made `var` in the signature
+                        Some((_, _, t)) => err.with_help(format!("declare the parameter `var {}: {}` on line {} to change the caller's value, or copy it into a `var` of another name first", n, type_name(t), b.line)),
+                        None => err.with_help(format!("declare it with `var {} = ...` on line {}", n, b.line)),
+                    })
+                }
                 None if self.field_type(n).is_some() => self.require_var_self(n, line, col),
                 None if self.consts.contains_key(&self.canon(n)) => Err(LumeError::new(line, col, format!("`{}` is a constant, but `{}` changes it", n, method))
                     .with_help(format!("copy it into a variable first: `var xs = {}`", n))),
@@ -11764,9 +11827,10 @@ impl Gen {
         if let Some(n) = ms.get("next") {
             if ms.get("items").is_none() {
                 let how = if !n.params.is_empty() {
-                    "takes arguments".to_string()
+                    let names: Vec<String> = n.params.iter().map(|(p, _)| format!("`{}`", p)).collect();
+                    format!("takes {}", names.join(", "))
                 } else if n.self_kind != SelfKind::Mutate {
-                    "does not change `self`, so it could not move on".to_string()
+                    "does not take `var self`".to_string()
                 } else {
                     format!("gives {}", a_type(&n.ret))
                 };
@@ -12529,6 +12593,35 @@ fn stmt_mentions(s: &Stmt, name: &str) -> bool {
 }
 
 /// `stmt_mentions`, plus names that are assigned to (`x += 1`, `x = v`).
+/// Whether `stmts` read `name` before a new binding of it hides the one
+/// that is meant: `t = spawn: ..` in a later loop is another `t`.
+fn reads_before_rebind(stmts: &[Stmt], name: &str) -> bool {
+    for st in stmts {
+        match st {
+            Stmt::Bind { name: n, value, .. } if n == name && !expr_mentions(value, name) => return false,
+            Stmt::For { iter, filter, body, vars, .. } => {
+                if expr_mentions(iter, name) || filter.as_ref().map(|f| expr_mentions(f, name)).unwrap_or(false) {
+                    return true;
+                }
+                if !vars.iter().any(|v| v == name) && reads_before_rebind(&body.stmts, name) {
+                    return true;
+                }
+            }
+            Stmt::While { cond, body } => {
+                if expr_mentions(cond, name) || reads_before_rebind(&body.stmts, name) {
+                    return true;
+                }
+            }
+            other => {
+                if stmt_mentions(other, name) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
 fn stmt_uses(s: &Stmt, name: &str) -> bool {
     let assigned = match s {
         Stmt::OpAssign { name: n, .. } | Stmt::Bind { name: n, .. } => n == name,

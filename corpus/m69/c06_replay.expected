@@ -1,0 +1,7 @@
+error: `replay` needs `S: Iterator[Event]`, and `Replay` is not Iterator[Event]
+  --> corpus/m69/c06_replay.lume:82:11
+   |
+82 |   world = replay(Replay(lines: LOG, at: 0))
+   |           ^
+  help: its `next` is `-> Event?`, and `Iterator[Event]` asks for `(var self) -> Event?`
+exit: 1

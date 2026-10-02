@@ -1,0 +1,75 @@
+# b04_iterator_bound_held: `[S: Iterator[Int]]` with `for`, `find` and a
+# stopped chain on the parameter (endless and finite arguments); a `var`
+# parameter of a bound type whose `next` calls move the caller's own value;
+# a plain parameter walking a copy (caller unchanged); and a value held as
+# `Iterator[Int]`: `next` on it, a chain on it (walks a copy, so the next
+# `next` carries on from before the chain), and reassigning the binding to a
+# different conforming type.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 10
+# Some(42)
+# [2, 4, 6]
+# 54
+# 3
+# Some(3)
+# 3
+# 2
+# Some(3)
+# [2, 1]
+# Some(2)
+# [1]
+# [101, 102]
+# Some(101)
+
+struct Countdown:
+  n: Int
+
+  def next(var self) -> Int?:
+    if n == 0:
+      return None
+    n -= 1
+    Some(n + 1)
+
+struct Nat:
+  i: Int
+
+  def next(var self) -> Int?:
+    i += 1
+    Some(i)
+
+def total[S: Iterator[Int]](s: S) -> Int:
+  var t = 0
+  for x in s:
+    t += x
+  t
+
+def first_big[S: Iterator[Int]](s: S, limit: Int) -> Int? = s.find { |x| x > limit }
+
+def evens[S: Iterator[Int]](s: S) -> [Int] = s.filter { |x| x % 2 == 0 }.take(3).to_list
+
+def pull_two[S: Iterator[Int]](var s: S) -> Int:
+  a = s.next.or(0)
+  b = s.next.or(0)
+  a * 10 + b
+
+def main:
+  puts total(Countdown(n: 4))
+  puts first_big(Nat(i: 0), 41)
+  puts evens(Nat(i: 0))
+
+  var c = Countdown(n: 5)
+  puts pull_two(c)
+  puts c.n
+  puts c.next
+  puts total(c)
+  puts c.n
+
+  var held: Iterator[Int] = Countdown(n: 3)
+  puts held.next
+  puts held.to_list
+  puts held.next
+  puts held.take(1).to_list
+  held = Nat(i: 100)
+  puts held.take(2).to_list
+  puts held.next

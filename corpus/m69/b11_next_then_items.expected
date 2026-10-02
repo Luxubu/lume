@@ -1,0 +1,7 @@
+error: `Deck` has both `items` and `next`, so a `for` over it could mean either
+  --> corpus/m69/b11_next_then_items.lume:18:3
+   |
+18 |   def next(var self) -> Str?:
+   |   ^
+  help: keep one: `items` gives a list to walk, `next` works items out one at a time; rename the other
+exit: 1

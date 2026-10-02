@@ -205,7 +205,8 @@ def main:
 ```
 
 **`_ = ...` is how you say you mean to drop it.** Nothing is hidden: the
-intent is right there in the line.
+intent is right there in the line. `_` is no name: write `_ = ...` as many
+times as you like, for any value, including an optional you do not need.
 
 ```lume
 def may_fail() -> Int or Error:

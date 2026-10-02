@@ -1,0 +1,6 @@
+error: `t` is a task, and it is given away here, so it cannot be used after
+  --> examples/errors/task_used_after_move.lume:6:14
+  |
+6 |   tasks.push(t)
+  |              ^
+  help: a task is awaited once, wherever it ends up: await it here or there, not both

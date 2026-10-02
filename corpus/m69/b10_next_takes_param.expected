@@ -1,0 +1,7 @@
+error: cannot loop over a `Stepper`
+  --> corpus/m69/b10_next_takes_param.lume:26:12
+   |
+26 |   for x in s:
+   |            ^
+  help: `Stepper`'s `next` takes `step`; to loop over it, write `def next(var self) -> T?`
+exit: 1

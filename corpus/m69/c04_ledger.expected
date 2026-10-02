@@ -1,0 +1,27 @@
+warning: `all` holds values of different types behind `Account`, so calls on its items go through a pointer
+  --> corpus/m69/c04_ledger.lume:122:3
+    |
+122 |   var all: [Account] = []
+    |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+[]
+["cy: no more withdrawals"]
+cy           7.50
+ok   Deposit(who: "ana", cents: 2500)
+ok   Withdraw(who: "bo", cents: 500)
+FAIL ana: over the 1000 overdraft
+ok   Transfer(src: "ana", dst: "bo", cents: 8000)
+ok   Withdraw(who: "bo", cents: 100)
+FAIL bo: no more withdrawals
+FAIL no account dee
+FAIL no account zed (refunded)
+ok   Deposit(who: "bo", cents: 1)
+ana         -5.00
+bo          94.01
+total 8901
+ana failed 2
+bo failed 1
+dee failed 1
+3 names, 4 failures
+["ana"]
+exit: 0

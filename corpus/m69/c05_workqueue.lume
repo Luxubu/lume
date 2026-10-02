@@ -1,0 +1,131 @@
+# c05_workqueue — a work queue planned onto workers, run as tasks, and
+# combined in a fixed order.
+# Probes: a `Queue` looped over through `def items -> [Int]` and handed,
+# like a plain list, to a bound `[C: Iterable[Int]]`; a `Batcher` sequence
+# (`def next(var self) -> [Int]?`) that ends by itself, used by `to_list`,
+# `len` and a bound `[S: Iterator[[Int]]]`; `spawn:` with an indented body
+# and with one line, awaited as a list in the order started; `?` inside a
+# task giving `T or Error`; an `async def` awaited inside a task; `min_by`
+# on a map with ties; a struct sent back from each task.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# [9, 6, 5, 5, 5, 4, 3, 3, 2, 1, 1]
+# [[9, 4, 2], [6, 5, 3, 1], [5, 5, 3, 1]]
+# [[10], [1, 1]]
+# worker 0: 3 jobs, load 15, cost 101
+# worker 1: 4 jobs, load 15, cost 71
+# worker 2: 4 jobs, load 14, cost 60
+# all costs 232
+# [[3, 1, 4], [1, 5, 9], [2, 6, 5], [3, 5]]
+# 4 batches, 1 short
+# [Ok(26), Ok(107), Ok(65), Ok(34)]
+# 232
+# batch 0 failed: job -3 is negative
+# batch 1 cost 65
+# batch 2 failed: job -1 is negative
+# 65 from 1 of 3
+# ["#0 3 jobs", "#1 3 jobs", "#2 3 jobs", "#3 2 jobs"]
+
+struct Queue:
+  jobs: [Int]
+
+  # biggest first: the longest jobs are placed while the loads are even
+  def items -> [Int] = jobs.sort.reverse
+
+struct Batcher:
+  xs: [Int]
+  size: Int
+  pos: Int
+
+  def next(var self) -> [Int]?:
+    if pos >= xs.len:
+      return None
+    b = xs.skip(pos).take(size).to_list
+    pos += size
+    Some(b)
+
+struct Summary:
+  worker: Int
+  jobs: Int
+  load: Int
+  cost: Int
+
+def cost(n: Int) -> Int or Error:
+  if n < 0:
+    return Error("job #{n} is negative")
+  n * n
+
+def batch_cost(batch: [Int]) -> Int or Error:
+  var t = 0
+  for n in batch:
+    t += cost(n)?
+  t
+
+async def label(i: Int, b: [Int]) -> Str:
+  await Time.sleep(5 - i)
+  "##{i} #{b.len} jobs"
+
+# each job goes to the worker with the least load so far; the first on a tie
+def plan[C: Iterable[Int]](c: C, k: Int) -> [[Int]]:
+  var loads: {Int: Int} = {}
+  for w in 0...k:
+    loads[w] = 0
+  var bins: {Int: [Int]} = {}
+  for n in c:
+    w = loads.min_by { |i, l| l }.map { |p| p.0 }.or(0)
+    loads[w] = loads[w].or(0) + n
+    bins[w].push(n)
+  bins.values
+
+def short_batches[S: Iterator[[Int]]](s: S, size: Int) -> Int = s.count { |b| b.len < size }
+
+async def main:
+  jobs = [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5]
+  queue = Queue(jobs: jobs)
+  puts queue.to_list
+  groups = plan(queue, 3)
+  puts groups
+  puts plan([10, 1, 1], 2)
+
+  var tasks: [Task[Summary]] = []
+  for i, g in groups.enumerate:
+    t = spawn:
+      var spent = 0
+      for n in g:
+        spent += cost(n).or(0)
+      Summary(worker: i, jobs: g.len, load: g.sum, cost: spent)
+    tasks.push(t)
+  summaries = await tasks
+  for s in summaries:
+    puts "worker #{s.worker}: #{s.jobs} jobs, load #{s.load}, cost #{s.cost}"
+  puts "all costs #{summaries.map { |s| s.cost }.sum}"
+
+  batcher = Batcher(xs: jobs, size: 3, pos: 0)
+  batches = batcher.to_list
+  puts batches
+  puts "#{batcher.len} batches, #{short_batches(batcher, 3)} short"
+  results = await batches.map { |b| spawn: batch_cost(b) }.to_list
+  puts results
+  puts results.map { |r| r.or(0) }.sum
+
+  bad = Batcher(xs: [2, 0 - 3, 4, 7, 0 - 1], size: 2, pos: 0)
+  var checks: [Task[Int or Error]] = []
+  for b in bad:
+    t = spawn:
+      first = cost(b.at(0))?
+      rest = batch_cost(b.skip(1).to_list)?
+      first + rest
+    checks.push(t)
+  var good = 0
+  var fine = 0
+  for i, r in (await checks).enumerate:
+    match r:
+      Ok(v) ->
+        puts "batch #{i} cost #{v}"
+        good += v
+        fine += 1
+      Error(e) -> puts "batch #{i} failed: #{e.message}"
+  puts "#{good} from #{fine} of #{bad.len}"
+
+  names = await batches.enumerate.map { |i, b| spawn: await label(i, b) }.to_list
+  puts names

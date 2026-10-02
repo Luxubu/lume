@@ -1,0 +1,80 @@
+# a01_pager: a paginated API reader. `Reader` is an Iterator[Str] whose
+# `next(var self)` fetches the next page only when the rows it holds run out.
+# Probes: chains on a lazily refilling sequence (take, count, enumerate,
+# filter + join), a `[S: Iterator[Str]]` function using `find`, a loop/chain
+# walking a copy (the `fetched` counter stays 0), a `var` reader moved by
+# hand with `next`, `while true` + `match` + `break` over `next`, and
+# `def self.start` building an empty-list field.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ["ada", "bo", "cy", "dee"]
+# 5
+# 6. fay
+# 7. gus
+# dee,eve
+# Some("fay")
+# None
+# 0
+# Some("ada")
+# 1
+# ["dee", "eve"]
+# Some("bo")
+# 3
+# None
+
+struct Page:
+  rows: [Str]
+  more: Bool
+
+# a fake server: three pages, the last one short
+def fetch(n: Int) -> Page:
+  match n:
+    0 -> Page(rows: ["ada", "bo", "cy"], more: true)
+    1 -> Page(rows: ["dee", "eve", "fay"], more: true)
+    2 -> Page(rows: ["gus"], more: false)
+    _ -> Page(rows: [], more: false)
+
+struct Reader:
+  page: Int
+  rows: [Str]
+  done: Bool
+  fetched: Int
+
+  def self.start -> Reader = Reader(page: 0, rows: [], done: false, fetched: 0)
+
+  def next(var self) -> Str?:
+    while rows.empty?:
+      if done:
+        return None
+      p = fetch(page)
+      page += 1
+      fetched += 1
+      rows = p.rows
+      done = not p.more
+    rows.remove_at(0)
+
+def first_with[S: Iterator[Str]](s: S, letter: Str) -> Str?:
+  s.find { |name| name.starts_with?(letter) }
+
+def main:
+  r = Reader.start
+  puts r.take(4).to_list
+  puts r.count { |n| n.len == 3 }
+  for i, name in r.enumerate:
+    puts "#{i + 1}. #{name}" if i >= 5
+  puts r.filter { |n| n.contains?("e") }.join(",")
+  puts first_with(r, "f")
+  puts first_with(r, "z")
+  puts r.fetched
+
+  var live = Reader.start
+  puts live.next
+  puts live.fetched
+  puts live.skip(2).take(2).to_list
+  puts live.next
+  while true:
+    match live.next:
+      Some(_) -> ()
+      None -> break
+  puts live.fetched
+  puts live.next

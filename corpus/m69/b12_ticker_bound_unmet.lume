@@ -1,0 +1,27 @@
+# b12_ticker_bound_unmet: an interface of your own whose required method
+# takes `var self`; a type whose `tick` has the same name, no parameters
+# and the same return type, but no `var self` (it only reads). Passed to a
+# bound `[T: Ticker]`. Probes that the docs' "a type fits only if its own
+# method takes `var self` too" gives the same shape of message as the
+# built-in examples/errors/iterator_bound_var_self.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `name_of` needs `T: Ticker`, and `Sundial` is not Ticker
+#   --> corpus/m69/b12_ticker_bound_unmet.lume:27:8
+#    |
+# 27 |   puts name_of(Sundial(t: 0))
+#    |        ^
+#   help: its `tick` is `-> Int`, and `Ticker` asks for `(var self) -> Int`
+
+interface Ticker:
+  def tick(var self) -> Int
+
+struct Sundial:
+  t: Int
+
+  def tick -> Int = t + 1
+
+def name_of[T: Ticker](x: T) -> Str = "#{x}"
+
+def main:
+  puts name_of(Sundial(t: 0))

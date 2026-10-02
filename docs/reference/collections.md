@@ -203,14 +203,29 @@ def main:
                            #=> 3
 ```
 
+- **Every method a list has works**, except the ones that change a list in
+  place (`push`, `pop`, `insert`, `remove_at`). `len`, `count`, `last`,
+  `max`, `uniq`, `group_by` and the rest work out the items first.
 - **Endless is fine.** Nothing is worked out before it is asked for, so
-  `take`, `take_while`, `find`, `first`, `any?`, `zip` and `break` stop a
-  sequence that never ends. A method that needs every item (`to_list`,
-  `len`, `sum`, `sort`) on an endless one never returns.
+  `take`, `take_while`, `skip`, `enumerate`, `find`, `first`, `any?`,
+  `all?`, `zip` and `break` stop a sequence that never ends, after asking for
+  only as many items as they need. A method that needs every item
+  (`to_list`, `len`, `sum`, `sort`) on an endless one never returns.
+- **`zip`** pairs a sequence with a list, a range, or another sequence, and
+  stops with the shorter. A list zipped with an endless sequence stops with
+  the list.
+- **Pairs:** a `next` that gives `(A, B)?` makes `for a, b in value` and
+  two-name blocks work, as `items` of pairs do.
 - **A loop or chain walks a copy.** `fib` above is still at its start after
   each line, as a list is after a `for`. To move a value along yourself,
   call `next` on a `var`: `var f = Fib(a: 0, b: 1)`, then `f.next` gives
-  `Some(0)` and `f` has moved on.
+  `Some(0)` and `f` has moved on. A loop or chain after that copies `f` as
+  it is now, so it starts at `1`. The same holds for a parameter, a value
+  held as an `Iterator[Int]`, and a value a task takes with it: the walk
+  never changes the original. A `var s: S` parameter changes the caller's
+  value only through `s.next`.
+- **After `None`**, `next` is called again only by you, and gives whatever
+  your code gives: Lume does not remember that it ended.
 - **The shape is exact:** `next` takes nothing but `var self` and gives an
   optional. A `next` of another shape is just a method, and a `for` over the
   type says what is wrong with it.

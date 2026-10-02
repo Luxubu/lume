@@ -1,0 +1,155 @@
+# c02_signals — two state machines: a traffic light stepped as an endless
+# sequence, and a turnstile fed by an endless, cycling script of events.
+# Probes: an endless `def next(var self) -> Snap?` stopped by `take`,
+# `find`, `take_while` and by `zip` with a list; a bound `[S: Iterator[Snap]]`
+# with `for` over `s.take(n)`; a sequence moved by hand on a `var`; enum keys
+# in a map and enum items in a set; `match` on a tuple of two enums inside a
+# `var self` method that changes the field it matched on; tuple results
+# taken apart with `(a, b) = ...`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# [0, 1, 2, 3, 4, 5, 6, 7]
+# [Red, Red, Red, Green, Green, Yellow, Red, Red]
+# {Red: 6, Green: 4, Yellow: 2}
+# Some(Snap(tick: 3, light: Red))
+# [0, 1, 2, 3]
+# {Red, Green}
+# 2 Red 2
+# passed 8, waiting 2
+# [2, 2, 3, 4, 2, 2, 3, 5, 5, 3, 1, 2]
+# Coin -> unlocked
+# Push -> pass
+# Push -> blocked
+# Coin -> unlocked
+# Coin -> thanks
+# Push -> pass
+# Coin -> unlocked
+# Push -> pass
+# Turnstile(state: Locked, coins: 4, blocked: 1)
+# 0
+# [(0, Coin), (1, Push), (2, Push)]
+
+enum Light:
+  Red
+  Green
+  Yellow
+
+  def after -> Light:
+    match self:
+      Red -> Green
+      Green -> Yellow
+      Yellow -> Red
+
+  def secs -> Int:
+    match self:
+      Red -> 3
+      Green -> 2
+      Yellow -> 1
+
+struct Snap:
+  tick: Int
+  light: Light
+
+struct Signal:
+  light: Light
+  left: Int
+  tick: Int
+
+  def self.start(l: Light) -> Signal = Signal(light: l, left: l.secs, tick: 0)
+
+  # never gives None: the light goes round for ever
+  def next(var self) -> Snap?:
+    s = Snap(tick: tick, light: light)
+    tick += 1
+    left -= 1
+    if left == 0:
+      light = light.after
+      left = light.secs
+    Some(s)
+
+def tally[S: Iterator[Snap]](s: S, n: Int) -> {Light: Int}:
+  var m: {Light: Int} = {}
+  for snap in s.take(n):
+    m[snap.light] = m[snap.light].or(0) + 1
+  m
+
+ARRIVALS = [2, 0, 1, 3, 0, 0, 1, 2, 0, 0, 0, 1]
+
+# two cars may cross on each green tick
+def simulate(sig: Signal) -> (Int, [Int]):
+  var queue = 0
+  var passed = 0
+  var sizes: [Int] = []
+  for snap, cars in sig.zip(ARRIVALS):
+    queue += cars
+    if snap.light == Green:
+      go = queue.min(2)
+      queue -= go
+      passed += go
+    sizes.push(queue)
+  (passed, sizes)
+
+enum Gate:
+  Locked
+  Open
+
+enum Ev:
+  Coin
+  Push
+
+struct Turnstile:
+  state: Gate
+  coins: Int
+  blocked: Int
+
+  def feed(var self, e: Ev) -> Str:
+    match (state, e):
+      (Locked, Coin) ->
+        coins += 1
+        state = Open
+        "unlocked"
+      (Open, Coin) ->
+        coins += 1
+        "thanks"
+      (Open, Push) ->
+        state = Locked
+        "pass"
+      (Locked, Push) ->
+        blocked += 1
+        "blocked"
+
+struct Script:
+  evs: [Ev]
+  i: Int
+
+  def next(var self) -> Ev?:
+    e = evs[i % evs.len]?
+    i += 1
+    Some(e)
+
+def main:
+  red = Signal.start(Red)
+  puts red.take(8).map { |s| s.tick }.to_list
+  puts red.take(8).map { |s| s.light }.to_list
+  puts tally(red, 12)
+  puts Signal.start(Green).find { |s| s.light == Red }
+  puts Signal.start(Yellow).take_while { |s| s.light != Green }.map { |s| s.tick }.to_list
+  puts red.take(4).map { |s| s.light }.to_set
+
+  var sig = Signal.start(Yellow)
+  _ = sig.next
+  _ = sig.next
+  puts "#{sig.tick} #{sig.light} #{sig.left}"
+
+  (passed, sizes) = simulate(red)
+  puts "passed #{passed}, waiting #{sizes.last.or(0)}"
+  puts sizes
+
+  script = Script(evs: [Coin, Push, Push, Coin, Coin, Push], i: 0)
+  var gate = Turnstile(state: Locked, coins: 0, blocked: 0)
+  for e in script.take(8):
+    said = gate.feed(e)
+    puts "#{e} -> #{said}"
+  puts gate
+  puts script.i
+  puts script.enumerate.take(3).to_list

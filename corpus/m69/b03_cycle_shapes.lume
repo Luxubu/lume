@@ -1,0 +1,70 @@
+# b03_cycle_shapes: what a `next` sequence may give. A generic
+# `struct Cycle[T]` over structs, strings and tuples (endless, so only
+# stopped chains); a sequence of `(Str, Int)` pairs taken apart by
+# `for k, v` and by two-name blocks (map, max_by); `for` over a stopped
+# chain of structs reading a field; and `next` by hand on a generic `var`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# [Card(suit: "h", rank: 1), Card(suit: "s", rank: 12), Card(suit: "h", rank: 1)]
+# 26
+# h
+# s
+# yxy
+# ["y", "x", "y"]
+# [(1, "a"), (1, "a")]
+# p1=1
+# p2=4
+# p3=9
+# [("p1", 1), ("p2", 4), ("p3", 9)]
+# [4, 9]
+# Some(("p1", 1))
+# Some("only")
+# Some("only")
+# 2
+
+struct Card:
+  suit: Str
+  rank: Int
+
+struct Cycle[T]:
+  xs: [T]
+  i: Int
+
+  def next(var self) -> T?:
+    x = xs[i % xs.len]?
+    i += 1
+    Some(x)
+
+struct Pairs:
+  k: Int
+
+  def next(var self) -> (Str, Int)?:
+    if k >= 3:
+      return None
+    k += 1
+    Some(("p#{k}", k * k))
+
+def main:
+  cards = Cycle(xs: [Card(suit: "h", rank: 1), Card(suit: "s", rank: 12)], i: 0)
+  puts cards.take(3).to_list
+  puts cards.map { |c| c.rank }.take(4).sum
+  for c in cards.take(2):
+    puts c.suit
+
+  words = Cycle(xs: ["x", "y"], i: 1)
+  puts words.take(3).join("")
+  puts words.take(3).to_list
+
+  tups = Cycle(xs: [(1, "a")], i: 0)
+  puts tups.take(2).to_list
+
+  for name, sq in Pairs(k: 0):
+    puts "#{name}=#{sq}"
+  puts Pairs(k: 0).to_list
+  puts Pairs(k: 1).map { |name, sq| sq }.to_list
+  puts Pairs(k: 0).max_by { |name, sq| 0 - sq }
+
+  var w = Cycle(xs: ["only"], i: 0)
+  puts w.next
+  puts w.next
+  puts w.i

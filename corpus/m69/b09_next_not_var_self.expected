@@ -1,0 +1,7 @@
+error: cannot loop over a `Ones`
+  --> corpus/m69/b09_next_not_var_self.lume:24:12
+   |
+24 |   for x in o:
+   |            ^
+  help: `Ones`'s `next` does not take `var self`; to loop over it, write `def next(var self) -> T?`
+exit: 1

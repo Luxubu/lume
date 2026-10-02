@@ -1,0 +1,7 @@
+error: `name_of` needs `T: Ticker`, and `Sundial` is not Ticker
+  --> corpus/m69/b12_ticker_bound_unmet.lume:27:8
+   |
+27 |   puts name_of(Sundial(t: 0))
+   |        ^
+  help: its `tick` is `-> Int`, and `Ticker` asks for `(var self) -> Int`
+exit: 1

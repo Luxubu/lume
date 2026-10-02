@@ -1,0 +1,15 @@
+  120 /src/main.lume
+   40 /src/util.lume
+    8 /README
+  300 /docs/ref/a.md
+   75 /docs/b.md
+5
+543
+["/docs/ref/a.md", "/docs/b.md"]
+Some(("/docs/ref/a.md", 300))
+[8, 40, 75, 120, 300]
+first big: /src/main.lume
+{"src": 2, "README": 1, "docs": 2}
+375
+1
+exit: 0

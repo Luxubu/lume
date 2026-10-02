@@ -1,0 +1,68 @@
+# b06_ticker_var_self: an interface of your own with a required
+# `var self` method beside a required read-only one and two defaults (one
+# overridden). A bound `[T: Ticker]` on a `var` parameter changes the
+# caller's value (a struct with an Int field, and one with a list field);
+# the defaults read the changed value; the `var self` method is called
+# directly on a `var` afterwards; and `for var` over a `var [Ticker]` list
+# calls the `var self` method on each held value.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 3
+# 3
+# ticker at 3
+# 3
+# [0, 2, 4]
+# metronome at 3
+# 4
+# [11, 1]
+
+interface Ticker:
+  def tick(var self) -> Int
+  def now -> Int
+
+  def label -> Str = "ticker"
+
+  def describe -> Str = "#{label} at #{now}"
+
+struct Clock:
+  t: Int
+
+  def tick(var self) -> Int:
+    t += 1
+    t
+
+  def now -> Int = t
+
+struct Metronome:
+  beats: [Int]
+
+  def tick(var self) -> Int:
+    beats.push(beats.len * 2)
+    beats.len
+
+  def now -> Int = beats.len
+
+  def label -> Str = "metronome"
+
+def run3[T: Ticker](var x: T) -> Int:
+  x.tick
+  x.tick
+  x.tick
+
+def main:
+  var c = Clock(t: 0)
+  puts run3(c)
+  puts c.t
+  puts c.describe
+
+  var m = Metronome(beats: [])
+  puts run3(m)
+  puts m.beats
+  puts m.describe
+
+  puts c.tick
+
+  var all: [Ticker] = [Clock(t: 10), Metronome(beats: [])]
+  for var x in all:
+    x.tick
+  puts all.map { |x| x.now }.to_list

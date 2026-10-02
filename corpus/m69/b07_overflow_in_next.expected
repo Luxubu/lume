@@ -1,0 +1,7 @@
+9223372036854775806
+[2, 4, 8]
+Some(2305843009213693952)
+4611686018427387904
+error: Int overflow in `*`
+  (set LUME_BACKTRACE=1 to see where in the generated Rust)
+exit: 101

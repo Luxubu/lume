@@ -1,0 +1,6 @@
+error: `Bag` is used as a `Sized`, but its `size` is `(var self) -> Int` and `Sized` needs `-> Int`
+  --> corpus/m69/b13_extra_var_self.lume:30:13
+   |
+30 |   puts show(Bag(xs: [1, 2], asked: 0))
+   |             ^
+exit: 1

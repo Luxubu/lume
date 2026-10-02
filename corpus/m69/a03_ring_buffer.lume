@@ -1,0 +1,87 @@
+# a03_ring_buffer: a fixed-size ring buffer of the last N readings, looped
+# over oldest-first through `def items -> [Int]` (Iterable[Int]).
+# Probes: a `var self` method named like a list method (`push`) winning over
+# the list's, index assignment on a field (`buf[head] = x`), `+` on two
+# lists, list methods reached through `items` (to_list, len, sum, join, avg
+# via a bound, max/min, enumerate, filter/map, first, last, sort, zip),
+# `[C: Iterable[Int]]` taking the ring, a list and a set, and values of
+# different types held as `[Iterable[Int]]`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# [5, 1, 4]
+# [4, 9, 2]
+# [9, 2, 4]
+# 3
+# 15
+# 4 -> 9 -> 2
+# 5.0
+# 7
+# 0: 4
+# 1: 9
+# 2: 2
+# [40, 90]
+# Some(4)
+# Some(2)
+# [2, 4, 9]
+# [(4, "a"), (9, "b"), (2, "c")]
+# 1.5
+# 7
+# 15
+# 6
+# EXPECTED WARNING (stderr, from compiling; not part of the output above):
+# warning: `all` holds values of different types behind `Iterable`, so calls on its items go through a pointer
+#   --> corpus/m69/a03_ring_buffer.lume:85:3
+#    |
+# 85 |   all: [Iterable[Int]] = [r, [1, 2, 3]]
+#    |   ^
+#   help: fine for most code; use a single concrete type or an enum if this is a hot loop
+
+struct Ring:
+  buf: [Int]
+  head: Int
+  cap: Int
+
+  def self.with_cap(cap: Int) -> Ring = Ring(buf: [], head: 0, cap: cap)
+
+  def push(var self, x: Int):
+    if buf.len < cap:
+      buf.push(x)
+    else:
+      buf[head] = x
+      head = (head + 1) % cap
+
+  def items -> [Int] = buf.skip(head).to_list + buf.take(head).to_list
+
+def mean[C: Iterable[Int]](c: C) -> Float = c.avg
+
+def spread[C: Iterable[Int]](c: C) -> Int:
+  hi = c.max.or(0)
+  lo = c.min.or(0)
+  hi - lo
+
+def main:
+  var r = Ring.with_cap(3)
+  for x in [5, 1, 4]:
+    r.push(x)
+  puts r.to_list
+  r.push(9)
+  r.push(2)
+  puts r.to_list
+  puts r.buf
+  puts r.len
+  puts r.sum
+  puts r.join(" -> ")
+  puts mean(r)
+  puts spread(r)
+  for i, x in r.enumerate:
+    puts "#{i}: #{x}"
+  puts r.filter { |x| x > 3 }.map { |x| x * 10 }.to_list
+  puts r.first
+  puts r.last
+  puts r.sort
+  puts r.zip(["a", "b", "c"]).to_list
+  puts mean([1, 2])
+  puts spread({3, 8, 1})
+  all: [Iterable[Int]] = [r, [1, 2, 3]]
+  for c in all:
+    puts c.sum

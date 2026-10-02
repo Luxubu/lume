@@ -1,0 +1,8 @@
+# A task is awaited once: once it is put in a list, the list has it, and awaiting it by name as well is refused.
+
+async def main:
+  var tasks: [Task[Int]] = []
+  t = spawn: 1 + 1
+  tasks.push(t)
+  puts await t
+  puts await tasks

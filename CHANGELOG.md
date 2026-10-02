@@ -22,7 +22,11 @@
   `[S: Iterator[T]]` takes it.
 - **Interfaces**: a required method may take `var self`. A type fits only
   when its method agrees about `var self`.
-- **`zip` on a lazy chain** stays lazy.
+- **`zip` on a lazy chain** stays lazy, and `zip` takes a sequence of your
+  own as its argument.
+- **Fixed**: giving a `var`, field, list position or map key held as an
+  interface a value of another type; `_ = ...` more than once in a block; a
+  task put in a list (it now moves, and using it afterwards is refused).
 
 ## 0.1.0 — the first release
 

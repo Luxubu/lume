@@ -1,0 +1,186 @@
+# c01_calc — an arithmetic calculator whose lexer is a lazy sequence.
+# Probes: a lexer written as `def next(var self) -> Tok?` and used by `for`
+# (walking a copy), `.map`, `.filter`, `.count`, `.to_list` and a bound
+# `[S: Iterator[Tok]]`; the same lexer held as an `Iterator[Tok]` and moved
+# by hand; an enum of tokens with `match`, `|` and nested literal patterns;
+# a recursive-descent parser whose methods take `var self` and give
+# `Int or Error` with `?`; a map tally and a set of operators.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# num   12
+# op    *
+# paren (
+# num   3
+# op    +
+# num   45
+# paren )
+# op    -
+# num   6
+# 0
+# 12 * ( 3 + 45 ) - 6
+# 3
+# {"num": 4, "op": 2, "paren": 2, "bad": 1}
+# Some(Num(value: 3))
+# Some(Op(sym: "+"))
+# [Num(value: 4)]
+# 1 + 2 * 3 = 7
+# (1 + 2) * 3 = 9
+# 2 * (3 + 4) - 5 = 9
+# 100 / 7 / 2 = 7
+# -4 * -(2 + 1) = 12
+# 8 / (3 - 3) : division by zero
+# 7 $ 2 # 1 : bad characters: ?$ ?#
+# (1 + 2 : missing )
+# 4 4 : trailing 4
+# 2 + : unexpected end
+# * 3 : unexpected *
+# {"+", "*", "-", "/"}
+# * + - /
+
+enum Tok:
+  Num(value: Int)
+  Op(sym: Str)
+  LParen
+  RParen
+  Bad(text: Str)
+
+  def kind -> Str:
+    match self:
+      Num(_) -> "num"
+      Op(_) -> "op"
+      LParen | RParen -> "paren"
+      Bad(_) -> "bad"
+
+  def show -> Str:
+    match self:
+      Num(v) -> "#{v}"
+      Op(s) -> s
+      LParen -> "("
+      RParen -> ")"
+      Bad(t) -> "?#{t}"
+
+struct Lexer:
+  cs: [Char]
+  pos: Int
+
+  def self.of(text: Str) -> Lexer = Lexer(cs: text.chars, pos: 0)
+
+  def next(var self) -> Tok?:
+    while pos < cs.len and cs.at(pos) == " ":
+      pos += 1
+    c = cs[pos]?
+    pos += 1
+    match c:
+      "(" -> Some(LParen)
+      ")" -> Some(RParen)
+      "+" | "-" | "*" | "/" -> Some(Op(c.to_s))
+      _ if c.digit? ->
+        var n = c.code - 48
+        while pos < cs.len and cs.at(pos).digit?:
+          n = n * 10 + cs.at(pos).code - 48
+          pos += 1
+        Some(Num(n))
+      _ -> Some(Bad(c.to_s))
+
+def count_ops[S: Iterator[Tok]](s: S) -> Int = s.count { |t| t.kind == "op" }
+
+def tally[S: Iterator[Tok]](s: S) -> {Str: Int}:
+  var m: {Str: Int} = {}
+  for t in s:
+    m[t.kind] = m[t.kind].or(0) + 1
+  m
+
+struct Parser:
+  toks: [Tok]
+  pos: Int
+
+  def peek -> Tok? = toks[pos]
+
+  def advance(var self):
+    pos += 1
+
+  def expr(var self) -> Int or Error:
+    var left = term()?
+    while true:
+      match peek:
+        Some(Op("+")) ->
+          advance()
+          left = left + term()?
+        Some(Op("-")) ->
+          advance()
+          left = left - term()?
+        _ -> break
+    left
+
+  def term(var self) -> Int or Error:
+    var left = atom()?
+    while true:
+      match peek:
+        Some(Op("*")) ->
+          advance()
+          left = left * atom()?
+        Some(Op("/")) ->
+          advance()
+          d = atom()?
+          if d == 0:
+            return Error("division by zero")
+          left = left / d
+        _ -> break
+    left
+
+  def atom(var self) -> Int or Error:
+    match peek:
+      Some(Num(v)) ->
+        advance()
+        v
+      Some(Op("-")) ->
+        advance()
+        0 - atom()?
+      Some(LParen) ->
+        advance()
+        inner = expr()?
+        match peek:
+          Some(RParen) -> advance()
+          _ -> return Error("missing )")
+        inner
+      Some(t) -> Error("unexpected #{t.show}")
+      None -> Error("unexpected end")
+
+def evaluate(src: Str) -> Int or Error:
+  toks = Lexer.of(src).to_list
+  bad = toks.filter { |t| t.kind == "bad" }.map { |t| t.show }.to_list
+  if bad.len > 0:
+    return Error("bad characters: #{bad.join(" ")}")
+  var p = Parser(toks: toks, pos: 0)
+  v = p.expr()?
+  match p.peek:
+    Some(t) -> Error("trailing #{t.show}")
+    None -> v
+
+SOURCES = ["1 + 2 * 3", "(1 + 2) * 3", "2 * (3 + 4) - 5", "100 / 7 / 2", "-4 * -(2 + 1)", "8 / (3 - 3)", "7 $ 2 # 1", "(1 + 2", "4 4", "2 +", "* 3"]
+
+def main:
+  lex = Lexer.of("12*(3+45) - 6")
+  for t in lex:
+    puts "#{t.kind.pad_right(6)}#{t.show}"
+  puts lex.pos
+  puts lex.map { |t| t.show }.join(" ")
+  puts count_ops(lex)
+  puts tally(Lexer.of("1 + (2 * 3) ? 4"))
+
+  var it: Iterator[Tok] = Lexer.of("3 + 4")
+  puts it.next
+  puts it.next
+  puts it.take(5).to_list
+
+  for src in SOURCES:
+    match evaluate(src):
+      Ok(v) -> puts "#{src} = #{v}"
+      Error(e) -> puts "#{src} : #{e.message}"
+
+  var ops: {Str} = {}
+  for src in SOURCES:
+    for t in Lexer.of(src).filter { |t| t.kind == "op" }:
+      ops.add(t.show)
+  puts ops
+  puts ops.sort.join(" ")

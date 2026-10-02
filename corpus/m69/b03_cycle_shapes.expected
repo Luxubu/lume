@@ -1,0 +1,17 @@
+[Card(suit: "h", rank: 1), Card(suit: "s", rank: 12), Card(suit: "h", rank: 1)]
+26
+h
+s
+yxy
+["y", "x", "y"]
+[(1, "a"), (1, "a")]
+p1=1
+p2=4
+p3=9
+[("p1", 1), ("p2", 4), ("p3", 9)]
+[4, 9]
+Some(("p1", 1))
+Some("only")
+Some("only")
+2
+exit: 0

@@ -1,0 +1,15 @@
+warning: `all` holds values of different types behind `Ticker`, so calls on its items go through a pointer
+  --> corpus/m69/b06_ticker_var_self.lume:65:3
+   |
+65 |   var all: [Ticker] = [Clock(t: 10), Metronome(beats: [])]
+   |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+3
+3
+ticker at 3
+3
+[0, 2, 4]
+metronome at 3
+4
+[11, 1]
+exit: 0

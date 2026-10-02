@@ -1,0 +1,24 @@
+# b11_next_then_items: a type with both `next` and `items`, written in the
+# other order from examples/errors/items_and_next (`next` first, `items`
+# second), and never looped over. Probes where the caret goes (the docs'
+# example has `next` second and points at it) and that the refusal comes
+# from the type alone, not from a `for`.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `Deck` has both `items` and `next`, so a `for` over it could mean either
+#   --> corpus/m69/b11_next_then_items.lume:18:3
+#    |
+# 18 |   def next(var self) -> Str?:
+#    |   ^
+#   help: keep one: `items` gives a list to walk, `next` works items out one at a time; rename the other
+
+struct Deck:
+  cards: [Str]
+
+  def next(var self) -> Str?:
+    cards.pop
+
+  def items -> [Str] = cards
+
+def main:
+  puts Deck(cards: ["a"]).cards

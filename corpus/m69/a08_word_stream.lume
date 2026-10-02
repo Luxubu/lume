@@ -1,0 +1,66 @@
+# a08_word_stream: words of a text as an Iterator[Str] that cleans each
+# word (lowercase, letters and apostrophes only) and skips what is left
+# empty.
+# Probes: `return w` from inside a `while` in `next`, falling out to `None`;
+# a Char filter joined back into a Str; `len`, `take` + `join`, `uniq`,
+# `any?`/`all?`, `enumerate` + two-name filter/map, `group_by` keyed by a
+# Char then map_values (Char keys print quoted); a tally map built by `for`
+# over the stream; sort_by on a map then `take` and a two-name `for`; zip of
+# a list with its own skip; a `[S: Iterator[Str]]` bound with `max_by` and
+# its first-on-a-tie rule; a text with no words.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 10
+# the cat sat the
+# {"the": 3, "cat": 1, "sat": 2, "dog": 1, "too": 1, "and": 1, "end": 1}
+# the x3
+# sat x2
+# the,cat,sat,dog,too,and,end
+# false
+# true
+# [0, 3, 8]
+# {"t": 4, "c": 1, "s": 2, "d": 1, "a": 1, "e": 1}
+# ["cat", "dog", "end"]
+# the
+# ccc
+# []
+
+struct Words:
+  raw: [Str]
+  i: Int
+
+  def self.of(text: Str) -> Words = Words(raw: text.split.to_list, i: 0)
+
+  def next(var self) -> Str?:
+    while i < raw.len:
+      w = clean(raw.at(i))
+      i += 1
+      if not w.empty?:
+        return w
+    None
+
+def clean(w: Str) -> Str = w.downcase.chars.filter { |c| c.alpha? or c == "'" }.join("")
+
+def longest[S: Iterator[Str]](s: S) -> Str = s.max_by { |w| w.len }.or("")
+
+def main:
+  text = "The cat sat. The dog sat, too! -- and THE end?"
+  ws = Words.of(text)
+  puts ws.len
+  puts ws.take(4).join(" ")
+  var counts: {Str: Int} = {}
+  for w in ws:
+    counts[w] = counts[w].or(0) + 1
+  puts counts
+  for w, n in counts.sort_by { |w, n| 0 - n }.take(2):
+    puts "#{w} x#{n}"
+  puts ws.uniq.join(",")
+  puts ws.any? { |w| w.len > 3 }
+  puts ws.all? { |w| w.len == 3 }
+  puts ws.enumerate.filter { |i, w| w == "the" }.map { |i, w| i }.to_list
+  puts ws.group_by { |w| w.chars.at(0) }.map_values { |v| v.len }
+  all = ws.to_list
+  puts all.zip(all.skip(1).to_list).filter { |a, b| a == "the" }.map { |a, b| b }.to_list
+  puts longest(ws)
+  puts longest(Words.of("a bb ccc dd"))
+  puts Words.of("!!! -- ...").to_list

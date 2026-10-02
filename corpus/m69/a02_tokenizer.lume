@@ -1,0 +1,97 @@
+# a02_tokenizer: a lexer as an Iterator[Tok] over the characters of a line.
+# Probes: `next(var self)` with early `return`s of enum variants (implied
+# Some), `?` on an index to end the sequence, Char methods (space?, digit?,
+# alpha?, code), Str + Char, `len`/`filter`/`map(fn)`/`take`/`join`/`find`
+# on the sequence, `enumerate.find` with a two-name block, an enum method
+# used through `_`, a `[S: Iterator[Tok]]` function with `for` + `match`, and
+# a `var` lexer moved by hand.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# word let
+# word x
+# sym =
+# num 12
+# sym +
+# word y
+# num 2
+# sym *
+# num 345
+# sym ;
+# 10
+# 359
+# word let | word x | sym =
+# ["word let", "word x", "word y"]
+# Some(Num(value: 2))
+# Some((7, Sym(op: "*")))
+# Some(Word(text: "a"))
+# Some(Num(value: 1))
+# None
+# 4
+# []
+
+enum Tok:
+  Num(value: Int)
+  Word(text: Str)
+  Sym(op: Str)
+
+  def word? -> Bool:
+    match self:
+      Word(_) -> true
+      _ -> false
+
+struct Lexer:
+  cs: [Char]
+  pos: Int
+
+  def self.of(src: Str) -> Lexer = Lexer(cs: src.chars, pos: 0)
+
+  def next(var self) -> Tok?:
+    while pos < cs.len and cs.at(pos).space?:
+      pos += 1
+    c = cs[pos]?
+    if c.digit?:
+      var n = 0
+      while pos < cs.len and cs.at(pos).digit?:
+        n = n * 10 + cs.at(pos).code - 48
+        pos += 1
+      return Num(n)
+    if c.alpha?:
+      var w = ""
+      while pos < cs.len and cs.at(pos).alpha?:
+        w = w + cs.at(pos)
+        pos += 1
+      return Word(w)
+    pos += 1
+    Sym(c.to_s)
+
+def describe(t: Tok) -> Str:
+  match t:
+    Num(v) -> "num #{v}"
+    Word(w) -> "word #{w}"
+    Sym(s) -> "sym #{s}"
+
+def sum_nums[S: Iterator[Tok]](s: S) -> Int:
+  var total = 0
+  for t in s:
+    match t:
+      Num(v) -> total += v
+      _ -> ()
+  total
+
+def main:
+  lx = Lexer.of("let x = 12 + y2 * 345;")
+  for t in lx:
+    puts describe(t)
+  puts lx.len
+  puts sum_nums(lx)
+  puts lx.filter { |t| t != Sym(";") }.map(describe).take(3).join(" | ")
+  puts lx.filter(_.word?).map(describe).to_list
+  puts lx.find { |t| t == Num(2) }
+  puts lx.enumerate.find { |i, t| t == Sym("*") }
+
+  var hand = Lexer.of("  a1")
+  puts hand.next
+  puts hand.next
+  puts hand.next
+  puts hand.pos
+  puts Lexer.of("").to_list

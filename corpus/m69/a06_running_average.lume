@@ -1,0 +1,80 @@
+# a06_running_average: temperature readings as streams. `Feed` gives the raw
+# Ints, `Running` gives the running mean as a Float after each reading, and
+# `Sensor` is an endless pseudo-random stream.
+# Probes: Iterator[Float] as well as Iterator[Int]; `[S: Iterator[Float]]`
+# and `[S: Iterator[Int]]` functions using map/join, max, count; how Floats
+# print in a list (12.666666666666666); `last` on a finite sequence; `zip`
+# taking another sequence of your own as its argument, then a two-name
+# filter/map; an empty feed; an endless one stopped by take, find and
+# take_while; a held `var s: Iterator[Int]` moved with `next`, then a chain
+# on it starting from where it now is.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 12.00 13.50 12.67 14.00 15.20 14.17
+# [12.0, 13.5, 12.666666666666666]
+# Some(14.166666666666666)
+# 0
+# 20
+# 3
+# [15, 18, 20]
+# 0
+# [10, 11, 18, 5, 7, 21]
+# Some(26)
+# 39
+# Some(10)
+# [18, 5]
+
+struct Feed:
+  xs: [Int]
+  i: Int
+
+  def next(var self) -> Int?:
+    x = xs[i]?
+    i += 1
+    x
+
+struct Running:
+  src: [Int]
+  i: Int
+  total: Int
+
+  def next(var self) -> Float?:
+    x = src[i]?
+    i += 1
+    total += x
+    total.to_float / i.to_float
+
+struct Sensor:
+  seed: Int
+
+  def next(var self) -> Int?:
+    seed = (seed * 7 + 3) % 31
+    Some(seed)
+
+def show_all[S: Iterator[Float]](s: S) -> Str = s.map { |x| x.decimals(2) }.join(" ")
+
+def peak[S: Iterator[Int]](s: S) -> Int = s.max.or(0)
+
+def above[S: Iterator[Int]](s: S, limit: Int) -> Int = s.count { |x| x > limit }
+
+def main:
+  temps = [12, 15, 11, 18, 20, 9]
+  r = Running(src: temps, i: 0, total: 0)
+  puts show_all(r)
+  puts r.take(3).to_list
+  puts r.last
+  puts r.i
+
+  feed = Feed(xs: temps, i: 0)
+  puts peak(feed)
+  puts above(feed, 14)
+  puts feed.zip(r).filter { |t, avg| t.to_float > avg }.map { |t, avg| t }.to_list
+  puts above(Feed(xs: [], i: 0), 0)
+
+  puts Sensor(seed: 1).take(6).to_list
+  puts Sensor(seed: 1).find { |x| x > 25 }
+  puts Sensor(seed: 1).take_while { |x| x != 5 }.sum
+
+  var s: Iterator[Int] = Sensor(seed: 1)
+  puts s.next
+  puts s.skip(1).take(2).to_list

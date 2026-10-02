@@ -1,0 +1,48 @@
+# b08_spawn_sequences: tasks with and without `await` in the body, over a
+# `next` sequence copied into each task. `a` awaits nothing (the blocking
+# pool), `b` awaits an async def first; they are awaited in the opposite
+# order to how they were started. A list of one-line tasks typed
+# `[Task[[Int]]]` is awaited as a whole (results in start order). The
+# outside sequence is unchanged afterwards. A task binds a `var` copy of an
+# outside `var` sequence and calls `next` on its copy; the outside one then
+# gives the same first item.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 6
+# 10
+# [[2, 3], [3, 4], [4, 5]]
+# 0
+# Some(11)
+# Some(11)
+
+struct Nat:
+  i: Int
+
+  def next(var self) -> Int?:
+    i += 1
+    Some(i)
+
+async def pause(n: Int) -> Int:
+  await Time.sleep(n)
+  n
+
+async def main:
+  nat = Nat(i: 0)
+  a = spawn: nat.take(4).sum
+  b = spawn:
+    w = await pause(5)
+    nat.skip(w).first.or(0)
+  var tasks: [Task[[Int]]] = []
+  for k in 1..3:
+    tasks.push(spawn: nat.skip(k).take(2).to_list)
+  puts await b
+  puts await a
+  puts await tasks
+  puts nat.i
+
+  var mine = Nat(i: 10)
+  c = spawn:
+    var local = mine
+    local.next
+  puts await c
+  puts mine.next

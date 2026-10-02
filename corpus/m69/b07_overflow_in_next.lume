@@ -1,0 +1,33 @@
+# b07_overflow_in_next: integer overflow under `lume run`, inside the
+# `next` of an endless sequence. Each step doubles; `skip(60).first` asks
+# for exactly the 61st item (2^61) and no further, so nothing overflows
+# there; the `for` over `skip(61)` prints the 62nd item (2^62) and then
+# asks for the 63rd, whose `*` overflows. The largest Int literal itself is
+# fine, and so is subtracting from it.
+# Meant to RUN, and to STOP at run time (this is what `lume run` prints).
+# EXPECTED OUTPUT:
+# 9223372036854775806
+# [2, 4, 8]
+# Some(2305843009213693952)
+# 4611686018427387904
+# (then, on standard error, and the program exits with a failure status:)
+# error: Int overflow in `*`
+#   (set LUME_BACKTRACE=1 to see where in the generated Rust)
+# ("never" is not printed.)
+
+struct Doubler:
+  v: Int
+
+  def next(var self) -> Int?:
+    v = v * 2
+    Some(v)
+
+def main:
+  big = 9223372036854775807
+  puts big - 1
+  d = Doubler(v: 1)
+  puts d.take(3).to_list
+  puts d.skip(60).first
+  for x in d.skip(61):
+    puts x
+  puts "never"
