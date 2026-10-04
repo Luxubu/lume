@@ -1067,6 +1067,9 @@ pub struct Gen {
     gen_item: Option<(Type, usize)>,
     /// The arguments being written are for a generator.
     arg_for_gen: bool,
+    /// Lists of text held as slices of another local's text, which they
+    /// borrow: name -> the local they borrow.
+    slices: HashMap<String, (String, usize)>,
     /// The program uses async somewhere: tokio goes in the dependencies.
     uses_async: bool,
     /// Set by `iter_base` for a map: its items are `(key, value)` pairs of
@@ -1151,6 +1154,7 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, module_id: &str
         current_fn: String::new(),
         gen_item: None,
         arg_for_gen: false,
+        slices: HashMap::new(),
         fn_params: Vec::new(),
         loop_depth: 0,
         in_block: false,
@@ -7037,7 +7041,12 @@ impl Gen {
         if self.barriers.iter().any(|b| idx < *b) {
             return true;
         }
-        self.rest_stack.iter().any(|rest| rest.iter().any(|st| stmt_uses(st, name)))
+        if self.rest_stack.iter().any(|rest| rest.iter().any(|st| stmt_uses(st, name))) {
+            return true;
+        }
+        // lists of slices of `name` still need it while they are used
+        let borrowers: Vec<String> = self.slices.iter().filter(|(_, (src, _))| src == name).map(|(n, _)| n.clone()).collect();
+        borrowers.iter().any(|b| self.slice_source(b).is_some() && self.rest_stack.iter().any(|rest| rest.iter().any(|st| stmt_mentions(st, b))))
     }
 
     /// Emits one argument of a call while the arguments still to come count
@@ -7708,6 +7717,11 @@ impl Gen {
                             let ft = self.field_type(name).unwrap_or(Type::Unknown);
                             let v = self.expr_owned_as(value, &ft)?;
                             self.line(&format!("self.{} = {};", rust_name(name), v));
+                        } else if let Some(src) = if ty.is_none() { self.slices_of(name, value) } else { None } {
+                            let v = self.expr(value)?;
+                            self.declare(name, false, true, Type::List(Box::new(Type::Str)), *line);
+                            self.slices.insert(name.clone(), (src, *line));
+                            self.line(&format!("let {}: Vec<&str> = {}.collect();", rust_name(name), v));
                         } else {
                             let v = self.expr_owned_as(value, &vt)?;
                             if ty.is_some() {
@@ -8459,6 +8473,8 @@ impl Gen {
                 None => self.field_type(n).is_some() || self.consts.contains_key(&self.canon(n)),
             },
             ExprKind::SelfRef => !self.self_is_lent_copy(),
+            // an item of a list of slices: copied out where a value is kept
+            ExprKind::Method { recv, name, args } if name == "at" && args.len() == 1 && matches!(&recv.kind, ExprKind::Ident(n) if self.slice_source(n).is_some()) => true,
             ExprKind::Method { recv, name, args }
                 if args.is_empty()
                     && matches!(&recv.kind, ExprKind::Ident(a) if self.lookup(a).is_none() && self.module_aliases.contains_key(a))
@@ -8598,6 +8614,38 @@ impl Gen {
             _ if self.seq_item_of_type(&at.materialized()).is_some() => self.expr_owned(e),
             other => Err(LumeError::new(e.line, e.col, format!("a sequence is wanted here, and this is {}", a_type(&other)))),
         }
+    }
+
+    /// The local a list of slices named `n` borrows from, if `n` is one here.
+    fn slice_source(&self, n: &str) -> Option<String> {
+        let (src, line) = self.slices.get(n)?;
+        let b = self.lookup(n)?;
+        if b.line == *line && b.ty == Type::List(Box::new(Type::Str)) { Some(src.clone()) } else { None }
+    }
+
+    /// `parts = line.split(" ")`, where `parts` is only read by position and
+    /// `line` is a local that never changes: the list holds slices of
+    /// `line`, as a Rust `Vec<&str>` would, instead of a copy of each piece.
+    fn slices_of(&mut self, name: &str, value: &Expr) -> Option<String> {
+        let src = match &value.kind {
+            ExprKind::Method { recv, name: m, .. } if matches!(m.as_str(), "split" | "lines") => match &recv.kind {
+                ExprKind::Ident(src) => src.clone(),
+                _ => return None,
+            },
+            _ => return None,
+        };
+        if self.ty_of(value) != Type::Iter(Box::new(Type::Str), true) {
+            return None;
+        }
+        let b = self.lookup(&src)?;
+        if b.mutable || b.ty.materialized() != Type::Str || self.shared_anywhere(&src) {
+            return None;
+        }
+        let rest = self.rest_stack.last()?;
+        if !only_read_items(rest, name) {
+            return None;
+        }
+        Some(src)
     }
 
     /// A value that cannot be copied — a task, a generator — moves, as in
@@ -11871,7 +11919,11 @@ impl Gen {
             // `price.decimals(2)` — the number as text, to that many places
             "decimals" => { need(1)?; format!("lume_decimals(({}) as f64, {})", recv, args[0]) }
             // `xs.at(i)` — the item, stopping the program when there is none
-            "at" => { need(1)?; format!("lume_at(&{}, {})", recv, args[0]) }
+            "at" => {
+                need(1)?;
+                let slices = matches!(&e.kind, ExprKind::Method { recv: r, .. } if matches!(&r.kind, ExprKind::Ident(n) if self.slice_source(n).is_some()));
+                if slices { format!("(*lume_at_ref(&{}, {}))", recv, args[0]) } else { format!("lume_at(&{}, {})", recv, args[0]) }
+            }
             "sqrt" | "abs" | "floor" | "ceil" | "round" => { need(0)?; format!("({}).{}()", recv, name) }
             "sum" => { need(0)?; format!("({}).lume_sum()", recv) }
             "push" => { need(1)?; format!("({}).push({})", recv, args[0]) }
@@ -12936,7 +12988,53 @@ fn stmt_mentions(s: &Stmt, name: &str) -> bool {
     }
 }
 
-/// `stmt_mentions`, plus names that are assigned to (`x += 1`, `x = v`).
+/// Whether every mention of `name` in `stmts` only reads the list: its
+/// length, whether it is empty, and its items by position. Such a list may
+/// hold slices of the text it was split from instead of copies.
+fn only_read_items(stmts: &[Stmt], name: &str) -> bool {
+    fn ex(e: &Expr, name: &str) -> bool {
+        let blk = |b: &Block| only_read_items(&b.stmts, name);
+        match &e.kind {
+            ExprKind::Method { recv, name: m, args } if matches!(&recv.kind, ExprKind::Ident(n) if n == name) => match m.as_str() {
+                "len" | "empty?" => args.is_empty(),
+                "at" => args.len() == 1 && !expr_mentions(&args[0].value, name) && ex(&args[0].value, name),
+                _ => false,
+            },
+            ExprKind::Ident(n) => n != name,
+            // a block may be kept, and take the list with it
+            ExprKind::Lambda { body, .. } | ExprKind::Spawn(body) => !body.stmts.iter().any(|st| stmt_mentions(st, name)),
+            ExprKind::Rust(code) => !code.contains(name),
+            ExprKind::Int(_) | ExprKind::Float(_) | ExprKind::Bool(_) | ExprKind::None | ExprKind::Placeholder | ExprKind::SelfRef => true,
+            ExprKind::Str(pieces) => pieces.iter().all(|p| match p { StrPiece::Expr(x) => ex(x, name), _ => true }),
+            ExprKind::List(items) | ExprKind::Tuple(items) | ExprKind::SetLit(items) => items.iter().all(|i| ex(i, name)),
+            ExprKind::MapLit(pairs) => pairs.iter().all(|(k, v)| ex(k, name) && ex(v, name)),
+            ExprKind::Await(x) | ExprKind::Unary { expr: x, .. } | ExprKind::Some(x) | ExprKind::Ok(x) | ExprKind::Try(x) | ExprKind::Unwrap(x) | ExprKind::Puts(x) | ExprKind::Warn(x) => ex(x, name),
+            ExprKind::Range { lo, hi, .. } => ex(lo, name) && ex(hi, name),
+            ExprKind::TupleIndex { recv, .. } => ex(recv, name),
+            ExprKind::Index { recv, index } => ex(recv, name) && ex(index, name),
+            ExprKind::Binary { lhs, rhs, .. } => ex(lhs, name) && ex(rhs, name),
+            ExprKind::Call { name: callee, args } => callee != name && args.iter().all(|a| ex(&a.value, name)),
+            ExprKind::Method { recv, args, .. } => ex(recv, name) && args.iter().all(|a| ex(&a.value, name)),
+            ExprKind::If { branches, else_block } => branches.iter().all(|(c, b)| ex(c, name) && blk(b)) && else_block.as_ref().map(blk).unwrap_or(true),
+            ExprKind::Match { scrutinee, arms } => ex(scrutinee, name) && arms.iter().all(|a| a.guard.as_ref().map(|g| ex(g, name)).unwrap_or(true) && blk(&a.body)),
+        }
+    }
+    stmts.iter().all(|st| match st {
+        // bound again: the new value is another list, so stop thinking
+        Stmt::Bind { name: n, .. } | Stmt::Var { name: n, .. } | Stmt::Shared { name: n, .. } if n == name => false,
+        Stmt::Destructure { names, .. } if names.iter().any(|n| n == name) => false,
+        Stmt::OpAssign { name: n, .. } if n == name => false,
+        Stmt::For { vars, iter, filter, body, .. } => ex(iter, name) && filter.as_ref().map(|f| ex(f, name)).unwrap_or(true) && (vars.iter().any(|v| v == name) || only_read_items(&body.stmts, name)),
+        Stmt::While { cond, body } => ex(cond, name) && only_read_items(&body.stmts, name),
+        Stmt::Bind { value, .. } | Stmt::Var { value, .. } | Stmt::OpAssign { value, .. } | Stmt::Destructure { value, .. } | Stmt::Shared { value, .. } | Stmt::Yield { value, .. } => ex(value, name),
+        Stmt::FieldAssign { recv, value, .. } => !expr_mentions(recv, name) && ex(value, name),
+        Stmt::IndexAssign { recv, index, value, .. } => !expr_mentions(recv, name) && ex(index, name) && ex(value, name),
+        Stmt::Expr(e) | Stmt::Assert { cond: e, .. } => ex(e, name),
+        Stmt::Return { value, .. } => value.as_ref().map(|v| ex(v, name)).unwrap_or(true),
+        Stmt::Break { .. } | Stmt::Next { .. } => true,
+    })
+}
+
 /// `Iterator` as a program writes it, or as the built-in is known inside.
 fn is_iterator_name(n: &str) -> bool {
     n == "Iterator" || n == "lume.Iterator"
@@ -13018,6 +13116,7 @@ fn reads_before_rebind(stmts: &[Stmt], name: &str) -> bool {
     false
 }
 
+/// `stmt_mentions`, plus names that are assigned to (`x += 1`, `x = v`).
 fn stmt_uses(s: &Stmt, name: &str) -> bool {
     let assigned = match s {
         Stmt::OpAssign { name: n, .. } | Stmt::Bind { name: n, .. } => n == name,

@@ -1,0 +1,71 @@
+# A list from `split` or `lines`, bound to a name that is only read by
+# position (`at`, `len`, `empty?`) while the text it came from stays as it
+# is, holds slices of that text instead of a copy of each piece, as a Rust
+# `Vec<&str>` would. Nothing a program prints changes; these are the cases
+# on each side of the line, each checked by its output.
+
+struct Row:
+  name: Str
+  n: Int
+
+struct Rec:
+  raw: Str
+  first: Str
+
+# read by position only: slices
+def parse(line: Str) -> Row or Error:
+  parts = line.split(",")
+  if parts.len != 2:
+    return Error("expected 2 fields, found #{parts.len}")
+  Row(name: parts.at(0).trim, n: parts.at(1).to_int?)
+
+# handed back whole: a list of its own
+def words(line: Str) -> [Str]:
+  parts = line.split(" ")
+  parts
+
+# an item kept under a name of its own: copied out of the slices
+def first_word(line: Str) -> Str:
+  parts = line.split(" ")
+  w = parts.at(0)
+  w
+
+def main -> () or Error:
+  puts parse("ann, 3")?
+  puts parse("x")
+  puts words("a b")
+  puts first_word("hello world")
+
+  # in a loop, compared and interpolated
+  for line in "a b\nc d".lines:
+    ws = line.split(" ")
+    puts "#{ws.at(1)}#{ws.at(0)} #{ws.len} #{ws.empty?} #{ws.at(0) == "a"}"
+
+  # the text is a `var` that changes after: the list keeps copies
+  var s = "x y"
+  ps = s.split(" ")
+  s = "changed"
+  puts "#{ps.at(0)} #{s}"
+
+  # the text is given away while the slices are still needed: it is copied
+  var kept: [Str] = []
+  var recs: [Rec] = []
+  for l in "alpha beta\ngamma delta".lines:
+    line = l.upcase
+    parts = line.split(" ")
+    kept.push(line)
+    puts parts.at(1)
+  for l in "one two".lines:
+    line = l.trim
+    parts = line.split(" ")
+    recs.push(Rec(raw: line, first: parts.at(0)))
+  puts kept
+  puts recs
+
+  # walked with `for`, or given to a block: a list of its own
+  line = "p q r"
+  all = line.split(" ")
+  for w in all:
+    puts w
+  puts all.map { |w| w.upcase }.to_list
+  ()

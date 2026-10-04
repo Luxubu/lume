@@ -408,6 +408,14 @@ of copying it.
   nothing is copied, provided the statement reads each field of `p` once
   and nothing later reads `p`.
 
+**A list that `split` or `lines` gives holds slices, not copies, when it can.**
+`parts = line.split(" ")` builds a new string for each piece, unless `parts`
+is only read by position — `parts.at(i)`, `parts.len`, `parts.empty?` —
+and `line` is a local that does not change while `parts` is in use. Then
+the list holds slices of `line`, as a Rust `Vec<&str>` does, and an item is
+copied only where it is kept: `name = parts.at(0)`, a field, a `push`.
+Splitting a log line into fields and reading them costs no strings at all.
+
 None of this changes what a program prints. It changes only how much work
 the program does. `examples/moves.lume` and `examples/moves_values.lume`
 show each side of the line.

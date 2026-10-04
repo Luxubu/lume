@@ -58,13 +58,15 @@ a Python script over the same file. These carried it:
    `bench/b8_logq` is now 3.3 times the Rust a person would write
    (310 ms against 94).
 
+Milestone 72 took the next step: `parts = line.split(" ")` now holds slices
+of `line` when `parts` is only read by position and `line` does not change,
+so the six strings per line are gone. `bench/b8_logq` went from 3.0 to 2.2
+times the Rust (205 ms against 93).
+
 ## Left as it is
 
-- **`split` gives a list of new strings.** `line.split(" ")` builds six
-  `String`s and a `Vec` for every line, where the hand-written Rust borrows
-  `&str` slices of the line. That is most of the remaining gap. Borrowing
-  needs the compiler to know the list never outlives the line, which is a
-  milestone of its own.
+- **What is left of the gap** is copies the program asks for: each entry's
+  `path`, the `took` field copied out to be sliced, and `group_by` below.
 - **`group_by` copies every entry into its group**, where the Rust counts.
   A Lume program that wants counts can count; this one, like most, groups.
 - **A call needs `()`, even with no arguments** (`usage()`): the bare name
