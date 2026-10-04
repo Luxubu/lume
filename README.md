@@ -35,7 +35,7 @@ Then:
 - **[The examples](docs/examples.md)** — 5,000 lines of working programs, in a
   reading order.
 - **[Installing](docs/install.md)** — and what each command does.
-- **[Changes](CHANGELOG.md)** — what each release holds; 0.1.0 is the first.
+- **[Changes](CHANGELOG.md)** — what each release holds; 0.2.0 is the latest.
 
 Every example in the documentation is compiled, run, and checked against the
 output it claims, by `tests/docs.sh`. An answer that stops being true fails

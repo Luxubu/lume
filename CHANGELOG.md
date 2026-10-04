@@ -2,42 +2,103 @@
 
 ## Unreleased
 
+Nothing yet.
+
+## 0.2.0 — sequences
+
+Nine milestones after 0.1.0 (65–73). The theme is sequences: types of your
+own that `for` and every list method work on, lazy and endless ones,
+generators written with `yield`, and functions that take any of them. Along
+the way came the `http` package, Rust builders through the bridge, and two
+programs written to find what was missing.
+
+### Install
+
+```sh
+git clone https://github.com/Luxubu/lume && cd lume && git checkout v0.2.0
+./install.sh
+lume run examples/generators.lume
+```
+
+It needs a Rust toolchain (<https://rustup.rs>). See `docs/install.md`.
+
+### What is new
+
+- **Sequences of your own** ([Collections](docs/reference/collections.md)):
+  - a type with `def items -> [T]` works with `for` and every list method
+    (`Iterable[T]`, as Rust's `IntoIterator`);
+  - a type with `def next(var self) -> T?` is a lazy sequence, possibly
+    endless, and compiles to a Rust `impl Iterator` (`Iterator[T]`);
+  - bounds `[C: Iterable[T]]` and `[S: Iterator[T]]` take them, and an
+    interface's required method may now take `var self`.
+- **Generators**: a function that gives `Iterator[T]` hands out its items
+  with `yield`, one at a time, so it may be endless. In Rust it is an
+  `impl Iterator` whose body rustc turns into a state machine. A generator
+  moves as a Rust iterator does: walking it uses it up.
+- **Sequence parameters**: `xs: Iterator[T]` takes a generator, a lazy
+  chain, a list, a set or a type with `next`, by move, so generators chain:
+  `evens(naturals()).take(3)`.
+- **`zip`** stays lazy on a chain and takes a sequence of your own.
 - **`packages/http`**: `get`, `post`, `post_json` and `send`, with a
-  `Response` that has `ok?`, headers and `.json`. A 404 is a response; only a
-  request that could not be made is an `Error`.
-- **Crate builders**: methods that take `self` by value, which is how most
-  Rust builders work, can be called through the bridge. `lume crate` marks
-  them.
+  `Response` that has `ok?`, headers and `.json`. A 404 is a response; only
+  a request that could not be made is an `Error`. Depend on it with
+  `http = { git = "https://github.com/Luxubu/lume", tag = "v0.2.0" }`.
+- **Rust builders**: crate methods that take `self` by value can be called
+  through the bridge, which is how most Rust builders work.
+- **Blocking tasks**: a `spawn:` body that awaits nothing runs on Tokio's
+  pool for blocking work, as `spawn_blocking` does, so requests, program
+  runs and computations in tasks run at once.
+- **Two programs written to find what was missing**:
+  - `examples/healthcheck/` checks services at once, on `http` and `json`;
+  - `examples/logq/` answers questions about an access log, on generators.
+- **Layout**: lists, maps, calls and parameter lists may be written across
+  lines, one item to a line.
 - **Docs**: new pages [HTTP](docs/reference/http.md) and
-  [Rust crates](docs/reference/crates.md).
-- **Blocking tasks**: a `spawn:` body that awaits nothing runs on a pool for
-  blocking work, as Rust's `spawn_blocking` does, so requests, program runs
-  and computations in tasks all run at once.
-- **`examples/healthcheck/`**: a service checker built on `http` and `json`.
-- **Iterating your own types**: a type with `def items -> [T]` works with
-  `for` and every list method, and a bound `[C: Iterable[T]]` takes it.
-- **Lazy sequences of your own**: a type with `def next(var self) -> T?`
-  works with `for` and every chain method, one item at a time, so it may be
-  endless; it compiles to a Rust `impl Iterator`. A bound
-  `[S: Iterator[T]]` takes it.
-- **Generators**: a function that gives `Iterator[T]` hands out items with
-  `yield`, lazily, and may be endless.
-- **Docs**: lists, maps and calls may be written across lines.
-- **Sequence parameters**: `xs: Iterator[T]` takes a generator, a chain, a
-  list, a set or a type with `next`, by move, so generators chain.
-- **`examples/logq/`**: a log analyzer built on generators.
-- **Faster**: `Time.parse` (2.7×), and text methods on a list's item.
-- **Fixed**: a function ending in `Env.exit` with no return type.
-- **Faster**: a list from `split` or `lines` that is only read by position
-  holds slices of the text instead of a copy of each piece.
-- **Fixed**: a `match` on an item of such a list.
-- **Interfaces**: a required method may take `var self`. A type fits only
-  when its method agrees about `var self`.
-- **`zip` on a lazy chain** stays lazy, and `zip` takes a sequence of your
-  own as its argument.
-- **Fixed**: giving a `var`, field, list position or map key held as an
-  interface a value of another type; `_ = ...` more than once in a block; a
-  task put in a list (it now moves, and using it afterwards is refused).
+  [Rust crates](docs/reference/crates.md); sections on sequences,
+  generators and sequence parameters.
+
+### Faster
+
+- **Generators** run at 1.3 times a hand-written Rust iterator, and
+  sequences of your own level with it.
+- **`split` and `lines`** give a list of slices of the text, not a copy of
+  each piece, when the list is only read by position.
+- **`Time.parse`** no longer allocates: 2.7 times faster.
+- **`logq`'s parse and summary** of a 500,000-line log went from 4.7 to 2.2
+  times the hand-written Rust.
+
+### Fixed
+
+- A `var`, field, list position or map key held as an interface could not
+  be given a value of another type.
+- `_ = ...` worked once per block.
+- A task put in a list was copied; it now moves, and using it afterwards is
+  refused with a message.
+- A function ending in `Env.exit` with no return type could not be typed.
+- Messages: "an `Ones`"; built-in interfaces named `lume.Iterable`; `Time`
+  used as a type; help lines for a `next` of the wrong shape and for a
+  `var self` call on a parameter.
+
+### How it was checked
+
+- **The suite**: `tests/run.sh`, 1045 checks and 411 docs examples, byte for
+  byte.
+- **Error messages**: 364 of the compiler's 379 messages are shown by a test.
+- **Review rounds**: rounds fourteen and fifteen, 59 programs by six
+  reviewers, written from the docs alone. Round fifteen: 37 guesses, 20 of 21
+  programs right on the first run, no wrong output.
+- **Benchmarks**: eight programs against the Rust a person would write; six
+  are within 10% of it.
+
+### Known limits
+
+- **Generators**: a method cannot be one yet, nor an `async def`, and a
+  lazy chain given to a generator is worked out at the call, so an endless
+  one never returns.
+- **Time zones**: dates and times are UTC only.
+- **Build caching**: a whole program is one Rust crate.
+- **VS Code**: the extension has still not been tried in VS Code itself.
+- **No registry**: packages come from paths and git.
 
 ## 0.1.0 — the first release
 

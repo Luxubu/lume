@@ -13,7 +13,7 @@ setting `lume.path`. Then, from this folder:
 
     npm install
     npx @vscode/vsce package
-    code --install-extension lume-0.1.0.vsix
+    code --install-extension lume-0.2.0.vsix
 
 Hover over a name to see its type or signature. Go to definition
 (F12, or Cmd/Ctrl-click) jumps to where it was written, across modules and

@@ -1,5 +1,5 @@
 --- initialize
-{"id": 1, "jsonrpc": "2.0", "result": {"capabilities": {"completionProvider": {"triggerCharacters": ["."]}, "definitionProvider": true, "hoverProvider": true, "textDocumentSync": {"change": 1, "openClose": true, "save": {"includeText": false}}}, "serverInfo": {"name": "lume", "version": "0.1.0"}}}
+{"id": 1, "jsonrpc": "2.0", "result": {"capabilities": {"completionProvider": {"triggerCharacters": ["."]}, "definitionProvider": true, "hoverProvider": true, "textDocumentSync": {"change": 1, "openClose": true, "save": {"includeText": false}}}, "serverInfo": {"name": "lume", "version": "0.2.0"}}}
 --- a file with an error, then fixed
 {"jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": {"diagnostics": [{"message": "unknown name `nope`\nhelp: names must be bound with `name = value` or `var name = value` before use", "range": {"end": {"character": 11, "line": 1}, "start": {"character": 7, "line": 1}}, "severity": 1, "source": "lume"}], "uri": "<tmp>/one/hello.lume"}}
 {"jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": {"diagnostics": [], "uri": "<tmp>/one/hello.lume"}}
