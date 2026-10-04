@@ -1,0 +1,104 @@
+# c04_schedule: a two-week agenda built from recurring meetings, over
+# working days that skip weekends and a holiday.
+# Probes: an endless generator of days (`days_from`); generators chained
+# into generators by `xs: Iterator[Int]` (`working`, `agenda`), kept lazy
+# end to end and stopped by `take` and by `take_while` with a two-name
+# block; a generator taking a set and a list of structs; `yield (..) if`;
+# `next` on a `var` generator, mapped; `Time.date`, `Time.format` with
+# `%a %A %d %b %B %Y %j %H %M`, `Time.weekday`, `Time.day`,
+# `Time.day_of_year`, `Time.parse`; an enum with a method; `group_by` with a
+# two-name block over pairs, then a map's `map`; a list of structs written
+# across lines; a top-level constant used inside a generator.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# Thursday 01 October 2026, day 274
+# weekday 4, day of year 274, 14 days in the window
+# Thu 01, Fri 02, Mon 05, Tue 06, Wed 07, Thu 08, Fri 09, Tue 13
+# Thu 01 Oct 08:00  invoice run
+# Fri 02 Oct 15:00  demo
+# Mon 05 Oct 10:00  planning
+# Wed 07 Oct 11:15  dentist
+# Fri 09 Oct 15:00  demo
+# Tue 13 Oct 14:00  board
+# Thu 1, Fri 2, Mon 1, Wed 1, Tue 1
+# true
+# Weekly(day: 1)
+# Some("01 October")
+# Some("02 October")
+# Error("September 2026 has days 1 to 30, not 31")
+
+DAY = 86400
+
+enum Rule:
+  Weekly(day: Int)
+  Monthly(day: Int)
+  Once(at: Int)
+
+  def hits?(t: Int) -> Bool:
+    match self:
+      Weekly(d) -> Time.weekday(t) == d
+      Monthly(d) -> Time.day(t) == d
+      Once(at) -> at == t
+
+struct Meeting:
+  title: Str
+  rule: Rule
+  hour: Int
+  minute: Int
+
+  def offset -> Int = hour * 3600 + minute * 60
+
+# Midnight of every day from `start` on, for ever.
+def days_from(start: Int) -> Iterator[Int]:
+  var t = start
+  while true:
+    yield t
+    t += DAY
+
+# Monday to Friday, less the days off.
+def working(xs: Iterator[Int], off: {Int}) -> Iterator[Int]:
+  for t in xs:
+    yield t if Time.weekday(t) <= 5 and not off.contains?(t)
+
+# Each meeting that falls on one of the days, in time order within a day.
+def agenda(days: Iterator[Int], meetings: [Meeting]) -> Iterator[(Int, Str)]:
+  order = meetings.sort_by { |x| x.offset }
+  for d in days:
+    for m in order:
+      yield (d + m.offset, m.title) if m.rule.hits?(d)
+
+def main -> () or Error:
+  start = Time.date(2026, 10, 1)?
+  off: {Int} = {Time.date(2026, 10, 12)?}
+  stop = start + 14 * DAY
+  puts Time.format(start, "%A %d %B %Y, day %j")
+  puts "weekday #{Time.weekday(start)}, day of year #{Time.day_of_year(start)}, #{(stop - start) / DAY} days in the window"
+
+  first = working(days_from(start), off).take(8).map { |t| Time.format(t, "%a %d") }
+  puts first.join(", ")
+
+  dentist = Time.date(2026, 10, 7)?
+  meetings = [
+    Meeting(title: "planning", rule: Weekly(1), hour: 10, minute: 0),
+    Meeting(title: "demo", rule: Weekly(5), hour: 15, minute: 0),
+    Meeting(title: "invoice run", rule: Monthly(1), hour: 8, minute: 0),
+    Meeting(title: "dentist", rule: Once(dentist), hour: 11, minute: 15),
+    Meeting(title: "board", rule: Monthly(13), hour: 14, minute: 0),
+  ]
+  items = agenda(working(days_from(start), off), meetings).take_while { |t, title| t < stop }.to_list
+  for t, title in items:
+    puts "#{Time.format(t, "%a %d %b %H:%M")}  #{title}"
+
+  by_day = items.group_by { |t, title| Time.format(t, "%a") }
+  puts by_day.map { |day, its| "#{day} #{its.len}" }.join(", ")
+
+  appt = Time.parse("2026-10-07 11:15", "%Y-%m-%d %H:%M")?
+  puts items.any? { |t, title| t == appt }
+  puts meetings.at(0).rule
+
+  var g = days_from(start)
+  puts g.next.map { |d| Time.format(d, "%d %B") }
+  puts g.next.map { |d| Time.format(d, "%d %B") }
+
+  puts Time.date(2026, 9, 31)
+  ()

@@ -1,0 +1,48 @@
+# Probes: literals and calls across lines: nested lists with the line broken
+# mid-list and a trailing comma at each level, a map with a trailing comma,
+# a call with one argument to a line and a trailing comma, a list argument
+# opened on the call's line, a set across lines, and a chain straight after
+# a list literal's closing `]`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# [[1, 2, 3], [4]]
+# {"ada": 36, "bo": 41}
+# box: 3 2
+# x: 11 1
+# 2
+# a1,b2
+
+def describe(name: Str, sizes: [Int], tags: {Str: Int}) -> Str:
+  "#{name}: #{sizes.sum} #{tags.len}"
+
+def main:
+  grid = [
+    [1, 2,
+      3],
+    [
+      4,
+    ],
+  ]
+  puts grid
+  ages = {
+    "ada": 36,
+    "bo": 41,
+  }
+  puts ages
+  puts describe(
+    "box",
+    [1, 2],
+    ages,
+  )
+  puts describe("x", [
+    5, 6,
+  ], {"k": 1})
+  colors = {
+    "red",
+    "blue",
+  }
+  puts colors.len
+  puts [
+    (1, "a"),
+    (2, "b"),
+  ].map { |n, s| "#{s}#{n}" }.join(",")

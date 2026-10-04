@@ -1,0 +1,95 @@
+# a01_sales_report: a CSV-ish sales report built from text in the program.
+# A generator reads the lines, splits each into fields read by position and
+# hands out the rows it can parse (warning about the rest); a function taking
+# `xs: Iterator[Sale]` tallies them into a map; the generator is called twice,
+# so its warnings come out twice; a multi-line constructor call with a
+# trailing comma and a multi-line call to a function of our own.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# columns: region | rep | units | price
+# north   1950
+# east    2000
+# south   1400
+# ------------
+# all     5350
+# 5 rows read
+# best sale: dee in south, 1400
+# ann, bo, cy, dee
+# bo  10
+# ann 7
+# dee 2
+# cy  1
+# units: 20
+# EXPECTED STDERR:
+# line 3: `x` is not an integer
+# line 7: expected 4 fields, found 2
+# line 3: `x` is not an integer
+# line 7: expected 4 fields, found 2
+
+struct Sale:
+  region: Str
+  rep: Str
+  units: Int
+  price: Int
+
+  def total -> Int = units * price
+
+def parse(line: Str) -> Sale or Error:
+  f = line.split(",")
+  if f.len != 4:
+    return Error("expected 4 fields, found #{f.len}")
+  Sale(
+    region: f.at(0),
+    rep: f.at(1),
+    units: f.at(2).to_int?,
+    price: f.at(3).to_int?,
+  )
+
+def sales(text: Str) -> Iterator[Sale]:
+  for n, line in text.lines.enumerate:
+    next if n == 0
+    match parse(line):
+      Ok(s) -> yield s
+      Error(e) -> warn "line #{n + 1}: #{e.message}"
+
+def by_region(xs: Iterator[Sale]) -> {Str: Int}:
+  var totals: {Str: Int} = {}
+  for s in xs:
+    totals[s.region] = totals[s.region].or(0) + s.total
+  totals
+
+def summary_line(label: Str, n: Int) -> Str = "#{label}: #{n}"
+
+def main:
+  text = """
+    region,rep,units,price
+    north,ann,3,250
+    south,bo,x,100
+    north,cy,1,1200
+    east,ann,4,250
+    south,dee,2,700
+    west,eve
+    east,bo,10,100
+    """
+  header = text.lines.first.or("")
+  puts "columns: #{header.split(",").join(" | ")}"
+
+  totals = by_region(sales(text))
+  for region, cents in totals:
+    puts "#{region.pad_right(6)}#{cents.pad(6)}"
+  puts "-".repeat(12)
+  puts "#{"all".pad_right(6)}#{totals.values.sum.pad(6)}"
+
+  rows = sales(text).to_list
+  puts "#{rows.len} rows read"
+  match rows.max_by { |s| s.total }:
+    Some(s) -> puts "best sale: #{s.rep} in #{s.region}, #{s.total}"
+    None -> puts "no sales"
+  puts rows.map { |s| s.rep }.to_set.sort.join(", ")
+  per_rep = rows.group_by { |s| s.rep }.map { |rep, ss| (rep, ss.sum { |s| s.units }) }
+  for rep, units in per_rep.sort_by { |r, u| 0 - u }:
+    puts "#{rep.pad_right(4)}#{units}"
+  puts summary_line(
+    "units",
+    rows.sum { |s| s.units },
+  )

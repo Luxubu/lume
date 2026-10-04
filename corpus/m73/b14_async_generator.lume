@@ -1,0 +1,18 @@
+# Probes: an `async def` with `yield`, which the docs list under "Not yet".
+# No example shows the message; it is guessed from the method one
+# (`generator_method`), pointing at the start of the definition.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `ticks` is an `async def`, and an `async def` cannot be a generator yet
+#   --> corpus/m73/b14_async_generator.lume:13:1
+#    |
+# 13 | async def ticks -> Iterator[Int]:
+#    | ^
+#   help: make it a plain `def`; a generator cannot wait for anything
+
+async def ticks -> Iterator[Int]:
+  yield 1
+  yield 2
+
+async def main:
+  puts 1

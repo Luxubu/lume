@@ -1,0 +1,164 @@
+# c01_ini_config: an INI-style config reader whose lexer is a generator.
+# Probes: a generator yielding enum values out of `text.lines`, with `next`
+# and `yield` inside `if` and `match` arms; a second generator taking
+# `toks: Iterator[Token]` and handed a list (copied in); a list pattern with
+# a rest and a guard on `split("=")`; a triple-quoted string; a map of maps
+# filled through `.or({})`; sets (`add`, `sort`, `diff`); `T?` with `?` in a
+# method; `or_error`, `map_error` and `?`; an interface with a default
+# method, held in a list written across lines; `warn` from inside a
+# generator.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 10 tokens, 1 unreadable
+# Pair(key: "name", value: "demo", line: 2)
+# {"server", "db", "empty"}
+# sections: db, empty, server
+# [global] 1 keys: name
+# [server] 3 keys: host port url
+# [db] 2 keys: port user
+# no keys: ["empty"]
+# Some("http://example.org/?a=1")
+# None
+# ok   server.host: example.org
+# ok   server.port: 8080
+# FAIL db.port: bad number: `five` is not an integer
+# FAIL db.password: missing db.password
+# FAIL cache.port: missing cache.port
+# next port: 8081
+# EXPECTED STDERR:
+# line 10: cannot read `oops this line`
+
+enum Token:
+  Section(name: Str, line: Int)
+  Pair(key: Str, value: Str, line: Int)
+  Bad(text: Str, line: Int)
+
+  def bad? -> Bool:
+    match self:
+      Bad(..) -> true
+      _ -> false
+
+struct Entry:
+  section: Str
+  key: Str
+  value: Str
+
+# The lexer: one token per line that means something.
+def tokens(text: Str) -> Iterator[Token]:
+  var n = 0
+  for raw in text.lines:
+    n += 1
+    line = raw.trim
+    next if line.empty? or line.starts_with?(";")
+    if line.starts_with?("[") and line.ends_with?("]"):
+      last = line.len - 2
+      yield Section(name: line[1..last].trim, line: n)
+    else:
+      match line.split("="):
+        [k, ..rest] if not rest.empty? -> yield Pair(key: k.trim, value: rest.join("=").trim, line: n)
+        _ -> yield Bad(text: line, line: n)
+
+# The parser: tokens in, entries out, each under the section above it.
+def entries(toks: Iterator[Token]) -> Iterator[Entry]:
+  var section = "global"
+  for t in toks:
+    match t:
+      Section(name, _) -> section = name
+      Pair(k, v, _) -> yield Entry(section: section, key: k, value: v)
+      Bad(text, n) -> warn "line #{n}: cannot read `#{text}`"
+
+struct Config:
+  values: {Str: {Str: Str}}
+
+  def get(section: Str, key: Str) -> Str?:
+    sec = values[section]?
+    v = sec[key]?
+    v
+
+def need(c: Config, section: Str, key: Str) -> Str or Error =
+  c.get(section, key).or_error("missing #{section}.#{key}")
+
+def need_int(c: Config, section: Str, key: Str) -> Int or Error:
+  text = need(c, section, key)?
+  text.to_int.map_error { |e| Error("bad number: #{e.message}") }
+
+interface Check:
+  def label -> Str
+  def run(c: Config) -> Str or Error
+
+  def report(c: Config) -> Str:
+    match run(c):
+      Ok(s) -> "ok   #{label}: #{s}"
+      Error(e) -> "FAIL #{label}: #{e.message}"
+
+struct Required:
+  section: Str
+  key: Str
+
+  def label -> Str = "#{section}.#{key}"
+  def run(c: Config) -> Str or Error = need(c, section, key)
+
+struct Port:
+  section: Str
+
+  def label -> Str = "#{section}.port"
+
+  def run(c: Config) -> Str or Error:
+    p = need_int(c, section, "port")?
+    if p < 1024:
+      return Error("#{p} is reserved")
+    "#{p}"
+
+def main -> () or Error:
+  text = """
+    ; sample settings
+    name = demo
+    [server]
+    host = example.org
+    port = 8080
+    url = http://example.org/?a=1
+    [db]
+    port = five
+    user = admin
+    oops this line
+    [ empty ]
+    """
+  toks = tokens(text).to_list
+  bad = toks.count { |t| t.bad? }
+  puts "#{toks.len} tokens, #{bad} unreadable"
+  puts toks.at(0)
+
+  var named: {Str} = {}
+  for t in toks:
+    match t:
+      Section(name, _) -> named.add(name)
+      _ -> ()
+  puts named
+  puts "sections: #{named.sort.join(", ")}"
+
+  var values: {Str: {Str: Str}} = {}
+  for e in entries(toks):
+    var sec = values[e.section].or({})
+    sec[e.key] = e.value
+    values[e.section] = sec
+  for name, sec in values:
+    puts "[#{name}] #{sec.len} keys: #{sec.keys.join(" ")}"
+  puts "no keys: #{named.diff(values.keys.to_set).to_list}"
+
+  cfg = Config(values: values)
+  puts cfg.get("server", "url")
+  puts cfg.get("db", "host")
+
+  checks: [Check] = [
+    Required(section: "server", key: "host"),
+    Port(section: "server"),
+    Port(section: "db"),
+    Required(section: "db", key: "password"),
+    Port(section: "cache"),
+  ]
+  for ch in checks:
+    puts ch.report(cfg)
+
+  port = need_int(cfg, "server", "port")?
+  puts "next port: #{port + 1}"
+  ()

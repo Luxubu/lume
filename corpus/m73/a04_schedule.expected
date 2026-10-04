@@ -1,0 +1,11 @@
+Tue 01 Oct, Fri 11 Oct, Mon 21 Oct, Thu 31 Oct, Sun 10 Nov, Wed 20 Nov
+7
+60 days in the window
+Tue 01 Oct, Fri 04 Oct, Mon 07 Oct, Thu 10 Oct, Wed 16 Oct
+2024-01-31 Wed
+skip: February 2024 has days 1 to 29, not 31
+2024-03-31 Sun
+skip: April 2024 has days 1 to 30, not 31
+7
+Some("Mon 21 Oct")
+exit: 0

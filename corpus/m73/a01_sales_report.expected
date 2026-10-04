@@ -1,0 +1,19 @@
+columns: region | rep | units | price
+line 3: `x` is not an integer
+line 7: expected 4 fields, found 2
+north   1950
+east    2000
+south   1400
+------------
+all     5350
+line 3: `x` is not an integer
+line 7: expected 4 fields, found 2
+5 rows read
+best sale: dee in south, 1400
+ann, bo, cy, dee
+bo  10
+ann 7
+dee 2
+cy  1
+units: 20
+exit: 0

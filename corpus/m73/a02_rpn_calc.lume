@@ -1,0 +1,82 @@
+# a02_rpn_calc: a tokenizer generator feeding a parser. `tokens` walks the
+# characters, gathers digits into numbers and yields an enum per token (from
+# inside a `match` arm, and after the loop); `eval_rpn` takes the tokens as
+# `toks: Iterator[Token]`, keeps a stack and returns `Int or Error`, using
+# `?` on `or_error` and `return` from inside a `match` arm. Last, a `var`
+# generator is moved on by hand with `next` and the rest handed to the
+# evaluator. The expressions are a list written across lines.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# [Num(value: 12), Num(value: 3), Op(sym: "/")]
+# 3 4 + = 7
+# 5 1 2 + 4 * + 3 - = 14
+# 2 3 4 * 5 + - = -15
+# 12 3 / = 4
+# 1 + -> `+` needs two numbers
+# 4 0 / -> division by zero
+# 2 x * -> unexpected `x`
+# 1 2 3 -> expected one result, found 3
+# Some(Num(value: 7))
+# Error("`*` needs two numbers")
+
+enum Token:
+  Num(value: Int)
+  Op(sym: Str)
+  Bad(text: Str)
+
+def tokens(src: Str) -> Iterator[Token]:
+  var digits = ""
+  for c in src.chars:
+    if c.digit?:
+      digits = digits + c
+      next
+    if not digits.empty?:
+      yield Num(digits.to_int.or(0))
+      digits = ""
+    match c:
+      " " -> ()
+      "+" | "-" | "*" | "/" -> yield Op(c.to_s)
+      _ -> yield Bad(c.to_s)
+  yield Num(digits.to_int.or(0)) if not digits.empty?
+
+def eval_rpn(toks: Iterator[Token]) -> Int or Error:
+  var stack: [Int] = []
+  for t in toks:
+    match t:
+      Num(n) -> stack.push(n)
+      Op(sym) ->
+        b = stack.pop.or_error("`#{sym}` needs two numbers")?
+        a = stack.pop.or_error("`#{sym}` needs two numbers")?
+        if sym == "/" and b == 0:
+          return Error("division by zero")
+        r = match sym:
+          "+" -> a + b
+          "-" -> a - b
+          "*" -> a * b
+          _ -> a / b
+        stack.push(r)
+      Bad(text) -> return Error("unexpected `#{text}`")
+  if stack.len != 1:
+    return Error("expected one result, found #{stack.len}")
+  stack.at(0)
+
+def main:
+  exprs = [
+    "3 4 +",
+    "5 1 2 + 4 * + 3 -",
+    "2 3 4 * 5 + -",
+    "12 3 /",
+    "1 +",
+    "4 0 /",
+    "2 x *",
+    "1 2 3",
+  ]
+  puts tokens("12 3 /").to_list
+  for e in exprs:
+    match eval_rpn(tokens(e)):
+      Ok(n) -> puts "#{e} = #{n}"
+      Error(err) -> puts "#{e} -> #{err.message}"
+
+  var g = tokens("7 8 *")
+  puts g.next
+  puts eval_rpn(g)

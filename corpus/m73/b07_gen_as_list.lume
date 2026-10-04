@@ -1,0 +1,29 @@
+# Probes: a generator given where a list is wanted: a `[Int]` struct field
+# and a `[Int]` parameter; and a generator moved along by `next` on a `var`,
+# then printed: only what is left.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# Bag(items: [3, 2, 1])
+# 2,1
+# Some(4)
+# [3, 2, 1]
+
+struct Bag:
+  items: [Int]
+
+def countdown(n: Int) -> Iterator[Int]:
+  var k = n
+  while k > 0:
+    yield k
+    k -= 1
+
+def show(xs: [Int]) -> Str = xs.join(",")
+
+def main:
+  b = Bag(items: countdown(3))
+  puts b
+  puts show(countdown(2))
+  var g = countdown(4)
+  top = g.next
+  puts top
+  puts g

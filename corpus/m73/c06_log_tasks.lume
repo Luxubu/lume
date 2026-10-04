@@ -1,0 +1,117 @@
+# c06_log_tasks: a log report, read by a generator pipeline in `main` and
+# summed up per service by one task each.
+# Probes: `parts = line.split(" ")` read only by position (`at`, `len`) in
+# a function giving `T or Error`, with `slice` for the rest of the line; a
+# `match` used as a value whose last arm is `other -> return Error(..)`;
+# generators chained by `xs: Iterator[(Int, Rec or Error)]`, with `warn`
+# for the lines that cannot be read; a list handed to an `Iterator[Rec]`
+# parameter inside a task; `spawn:` per group and `await` on the list of
+# tasks, results in the order started; an enum as a map key; `max_by` with
+# a tie on a map; a struct built by a call written across lines with a
+# tuple field; `pad` and `pad_right` columns.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 10 records from 3 services
+# {Info: 5, Warning: 2, Failure: 3}
+# Some(("09:02", 2))
+# {"db", "api"}
+# api   5 lines  09:00-09:07  warn 1  FAIL 09:04 upstream 502; 09:05 upstream 504
+# db    3 lines  09:02-09:03  warn 0  FAIL 09:02 connection lost
+# web   2 lines  09:05-09:06  warn 1
+# EXPECTED STDERR:
+# line 5: expected at least 4 fields, found 1
+# line 10: unknown level `TRACE`
+
+enum Level:
+  Info
+  Warning
+  Failure
+
+struct Rec:
+  at: Str
+  level: Level
+  svc: Str
+  msg: Str
+
+struct Summary:
+  svc: Str
+  total: Int
+  warns: Int
+  fails: [Str]
+  span: (Str, Str)
+
+  def line -> Str:
+    head = "#{svc.pad_right(4)} #{total.pad(2)} lines  #{span.0}-#{span.1}  warn #{warns}"
+    if fails.empty?: head else: "#{head}  FAIL #{fails.join("; ")}"
+
+# `09:01 WARN api slow reply 812ms`: time, level, service, then the message.
+def parse(line: Str) -> Rec or Error:
+  parts = line.split(" ")
+  if parts.len < 4:
+    return Error("expected at least 4 fields, found #{parts.len}")
+  level = match parts.at(1):
+    "INFO" -> Info
+    "WARN" -> Warning
+    "ERROR" -> Failure
+    other -> return Error("unknown level `#{other}`")
+  start = parts.at(0).len + parts.at(1).len + parts.at(2).len + 3
+  Rec(at: parts.at(0), level: level, svc: parts.at(2), msg: line.slice(start, line.len))
+
+def records(text: Str) -> Iterator[(Int, Rec or Error)]:
+  for i, line in text.lines.enumerate:
+    yield (i + 1, parse(line)) if not line.trim.empty?
+
+def valid(xs: Iterator[(Int, Rec or Error)]) -> Iterator[Rec]:
+  for n, r in xs:
+    match r:
+      Ok(rec) -> yield rec
+      Error(e) -> warn "line #{n}: #{e.message}"
+
+def failures(xs: Iterator[Rec]) -> Iterator[Str]:
+  for r in xs:
+    yield "#{r.at} #{r.msg}" if r.level == Failure
+
+def summarize(svc: Str, rs: [Rec]) -> Summary:
+  times = rs.map { |r| r.at }.to_list
+  Summary(
+    svc: svc,
+    total: rs.len,
+    warns: rs.count { |r| r.level == Warning },
+    fails: failures(rs).to_list,
+    span: (times.min.or("?"), times.max.or("?")),
+  )
+
+async def main:
+  log = """
+    09:00 INFO api started
+    09:01 WARN api slow reply 812ms
+    09:02 ERROR db connection lost
+    09:02 INFO db retrying
+    garbage
+    09:03 INFO db connected
+    09:04 ERROR api upstream 502
+    09:05 INFO web started
+    09:05 ERROR api upstream 504
+    09:06 TRACE web cache probe
+    09:06 WARN web cache miss rate 40%
+    09:07 INFO api healthy
+    """
+  recs = valid(records(log)).to_list
+  by_svc = recs.group_by { |r| r.svc }
+  puts "#{recs.len} records from #{by_svc.len} services"
+
+  var by_level: {Level: Int} = {}
+  var per_min: {Str: Int} = {}
+  for r in recs:
+    by_level[r.level] = by_level[r.level].or(0) + 1
+    per_min[r.at] = per_min[r.at].or(0) + 1
+  puts by_level
+  puts per_min.max_by { |k, v| v }
+  puts recs.filter { |r| r.level == Failure }.map { |r| r.svc }.to_set
+
+  var tasks: [Task[Summary]] = []
+  for svc, rs in by_svc:
+    t = spawn: summarize(svc, rs)
+    tasks.push(t)
+  for s in await tasks:
+    puts s.line

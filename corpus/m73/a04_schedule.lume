@@ -1,0 +1,53 @@
+# a04_schedule: dates as a sequence of Ints. An endless generator gives every
+# Nth day from a start made by `Time.date`; `take`, `take_while` and `find`
+# stop it; a generator taking `xs: Iterator[Int]` keeps only weekdays; a
+# finite generator tries the 31st of every month and yields either the date
+# or the reason `Time.date` gave for refusing it.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# Tue 01 Oct, Fri 11 Oct, Mon 21 Oct, Thu 31 Oct, Sun 10 Nov, Wed 20 Nov
+# 7
+# 60 days in the window
+# Tue 01 Oct, Fri 04 Oct, Mon 07 Oct, Thu 10 Oct, Wed 16 Oct
+# 2024-01-31 Wed
+# skip: February 2024 has days 1 to 29, not 31
+# 2024-03-31 Sun
+# skip: April 2024 has days 1 to 30, not 31
+# 7
+# Some("Mon 21 Oct")
+
+DAY = 86400
+
+def every(start: Int, days: Int) -> Iterator[Int]:
+  var t = start
+  while true:
+    yield t
+    t += days * DAY
+
+def weekdays(xs: Iterator[Int]) -> Iterator[Int]:
+  for t in xs:
+    yield t if Time.weekday(t) <= 5
+
+def monthly(year: Int, day: Int) -> Iterator[Str]:
+  for m in 1..12:
+    match Time.date(year, m, day):
+      Ok(t) -> yield Time.format(t, "%Y-%m-%d %a")
+      Error(e) -> yield "skip: #{e.message}"
+
+def show(t: Int) -> Str = Time.format(t, "%a %d %b")
+
+def main -> () or Error:
+  start = Time.date(2024, 10, 1)?
+  stop = Time.date(2024, 11, 30)?
+
+  puts every(start, 10).take(6).map(show).join(", ")
+  puts every(start, 10).take_while { |t| t <= stop }.len
+  puts "#{(stop - start) / DAY} days in the window"
+  puts weekdays(every(start, 3)).take(5).map(show).join(", ")
+
+  for line in monthly(2024, 31).take(4):
+    puts line
+  puts monthly(2024, 31).reject { |s| s.starts_with?("skip") }.len
+
+  due = Time.parse("2024-10-15", "%Y-%m-%d")?
+  puts every(start, 10).find { |t| t >= due }.map(show)

@@ -1,0 +1,14 @@
+ledger: 5 items, counted: 5 skus
+ledger value: $151.25
+A100  ok      120
+A200  ok      300
+B300  over    +5
+C400  short   -1
+D500  missing -8 (none found)
+E600  unknown 5 not in the ledger
+value change: -$40.75
+to recount: B300, C400, D500, E600
+A100 on S1 and S3
+rejected: unexpected header ["id", "name"]
+rejected: bad price `1.5`
+exit: 0

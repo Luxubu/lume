@@ -1,0 +1,12 @@
+[Num(value: 12), Num(value: 3), Op(sym: "/")]
+3 4 + = 7
+5 1 2 + 4 * + 3 - = 14
+2 3 4 * 5 + - = -15
+12 3 / = 4
+1 + -> `+` needs two numbers
+4 0 / -> division by zero
+2 x * -> unexpected `x`
+1 2 3 -> expected one result, found 3
+Some(Num(value: 7))
+Error("`*` needs two numbers")
+exit: 0

@@ -1,0 +1,7 @@
+error: `main` hands out items with `yield`, so it gives `Iterator[T]`
+  --> corpus/m73/b12_yield_in_main.lume:13:1
+   |
+13 | def main:
+   | ^
+  help: say what it gives: `def main(...) -> Iterator[Int]:`, with the type its `yield`s have
+exit: 1

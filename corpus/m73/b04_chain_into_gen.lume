@@ -1,0 +1,35 @@
+# Probes: when a lazy chain given to an `Iterator[T]` parameter is worked
+# out. Into a plain function it stays lazy, so the `map` and the loop take
+# turns; into a generator it is worked out first, so both `map` lines come
+# before anything else. The block is a function with a side effect, so the
+# order shows in the output.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# map 1
+# plain got 1
+# map 2
+# plain got 2
+# map 3
+# map 4
+# made
+# gen got 300
+# gen got 400
+
+def tagged(xs: Iterator[Int]) -> Iterator[Int]:
+  for x in xs:
+    yield x * 100
+
+def plain(xs: Iterator[Int]):
+  for x in xs:
+    puts "plain got #{x}"
+
+def noisy(x: Int) -> Int:
+  puts "map #{x}"
+  x
+
+def main:
+  plain([1, 2].map(noisy))
+  g = tagged([3, 4].map(noisy))
+  puts "made"
+  for x in g:
+    puts "gen got #{x}"

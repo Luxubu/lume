@@ -1,0 +1,16 @@
+Thursday 01 October 2026, day 274
+weekday 4, day of year 274, 14 days in the window
+Thu 01, Fri 02, Mon 05, Tue 06, Wed 07, Thu 08, Fri 09, Tue 13
+Thu 01 Oct 08:00  invoice run
+Fri 02 Oct 15:00  demo
+Mon 05 Oct 10:00  planning
+Wed 07 Oct 11:15  dentist
+Fri 09 Oct 15:00  demo
+Tue 13 Oct 14:00  board
+Thu 1, Fri 2, Mon 1, Wed 1, Tue 1
+true
+Weekly(day: 1)
+Some("01 October")
+Some("02 October")
+Error("September 2026 has days 1 to 30, not 31")
+exit: 0

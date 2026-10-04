@@ -1,0 +1,40 @@
+# Probes: a generic generator giving pairs (taken apart by `for a, b` and by
+# a two-name block), one that reaches no `yield`, a generator that calls
+# itself, and `zip` with a generator on the left, on the right (after a
+# list), and an endless one zipped with a list.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# x->y
+# y->z
+# [3, 5]
+# [4, 0, 7, 2]
+# [(4, 0), (0, 1), (7, 2), (2, 3)]
+# [(10, 9), (20, 5)]
+# [(0, "a"), (1, "b")]
+# []
+
+def naturals -> Iterator[Int]:
+  var n = 0
+  while true:
+    yield n
+    n += 1
+
+def neighbours[T](xs: [T]) -> Iterator[(T, T)]:
+  for i in 1...xs.len:
+    yield (xs.at(i - 1), xs.at(i))
+
+def digits(n: Int) -> Iterator[Int]:
+  if n >= 10:
+    for d in digits(n / 10):
+      yield d
+  yield n % 10
+
+def main:
+  for a, b in neighbours(["x", "y", "z"]):
+    puts "#{a}->#{b}"
+  puts neighbours([1, 2, 3]).map { |a, b| a + b }.to_list
+  puts digits(4072).to_list
+  puts digits(4072).zip(naturals()).to_list
+  puts [10, 20].zip(digits(95)).to_list
+  puts naturals().zip(["a", "b"]).to_list
+  puts neighbours([5]).to_list

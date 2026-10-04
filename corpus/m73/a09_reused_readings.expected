@@ -1,0 +1,7 @@
+error: `temps` is a generator, and it is used up here, so it cannot be used after
+  --> corpus/m73/a09_reused_readings.lume:24:16
+   |
+24 |   puts average(temps).decimals(1)
+   |                ^
+  help: a generator hands out each item once: to walk the items twice, keep them with `.to_list` first
+exit: 1

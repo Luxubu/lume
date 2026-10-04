@@ -1,0 +1,59 @@
+# a05_word_freq: a word-frequency pipeline. `words` yields cleaned words from
+# nested `for`s over `lines` and bare `split`; `without` is a generator
+# taking `xs: Iterator[Str]` and a stop-word set (a set literal written across
+# lines); `tally` takes any sequence of words into a map; the map is ranked
+# with `sort_by` on a tuple key. A lazy chain over a generator is handed to a
+# generator too (worked out first, as the docs say).
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 21 words, 10 kept
+# cat  **** 4
+# sat  ** 2
+# dog  * 1
+# 6 different
+# once: dog log mat ran
+# Some("the")
+# ["sat", "mat", "dog", "sat", "log", "ran"]
+
+def words(text: Str) -> Iterator[Str]:
+  for line in text.lines:
+    for raw in line.split:
+      w = raw.downcase.replace(",", "").replace(".", "").replace("!", "")
+      yield w if not w.empty?
+
+def without(xs: Iterator[Str], stop: {Str}) -> Iterator[Str]:
+  for w in xs:
+    yield w if not stop.contains?(w)
+
+def tally(xs: Iterator[Str]) -> {Str: Int}:
+  var counts: {Str: Int} = {}
+  for w in xs:
+    counts[w] = counts[w].or(0) + 1
+  counts
+
+def main:
+  text = """
+    The cat sat on the mat.
+    The dog sat on the log, and the cat ran!
+    A cat is a cat.
+    """
+  stop = {
+    "the",
+    "a",
+    "and",
+    "on",
+    "is",
+  }
+
+  puts "#{words(text).len} words, #{without(words(text), stop).len} kept"
+
+  counts = tally(without(words(text), stop))
+  ranked = counts.sort_by { |w, n| (0 - n, w) }
+  for w, n in ranked.take(3):
+    puts "#{w.pad_right(5)}#{"*".repeat(n)} #{n}"
+  puts "#{counts.len} different"
+  once = counts.filter { |w, n| n == 1 }.keys.sort
+  puts "once: #{once.join(" ")}"
+
+  puts words(text).max_by { |w| w.len }
+  puts without(words(text).filter { |w| w != "cat" }, stop).to_list

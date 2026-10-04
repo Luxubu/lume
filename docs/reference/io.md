@@ -335,7 +335,7 @@ Its errors say where the text stopped matching, or what did not exist:
 | ``expected the month at position 5`` | a directive found no digits |
 | ``unexpected ` extra` at position 10`` | the pattern ended before the text |
 | ``month 13 is not 1 to 12`` | the parts make no date |
-| ``February 2023 has days 1 to 28, not 29`` | |
+| ``February 2023 has days 1 to 28, not 29`` | any month, by its full name: ``April 2025 has days 1 to 30, not 31`` |
 | ``24:00:00 is not a time of day`` | |
 | ``day 367 of 2024 is not 1 to 366`` | `%j` past the end of the year |
 

@@ -174,7 +174,7 @@ an `Int`. See [numbers](numbers.md) for how floats print and sort.
 | `take`, `skip` | `Int` | chain of `T` | the first `n`, all but the first `n` |
 | `take_while` | block | chain of `T` | items from the start while they pass |
 | `enumerate` | | chain of `(Int, T)` | each item with its position, the position first |
-| `zip` | `[U]` | `[(T, U)]` | pairs items up; stops at the shorter list |
+| `zip` | `[U]`, a range or a sequence | `[(T, U)]`; a chain when called on one | pairs items up; stops at the shorter side, so an endless sequence on either side is fine |
 | `flat_map` | block giving a list | `[U]` | each item becomes a list; the lists are joined |
 | `flatten` | | `[U]` | a `[[U]]` joined into one list, one level deep |
 | `group_by` | block | `{K: [T]}` | items gathered under the key the block gives |

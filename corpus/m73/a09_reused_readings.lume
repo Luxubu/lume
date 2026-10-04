@@ -1,0 +1,25 @@
+# a09_reused_readings: an everyday slip. A generator of readings is handed
+# to a function taking `xs: Iterator[Int]`, which takes it by move, and the
+# program then asks the same generator for its maximum. The docs say a
+# generator moves into such a parameter and is gone after it is used; the
+# message predicted is the "used up" one, pointing at where it moved.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `temps` is a generator, and it is used up here, so it cannot be used after
+#   --> corpus/m73/a09_reused_readings.lume:24:16
+#    |
+# 24 |   puts average(temps).decimals(1)
+#    |                ^
+#   help: a generator hands out each item once: to walk the items twice, keep them with `.to_list` first
+
+def readings(text: Str) -> Iterator[Int]:
+  for line in text.lines:
+    f = line.split(",")
+    yield f.at(1).trim.to_int.or(0) if f.len == 2
+
+def average(xs: Iterator[Int]) -> Float = xs.avg
+
+def main:
+  temps = readings("mon, 12\ntue, 15\nwed, 9")
+  puts average(temps).decimals(1)
+  puts temps.max

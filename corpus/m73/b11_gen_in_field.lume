@@ -1,0 +1,22 @@
+# Probes: a generator given to a struct field typed `Iterator[Int]` (an
+# interface-typed field, which is copied with the struct). The docs refuse a
+# generator in a field; no example shows the message, so it is guessed.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: a generator cannot be kept in a field: it is used up as it is walked
+#   --> corpus/m73/b11_gen_in_field.lume:21:32
+#    |
+# 21 |   s = Source(name: "a", items: ones())
+#    |                                ^
+#   help: keep its items with `.to_list`, or keep a struct with `def next(var self) -> T?`, which can be copied
+
+struct Source:
+  name: Str
+  items: Iterator[Int]
+
+def ones -> Iterator[Int]:
+  yield 1
+
+def main:
+  s = Source(name: "a", items: ones())
+  puts s.name

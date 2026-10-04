@@ -1,0 +1,43 @@
+4 rooms, 4 items, 1 lock
+> look
+  hall: exits north east; you see lamp
+> go east
+  you enter the kitchen
+> go down
+  too dark to go down without the lamp
+> go west
+  back in the hall
+> take lamp
+  taken: lamp
+> take lamp
+  no lamp here
+> dance
+  what is `dance`?
+> go east
+  back in the kitchen
+> take key
+  taken: key
+> go down
+  you enter the cellar
+> take coin
+  taken: coin
+> i
+  you carry coin, key, lamp
+> go up
+  back in the kitchen
+> go west
+  back in the hall
+> go north
+  you enter the library
+> drop key
+  dropped: key
+> look
+  library: exits south; you see book, key
+> score
+  4 rooms seen in 18 moves, 40 points
+> quit
+  bye
+replayed 19 commands
+bad world: ghost is in `attic`, which is not a room
+bad world: cannot read `teleport now`
+exit: 0

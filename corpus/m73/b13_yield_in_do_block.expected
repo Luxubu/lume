@@ -1,0 +1,7 @@
+error: `yield` inside a block hands nothing out: the block runs inside a call, not in the generator
+  --> corpus/m73/b13_yield_in_do_block.lume:15:5
+   |
+15 |     yield y
+   |     ^
+  help: loop with `for` instead of a block method, so the `yield` is the generator's own
+exit: 1

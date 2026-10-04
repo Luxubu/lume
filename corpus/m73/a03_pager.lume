@@ -1,0 +1,76 @@
+# a03_pager: paging through search results. An endless generator of ids is
+# zipped with a list of titles (stopping with the list); a finite generator
+# yields one `Page` struct per page, built by a constructor call written
+# across lines; `skip(1).first` picks one page; a `var` pager is moved on
+# with `next` and the rest walked by a chain; an empty input gives no pages.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# page 1/3
+#   R-100 Intro to Lume
+#   R-101 Generators
+#   R-102 Sequences
+# page 2/3
+#   R-103 Splitting text
+#   R-104 Maps in order
+#   R-105 Errors
+# page 3/3
+#   R-106 Printing
+# page 2/3: R-103 Splitting text .. R-105 Errors
+# first: page 1/3
+# [2, 3]
+# [Page(number: 1, total: 2, items: ["a", "b"]), Page(number: 2, total: 2, items: ["c"])]
+# []
+
+struct Page:
+  number: Int
+  total: Int
+  items: [Str]
+
+  def header -> Str = "page #{number}/#{total}"
+
+def ids(start: Int) -> Iterator[Str]:
+  var n = start
+  while true:
+    yield "R-#{n}"
+    n += 1
+
+def pages(items: [Str], size: Int) -> Iterator[Page]:
+  count = (items.len + size - 1) / size
+  var n = 0
+  while n < count:
+    yield Page(
+      number: n + 1,
+      total: count,
+      items: items.skip(n * size).take(size).to_list,
+    )
+    n += 1
+
+def main:
+  titles = [
+    "Intro to Lume",
+    "Generators",
+    "Sequences",
+    "Splitting text",
+    "Maps in order",
+    "Errors",
+    "Printing",
+  ]
+  results = ids(100).zip(titles).map { |id, t| "#{id} #{t}" }.to_list
+
+  for p in pages(results, 3):
+    puts p.header
+    for line in p.items:
+      puts "  #{line}"
+
+  match pages(results, 3).skip(1).first:
+    Some(p) -> puts "#{p.header}: #{p.items.at(0)} .. #{p.items.last.or("")}"
+    None -> puts "no page 2"
+
+  var pager = pages(results, 3)
+  match pager.next:
+    Some(p) -> puts "first: #{p.header}"
+    None -> puts "nothing"
+  puts pager.map { |p| p.number }.to_list
+
+  puts pages(["a", "b", "c"], 2).to_list
+  puts pages([], 3).to_list

@@ -1,0 +1,18 @@
+# Probes: `yield` on its own line inside a `do |x|` block given to `each`, in
+# a generator: the `do` form is still a block, not the generator's body.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `yield` inside a block hands nothing out: the block runs inside a call, not in the generator
+#   --> corpus/m73/b13_yield_in_do_block.lume:15:5
+#    |
+# 15 |     yield y
+#    |     ^
+#   help: loop with `for` instead of a block method, so the `yield` is the generator's own
+
+def doubled(xs: [Int]) -> Iterator[Int]:
+  xs.each do |x|
+    y = x * 2
+    yield y
+
+def main:
+  puts doubled([1, 2]).to_list

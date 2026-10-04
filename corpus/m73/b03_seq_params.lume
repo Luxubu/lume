@@ -1,0 +1,56 @@
+# Probes: one `xs: Iterator[Int]` parameter given a generator, a lazy chain,
+# a range, a list, a set (with a duplicate) and a struct with `next` that
+# was moved along by hand first; `xs.next` inside, then the rest handed on
+# to another `Iterator[Int]` function; the caller's list and struct as they
+# were after.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 6
+# 60
+# 10
+# 6
+# 11
+# Some(3)
+# 3
+# 2
+# 1+5
+# 2+1
+# [1, 2, 3]
+# Countdown(n: 2)
+
+struct Countdown:
+  n: Int
+
+  def next(var self) -> Int?:
+    if n == 0:
+      return None
+    n -= 1
+    Some(n + 1)
+
+def countdown(n: Int) -> Iterator[Int]:
+  var k = n
+  while k > 0:
+    yield k
+    k -= 1
+
+def total(xs: Iterator[Int]) -> Int = xs.sum
+
+def head_and_total(xs: Iterator[Int]) -> Str:
+  first = xs.next.or(0)
+  "#{first}+#{total(xs)}"
+
+def main:
+  nums = [1, 2, 3]
+  puts total(countdown(3))
+  puts total(nums.map { |x| x * 10 })
+  puts total(1..4)
+  puts total(nums)
+  puts total({5, 5, 6})
+  var c = Countdown(n: 3)
+  puts c.next
+  puts total(c)
+  puts c.n
+  puts head_and_total(nums)
+  puts head_and_total(c)
+  puts nums
+  puts c

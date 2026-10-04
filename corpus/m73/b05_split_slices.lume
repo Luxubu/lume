@@ -1,0 +1,49 @@
+# Probes: `split` lists whose output would show a wrong slice: the source a
+# `var` that grows after the split, a list handed back from a function,
+# items kept in struct fields, items compared and interpolated, a list given
+# to a block, nested splits read by position, and a list walked with `for`
+# after its source text was replaced.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 2 b=2 a=1;b=2;c=3
+# [Field(key: "a", val: "1"), Field(key: "b", val: "2"), Field(key: "c", val: "3")]
+# true
+# true yx
+# XYX
+# 5
+# pz
+# qz
+# ["p", "q"]
+
+struct Field:
+  key: Str
+  val: Str
+
+def fields(line: Str) -> [Str]:
+  parts = line.split(";")
+  parts
+
+def main:
+  var text = "a=1;b=2"
+  parts = text.split(";")
+  text = text + ";c=3"
+  puts "#{parts.len} #{parts.at(1)} #{text}"
+  var kept: [Field] = []
+  for p in fields(text):
+    kv = p.split("=")
+    kept.push(Field(key: kv.at(0), val: kv.at(1)))
+  puts kept
+  first = kept.at(0)
+  puts first.key == "a"
+  words = "x y x".split(" ")
+  same = words.at(0) == words.at(2)
+  puts "#{same} #{words.at(1)}#{words.at(0)}"
+  puts words.map { |w| w.upcase }.join("")
+  nested = "1,2|3|4,5,6".split("|")
+  puts nested.at(0).split(",").len + nested.at(2).split(",").len
+  var row = "p q"
+  cells = row.split(" ")
+  row = "z"
+  for c in cells:
+    puts c + row
+  puts cells

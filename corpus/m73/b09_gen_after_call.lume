@@ -1,0 +1,24 @@
+# Probes: a generator in a local handed to an `xs: Iterator[Int]` parameter
+# (it moves in), then used again by the caller. Assumed: the same message as
+# for any other walk that uses it up, pointing at the argument.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `g` is a generator, and it is used up here, so it cannot be used after
+#   --> corpus/m73/b09_gen_after_call.lume:23:14
+#    |
+# 23 |   puts total(g)
+#    |              ^
+#   help: a generator hands out each item once: to walk the items twice, keep them with `.to_list` first
+
+def countdown(n: Int) -> Iterator[Int]:
+  var k = n
+  while k > 0:
+    yield k
+    k -= 1
+
+def total(xs: Iterator[Int]) -> Int = xs.sum
+
+def main:
+  g = countdown(3)
+  puts total(g)
+  puts g.to_list

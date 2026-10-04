@@ -1,0 +1,24 @@
+warning: `checks` holds values of different types behind `Check`, so calls on its items go through a pointer
+  --> corpus/m73/c01_ini_config.lume:152:3
+    |
+152 |   checks: [Check] = [
+    |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+10 tokens, 1 unreadable
+Pair(key: "name", value: "demo", line: 2)
+{"server", "db", "empty"}
+sections: db, empty, server
+line 10: cannot read `oops this line`
+[global] 1 keys: name
+[server] 3 keys: host port url
+[db] 2 keys: port user
+no keys: ["empty"]
+Some("http://example.org/?a=1")
+None
+ok   server.host: example.org
+ok   server.port: 8080
+FAIL db.port: bad number: `five` is not an integer
+FAIL db.password: missing db.password
+FAIL cache.port: missing cache.port
+next port: 8081
+exit: 0

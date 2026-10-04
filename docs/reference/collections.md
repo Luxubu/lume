@@ -37,8 +37,9 @@ puts [1, 2].join("+")      #=> 1+2
 after a sort is the descending form.
 
 **A literal may span lines.** Inside `[...]`, `{...}` or the parentheses of
-a call, a line break does not end the statement, so long lists, maps and
-argument lists are written one item to a line. A comma after the last item
+a call or of a `def`'s parameters, a line break does not end the statement,
+so long lists, maps, argument lists and parameter lists are written one item
+to a line. The indentation inside the brackets is free. A comma after the last item
 is fine, and `lume fmt` writes one:
 
 ```lume
@@ -295,7 +296,10 @@ where a list is wanted, it gives its items. Where it differs:
   argument, which are copied. A parameter `xs: Iterator[T]` takes it (below).
 - **It has its own copy of its arguments,** taken at the call, since it runs
   after the call has returned. A `var` parameter is refused.
-- **`return` alone ends it.** Its items come only from `yield`.
+- **`return` alone ends it.** Its items come only from `yield`. Once it has
+  ended, `next` gives `None` every time it is asked again.
+- **A `var` holding one carries on where it stopped**: after `g.next`, a
+  `for`, a chain or a call that takes `g` starts from the next item.
 - **`yield` belongs to the generator's own body**: its loops, `if`s and
   `match`es, not a block it hands to a method (`xs.each { .. }`) or a
   `spawn:`. Use `for` there instead.
@@ -332,8 +336,11 @@ def main:
 A generator moves in; a list, a set or a sequence of your own is copied in,
 so the caller's value is as it was. A lazy chain stays lazy into a plain
 function. Into a generator, which outlives the call, it is worked out first,
-since what it reads might not live as long: pass a generator itself to stay
-lazy there.
+at the call, since what it reads might not live as long: pass a generator
+itself to stay lazy there. **So an endless chain given to a generator never
+returns** — `evens(naturals().map { |n| n * 3 })` waits for ever, where
+`evens(naturals())` does not. Make the `map` a generator of its own, or move
+it inside.
 - **Speed:** `bench/b7_generators.lume` is `b6` as a generator; it runs at
   about 1.3 times the hand-written Rust iterator.
 - **More:** `examples/generators.lume` shows each of these.

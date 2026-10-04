@@ -1,0 +1,78 @@
+# a08_ledger: a bank statement with a running balance. An enum of
+# transactions with methods; a generator yielding (transaction, balance)
+# pairs, its parameters written across lines like a call's; a `() or Error`
+# function taking the pairs as `xs: Iterator[(Txn, Int)]` that stops at the
+# first overdraft; money shown with `decimals` and padded columns; the list of
+# transactions written one to a line.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# deposit        1200.00   1250.00
+# withdrawal     -450.50    799.50
+# fee: card        -2.50    797.00
+# withdrawal     -800.00     -3.00
+# deposit         100.00     97.00
+# overdrawn by 3.00 after withdrawal
+# never overdrawn
+# closing 97.00
+# fees 2.50 in 1 charge
+# Some((Withdraw(cents: 80000), -300))
+
+enum Txn:
+  Deposit(cents: Int)
+  Withdraw(cents: Int)
+  Fee(label: Str, cents: Int)
+
+  def delta -> Int:
+    match self:
+      Deposit(c) -> c
+      Withdraw(c) -> 0 - c
+      Fee(_, c) -> 0 - c
+
+  def describe -> Str:
+    match self:
+      Deposit(_) -> "deposit"
+      Withdraw(_) -> "withdrawal"
+      Fee(l, _) -> "fee: #{l}"
+
+  def fee? -> Bool:
+    match self:
+      Fee(..) -> true
+      _ -> false
+
+def money(c: Int) -> Str = (c.to_float / 100.0).decimals(2)
+
+def running(
+  txns: [Txn],
+  opening: Int,
+) -> Iterator[(Txn, Int)]:
+  var balance = opening
+  for t in txns:
+    balance += t.delta
+    yield (t, balance)
+
+def first_overdraft(xs: Iterator[(Txn, Int)]) -> () or Error:
+  for t, b in xs:
+    if b < 0:
+      return Error("overdrawn by #{money(0 - b)} after #{t.describe}")
+
+def main:
+  txns = [
+    Deposit(cents: 120000),
+    Withdraw(cents: 45050),
+    Fee(label: "card", cents: 250),
+    Withdraw(cents: 80000),
+    Deposit(cents: 10000),
+  ]
+  for t, b in running(txns, 5000):
+    puts "#{t.describe.pad_right(12)}#{money(t.delta).pad(10)}#{money(b).pad(10)}"
+
+  for opening in [5000, 50000]:
+    match first_overdraft(running(txns, opening)):
+      Ok(_) -> puts "never overdrawn"
+      Error(e) -> puts e.message
+
+  closing = running(txns, 5000).map { |t, b| b }.last.or(0)
+  puts "closing #{money(closing)}"
+  fees = txns.filter(_.fee?)
+  puts "fees #{money(fees.sum { |t| 0 - t.delta })} in #{fees.len} charge"
+  puts running(txns, 5000).min_by { |t, b| b }

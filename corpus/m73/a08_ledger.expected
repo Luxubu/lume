@@ -1,0 +1,11 @@
+deposit        1200.00   1250.00
+withdrawal     -450.50    799.50
+fee: card        -2.50    797.00
+withdrawal     -800.00     -3.00
+deposit         100.00     97.00
+overdrawn by 3.00 after withdrawal
+never overdrawn
+closing 97.00
+fees 2.50 in 1 charge
+Some((Withdraw(cents: 80000), -300))
+exit: 0

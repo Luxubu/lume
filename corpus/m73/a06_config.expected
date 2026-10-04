@@ -1,0 +1,13 @@
+line 10: expected `key = value`, found `oops`
+5
+server.host    = shop.local
+server.port    = 9090
+server.timeout = 30s
+db.name        = shop
+db.pool        = 4
+server, db
+serving shop.local:9090 with 4 connections
+Error("missing `db.user`")
+Error("db.name: `shop` is not an integer")
+error: server.timeout: `30s` is not an integer
+exit: 1

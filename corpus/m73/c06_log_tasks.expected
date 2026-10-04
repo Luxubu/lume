@@ -1,0 +1,10 @@
+line 5: expected at least 4 fields, found 1
+line 10: unknown level `TRACE`
+10 records from 3 services
+{Info: 5, Warning: 2, Failure: 3}
+Some(("09:02", 2))
+{"db", "api"}
+api   5 lines  09:00-09:07  warn 1  FAIL 09:04 upstream 502; 09:05 upstream 504
+db    3 lines  09:02-09:03  warn 0  FAIL 09:02 connection lost
+web   2 lines  09:05-09:06  warn 1
+exit: 0

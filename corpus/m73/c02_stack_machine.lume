@@ -1,0 +1,183 @@
+# c02_stack_machine: a tiny stack-machine interpreter that reads its
+# program line by line.
+# Probes: a generator over `src.lines.enumerate` yielding
+# `(Int, Instr or Error)` pairs, with `next if` to skip lines; a plain
+# function taking `steps: Iterator[(Int, Instr or Error)]` and taking the
+# pairs apart with `for n, r in`; list patterns with literals and a guard on
+# a bare `split`; `?` inside a constructor argument in a `match` arm;
+# `var self` methods that give `T or Error`; a `while` loop with `return`
+# from inside `match` arms; maps for labels and registers; a raw
+# triple-quoted program; a list of tuples written across lines.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# == fact
+# 24 instructions
+# 5
+# 20
+# 60
+# 120
+# 120
+# 120
+# halted after 81 steps, stack []
+# == typos
+# load failed: line 2: `x` is not an integer; line 3: cannot read `frob 2`
+# == underflow
+# 2 instructions
+# run failed: pop from an empty stack
+# == spin
+# 2 instructions
+# run failed: gave up after 200 steps
+# == lost
+# 2 instructions
+# run failed: no label `nowhere`
+# 1 of 5 halted
+
+enum Instr:
+  Push(n: Int)
+  Load(reg: Str)
+  Store(reg: Str)
+  Add
+  Sub
+  Mul
+  Print
+  Jz(target: Str)
+  Jmp(target: Str)
+  Label(name: Str)
+  Halt
+
+def parse(line: Str) -> Instr or Error:
+  match line.split:
+    ["push", n] -> Push(n.to_int?)
+    ["load", r] -> Load(r)
+    ["store", r] -> Store(r)
+    ["add"] -> Add
+    ["sub"] -> Sub
+    ["mul"] -> Mul
+    ["print"] -> Print
+    ["jz", t] -> Jz(t)
+    ["jmp", t] -> Jmp(t)
+    ["halt"] -> Halt
+    [word] if word.ends_with?(":") ->
+      last = word.len - 2
+      Label(word[0..last])
+    _ -> Error("cannot read `#{line}`")
+
+# Every line that holds an instruction, numbered from 1, read or not.
+def program(src: Str) -> Iterator[(Int, Instr or Error)]:
+  for i, raw in src.lines.enumerate:
+    line = raw.trim
+    next if line.empty? or line.starts_with?("--")
+    yield (i + 1, parse(line))
+
+# All the instructions, or every line that could not be read.
+def load(steps: Iterator[(Int, Instr or Error)]) -> [Instr] or Error:
+  var code: [Instr] = []
+  var problems: [Str] = []
+  for n, r in steps:
+    match r:
+      Ok(i) -> code.push(i)
+      Error(e) -> problems.push("line #{n}: #{e.message}")
+  if not problems.empty?:
+    return Error(problems.join("; "))
+  code
+
+struct Vm:
+  stack: [Int]
+  steps: Int
+
+  def tick(var self):
+    steps += 1
+
+  def push(var self, n: Int):
+    stack.push(n)
+
+  def pop(var self) -> Int or Error = stack.pop.or_error("pop from an empty stack")
+
+def run(code: [Instr], limit: Int) -> Vm or Error:
+  var labels: {Str: Int} = {}
+  for i, ins in code.enumerate:
+    match ins:
+      Label(name) -> labels[name] = i
+      _ -> ()
+  var regs: {Str: Int} = {}
+  var vm = Vm(stack: [], steps: 0)
+  var pc = 0
+  while pc < code.len:
+    vm.tick
+    if vm.steps > limit:
+      return Error("gave up after #{limit} steps")
+    op = code.at(pc)
+    pc += 1
+    match op:
+      Push(n) -> vm.push(n)
+      Load(r) -> vm.push(regs[r].or_error("no register `#{r}`")?)
+      Store(r) -> regs[r] = vm.pop?
+      Add ->
+        b = vm.pop?
+        a = vm.pop?
+        vm.push(a + b)
+      Sub ->
+        b = vm.pop?
+        a = vm.pop?
+        vm.push(a - b)
+      Mul ->
+        b = vm.pop?
+        a = vm.pop?
+        vm.push(a * b)
+      Print -> puts vm.pop?
+      Jz(t) ->
+        if vm.pop? == 0:
+          pc = labels[t].or_error("no label `#{t}`")?
+      Jmp(t) -> pc = labels[t].or_error("no label `#{t}`")?
+      Label(_) -> ()
+      Halt -> return vm
+  vm
+
+def main:
+  fact = r"""
+    -- factorial of 5, printing each running product
+    push 5
+    store n
+    push 1
+    store acc
+    top:
+    load n
+    jz end
+    load acc
+    load n
+    mul
+    store acc
+    load acc
+    print
+    load n
+    push 1
+    sub
+    store n
+    jmp top
+    end:
+    load acc
+    print
+    halt
+    push 99
+    print
+    """
+  programs = [
+    ("fact", fact),
+    ("typos", "push 1\npush x\nfrob 2\nadd"),
+    ("underflow", "push 2\nadd"),
+    ("spin", "spin:\njmp spin"),
+    ("lost", "push 0\njz nowhere"),
+  ]
+  var halted = 0
+  for name, src in programs:
+    puts "== #{name}"
+    match load(program(src)):
+      Error(e) -> puts "load failed: #{e.message}"
+      Ok(code) ->
+        puts "#{code.len} instructions"
+        match run(code, 200):
+          Ok(vm) ->
+            halted += 1
+            puts "halted after #{vm.steps} steps, stack #{vm.stack}"
+          Error(e) -> puts "run failed: #{e.message}"
+  puts "#{halted} of #{programs.len} halted"

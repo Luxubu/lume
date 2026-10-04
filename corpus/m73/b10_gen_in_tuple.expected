@@ -1,0 +1,7 @@
+error: a generator cannot be kept in a list or a tuple: it is used up as it is walked
+  --> corpus/m73/b10_gen_in_tuple.lume:17:11
+   |
+17 |   pair = (ones(), 2)
+   |           ^
+  help: keep its items with `.to_list`, or keep a struct with `def next(var self) -> T?`, which can be copied
+exit: 1

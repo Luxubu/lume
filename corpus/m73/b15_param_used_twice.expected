@@ -1,0 +1,7 @@
+error: `xs` is a generator, and it is used up here, so it cannot be used after
+  --> corpus/m73/b15_param_used_twice.lume:14:8
+   |
+14 |   hi = xs.max.or(0)
+   |        ^
+  help: a generator hands out each item once: to walk the items twice, keep them with `.to_list` first
+exit: 1

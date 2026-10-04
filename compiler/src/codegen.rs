@@ -3210,7 +3210,7 @@ impl Gen {
     fn require_conforms(&self, t: &Type, iface: &Type, line: usize, col: usize) -> Result<()> {
         if let Type::Gen(_) = t {
             return Err(LumeError::new(line, col, format!("a generator cannot be held as an `{}` value: it is used up as it is walked, and such a value is copied", type_name(iface)))
-                .with_help("make this a generator too, handing on the items: `for x in other(): yield x`"));
+                .with_help("a generator lives in a local or a parameter `xs: Iterator[T]`; to keep the items, `.to_list`; to give them back from a function, make it a generator: `for x in other(): yield x`"));
         }
         let key = self.type_key(iface);
         // Check against the interface as it was asked for, arguments and
@@ -8616,6 +8616,11 @@ impl Gen {
         }
     }
 
+    /// `parts.at(i)` on a list of slices: already a `&str`, so not borrowed again.
+    fn is_slice_item(&self, e: &Expr) -> bool {
+        matches!(&e.kind, ExprKind::Method { recv, name, args } if name == "at" && args.len() == 1 && matches!(&recv.kind, ExprKind::Ident(n) if self.slice_source(n).is_some()))
+    }
+
     /// The local a list of slices named `n` borrows from, if `n` is one here.
     fn slice_source(&self, n: &str) -> Option<String> {
         let (src, line) = self.slices.get(n)?;
@@ -9551,7 +9556,7 @@ impl Gen {
                 return Err(LumeError::new(e.line, e.col, format!("a list pattern cannot match a `{}`", type_name(&st))));
             }
             format!("({}).as_slice()", s)
-        } else if by_ref && !self.is_borrowed_ident(scrutinee) {
+        } else if by_ref && !self.is_borrowed_ident(scrutinee) && !self.is_slice_item(scrutinee) {
             format!("&({})", s)
         } else {
             format!("({})", s)

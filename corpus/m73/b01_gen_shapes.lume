@@ -1,0 +1,47 @@
+# Probes: `yield` inside `if`/`elif`, inside `match` arms (one with a trailing
+# `yield x if c`), a bare `return` ending a generator mid-loop, a generator
+# that reaches no `yield` at all (printed, and its `len`), and `next` by hand
+# called again after the end.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ["pos 3", "neg -2"]
+# [0, 40]
+# []
+# 0
+# None
+# None
+# Some("pos 1")
+# None
+# None
+
+def classify(xs: [Int]) -> Iterator[Str]:
+  for x in xs:
+    if x < 0:
+      yield "neg #{x}"
+    elif x == 0:
+      return
+    else:
+      yield "pos #{x}"
+
+def options(xs: [Int?]) -> Iterator[Int]:
+  for o in xs:
+    match o:
+      Some(v) -> yield v * 10 if v > 1
+      None -> yield 0
+
+def nothing(xs: [Int]) -> Iterator[Int]:
+  for x in xs:
+    yield x if x > 100
+
+def main:
+  puts classify([3, -2, 0, 5]).to_list
+  puts options([Some(1), None, Some(4)]).to_list
+  puts nothing([1, 2])
+  puts nothing([]).len
+  var g = nothing([7])
+  puts g.next
+  puts g.next
+  var h = classify([1])
+  puts h.next
+  puts h.next
+  puts h.next

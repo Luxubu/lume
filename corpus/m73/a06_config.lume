@@ -1,0 +1,80 @@
+# a06_config: an INI-style config reader with [sections]. A generator walks
+# the lines, keeps the current section in a `var`, skips comments, warns about
+# a line that is not `key = value`, and yields ("section.key", value) pairs
+# from fields read by position; `load` takes the pairs as an
+# `Iterator[(Str, Str)]` into a map (a repeated key keeps its first place);
+# lookups give `Str or Error` and `?` ends `main` on the last, bad one.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 5
+# server.host    = shop.local
+# server.port    = 9090
+# server.timeout = 30s
+# db.name        = shop
+# db.pool        = 4
+# server, db
+# serving shop.local:9090 with 4 connections
+# Error("missing `db.user`")
+# Error("db.name: `shop` is not an integer")
+# EXPECTED STDERR:
+# line 10: expected `key = value`, found `oops`
+# error: server.timeout: `30s` is not an integer
+
+def entries(text: Str) -> Iterator[(Str, Str)]:
+  var section = ""
+  for n, raw in text.lines.enumerate:
+    line = raw.trim
+    if line.empty? or line.starts_with?(";"):
+      next
+    if line.starts_with?("[") and line.ends_with?("]"):
+      section = line.slice(1, line.len - 2)
+      next
+    parts = line.split("=")
+    if parts.len != 2:
+      warn "line #{n + 1}: expected `key = value`, found `#{line}`"
+      next
+    yield ("#{section}.#{parts.at(0).trim}", parts.at(1).trim)
+
+def load(xs: Iterator[(Str, Str)]) -> {Str: Str}:
+  var conf: {Str: Str} = {}
+  for key, value in xs:
+    conf[key] = value
+  conf
+
+def need(conf: {Str: Str}, key: Str) -> Str or Error = conf[key].or_error("missing `#{key}`")
+
+def need_int(conf: {Str: Str}, key: Str) -> Int or Error:
+  text = need(conf, key)?
+  text.to_int.map_error { |e| Error("#{key}: #{e.message}") }
+
+def main -> () or Error:
+  text = """
+    ; settings for the shop
+    [server]
+    host = shop.local
+    port = 8080
+    timeout = 30s
+    ; the database
+    [db]
+    name = shop
+    pool = 4
+    oops
+    [server]
+    port = 9090
+    """
+  conf = load(entries(text))
+  puts conf.len
+  for key, value in conf:
+    puts "#{key.pad_right(15)}= #{value}"
+  sections = conf.keys.map { |k| k.split(".").at(0) }.uniq
+  puts sections.join(", ")
+
+  host = need(conf, "server.host")?
+  port = need_int(conf, "server.port")?
+  pool = need_int(conf, "db.pool")?
+  puts "serving #{host}:#{port} with #{pool} connections"
+  puts need(conf, "db.user")
+  puts need_int(conf, "db.name")
+
+  timeout = need_int(conf, "server.timeout")?
+  puts "timeout #{timeout}"

@@ -1,0 +1,22 @@
+== fact
+24 instructions
+5
+20
+60
+120
+120
+120
+halted after 81 steps, stack []
+== typos
+load failed: line 2: `x` is not an integer; line 3: cannot read `frob 2`
+== underflow
+2 instructions
+run failed: pop from an empty stack
+== spin
+2 instructions
+run failed: gave up after 200 steps
+== lost
+2 instructions
+run failed: no label `nowhere`
+1 of 5 halted
+exit: 0

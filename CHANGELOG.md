@@ -30,6 +30,7 @@
 - **Fixed**: a function ending in `Env.exit` with no return type.
 - **Faster**: a list from `split` or `lines` that is only read by position
   holds slices of the text instead of a copy of each piece.
+- **Fixed**: a `match` on an item of such a list.
 - **Interfaces**: a required method may take `var self`. A type fits only
   when its method agrees about `var self`.
 - **`zip` on a lazy chain** stays lazy, and `zip` takes a sequence of your

@@ -1,0 +1,228 @@
+# c05_adventure: replays a scripted text adventure against a world that is
+# itself read from text.
+# Probes: a generator of `Fact or Error` built by a parser with list
+# patterns (`["room", label, ..ways]` with a guard, literals between
+# names); `match f?` on each item inside a function giving `T or Error`; a
+# generator yielding `(Str, Cmd)` pairs that ends itself with a bare
+# `return` after `quit`, so the rest of the script is never read; `|`
+# alternatives of two list patterns; a struct whose `var self` methods call
+# each other by bare name and change map, set and `Str` fields; a map's
+# `filter` with a two-name block; `set.add` used for its `Bool`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 4 rooms, 4 items, 1 lock
+# > look
+#   hall: exits north east; you see lamp
+# > go east
+#   you enter the kitchen
+# > go down
+#   too dark to go down without the lamp
+# > go west
+#   back in the hall
+# > take lamp
+#   taken: lamp
+# > take lamp
+#   no lamp here
+# > dance
+#   what is `dance`?
+# > go east
+#   back in the kitchen
+# > take key
+#   taken: key
+# > go down
+#   you enter the cellar
+# > take coin
+#   taken: coin
+# > i
+#   you carry coin, key, lamp
+# > go up
+#   back in the kitchen
+# > go west
+#   back in the hall
+# > go north
+#   you enter the library
+# > drop key
+#   dropped: key
+# > look
+#   library: exits south; you see book, key
+# > score
+#   4 rooms seen in 18 moves, 40 points
+# > quit
+#   bye
+# replayed 19 commands
+# bad world: ghost is in `attic`, which is not a room
+# bad world: cannot read `teleport now`
+
+enum Fact:
+  Room(name: Str, exits: {Str: Str})
+  Item(name: Str, place: Str)
+  Lock(room: Str, needs: Str)
+
+enum Cmd:
+  Look
+  Go(dir: Str)
+  Take(thing: Str)
+  Drop(thing: Str)
+  Inventory
+  Score
+  Quit
+  Unknown(text: Str)
+
+struct World:
+  exits: {Str: {Str: Str}}
+  items: {Str: Str}
+  locks: {Str: Str}
+
+def parse_fact(line: Str) -> Fact or Error:
+  match line.split:
+    ["room", label, ..ways] if label.ends_with?(":") ->
+      var exits: {Str: Str} = {}
+      for w in ways:
+        match w.split("="):
+          [dir, to] -> exits[dir] = to
+          _ -> return Error("bad exit `#{w}` in room #{label}")
+      last = label.len - 2
+      Room(label[0..last], exits)
+    ["item", thing, "in", place] -> Item(thing, place)
+    ["lock", room, "needs", thing] -> Lock(room, thing)
+    _ -> Error("cannot read `#{line}`")
+
+def facts(text: Str) -> Iterator[Fact or Error]:
+  for line in text.lines:
+    yield parse_fact(line) if not line.trim.empty?
+
+def build(text: Str) -> World or Error:
+  var exits: {Str: {Str: Str}} = {}
+  var items: {Str: Str} = {}
+  var locks: {Str: Str} = {}
+  for f in facts(text):
+    match f?:
+      Room(name, ways) -> exits[name] = ways
+      Item(name, place) -> items[name] = place
+      Lock(room, thing) -> locks[room] = thing
+  for thing, place in items:
+    if not exits.contains?(place):
+      return Error("#{thing} is in `#{place}`, which is not a room")
+  World(exits: exits, items: items, locks: locks)
+
+def parse_cmd(line: Str) -> Cmd:
+  match line.split:
+    ["look"] -> Look
+    ["go", dir] -> Go(dir)
+    ["take", t] -> Take(t)
+    ["drop", t] -> Drop(t)
+    ["inventory"] | ["i"] -> Inventory
+    ["score"] -> Score
+    ["quit"] -> Quit
+    _ -> Unknown(line)
+
+# The script, one command at a time, up to and including `quit`.
+def commands(script: Str) -> Iterator[(Str, Cmd)]:
+  for raw in script.lines:
+    line = raw.trim
+    next if line.empty?
+    c = parse_cmd(line)
+    yield (line, c)
+    match c:
+      Quit -> return
+      _ -> ()
+
+struct Game:
+  here: Str
+  floor: {Str: Str}
+  bag: {Str}
+  seen: {Str}
+  moves: Int
+
+  def describe(w: World) -> Str:
+    at = here
+    ways = w.exits[at].or({}).keys.join(" ")
+    stuff = floor.filter { |thing, place| place == at }.keys
+    things = if stuff.empty?: "nothing" else: stuff.join(", ")
+    "#{at}: exits #{ways}; you see #{things}"
+
+  def go(var self, w: World, dir: Str) -> Str:
+    ways = w.exits[here].or({})
+    match ways[dir]:
+      None -> "you cannot go #{dir}"
+      Some(to) ->
+        need = w.locks[to].or("")
+        if not need.empty? and not bag.contains?(need):
+          return "too dark to go #{dir} without the #{need}"
+        here = to
+        first = seen.add(to)
+        if first: "you enter the #{to}" else: "back in the #{to}"
+
+  def pick_up(var self, t: Str) -> Str:
+    if floor[t].or("") != here:
+      return "no #{t} here"
+    _ = floor.remove(t)
+    bag.add(t)
+    "taken: #{t}"
+
+  def put_down(var self, t: Str) -> Str:
+    if not bag.remove(t):
+      return "you have no #{t}"
+    floor[t] = here
+    "dropped: #{t}"
+
+  def step(var self, w: World, c: Cmd) -> Str:
+    moves += 1
+    match c:
+      Look -> describe(w)
+      Go(dir) -> go(w, dir)
+      Take(t) -> pick_up(t)
+      Drop(t) -> put_down(t)
+      Inventory -> if bag.empty?: "you carry nothing" else: "you carry #{bag.sort.join(", ")}"
+      Score -> "#{seen.len} rooms seen in #{moves} moves, #{seen.len * 10} points"
+      Quit -> "bye"
+      Unknown(text) -> "what is `#{text}`?"
+
+def main -> () or Error:
+  world_text = """
+    room hall: north=library east=kitchen
+    room library: south=hall
+    room kitchen: west=hall down=cellar
+    room cellar: up=kitchen
+    item lamp in hall
+    item key in kitchen
+    item book in library
+    item coin in cellar
+    lock cellar needs lamp
+    """
+  world = build(world_text)?
+  puts "#{world.exits.len} rooms, #{world.items.len} items, #{world.locks.len} lock"
+
+  script = """
+    look
+    go east
+    go down
+    go west
+    take lamp
+    take lamp
+    dance
+    go east
+    take key
+    go down
+    take coin
+    i
+    go up
+    go west
+    go north
+    drop key
+    look
+    score
+    quit
+    look
+    """
+  var game = Game(here: "hall", floor: world.items, bag: {}, seen: {"hall"}, moves: 0)
+  for raw, c in commands(script):
+    puts "> #{raw}"
+    puts "  #{game.step(world, c)}"
+  puts "replayed #{game.moves} commands"
+
+  for text in ["item ghost in attic", "room hall: north=library\nteleport now"]:
+    match build(text):
+      Ok(w) -> puts "built #{w.exits.len} rooms"
+      Error(e) -> puts "bad world: #{e.message}"
+  ()

@@ -1,0 +1,173 @@
+# c03_inventory: reconcile a stock count against the ledger, two tables
+# embedded in the program in different formats.
+# Probes: one generator `fields(text, sep)` yielding `[Str]` rows from
+# either table; `rows.next` on an `Iterator[[Str]]` parameter to take the
+# header, then `for` over the rest; list patterns binding four and three
+# fields; a generator taking two maps and yielding enum values, with guards
+# on `Some(n)`; a generator taking another generator (`problems`);
+# `|` alternatives that bind the same name; sets from `keys.to_set` and
+# `diff`; `index[k].push` through a missing key; `pad_right` columns;
+# money kept in whole cents; `?` in a field of a constructor.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ledger: 5 items, counted: 5 skus
+# ledger value: $151.25
+# A100  ok      120
+# A200  ok      300
+# B300  over    +5
+# C400  short   -1
+# D500  missing -8 (none found)
+# E600  unknown 5 not in the ledger
+# value change: -$40.75
+# to recount: B300, C400, D500, E600
+# A100 on S1 and S3
+# rejected: unexpected header ["id", "name"]
+# rejected: bad price `1.5`
+
+struct Item:
+  sku: Str
+  name: Str
+  qty: Int
+  cents: Int
+
+struct Count:
+  total: {Str: Int}
+  places: {Str: [Str]}
+
+enum Diff:
+  Even(sku: Str, qty: Int)
+  Over(sku: Str, by: Int)
+  Short(sku: Str, by: Int)
+  Missing(sku: Str, qty: Int)
+  Unknown(sku: Str, qty: Int)
+
+  def sku_of -> Str:
+    match self:
+      Even(s, _) | Over(s, _) | Short(s, _) | Missing(s, _) | Unknown(s, _) -> s
+
+  def label -> Str:
+    match self:
+      Even(..) -> "ok"
+      Over(..) -> "over"
+      Short(..) -> "short"
+      Missing(..) -> "missing"
+      Unknown(..) -> "unknown"
+
+  def detail -> Str:
+    match self:
+      Even(_, q) -> "#{q}"
+      Over(_, by) -> "+#{by}"
+      Short(_, by) -> "-#{by}"
+      Missing(_, q) -> "-#{q} (none found)"
+      Unknown(_, q) -> "#{q} not in the ledger"
+
+  def delta -> Int:
+    match self:
+      Even(..) | Unknown(..) -> 0
+      Over(_, by) -> by
+      Short(_, by) -> 0 - by
+      Missing(_, q) -> 0 - q
+
+# The rows of a table, split on `sep` (" " means any run of spaces).
+def fields(text: Str, sep: Str) -> Iterator[[Str]]:
+  for line in text.lines:
+    t = line.trim
+    next if t.empty? or t.starts_with?("#")
+    if sep == " ":
+      yield t.split.to_list
+    else:
+      yield t.split(sep).map { |f| f.trim }.to_list
+
+def cents_of(price: Str) -> Int or Error:
+  match price.split("."):
+    [whole, frac] if frac.len == 2 -> whole.to_int? * 100 + frac.to_int?
+    _ -> Error("bad price `#{price}`")
+
+def ledger(rows: Iterator[[Str]]) -> {Str: Item} or Error:
+  header = rows.next.or([])
+  if header != ["sku", "name", "qty", "price"]:
+    return Error("unexpected header #{header}")
+  var out: {Str: Item} = {}
+  for r in rows:
+    match r:
+      [sku, name, qty, price] ->
+        out[sku] = Item(sku: sku, name: name, qty: qty.to_int?, cents: cents_of(price)?)
+      _ -> return Error("expected 4 fields, found #{r.len}")
+  out
+
+def counts(rows: Iterator[[Str]]) -> Count or Error:
+  var total: {Str: Int} = {}
+  var places: {Str: [Str]} = {}
+  for r in rows:
+    match r:
+      [shelf, sku, n] ->
+        total[sku] = total[sku].or(0) + n.to_int?
+        places[sku].push(shelf)
+      _ -> return Error("expected 3 fields, found #{r.len}")
+  Count(total: total, places: places)
+
+def reconcile(book: {Str: Item}, seen: {Str: Int}) -> Iterator[Diff]:
+  for sku, item in book:
+    match seen[sku]:
+      None -> yield Missing(sku, item.qty)
+      Some(n) if n == item.qty -> yield Even(sku, n)
+      Some(n) if n > item.qty -> yield Over(sku, n - item.qty)
+      Some(n) -> yield Short(sku, item.qty - n)
+  extra = seen.keys.to_set.diff(book.keys.to_set)
+  for sku in extra.sort:
+    yield Unknown(sku, seen[sku].or(0))
+
+def problems(xs: Iterator[Diff]) -> Iterator[Str]:
+  for d in xs:
+    yield d.sku_of if d.label != "ok"
+
+def money(cents: Int) -> Str:
+  sign = if cents < 0: "-" else: ""
+  c = cents.abs
+  frac = c % 100
+  pad = if frac < 10: "0" else: ""
+  "#{sign}$#{c / 100}.#{pad}#{frac}"
+
+def show(r: {Str: Item} or Error) -> Str:
+  match r:
+    Ok(b) -> "#{b.len} items"
+    Error(e) -> "rejected: #{e.message}"
+
+def main -> () or Error:
+  ledger_text = """
+    sku,name,qty,price
+    A100,bolt,120,0.25
+    A200,nut,300,0.10
+    B300,washer,75,0.15
+    C400,bracket,12,3.50
+    D500,hinge,8,4.75
+    """
+  count_text = """
+    # shelf  sku   counted
+    S1  A100  118
+    S1  A200  300
+    S2  B300  80
+    S2  C400  11
+    S3  E600  5
+    S3  A100  2
+    """
+  book = ledger(fields(ledger_text, ","))?
+  seen = counts(fields(count_text, " "))?
+  puts "ledger: #{book.len} items, counted: #{seen.total.len} skus"
+  puts "ledger value: #{money(book.values.map { |i| i.qty * i.cents }.sum)}"
+
+  diffs = reconcile(book, seen.total).to_list
+  for d in diffs:
+    puts "#{d.sku_of.pad_right(6)}#{d.label.pad_right(8)}#{d.detail}"
+  var cents = 0
+  for d in diffs:
+    cents += d.delta * book[d.sku_of].map { |i| i.cents }.or(0)
+  puts "value change: #{money(cents)}"
+  puts "to recount: #{problems(reconcile(book, seen.total)).join(", ")}"
+
+  for sku, ps in seen.places.filter { |k, v| v.len > 1 }:
+    puts "#{sku} on #{ps.join(" and ")}"
+
+  puts show(ledger(fields("id,name\nx,y", ",")))
+  puts show(ledger(fields("sku,name,qty,price\nZ1,thing,3,1.5", ",")))
+  ()

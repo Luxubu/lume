@@ -1,0 +1,7 @@
+error: `ticks` cannot be both `async` and a generator
+  --> corpus/m73/b14_async_generator.lume:13:1
+   |
+13 | async def ticks -> Iterator[Int]:
+   | ^
+  help: a generator's items are worked out when they are asked for; drop `async`
+exit: 1

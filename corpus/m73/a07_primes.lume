@@ -1,0 +1,74 @@
+# a07_primes: Fibonacci and prime pipelines. Endless generators (`count_from`,
+# `fibs`) feed generators that take `xs: Iterator[Int]` (`primes`, `twins`),
+# three deep, stopped by `take`/`first`; a lazy chain, a range chain and a
+# list are each handed to `primes` too; two endless sequences are zipped and
+# then cut with `take`; a `var` generator is moved on with `next`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# [2, 3, 5, 7, 11, 13, 17, 19, 23, 29]
+# [0, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89]
+# [2, 3, 5, 13, 89]
+# 44
+# Some(101)
+# 2 0
+# 3 1
+# 5 1
+# 7 2
+# [(3, 5), (5, 7), (11, 13), (17, 19)]
+# 14
+# [7, 11]
+# Some(5)
+# [7, 11, 13]
+
+def count_from(n: Int) -> Iterator[Int]:
+  var k = n
+  while true:
+    yield k
+    k += 1
+
+def fibs -> Iterator[Int]:
+  var a = 0
+  var b = 1
+  while true:
+    yield a
+    sum_ab = a + b
+    a = b
+    b = sum_ab
+
+def prime?(n: Int) -> Bool:
+  if n < 2:
+    return false
+  var d = 2
+  while d * d <= n:
+    if n % d == 0:
+      return false
+    d += 1
+  true
+
+def primes(xs: Iterator[Int]) -> Iterator[Int]:
+  for x in xs:
+    yield x if prime?(x)
+
+def twins(xs: Iterator[Int]) -> Iterator[(Int, Int)]:
+  var prev = 0 - 10
+  for p in xs:
+    yield (prev, p) if p - prev == 2
+    prev = p
+
+def main:
+  puts primes(count_from(1)).take(10).to_list
+  puts fibs().take(12).to_list
+  puts primes(fibs().take(12)).to_list
+  puts fibs().take_while { |f| f < 100 }.filter { |f| f % 2 == 0 }.sum
+  puts primes(count_from(100)).first
+  for p, f in primes(count_from(2)).zip(fibs()).take(4):
+    puts "#{p} #{f}"
+  puts twins(primes(count_from(2))).take(4).to_list
+  puts primes((1..50).filter { |n| n % 2 == 1 }).len
+  puts primes([4, 6, 7, 9, 11]).to_list
+
+  var ps = primes(count_from(2))
+  _ = ps.next
+  _ = ps.next
+  puts ps.next
+  puts ps.take(3).to_list

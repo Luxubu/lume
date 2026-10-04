@@ -1,0 +1,19 @@
+# Probes: an `xs: Iterator[Int]` parameter walked twice inside the function
+# ("Inside, it is walked like a generator, once"). Assumed: refused like a
+# generator used twice, at the first walk, with the generator wording.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `xs` is a generator, and it is used up here, so it cannot be used after
+#   --> corpus/m73/b15_param_used_twice.lume:14:8
+#    |
+# 14 |   hi = xs.max.or(0)
+#    |        ^
+#   help: a generator hands out each item once: to walk the items twice, keep them with `.to_list` first
+
+def spread(xs: Iterator[Int]) -> Int:
+  hi = xs.max.or(0)
+  lo = xs.min.or(0)
+  hi - lo
+
+def main:
+  puts spread([3, 9, 4])

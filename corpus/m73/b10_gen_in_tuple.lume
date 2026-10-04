@@ -1,0 +1,18 @@
+# Probes: a generator put in a tuple, which the docs refuse ("Not in a list,
+# a tuple or a field"). Assumed: the list message, pointing at the `(` that
+# starts the tuple as it points at the `[` of a list.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: a generator cannot be kept in a list or a tuple: it is used up as it is walked
+#   --> corpus/m73/b10_gen_in_tuple.lume:17:10
+#    |
+# 17 |   pair = (ones(), 2)
+#    |          ^
+#   help: keep its items with `.to_list`, or keep a struct with `def next(var self) -> T?`, which can be copied
+
+def ones -> Iterator[Int]:
+  yield 1
+
+def main:
+  pair = (ones(), 2)
+  puts pair.1

@@ -1,0 +1,9 @@
+21 words, 10 kept
+cat  **** 4
+sat  ** 2
+dog  * 1
+6 different
+once: dog log mat ran
+Some("the")
+["sat", "mat", "dog", "sat", "log", "ran"]
+exit: 0
