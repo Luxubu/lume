@@ -1,6 +1,0 @@
-error: `each_one` is a method, and a method cannot be a generator yet
-  --> examples/errors/generator_method.lume:7:3
-  |
-7 |   def each_one -> Iterator[Int]:
-  |   ^
-  help: write it as a function that takes the value, or give the type `def next(var self) -> T?`

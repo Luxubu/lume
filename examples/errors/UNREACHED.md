@@ -14,6 +14,8 @@ tried; this is why there is no `examples/errors/*.lume` for it.
 - `codegen.rs`: `{}` is already shared — dead code: the value's type goes through `materialized()`, which turns a `shared` type into the type it holds, so the `Type::Shared` test never matches.
 - `codegen.rs`: `{}` keeps the block it is given, and `{}` is a block this function was only handed for the call — Lume works out which parameters a function keeps, so handing a block parameter on to a function that keeps it (or storing it in a struct) makes this function keep it too; nothing tried was refused.
 - `codegen.rs`: `{}` is a block this function was handed, so a kept block cannot hold on to it — same reason: a kept block that uses a block parameter makes the parameter kept.
+- `codegen.rs`: `{}` belongs to an interface or an `extend`, and such a method cannot be a generator yet — a guard: a generator gives `Iterator[T]`, and an interface's signature may not name an interface yet, so "mentions an interface in its signature" comes first.
+- `codegen.rs`: a sequence is wanted here, and this is {} — a guard: an argument for a parameter `Iterator[T]` is checked to be a sequence before it is written, so nothing else reaches it.
 - `codegen.rs`: `return` inside a block ends this item's block, not the function — a warning, not an error: `lume check` succeeds, and when the same file also has an error only the error is printed.
 
 ## Need a crate or packages

@@ -982,6 +982,9 @@ pub struct Gen {
     /// The next built-in block is a `move` closure: it owns the kept block
     /// it calls, so a lazy chain can outlive the expression that made it.
     move_next_lambda: bool,
+    /// Every block written now takes what it uses with it: a chain handed
+    /// to a generator, which outlives the statement.
+    move_lambdas: bool,
     /// Emitting an interface's default bodies, inside the trait itself.
     in_trait_decl: bool,
     /// The method being emitted can be called only on a known type (it is
@@ -1141,6 +1144,7 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, module_id: &str
         kept_captured: HashSet::new(),
         annotate_params: false,
         move_next_lambda: false,
+        move_lambdas: false,
         in_trait_decl: false,
         current_static_only: false,
         this_file: file.to_string(),
@@ -6665,8 +6669,11 @@ impl Gen {
         }
         if gen_item.is_some() {
             let refuse = |why: &str, help: &str| Err(LumeError::new(f.line, f.col, why.to_string()).with_help(help.to_string()));
-            if owner.is_some() {
-                return refuse(&format!("`{}` is a method, and a method cannot be a generator yet", f.name), "write it as a function that takes the value, or give the type `def next(var self) -> T?`");
+            if owner.is_some() && (self.in_trait_impl || self.in_trait_decl) {
+                return refuse(&format!("`{}` belongs to an interface or an `extend`, and such a method cannot be a generator yet", f.name), "make it a method of the struct or enum itself, or a function that takes the value");
+            }
+            if owner.is_some() && f.self_kind == SelfKind::Mutate {
+                return refuse(&format!("`{}` is a generator, which walks its own copy of the value, so `var self` would change nothing", f.name), "drop `var`; to move a value along by hand, give it `def next(var self) -> T?`");
             }
             if f.is_async {
                 return refuse(&format!("`{}` cannot be both `async` and a generator", f.name), "a generator's items are worked out when they are asked for; drop `async`");
@@ -6841,8 +6848,32 @@ impl Gen {
                     self.line(&format!("let {} = {}.clone();", rust_name(&p.name), rust_name(&p.name)));
                 }
             }
-            self.line(&format!("LumeGen::new(move |lume_co: LumeYield<{}>| async move {{", self.rt(item)));
-            self.indent += 1;
+            if owner.is_some() && f.self_kind == SelfKind::Read {
+                // a method: the generator owns a copy of the value and lends
+                // it to the body, an `async fn` like any method taking `&self`;
+                // an async block may lend what it owns across its pauses
+                let names: Vec<String> = f.params.iter().map(|p| rust_name(&p.name)).collect();
+                let item_rt = self.rt(item);
+                self.line("let lume_this = self.clone();");
+                let mut call_args = vec!["lume_co".to_string()];
+                call_args.extend(names.iter().cloned());
+                self.line(&format!("LumeGen::new(move |lume_co: LumeYield<{}>| async move {{ lume_this.lume_gen_{}({}).await }})", item_rt, rust_name(&f.name), call_args.join(", ")));
+                self.indent -= 1;
+                self.line("}");
+                let mut owned = vec!["&self".to_string(), format!("lume_co: LumeYield<{}>", item_rt)];
+                for p in &f.params {
+                    let pty = param_type(self.ct(&p.ty));
+                    owned.push(match &pty {
+                        Type::Gen(i) => format!("mut {}: impl Iterator<Item = {}> + Send", rust_name(&p.name), self.rt(i)),
+                        _ => format!("{}: {}", rust_name(&p.name), self.rt(&pty)),
+                    });
+                }
+                self.line(&format!("async fn lume_gen_{}{}({}) {{", rust_name(&f.name), gen, owned.join(", ")));
+                self.indent += 1;
+            } else {
+                self.line(&format!("LumeGen::new(move |lume_co: LumeYield<{}>| async move {{", self.rt(item)));
+                self.indent += 1;
+            }
         }
         self.push_scope();
         self.fn_params = f.params.iter().map(|p| (p.name.clone(), p.line, self.ct(&p.ty))).collect();
@@ -6878,7 +6909,7 @@ impl Gen {
         }
         self.tail_of_fn = false;
         self.gen_item = saved_gen;
-        if gen_item.is_some() {
+        if gen_item.is_some() && !(owner.is_some() && f.self_kind == SelfKind::Read) {
             self.indent -= 1;
             self.line("})");
         }
@@ -8601,6 +8632,18 @@ impl Gen {
         match at.clone() {
             Type::Gen(_) => self.give_away(e),
             Type::Iter(elem, by_ref) => {
+                if let Some(copies) = if self.arg_for_gen { self.owned_chain(e) } else { None } {
+                    // the chain takes copies of what its blocks read, so it
+                    // borrows nothing and goes in as it is, still lazy
+                    self.move_lambdas = true;
+                    let s = self.expr(e);
+                    self.move_lambdas = false;
+                    let lets: Vec<String> = copies
+                        .iter()
+                        .map(|(n, t)| if *t == Type::Str { format!("let {n} = {n}.to_string();", n = rust_name(n)) } else { format!("let {n} = {n}.clone();", n = rust_name(n)) })
+                        .collect();
+                    return Ok(if lets.is_empty() { s? } else { format!("{{ {} {} }}", lets.join(" "), s?) });
+                }
                 let s = self.expr(e)?;
                 if self.arg_for_gen {
                     Ok(format!("{}.into_iter()", self.collect_iter_t(&s, by_ref, &elem)))
@@ -8651,6 +8694,50 @@ impl Gen {
             return None;
         }
         Some(src)
+    }
+
+    /// A lazy chain that need borrow nothing: it starts from a generator, a
+    /// range or a sequence of your own. Such a chain can be handed to a
+    /// generator as it is, even an endless one; what its blocks read is
+    /// copied in, and those are given back to be copied.
+    fn owned_chain(&mut self, e: &Expr) -> Option<Vec<(String, Type)>> {
+        let mut base = e;
+        while let ExprKind::Method { recv, .. } = &base.kind {
+            if !matches!(self.ty_of(recv), Type::Iter(..)) {
+                base = recv;
+                break;
+            }
+            base = recv;
+        }
+        let bt = self.ty_of(base).materialized();
+        let owned_base = matches!(bt, Type::Gen(_)) || matches!(base.kind, ExprKind::Range { .. }) || self.seq_item_of_type(&bt).is_some();
+        if !owned_base {
+            return None;
+        }
+        let base_name = match &base.kind {
+            ExprKind::Ident(n) => Some(n.clone()),
+            _ => None,
+        };
+        // the innermost binding of each name, as the chain sees it
+        let mut seen: HashSet<String> = HashSet::new();
+        let mut copies = Vec::new();
+        for sc in self.scopes.iter().rev() {
+            for (n, b) in sc {
+                if !seen.insert(n.clone()) || Some(n) == base_name.as_ref() || !expr_mentions(e, n) {
+                    continue;
+                }
+                let t = b.ty.materialized();
+                // a handle or a task is not something a block may take a copy of
+                if matches!(t, Type::Gen(_) | Type::Task(_) | Type::Shared(..) | Type::Fn(..) | Type::Unknown) {
+                    return None;
+                }
+                if !t.is_copy() {
+                    copies.push((n.clone(), t));
+                }
+            }
+        }
+        copies.sort_by(|a, b| a.0.cmp(&b.0));
+        Some(copies)
     }
 
     /// A value that cannot be copied — a task, a generator — moves, as in
@@ -8928,7 +9015,7 @@ impl Gen {
     }
 
     fn gen_lambda_ex(&mut self, params: &[String], body: &Block, elem: &Type, by_ref: bool, pattern_ref: bool, want_value: bool, acc: Option<&Type>, negate: bool, at: &Expr) -> Result<String> {
-        let mv = if std::mem::take(&mut self.move_next_lambda) { "move " } else { "" };
+        let mv = if std::mem::take(&mut self.move_next_lambda) || self.move_lambdas { "move " } else { "" };
         let expected = if acc.is_some() { 2 } else if matches!(elem, Type::Tuple(ts) if ts.len() == 2) && params.len() == 2 { 2 } else { 1 };
         if params.len() != expected {
             if params.is_empty() {

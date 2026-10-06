@@ -1,0 +1,14 @@
+# A generator method walks its own copy of the value, so a `var self` one would change nothing the caller sees.
+
+struct Range2:
+  lo: Int
+  hi: Int
+
+  def each_one(var self) -> Iterator[Int]:
+    while lo <= hi:
+      yield lo
+      lo += 1
+
+def main:
+  var r = Range2(lo: 1, hi: 3)
+  puts r.each_one.to_list

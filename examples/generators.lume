@@ -59,6 +59,15 @@ def first_and_rest(xs: Iterator[Str]) -> Str:
   first = xs.next.or("-")
   "#{first}, then #{xs.to_list}"
 
+# a method may be a generator: it walks its own copy of the value
+struct Team:
+  name: Str
+  members: [Str]
+
+  def roll_call(prefix: Str) -> Iterator[Str]:
+    for i, m in members.enumerate:
+      yield "#{prefix}#{i + 1} #{m} (#{name})"
+
 def main:
   for x in countdown(3):
     puts x
@@ -101,3 +110,14 @@ def main:
   words = ["a", "b", "c"]
   puts first_and_rest(words)
   puts words
+
+  # a generator method, and the value changed after the call
+  var team = Team(name: "red", members: ["ann", "bo"])
+  calls = team.roll_call("#")
+  team.name = "blue"
+  for c in calls:
+    puts c
+
+  # an endless chain into a generator stays lazy; its block copies `step`
+  step = 5
+  puts evens(naturals().map { |n| n * step }).take(3).to_list

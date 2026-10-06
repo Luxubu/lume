@@ -303,8 +303,32 @@ where a list is wanted, it gives its items. Where it differs:
 - **`yield` belongs to the generator's own body**: its loops, `if`s and
   `match`es, not a block it hands to a method (`xs.each { .. }`) or a
   `spawn:`. Use `for` there instead.
-- **Not yet:** a method with `yield`, an `async` generator, and a generator
-  that takes a block or an interface value.
+- **A method may be one.** It walks its own copy of the value, taken at the
+  call, as a generator takes copies of its arguments, so a change to the
+  value afterwards does not show. `var self` is refused: there would be
+  nothing for it to change.
+
+```lume
+struct Node:
+  name: Str
+  kids: [Node]
+
+  def names -> Iterator[Str]:
+    yield name
+    for k in kids:
+      for n in k.names:
+        yield n
+
+def main:
+  tree = Node(name: "root", kids: [Node(name: "a", kids: []), Node(name: "b", kids: [])])
+  puts tree.names.to_list    #=> ["root", "a", "b"]
+```
+
+- **Not yet:** an `async` generator, a generator in an interface or an
+  `extend`, and a generator that takes a block or an interface value.
+- **Speed:** `bench/b7_generators.lume` is `b6` as a generator; it runs at
+  about 1.3 times the hand-written Rust iterator.
+- **More:** `examples/generators.lume` shows each of these.
 
 ### Taking a sequence: `xs: Iterator[T]`
 
@@ -335,15 +359,12 @@ def main:
 
 A generator moves in; a list, a set or a sequence of your own is copied in,
 so the caller's value is as it was. A lazy chain stays lazy into a plain
-function. Into a generator, which outlives the call, it is worked out first,
-at the call, since what it reads might not live as long: pass a generator
-itself to stay lazy there. **So an endless chain given to a generator never
-returns** — `evens(naturals().map { |n| n * 3 })` waits for ever, where
-`evens(naturals())` does not. Make the `map` a generator of its own, or move
-it inside.
-- **Speed:** `bench/b7_generators.lume` is `b6` as a generator; it runs at
-  about 1.3 times the hand-written Rust iterator.
-- **More:** `examples/generators.lume` shows each of these.
+function. Into a generator, which outlives the call, it stays lazy when it
+starts from something it can own — a generator, a range or a sequence of
+your own — and its blocks take copies of what they read, so
+`evens(naturals().map { |n| n * k })` is as endless as `naturals()`. A chain
+that starts from a list is worked out first, at the call, since the list
+might change before the generator is done with it.
 
 ## Where `[]` and `{}` need a type
 

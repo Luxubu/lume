@@ -2,7 +2,11 @@
 
 ## Unreleased
 
-Nothing yet.
+- **Generator methods**: a method may have `yield`; it walks its own copy
+  of the value.
+- **Lazy into generators**: a chain that starts from a generator, a range
+  or a sequence of your own stays lazy when given to a generator, so an
+  endless one works.
 
 ## 0.2.0 — sequences
 

@@ -1,0 +1,6 @@
+error: `each_one` is a generator, which walks its own copy of the value, so `var self` would change nothing
+  --> examples/errors/generator_var_self.lume:7:3
+  |
+7 |   def each_one(var self) -> Iterator[Int]:
+  |   ^
+  help: drop `var`; to move a value along by hand, give it `def next(var self) -> T?`
