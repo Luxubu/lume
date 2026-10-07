@@ -1,0 +1,11 @@
+# An `extend` method cannot be a generator yet; an interface default can, and so can a method of the type itself.
+
+interface Halves:
+  def halves -> Iterator[Int]
+
+extend [T] with Halves:
+  def halves -> Iterator[Int]:
+    yield self.len / 2
+
+def main:
+  puts [1, 2, 3, 4].halves.to_list

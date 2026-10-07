@@ -1,9 +1,11 @@
-# An `Iterator[Int]` value is copied like any value; a generator is used up as it is walked, so it cannot be one.
+# A field held as an `Iterator[Int]` value is copied like any value, and a generator is used up as it is walked, so it cannot be one.
 
 def ones -> Iterator[Int]:
   yield 1
 
-def more -> Iterator[Int] = ones()
+struct Feed:
+  source: Iterator[Int]
 
 def main:
-  puts more().to_list
+  f = Feed(source: ones())
+  puts f

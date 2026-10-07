@@ -1,0 +1,19 @@
+# An interface value is lent to an interface's method through a pointer, and an `async` method is one only a known type can call.
+
+
+interface Source:
+  async def fetch -> Str
+
+interface Reader:
+  def label(s: Source) -> Str
+
+struct Fixed:
+  text: Str
+  async def fetch -> Str = text
+
+struct Plain:
+  n: Int
+  def label(s: Source) -> Str = "a source"
+
+async def main:
+  puts Plain(n: 1).label(Fixed(text: "x"))

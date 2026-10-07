@@ -3,5 +3,5 @@ error: a generator cannot be held as an `Iterator[Int]` value: it is used up as 
    |
 21 |   s = Source(name: "a", items: ones())
    |                                ^
-  help: a generator lives in a local or a parameter `xs: Iterator[T]`; to keep the items, `.to_list`; to give them back from a function, make it a generator: `for x in other(): yield x`
+  help: a generator lives in a local, a parameter `xs: Iterator[T]`, or a function's result `-> Iterator[T]`; to keep the items, `.to_list`
 exit: 1

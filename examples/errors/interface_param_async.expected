@@ -1,0 +1,6 @@
+error: `label` takes a `Source`, which has `fetch`, a method only a known type can call, so it cannot be lent to an interface's method
+  --> examples/errors/interface_param_async.lume:8:13
+  |
+8 |   def label(s: Source) -> Str
+  |             ^
+  help: take what `label` needs from it instead, or write `label` as a function with a parameter `s: Source`

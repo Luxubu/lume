@@ -11,6 +11,10 @@
   tuple, three or more as well as two.
 - **`examples/deps/`**: a dependency-graph tool built on generator methods.
 - **Fixed**: `text.split(sep).at(i)` followed by a text method.
+- **Interfaces in signatures**: an interface method may take and give
+  interface values and sequences, and a default may be a generator.
+- **`-> Iterator[T]`** gives a sequence from any function, with `yield` or
+  without.
 
 ## 0.2.0 — sequences
 

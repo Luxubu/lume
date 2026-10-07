@@ -322,6 +322,62 @@ def main:
 #! the items of a list must all be the same type
 ```
 
+## An interface's own methods may use interfaces
+
+**An interface method may take an interface value, give one back, or give a
+sequence**, as a free function may. In Rust the trait takes `&dyn Shape`,
+gives `Box<dyn Shape>`, and gives a boxed iterator for `Iterator[T]`, so it
+stays usable through a pointer:
+
+```lume
+interface Shape:
+  def area -> Float
+  def scaled(k: Float) -> Shape
+  def bigger?(o: Shape) -> Bool = area > o.area
+
+struct Sq:
+  s: Float
+  def area -> Float = s * s
+  def scaled(k: Float) -> Shape = Sq(s: s * k)
+
+struct Circle:
+  r: Float
+  def area -> Float = 3.0 * r * r
+  def scaled(k: Float) -> Shape = Circle(r: r * k)
+
+def main:
+  puts Sq(s: 2.0).bigger?(Circle(r: 1.0))    #=> true
+  shapes: [Shape] = [Sq(s: 1.0), Circle(r: 1.0)]
+  puts shapes.at(0).bigger?(shapes.at(1))   #=> false
+  puts shapes.at(1).scaled(2.0).area        #=> 12.0
+```
+
+A default may be a generator, made from the interface's other methods, and
+a required method may give a sequence, which each type makes as it likes —
+with `yield`, or by handing back a chain:
+
+```lume
+interface Source[T]:
+  def each_item -> Iterator[T]
+  def numbered -> Iterator[(Int, T)]:
+    var i = 1
+    for x in each_item:
+      yield (i, x)
+      i += 1
+
+struct Squares:
+  upto: Int
+  def each_item -> Iterator[Int] = (1..upto).map { |n| n * n }
+
+def main:
+  puts Squares(upto: 3).numbered.to_list    #=> [(1, 1), (2, 4), (3, 9)]
+```
+
+A generator default walks a copy of the value, taken through the same
+`lume_box` that copies any value held as the interface. A method in an
+`extend` cannot be a generator yet: write it as a default in the interface,
+or on the type itself.
+
 ## Methods that take a block, have type parameters, or are `async`
 
 **An interface method may take a block**, and is written as any other:

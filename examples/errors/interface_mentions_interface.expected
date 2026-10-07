@@ -1,6 +1,0 @@
-error: interface method `fits` mentions an interface in its signature, which is not supported yet
-  --> examples/errors/interface_mentions_interface.lume:6:3
-  |
-6 |   def fits(s: Sized) -> Bool
-  |   ^
-  help: use concrete types in interface signatures for now

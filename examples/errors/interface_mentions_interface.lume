@@ -1,9 +1,0 @@
-# An interface method takes another interface as a parameter.
-interface Sized:
-  def size -> Int
-
-interface Box:
-  def fits(s: Sized) -> Bool
-
-def main:
-  puts 1

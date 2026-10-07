@@ -291,9 +291,10 @@ where a list is wanted, it gives its items. Where it differs:
   is refused. Keep the items with `.to_list` to walk them twice. A sequence
   of your own (`def next(var self)`) is copied instead, because its state is
   fields that can be copied; a generator's state is where its body stopped.
-- **So it is kept in a local, or handed on.** Not in a list, a tuple or a
-  field, and not as an `Iterator[Int]` value or a `[S: Iterator[Int]]`
-  argument, which are copied. A parameter `xs: Iterator[T]` takes it (below).
+- **So it is kept in a local, or handed on** — to a parameter
+  `xs: Iterator[T]`, or as a function's result `-> Iterator[T]`. Not in a
+  list, a tuple or a field, and not as an `Iterator[Int]` value or a
+  `[S: Iterator[Int]]` argument, which are copied.
 - **It has its own copy of its arguments,** taken at the call, since it runs
   after the call has returned. A `var` parameter is refused.
 - **`return` alone ends it.** Its items come only from `yield`. Once it has
@@ -324,8 +325,11 @@ def main:
   puts tree.names.to_list    #=> ["root", "a", "b"]
 ```
 
-- **Not yet:** an `async` generator, a generator in an interface or an
-  `extend`, and a generator that takes a block or an interface value.
+- **In an interface** a default may be a generator, made from the
+  interface's other methods; see
+  [Interfaces](interfaces.md#an-interfaces-own-methods-may-use-interfaces).
+- **Not yet:** an `async` generator, a generator in an `extend`, and a
+  generator that takes a block or an interface value.
 - **Speed:** `bench/b7_generators.lume` is `b6` as a generator; it runs at
   about 1.3 times the hand-written Rust iterator.
 - **More:** `examples/generators.lume` shows each of these.
@@ -356,6 +360,11 @@ def main:
   puts total([1, 2, 3])                      #=> 6
   puts total(evens(1..6))                    #=> 12
 ```
+
+**A function that gives `Iterator[T]` gives a sequence the same way**, as
+Rust's `-> impl Iterator` does, whether it has `yield` or hands back a
+generator, a chain or a list: `def evens(xs: [Int]) -> Iterator[Int] =
+xs.filter { |x| x % 2 == 0 }` works.
 
 A generator moves in; a list, a set or a sequence of your own is copied in,
 so the caller's value is as it was. A lazy chain stays lazy into a plain

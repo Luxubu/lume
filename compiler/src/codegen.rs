@@ -985,6 +985,12 @@ pub struct Gen {
     /// Every block written now takes what it uses with it: a chain handed
     /// to a generator, which outlives the statement.
     move_lambdas: bool,
+    /// The bodies of an interface's generator defaults, written after the
+    /// trait in `impl dyn Trait`.
+    trait_extra: String,
+    /// Where a generator default's body began in `out`, and the indent to
+    /// return to, while it is written.
+    gen_body_mark: Option<(usize, usize)>,
     /// Emitting an interface's default bodies, inside the trait itself.
     in_trait_decl: bool,
     /// The method being emitted can be called only on a known type (it is
@@ -1145,6 +1151,8 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, module_id: &str
         annotate_params: false,
         move_next_lambda: false,
         move_lambdas: false,
+        trait_extra: String::new(),
+        gen_body_mark: None,
         in_trait_decl: false,
         current_static_only: false,
         this_file: file.to_string(),
@@ -1536,8 +1544,9 @@ impl Gen {
             params: f.params.iter().map(|p| (p.name.clone(), param_type(Self::as_vars(&self.ct(&p.ty), &f.generics)))).collect(),
             var_params: f.params.iter().map(|p| p.mutable).collect(),
             ret: match f.ret.as_ref().map(|t| Self::as_vars(&self.ct(t), &f.generics)) {
-                // a `def` with `yield` that gives `Iterator[T]` is a generator
-                Some(Type::App(n, args)) if args.len() == 1 && is_iterator_name(&n) && block_yields(&f.body) => Type::Gen(Box::new(args[0].clone())),
+                // a `def` that gives `Iterator[T]` gives a sequence by move, as
+                // Rust's `-> impl Iterator` does: a generator when it has `yield`
+                Some(Type::App(n, args)) if args.len() == 1 && is_iterator_name(&n) => Type::Gen(Box::new(args[0].clone())),
                 Some(t) => t,
                 None => Type::Unknown,
             },
@@ -1698,6 +1707,8 @@ impl Gen {
             | (Type::Set(d), Type::Set(a))
             | (Type::Task(d), Type::Task(a))
             | (Type::Shared(d, _), Type::Shared(a, _)) => Self::unify(d, a, m),
+            // a sequence: what it hands out, whatever kind it is
+            (Type::Gen(d), Type::Gen(a) | Type::List(a) | Type::Set(a) | Type::Iter(a, _)) => Self::unify(d, a, m),
             (Type::Result(d1, d2), Type::Result(a1, a2)) | (Type::Map(d1, d2), Type::Map(a1, a2)) => {
                 Self::unify(d1, a1, m);
                 Self::unify(d2, a2, m);
@@ -3214,7 +3225,7 @@ impl Gen {
     fn require_conforms(&self, t: &Type, iface: &Type, line: usize, col: usize) -> Result<()> {
         if let Type::Gen(_) = t {
             return Err(LumeError::new(line, col, format!("a generator cannot be held as an `{}` value: it is used up as it is walked, and such a value is copied", type_name(iface)))
-                .with_help("a generator lives in a local or a parameter `xs: Iterator[T]`; to keep the items, `.to_list`; to give them back from a function, make it a generator: `for x in other(): yield x`"));
+                .with_help("a generator lives in a local, a parameter `xs: Iterator[T]`, or a function's result `-> Iterator[T]`; to keep the items, `.to_list`"));
         }
         let key = self.type_key(iface);
         // Check against the interface as it was asked for, arguments and
@@ -3881,9 +3892,18 @@ impl Gen {
                     self.check_generics_used(&i.generics, sig_types.iter(), &format!("interface `{}`", i.name))?;
                     for m in i.required.iter().chain(&i.defaults) {
                         self.check_sig_types(m, &i.generics)?;
-                        if m.params.iter().any(|p| self.is_interface(&self.ct(&p.ty))) || m.ret.as_ref().map(|r| self.is_interface(&self.ct(r))).unwrap_or(false) {
-                            return Err(LumeError::new(m.line, m.col, format!("interface method `{}` mentions an interface in its signature, which is not supported yet", m.name))
-                                .with_help("use concrete types in interface signatures for now"));
+                        // an interface value is lent to a trait method as `&dyn`, and a
+                        // value lent that way cannot call what only a known type can
+                        for p in &m.params {
+                            let pt = self.ct(&p.ty);
+                            if let Some(info) = self.interfaces.get(&self.type_key(&pt)).filter(|_| self.is_interface(&pt)) {
+                                let mut only: Vec<&String> = info.methods.iter().filter(|(_, sg)| Self::static_only(sg) || sg.is_async).map(|(n, _)| n).collect();
+                                only.sort();
+                                if let Some(n) = only.first() {
+                                    return Err(LumeError::new(p.line, p.col, format!("`{}` takes a `{}`, which has `{}`, a method only a known type can call, so it cannot be lent to an interface's method", m.name, type_name(&pt), n))
+                                        .with_help(format!("take what `{}` needs from it instead, or write `{}` as a function with a parameter `{}: {}`", m.name, m.name, p.name, type_name(&pt))));
+                                }
+                            }
                         }
                     }
                 }
@@ -6081,6 +6101,13 @@ impl Gen {
         self.in_trait_impl = false;
         self.indent -= 1;
         self.line("}");
+        let extra = std::mem::take(&mut self.trait_extra);
+        if !extra.is_empty() {
+            // the generator defaults' bodies: methods of any value that fits
+            self.line(&format!("impl{} dyn {}{} {{", gen, i.name, gargs));
+            self.out.push_str(&extra);
+            self.line("}");
+        }
         // Boxed values forward to the value inside.
         let box_gen = if i.generics.is_empty() {
             format!("<Inner: {} + ?std::marker::Sized>", i.name)
@@ -6170,7 +6197,14 @@ impl Gen {
     fn trait_header(&self, name: &str, sg: &Sig, decl: Option<&[Type]>) -> String {
         let gen = self.rust_generics(&sg.generics);
         let params = self.sig_params_rust_as(sg, decl, true);
-        let ret = if sg.is_async { format!("impl std::future::Future<Output = {}> + Send", self.rt(&sg.ret)) } else { self.rt(&sg.ret) };
+        let ret = if sg.is_async {
+            format!("impl std::future::Future<Output = {}> + Send", self.rt(&sg.ret))
+        } else if let Type::Gen(item) = &sg.ret {
+            // a trait stays usable through a pointer: its sequences are boxed
+            format!("::std::boxed::Box<dyn Iterator<Item = {}> + Send>", self.rt(item))
+        } else {
+            self.rt(&sg.ret)
+        };
         let wh = if Self::static_only(sg) { " where Self: Sized" } else { "" };
         format!("fn {}{}({}) -> {}{}", rust_name(name), gen, params, ret, wh)
     }
@@ -6186,6 +6220,12 @@ impl Gen {
             // value; a generic here would make it one only generics can use
             if let Type::Fn(ins, out) = t {
                 parts.push(format!("{}: &mut dyn {}", rust_name(n), self.rust_fn_bound(ins, out)));
+                continue;
+            }
+            // an interface value is lent as `&dyn`, which takes a value of any
+            // type that fits as well as one already held through a pointer
+            if self.is_interface(t) && !sg.var_params.get(i).copied().unwrap_or(false) {
+                parts.push(format!("{}: &dyn {}", rust_name(n), self.rust_iface(t)));
                 continue;
             }
             let rt = self.rt(t);
@@ -6406,14 +6446,9 @@ impl Gen {
                             }
                         } else if inherent.contains_key(mname) && !self.ext_methods.get(tkey).map(|m| m.contains_key(mname)).unwrap_or(false) {
                             let args: Vec<String> = pass.clone();
-                            self.line(&format!(
-                                "{} {{ {}::{}(self{}{}) }}",
-                                self.trait_header(mname, sg, Some(&decl_tys)),
-                                Self::turbofish(&self.rt(t)),
-                                rust_name(mname),
-                                if args.is_empty() { "" } else { ", " },
-                                args.join(", ")
-                            ));
+                            let call = format!("{}::{}(self{}{})", Self::turbofish(&self.rt(t)), rust_name(mname), if args.is_empty() { "" } else { ", " }, args.join(", "));
+                            let call = if matches!(sg.ret, Type::Gen(_)) { format!("::std::boxed::Box::new({})", call) } else { call };
+                            self.line(&format!("{} {{ {} }}", self.trait_header(mname, sg, Some(&decl_tys)), call));
                         }
                     }
                     self.indent -= 1;
@@ -6661,18 +6696,20 @@ impl Gen {
         };
         let is_main = f.name == "main" && owner.is_none() && self.is_entry;
         let main_result = is_main && matches!(sig.ret, Type::Result(..));
+        // a generator has `yield`; a `def` that gives `Iterator[T]` without
+        // it hands on a sequence it makes some other way
         let gen_item = match &sig.ret {
-            Type::Gen(t) => Some((**t).clone()),
+            Type::Gen(t) if block_yields(&f.body) => Some((**t).clone()),
             _ => None,
         };
-        if gen_item.is_none() && block_yields(&f.body) {
+        if gen_item.is_none() && block_yields(&f.body) && !matches!(sig.ret, Type::Gen(_)) {
             return Err(LumeError::new(f.line, f.col, format!("`{}` hands out items with `yield`, so it gives `Iterator[T]`", f.name))
                 .with_help(format!("say what it gives: `def {}(...) -> Iterator[Int]:`, with the type its `yield`s have", f.name)));
         }
         if gen_item.is_some() {
             let refuse = |why: &str, help: &str| Err(LumeError::new(f.line, f.col, why.to_string()).with_help(help.to_string()));
-            if owner.is_some() && (self.in_trait_impl || self.in_trait_decl) {
-                return refuse(&format!("`{}` belongs to an interface or an `extend`, and such a method cannot be a generator yet", f.name), "make it a method of the struct or enum itself, or a function that takes the value");
+            if owner.is_some() && self.in_trait_impl && !self.in_trait_decl {
+                return refuse(&format!("`{}` is in an `extend`, and a method there cannot be a generator yet", f.name), "write the generator as a default in the interface, or as a method of the struct or enum itself");
             }
             if owner.is_some() && f.self_kind == SelfKind::Mutate {
                 return refuse(&format!("`{}` is a generator, which walks its own copy of the value, so `var self` would change nothing", f.name), "drop `var`; to move a value along by hand, give it `def next(var self) -> T?`");
@@ -6755,11 +6792,23 @@ impl Gen {
                 parts.push(format!("mut {}: impl Iterator<Item = {}> + Send", rust_name(&p.name), self.rt(&item)));
                 continue;
             }
+            if self.is_interface(&pty) && self.in_trait_impl && !p.mutable {
+                // as the trait declares it: lent as `&dyn`
+                parts.push(format!("{}: &dyn {}", rust_name(&p.name), self.rust_iface(&pty)));
+                self.iface_params.insert(p.name.clone());
+                continue;
+            }
             if self.is_interface(&pty) && !self.in_trait_impl {
-                // `s: Shape` — one generic parameter per interface-typed parameter (static dispatch)
+                // `s: Shape` — one generic parameter per interface-typed parameter (static dispatch);
+                // `?Sized`, so a value lent as `&dyn` may be handed on
                 let g = format!("Iface{}", generics.len());
                 let iface = self.rust_iface(&pty);
-                generics.push(format!("{}: {}", g, iface));
+                // an interface whose methods all work through a pointer may
+                // also be lent as `&dyn`; one with methods only a known type
+                // can call (`async`, or taking a block) must stay `Sized`
+                let all_dyn = self.interfaces.get(&self.type_key(&pty)).map(|i| i.methods.values().all(|sg| !Self::static_only(sg) && !sg.is_async)).unwrap_or(false);
+                let maybe_unsized = if all_dyn { " + ?::std::marker::Sized" } else { "" };
+                generics.push(format!("{}: {}{}", g, iface, maybe_unsized));
                 parts.push(format!("{}: &{}", rust_name(&p.name), g));
                 continue;
             }
@@ -6820,7 +6869,10 @@ impl Gen {
         if async_default {
             header.push_str(&format!(" -> impl std::future::Future<Output = {}> + Send", self.rt(&sig.ret)));
         } else if sig.ret != Type::Unit {
-            header.push_str(&format!(" -> {}", self.rt(&sig.ret)));
+            match &sig.ret {
+                Type::Gen(item) if self.in_trait_impl => header.push_str(&format!(" -> ::std::boxed::Box<dyn Iterator<Item = {}> + Send>", self.rt(item))),
+                _ => header.push_str(&format!(" -> {}", self.rt(&sig.ret))),
+            }
         }
         // a method only a generic can call, as the trait declares it
         if self.in_trait_impl && Self::static_only(&sig) {
@@ -6856,12 +6908,21 @@ impl Gen {
                 // an async block may lend what it owns across its pauses
                 let names: Vec<String> = f.params.iter().map(|p| rust_name(&p.name)).collect();
                 let item_rt = self.rt(item);
-                self.line("let lume_this = self.clone();");
+                // in an interface the value is copied through `lume_box`,
+                // which every type that fits has, and the body is a method of
+                // `dyn Trait`, written after the trait
+                let in_decl = self.in_trait_decl;
+                self.line(if in_decl { "let lume_this = self.lume_box();" } else { "let lume_this = self.clone();" });
                 let mut call_args = vec!["lume_co".to_string()];
                 call_args.extend(names.iter().cloned());
-                self.line(&format!("LumeGen::new(move |lume_co: LumeYield<{}>| async move {{ lume_this.lume_gen_{}({}).await }})", item_rt, rust_name(&f.name), call_args.join(", ")));
+                let made = format!("LumeGen::new(move |lume_co: LumeYield<{}>| async move {{ lume_this.lume_gen_{}({}).await }})", item_rt, rust_name(&f.name), call_args.join(", "));
+                self.line(&if in_decl { format!("::std::boxed::Box::new({})", made) } else { made });
                 self.indent -= 1;
                 self.line("}");
+                if in_decl {
+                    self.gen_body_mark = Some((self.out.len(), self.indent));
+                    self.indent = 1;
+                }
                 let mut owned = vec!["&self".to_string(), format!("lume_co: LumeYield<{}>", item_rt)];
                 for p in &f.params {
                     let pty = param_type(self.ct(&p.ty));
@@ -6902,6 +6963,13 @@ impl Gen {
         self.current_fn = f.name.clone();
         let saved_static_only = std::mem::replace(&mut self.current_static_only, Self::static_only(&sig));
         let want_value = sig.ret != Type::Unit && gen_item.is_none();
+        // in a trait, a sequence handed on is boxed; the body is a closure
+        // called at once, so its `return`s still give the sequence
+        let boxed_seq = self.in_trait_impl && gen_item.is_none() && matches!(sig.ret, Type::Gen(_));
+        if boxed_seq {
+            self.line("::std::boxed::Box::new((move || {");
+            self.indent += 1;
+        }
         self.tail_of_fn = true;
         if unit_result {
             self.block_body(&f.body, false)?;
@@ -6910,6 +6978,10 @@ impl Gen {
             self.block_body(&f.body, want_value)?;
         }
         self.tail_of_fn = false;
+        if boxed_seq {
+            self.indent -= 1;
+            self.line("})())");
+        }
         self.gen_item = saved_gen;
         if gen_item.is_some() && !(owner.is_some() && f.self_kind == SelfKind::Read) {
             self.indent -= 1;
@@ -6930,6 +7002,11 @@ impl Gen {
         }
         self.indent -= 1;
         self.line("}");
+        if let Some((mark, indent)) = self.gen_body_mark.take() {
+            let body = self.out.split_off(mark);
+            self.trait_extra.push_str(&body);
+            self.indent = indent;
+        }
         if main_result && !self.test_mode {
             if f.is_async {
                 self.line("#[tokio::main]");
@@ -8595,6 +8672,14 @@ impl Gen {
     /// get cloned; owned locals move.
     fn expr_owned(&mut self, e: &Expr) -> Result<String> {
         let t = self.ty_of(e);
+        // a sequence where `Iterator[T]` is wanted, as a result: made one
+        // that owns what it walks
+        if matches!(self.want.last(), Some(Type::Gen(_))) && !matches!(t, Type::Gen(_)) && (matches!(t, Type::Iter(..) | Type::List(_) | Type::Set(_)) || self.seq_item_of_type(&t.materialized()).is_some()) {
+            let saved = std::mem::replace(&mut self.arg_for_gen, true);
+            let r = self.seq_arg(e);
+            self.arg_for_gen = saved;
+            return r;
+        }
         if let Type::Iter(elem, by_ref) = &t {
             let (by_ref, elem) = (*by_ref, (**elem).clone());
             let s = self.expr(e)?;
@@ -8630,6 +8715,14 @@ impl Gen {
     /// generator, which outlives the call and so cannot hold what the chain
     /// borrows: there it is worked out first.
     fn seq_arg(&mut self, e: &Expr) -> Result<String> {
+        // what is written here is the sequence itself, not one wanted again
+        self.want.push(Type::Unknown);
+        let r = self.seq_arg_inner(e);
+        self.want.pop();
+        r
+    }
+
+    fn seq_arg_inner(&mut self, e: &Expr) -> Result<String> {
         let at = self.ty_of(e);
         match at.clone() {
             Type::Gen(_) => self.give_away(e),
@@ -8769,6 +8862,13 @@ impl Gen {
     }
 
     fn expr_owned_as_inner(&mut self, e: &Expr, expected: &Type) -> Result<String> {
+        if let Type::Gen(_) = expected {
+            // it leaves the function, so nothing it gives back may borrow
+            let saved = std::mem::replace(&mut self.arg_for_gen, true);
+            let r = self.seq_arg(e);
+            self.arg_for_gen = saved;
+            return r;
+        }
         if let (Type::List(_), Type::Gen(_)) = (expected, self.ty_of(e).materialized()) {
             return self.expr_val(e);
         }
@@ -12657,7 +12757,7 @@ fn overlap_unify(a: &Type, b: &Type, sub: &mut HashMap<String, Type>) -> bool {
         }
         (Type::Unknown, _) | (_, Type::Unknown) => true,
         (Type::List(x), Type::List(y)) | (Type::Iter(x, _), Type::List(y)) | (Type::List(x), Type::Iter(y, _)) | (Type::Iter(x, _), Type::Iter(y, _)) => overlap_unify(x, y, sub),
-        (Type::Option(x), Type::Option(y)) | (Type::Set(x), Type::Set(y)) | (Type::Task(x), Type::Task(y)) => overlap_unify(x, y, sub),
+        (Type::Option(x), Type::Option(y)) | (Type::Set(x), Type::Set(y)) | (Type::Task(x), Type::Task(y)) | (Type::Gen(x), Type::Gen(y)) => overlap_unify(x, y, sub),
         (Type::Map(a1, b1), Type::Map(a2, b2)) | (Type::Result(a1, b1), Type::Result(a2, b2)) => overlap_unify(a1, a2, sub) && overlap_unify(b1, b2, sub),
         (Type::Tuple(xs), Type::Tuple(ys)) => xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| overlap_unify(x, y, sub)),
         (Type::App(n, xs), Type::App(m, ys)) => n == m && xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| overlap_unify(x, y, sub)),
@@ -12683,7 +12783,7 @@ fn ext_fits(pat: &Type, t: &Type, sub: &mut HashMap<String, Type>) -> bool {
         (_, Type::Unknown) => true,
         (_, Type::Shared(inner, _)) => ext_fits(pat, inner, sub),
         (Type::List(x), Type::List(y)) | (Type::List(x), Type::Iter(y, _)) => ext_fits(x, y, sub),
-        (Type::Option(x), Type::Option(y)) | (Type::Set(x), Type::Set(y)) | (Type::Task(x), Type::Task(y)) => ext_fits(x, y, sub),
+        (Type::Option(x), Type::Option(y)) | (Type::Set(x), Type::Set(y)) | (Type::Task(x), Type::Task(y)) | (Type::Gen(x), Type::Gen(y)) => ext_fits(x, y, sub),
         (Type::Map(a1, b1), Type::Map(a2, b2)) | (Type::Result(a1, b1), Type::Result(a2, b2)) => ext_fits(a1, a2, sub) && ext_fits(b1, b2, sub),
         (Type::Tuple(xs), Type::Tuple(ys)) => xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| ext_fits(x, y, sub)),
         (Type::App(n, xs), Type::App(m, ys)) => n == m && xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| ext_fits(x, y, sub)),
