@@ -1,0 +1,9 @@
+# a cycle hidden two deep, and one that is a package using itself
+app: core, ui
+core: model, util
+model: store
+store: core
+ui: widgets
+widgets: ui
+util
+tool: tool

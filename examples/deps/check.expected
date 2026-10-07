@@ -1,0 +1,88 @@
+$ deps tree shop data/shop.deps
+shop
+  web
+    http
+      pool
+    templates
+      text
+    json
+      text (above)
+  orders
+    db
+      pool (above)
+      json (above)
+    users
+      db (above)
+      auth
+        crypto
+        json (above)
+    json (above)
+    money
+  users (above)
+  search
+    index
+      text (above)
+    json (above)
+(exit 0)
+$ deps order data/shop.deps
+money pool crypto text http index templates json web auth search db users orders shop
+(exit 0)
+$ deps why shop text data/shop.deps
+shop -> web -> templates -> text
+shop -> web -> json -> text
+shop -> orders -> db -> json -> text
+shop -> orders -> users -> db -> json -> text
+shop -> orders -> users -> auth -> json -> text
+shop -> orders -> json -> text
+shop -> users -> db -> json -> text
+shop -> users -> auth -> json -> text
+shop -> search -> index -> text
+shop -> search -> json -> text
+(exit 0)
+$ deps why text shop data/shop.deps
+text does not use shop
+(exit 0)
+$ deps users db data/shop.deps
+shop orders users
+(exit 0)
+$ deps cycles data/shop.deps
+no cycles
+(exit 0)
+$ deps tree app data/loop.deps
+app
+  core
+    model
+      store
+        core (above)
+    util
+  ui
+    widgets
+      ui (above)
+(exit 0)
+$ deps order data/loop.deps
+util
+never ready (in a cycle, or using one): app, core, model, store, ui, widgets, tool
+(exit 0)
+$ deps cycles data/loop.deps
+core -> model -> store -> core
+ui -> widgets -> ui
+tool -> tool
+(exit 0)
+$ deps users core data/loop.deps
+app model store
+(exit 0)
+$ deps tree nope data/shop.deps
+error: no package `nope`
+(exit 1)
+$ deps order data/bad.deps
+error: line 3: a line needs a package name before `:`
+(exit 1)
+$ deps order data/missing.deps
+error: cannot read `data/missing.deps`: No such file or directory (os error 2)
+(exit 1)
+$ deps frob data/shop.deps
+error: unknown command `frob`
+(exit 1)
+$ deps 
+usage: deps tree NAME FILE | order FILE | why A B FILE | cycles FILE | users NAME FILE
+(exit 2)

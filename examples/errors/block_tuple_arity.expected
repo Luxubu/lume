@@ -1,0 +1,6 @@
+error: this block names 2 arguments, but the items have 3 parts
+  --> examples/errors/block_tuple_arity.lume:5:17
+  |
+5 |   puts rows.map { |name, n| name }.to_list
+  |                 ^
+  help: name one for each part, `{ |a, b, c| ... }`, or one for the whole tuple

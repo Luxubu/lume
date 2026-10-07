@@ -1,0 +1,5 @@
+# A block names one argument for each part of the items it is given: these items are triples.
+
+def main:
+  rows = [("ann", 3, true)]
+  puts rows.map { |name, n| name }.to_list

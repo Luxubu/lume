@@ -160,6 +160,10 @@ fi
 out=$(examples/jobr/check.sh "$LUME" 2>&1)
 check "jobr" "examples/jobr/queries.expected" "$out"
 
+# the deps dogfood program: generator methods over a graph, and its errors
+out=$(examples/deps/check.sh "$LUME" 2>&1)
+check "deps" "examples/deps/check.expected" "$out"
+
 # the logq dogfood program: every command, a pipe, and its errors
 out=$(examples/logq/check.sh "$LUME" 2>&1)
 check "logq" "examples/logq/check.expected" "$out"

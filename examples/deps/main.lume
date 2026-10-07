@@ -1,0 +1,165 @@
+# deps — questions about a dependency graph, answered by walking it.
+#
+#   deps tree NAME FILE    what NAME uses, as a tree (a package seen before is marked)
+#   deps order FILE        an order to build in: everything after what it uses
+#   deps why A B FILE      every path by which A comes to use B
+#   deps cycles FILE       each cycle, once
+#   deps users NAME FILE   what uses NAME, directly or not
+#
+# A FILE has one package to a line, then what it uses:
+#
+#   shop: web, orders
+#   web: http
+#   http
+#
+# `#` starts a comment.
+
+struct Graph:
+  uses: {Str: [Str]}
+  # the order the file named them in, so every answer is the same each run
+  names: [Str]
+
+  def has?(name: Str) -> Bool = uses.contains?(name)
+
+  def deps_of(name: Str) -> [Str] = uses.get(name).or([])
+
+  # Depth first from `root`: each package with its depth, and whether it was
+  # already shown higher up.
+  def walk(root: Str) -> Iterator[(Int, Str, Bool)]:
+    var seen: {Str} = {}
+    var stack: [(Int, Str)] = [(0, root)]
+    while not stack.empty?:
+      (depth, name) = stack.pop.or((0, ""))
+      again = seen.contains?(name)
+      yield (depth, name, again)
+      if again:
+        next
+      seen.add(name)
+      for d in deps_of(name).reverse:
+        stack.push((depth + 1, d))
+
+  # Kahn's algorithm: a package comes out once everything it uses has.
+  # A package in a cycle never does.
+  def order -> Iterator[Str]:
+    var waiting: {Str: Int} = {}
+    for n in names:
+      waiting[n] = deps_of(n).len
+    var ready: [Str] = names.filter { |n| deps_of(n).empty? }.to_list
+    var done: {Str} = {}
+    while not ready.empty?:
+      n = ready.at(0)
+      ready = ready.skip(1).to_list
+      yield n
+      done.add(n)
+      for user in names:
+        if deps_of(user).contains?(n) and not done.contains?(user):
+          left = waiting[user].or(0) - 1
+          waiting[user] = left
+          ready.push(user) if left == 0
+
+  # Every path from `from` to `to` that passes no package twice, in the
+  # order the file lists what each package uses.
+  def paths(from: Str, to: Str) -> Iterator[[Str]]:
+    for p in paths_avoiding(from, to, []):
+      yield p
+
+  def paths_avoiding(from: Str, to: Str, on_path: [Str]) -> Iterator[[Str]]:
+    if from == to:
+      yield [to]
+      return
+    for d in deps_of(from):
+      if d == to or not on_path.contains?(d):
+        for rest in paths_avoiding(d, to, on_path + [from]):
+          yield [from] + rest
+
+  # Each cycle once, starting from its first package in file order.
+  def cycles -> Iterator[[Str]]:
+    var found: {Str} = {}
+    for start in names:
+      for d in deps_of(start):
+        for p in paths(d, start):
+          ring = [start] + p.take(p.len - 1).to_list
+          key = ring.sort.join(",")
+          if not found.contains?(key) and ring.all? { |n| names.index_of(n).or(0) >= names.index_of(start).or(0) }:
+            found.add(key)
+            yield ring
+
+  def users_of(name: Str) -> Iterator[Str]:
+    for n in names:
+      if n != name and walk(n).any? { |depth, m, again| m == name }:
+        yield n
+
+# One line of the file: a package and what it uses, or nothing for a blank
+# or comment line.
+def parse_line(line: Str) -> (Str, [Str])? or Error:
+  text = line.split("#").at(0).trim
+  if text.empty?:
+    return Ok(None)
+  parts = text.split(":")
+  name = parts.at(0).trim
+  if name.empty?:
+    return Error("a line needs a package name before `:`")
+  deps = if parts.len > 1: parts.at(1).split(",").map { |d| d.trim }.reject { |d| d.empty? }.to_list else: []
+  Ok(Some((name, deps)))
+
+def read_graph(text: Str) -> Graph or Error:
+  var uses: {Str: [Str]} = {}
+  var names: [Str] = []
+  for i, line in text.lines.enumerate:
+    match parse_line(line):
+      Ok(Some((name, deps))) ->
+        if uses.contains?(name):
+          return Error("line #{i + 1}: `#{name}` is listed twice")
+        uses[name] = deps
+        names.push(name)
+      Ok(None) -> next
+      Error(e) -> return Error("line #{i + 1}: #{e.message}")
+  for n in names:
+    for d in uses[n].or([]):
+      if not uses.contains?(d):
+        return Error("`#{n}` uses `#{d}`, which the file does not list")
+  Graph(uses: uses, names: names)
+
+def tree(g: Graph, root: Str):
+  for depth, name, again in g.walk(root):
+    mark = if again: " (above)" else: ""
+    puts "#{"  ".repeat(depth)}#{name}#{mark}"
+
+def need(g: Graph, name: Str) -> () or Error:
+  return Error("no package `#{name}`") if not g.has?(name)
+  ()
+
+def main -> () or Error:
+  args = Env.args
+  if args.len < 2:
+    warn "usage: deps tree NAME FILE | order FILE | why A B FILE | cycles FILE | users NAME FILE"
+    Env.exit(2)
+  g = read_graph(File.read(args.last.or(""))?)?
+  match args.at(0):
+    "tree" ->
+      need(g, args.at(1))?
+      tree(g, args.at(1))
+    "order" ->
+      order = g.order.to_list
+      puts order.join(" ")
+      stuck = g.names.reject { |n| order.contains?(n) }.to_list
+      puts "never ready (in a cycle, or using one): #{stuck.join(", ")}" if not stuck.empty?
+    "why" ->
+      need(g, args.at(1))?
+      need(g, args.at(2))?
+      var n = 0
+      for p in g.paths(args.at(1), args.at(2)):
+        puts p.join(" -> ")
+        n += 1
+      puts "#{args.at(1)} does not use #{args.at(2)}" if n == 0
+    "cycles" ->
+      var n = 0
+      for c in g.cycles:
+        puts "#{(c + [c.at(0)]).join(" -> ")}"
+        n += 1
+      puts "no cycles" if n == 0
+    "users" ->
+      need(g, args.at(1))?
+      puts g.users_of(args.at(1)).to_list.join(" ")
+    other -> return Error("unknown command `#{other}`")
+  ()

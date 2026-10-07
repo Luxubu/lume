@@ -5944,9 +5944,11 @@ impl Gen {
                 self.declare(&params[0], false, false, at.clone(), line);
                 self.declare(&params[1], false, by_ref && !elem.is_copy(), elem.clone(), line);
             }
-            (None, 2, Type::Tuple(ts)) if ts.len() == 2 => {
-                self.declare(&params[0], false, by_ref && !ts[0].is_copy(), ts[0].clone(), line);
-                self.declare(&params[1], false, by_ref && !ts[1].is_copy(), ts[1].clone(), line);
+            // one name for each part of a tuple: a pair, a triple, ...
+            (None, n, Type::Tuple(ts)) if n >= 2 && ts.len() == n => {
+                for (p, t) in params.iter().zip(ts) {
+                    self.declare(p, false, by_ref && !t.is_copy(), t.clone(), line);
+                }
             }
             _ => {
                 if let Some(p) = params.first() {
@@ -9016,7 +9018,7 @@ impl Gen {
 
     fn gen_lambda_ex(&mut self, params: &[String], body: &Block, elem: &Type, by_ref: bool, pattern_ref: bool, want_value: bool, acc: Option<&Type>, negate: bool, at: &Expr) -> Result<String> {
         let mv = if std::mem::take(&mut self.move_next_lambda) || self.move_lambdas { "move " } else { "" };
-        let expected = if acc.is_some() { 2 } else if matches!(elem, Type::Tuple(ts) if ts.len() == 2) && params.len() == 2 { 2 } else { 1 };
+        let expected = if acc.is_some() { 2 } else if params.len() >= 2 && matches!(elem, Type::Tuple(ts) if ts.len() == params.len()) { params.len() } else { 1 };
         if params.len() != expected {
             if params.is_empty() {
                 return Err(LumeError::new(at.line, at.col, format!("this block names no arguments, but it is given {}", plural(expected, "one", "two")))
@@ -9024,6 +9026,10 @@ impl Gen {
             }
             let msg = if acc.is_some() {
                 "`fold` takes a block with two arguments: the accumulator and the item".to_string()
+            } else if let (Type::Tuple(ts), true) = (elem, params.len() >= 2) {
+                let names: Vec<String> = (0..ts.len()).map(|i| ["a", "b", "c", "d", "e", "f"].get(i).unwrap_or(&"x").to_string()).collect();
+                return Err(LumeError::new(at.line, at.col, format!("this block names {} arguments, but the items have {} parts", params.len(), ts.len()))
+                    .with_help(format!("name one for each part, `{{ |{}| ... }}`, or one for the whole tuple", names.join(", "))));
             } else if params.len() == 2 {
                 "this block names two arguments, but the items are not pairs".to_string()
             } else {
@@ -9036,23 +9042,23 @@ impl Gen {
         // The closure pattern spells out every reference layer, so each name
         // binds exactly what `declare_block_params` says it is: a Copy part by
         // value, anything else as one `&`.
-        let item_pat = if acc.is_none() && params.len() == 2 && matches!(elem, Type::Tuple(ts) if ts.len() == 2) {
+        let item_pat = if acc.is_none() && params.len() >= 2 && matches!(elem, Type::Tuple(ts) if ts.len() == params.len()) {
             let ts = match elem {
                 Type::Tuple(ts) => ts.clone(),
                 _ => unreachable!(),
             };
             if map_items {
                 // items are `(k, v)` values holding references already
-                let pair = format!("({}, {})", names[0], names[1]);
+                let pair = format!("({})", names.join(", "));
                 if pattern_ref { format!("&{}", pair) } else { pair }
             } else if by_ref || (pattern_ref && !elem.is_copy()) {
                 // a reference to a tuple: take Copy parts out, borrow the rest
                 let parts: Vec<String> = names.iter().zip(&ts).map(|(n, t)| if t.is_copy() { n.clone() } else { format!("ref {}", n) }).collect();
-                let pair = format!("({}, {})", parts[0], parts[1]);
+                let pair = format!("({})", parts.join(", "));
                 let depth = (by_ref as usize) + (pattern_ref as usize);
                 format!("{}{}", "&".repeat(depth), pair)
             } else {
-                let pair = format!("({}, {})", names[0], names[1]);
+                let pair = format!("({})", names.join(", "));
                 if pattern_ref { format!("&{}", pair) } else { pair }
             }
         } else {
@@ -11345,7 +11351,7 @@ impl Gen {
                                     continue;
                                 }
                                 if let ExprKind::Method { recv: list, name: at, args: at_args } = &a.value.kind {
-                                    if at == "at" && at_args.len() == 1 && self.ty_of(list).materialized() == Type::List(Box::new(Type::Str)) {
+                                    if at == "at" && at_args.len() == 1 && self.ty_of(list) == Type::List(Box::new(Type::Str)) {
                                         let l = self.expr(list)?;
                                         let i = self.expr_val(&at_args[0].value)?;
                                         parts.push(format!("(*lume_at_ref(&{}, {}))", l, i));
@@ -11532,7 +11538,7 @@ impl Gen {
                 // so the item is read where it is, not copied out first
                 if rt == Type::Str {
                     if let ExprKind::Method { recv: list, name: at, args: at_args } = &recv.kind {
-                        if at == "at" && at_args.len() == 1 && matches!(self.ty_of(list).materialized(), Type::List(_)) {
+                        if at == "at" && at_args.len() == 1 && matches!(self.ty_of(list), Type::List(_)) {
                             let l = self.expr(list)?;
                             let i = self.expr_val(&at_args[0].value)?;
                             r = format!("(*lume_at_ref(&{}, {}))", l, i);

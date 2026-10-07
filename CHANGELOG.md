@@ -7,6 +7,10 @@
 - **Lazy into generators**: a chain that starts from a generator, a range
   or a sequence of your own stays lazy when given to a generator, so an
   endless one works.
+- **Blocks over tuples**: a block names one argument for each part of a
+  tuple, three or more as well as two.
+- **`examples/deps/`**: a dependency-graph tool built on generator methods.
+- **Fixed**: `text.split(sep).at(i)` followed by a text method.
 
 ## 0.2.0 — sequences
 

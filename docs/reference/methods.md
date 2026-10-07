@@ -208,6 +208,14 @@ puts pairs.sort_by { |name, n| n }      #=> [("bo", 1), ("ann", 3), ("cy", 3)]
 `ann` and `cy` tie on 3: `max_by` gives `ann`, the first. `sort_by` keeps them
 in the order they came, because it is stable.
 
+**A tuple of three or more is taken apart the same way**, one name for each
+part, as `for` does:
+
+```lume
+rows = [("ann", 3, true), ("bo", 5, false)]
+puts rows.filter { |name, n, ok| ok }.map { |name, n, ok| "#{name}#{n}" }.to_list   #=> ["ann3"]
+```
+
 The ones that build something new:
 
 ```lume
@@ -476,7 +484,7 @@ p = (1, "a")
 puts p < (1, "b")                          #=> true
 ```
 
-A tuple is taken apart by `(a, b) = t`, by a block with two names, or by
+A tuple is taken apart by `(a, b) = t`, by a block with a name for each part, or by
 `match` ([patterns](patterns.md)).
 
 ## Everything

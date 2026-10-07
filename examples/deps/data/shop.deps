@@ -1,0 +1,16 @@
+# a web shop: each line is a package, then what it uses
+shop: web, orders, users, search
+web: http, templates, json
+orders: db, users, json, money
+users: db, auth
+auth: crypto, json
+search: index, json
+index: text
+templates: text
+db: pool, json
+money
+http: pool
+pool
+crypto
+json: text
+text
