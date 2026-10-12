@@ -1,0 +1,44 @@
+warning: `styles` holds values of different types behind `Style`, so calls on its items go through a pointer
+  --> corpus/m78/c03_document.lume:194:3
+    |
+194 |   styles: [Style] = [Plain(w: 8), Shout(w: 6)]
+    |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+skipped: unknown kind `x`
+skipped: no kind in `no colon here`
+skipped: a quote needs `text | who`, got `just text`
+parsed Quote(text: "Small programs travel well.", who: "a reviewer")
+FIELD GUIDE
+===========
+
+# 1. Getting started
+Lume reads like a script.
+- install the compiler
+- write a file
+- run the file
+## 1.1. Your first file
+A file starts at main.
+
+# 2. Sharing
+> Small programs travel well.
+>   -- a reviewer
+1. Getting started (15 words)
+  1.1. Your first file (3 words)
+2. Sharing (5 words)
+20 words, 17 different
+file 3
+the 2
+lume 1
+{"install", "compiler", "programs", "reviewer"}
++--------+
+|intro   |
+|body    |
++--------+
++------+
+| INTRO|
+|  BODY|
++------+
+true
+false
+["+-----+", "|ok   |", "+-----+"]
+exit: 0

@@ -1,0 +1,30 @@
+warning: `all` holds values of different types behind `Shape`, so calls on its items go through a pointer
+  --> corpus/m78/b05_iface_in_signatures.lume:92:3
+   |
+92 |   all: [Shape] = [a, b, Sq(s: 1)]
+   |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+warning: `srcs` holds values of different types behind `Source`, so calls on its items go through a pointer
+  --> corpus/m78/b05_iface_in_signatures.lume:107:3
+    |
+107 |   srcs: [Source[Int]] = [c, l]
+    |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+true
+bar(8) vs sq(9)
+sq
+false
+false
+[16, 9, 4]
+sq(9) vs sq(4)
+["sq"]
+[1, 2]
+[40, 10]
+[1, 3, 5]
+[40, 30]
+15
+80
+40
+9
+70
+exit: 0

@@ -1,0 +1,7 @@
+error: `trail` is a generator, which walks its own copy of the value, so `var self` would change nothing
+  --> corpus/m78/b08_enum_gen_var_self.lume:15:3
+   |
+15 |   def trail(var self) -> Iterator[Int]:
+   |   ^
+  help: drop `var`; to move a value along by hand, give it `def next(var self) -> T?`
+exit: 1

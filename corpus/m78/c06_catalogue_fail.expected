@@ -1,0 +1,7 @@
+error: a generator cannot take `q` yet: it keeps what it is given, and a block or an interface value cannot be kept that way
+  --> corpus/m78/c06_catalogue_fail.lume:51:16
+   |
+51 |   def matching(q: Query) -> Iterator[Book]:
+   |                ^
+  help: pass the values the generator needs instead
+exit: 1

@@ -1,0 +1,31 @@
+warning: `lints` holds values of different types behind `Lint`, so calls on its items go through a pointer
+  --> corpus/m78/c05_type_checker.lume:185:3
+    |
+185 |   lints: [Lint] = [AddZero(tag: "add-zero"), SelfCompare(tag: "self-compare"), ConstCond(tag: "const-cond")]
+    |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+1. let x = 2 in (x + 0) : TInt
+2. if true then 'a' else ('b' + 'c') : TStr
+3. if (y == y) then 1 else 'one' ! branches differ: TInt and TStr
+4. size((1 + false)) ! cannot add TInt and TBool
+5. (z + 1) ! unknown name `z`
+6. let s = 'hey' in size((s + s)) : TInt
+7. ((0 + y) == (0 + y)) : TBool
+4 of 7 check
+let let x = 2 in (x + 0)
+  lit 2
+  op (x + 0)
+    name x
+    lit 0
+add-zero: (x + 0)
+const-cond: if true then 'a' else ('b' + 'c')
+self-compare: (y == y)
+add-zero: (0 + y)
+add-zero: (0 + y)
+self-compare: ((0 + y) == (0 + y))
+2
+0
+["az: (x + 0)"]
+{"let": 2, "lit": 14, "op": 9, "name": 8, "if": 2, "call": 2}
+{"x", "y", "z", "s"}
+exit: 0

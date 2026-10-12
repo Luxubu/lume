@@ -1,0 +1,157 @@
+# c02_board_pieces: pieces on a 5x5 board as interface values. `Piece` has
+# a generator default `moves -> Iterator[(Int, Int)]` built from the other
+# methods (and a top-level constant), a required method that gives a
+# `Piece` back, and defaults that take a `Piece` (`attacks?`) and use the
+# generator through a pointer. `Knight` replaces the generator default with
+# a generator method of its own. Around them: a `[Piece]` list (warning),
+# tuple map keys, a set of tuples, a render as a list of rows, sorting
+# tuples, a turn order made by an endless chain handed to a generator, and
+# a `match` on a pair of options.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# R..K.
+# .....
+# ..N..
+# .....
+# .....
+# R@0,0: 8 moves
+# N@2,2: 8 moves
+# K@0,3: 5 moves
+# R attacks ["K"]
+# N attacks ["K"]
+# K attacks []
+# [(0, 1), (0, 3), (1, 0), (1, 4), (3, 0), (3, 4), (4, 1), (4, 3)]
+# K@1,3
+# true
+# false
+# covered 14, safe 9
+# [(1, "white"), (2, "black"), (3, "white"), (4, "black")]
+# turn 1: white R to 1,0
+# turn 2: black N to 3,4
+# turn 3: white K to 0,2
+# turn 4: black R to 1,0
+# EXPECTED STDERR:
+# warning: `pieces` holds values of different types behind `Piece`, so calls on its items go through a pointer
+#   --> corpus/m78/c02_board_pieces.lume:117:3
+#     |
+# 117 |   pieces: [Piece] = [Rook(pos: (0, 0)), Knight(pos: (2, 2)), King(pos: (0, 3))]
+#     |   ^
+#   help: fine for most code; use a single concrete type or an enum if this is a hot loop
+
+SIZE = 5
+
+def on_board?(r: Int, c: Int) -> Bool = r >= 0 and r < SIZE and c >= 0 and c < SIZE
+
+interface Piece:
+  def symbol -> Str
+  def at -> (Int, Int)
+  def steps -> [(Int, Int)]
+  def slides? -> Bool = false
+  def moved(to: (Int, Int)) -> Piece
+
+  # one square per step, or on along the line for a piece that slides
+  def moves -> Iterator[(Int, Int)]:
+    (r, c) = at
+    for d in steps:
+      var nr = r + d.0
+      var nc = c + d.1
+      while on_board?(nr, nc):
+        yield (nr, nc)
+        break if not slides?
+        nr += d.0
+        nc += d.1
+
+  def attacks?(o: Piece) -> Bool = moves.any? { |m| m == o.at }
+  def describe -> Str = "#{symbol}@#{at.0},#{at.1}"
+
+struct Rook:
+  pos: (Int, Int)
+
+  def symbol -> Str = "R"
+  def at -> (Int, Int) = pos
+  def steps -> [(Int, Int)] = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+  def slides? -> Bool = true
+  def moved(to: (Int, Int)) -> Piece = Rook(pos: to)
+
+struct Knight:
+  pos: (Int, Int)
+
+  def symbol -> Str = "N"
+  def at -> (Int, Int) = pos
+  def steps -> [(Int, Int)] = [(1, 2), (2, 1), (-1, 2), (-2, 1), (1, -2), (2, -1), (-1, -2), (-2, -1)]
+  def moved(to: (Int, Int)) -> Piece = Knight(pos: to)
+
+  # its own generator, in place of the interface's default
+  def moves -> Iterator[(Int, Int)]:
+    for d in steps:
+      (r, c) = (pos.0 + d.0, pos.1 + d.1)
+      yield (r, c) if on_board?(r, c)
+
+struct King:
+  pos: (Int, Int)
+
+  def symbol -> Str = "K"
+  def at -> (Int, Int) = pos
+  def steps -> [(Int, Int)] = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+  def moved(to: (Int, Int)) -> Piece = King(pos: to)
+
+def render(ps: [Piece]) -> [Str]:
+  var marks: {(Int, Int): Str} = {}
+  for p in ps:
+    marks[p.at] = p.symbol
+  (0...SIZE).map { |r| (0...SIZE).map { |c| marks[(r, c)].or(".") }.join("") }.to_list
+
+def naturals -> Iterator[Int]:
+  var n = 0
+  while true:
+    yield n
+    n += 1
+
+# endless in, endless out: each number with whose turn it is
+def turns(xs: Iterator[Int]) -> Iterator[(Int, Str)]:
+  for x in xs:
+    side = if x % 2 == 1: "white" else: "black"
+    yield (x, side)
+
+def main:
+  pieces: [Piece] = [Rook(pos: (0, 0)), Knight(pos: (2, 2)), King(pos: (0, 3))]
+  for row in render(pieces):
+    puts row
+
+  for p in pieces:
+    puts "#{p.describe}: #{p.moves.to_list.len} moves"
+
+  for a in pieces:
+    targets = pieces.filter { |b| b.describe != a.describe and a.attacks?(b) }.map { |b| b.symbol }.to_list
+    puts "#{a.symbol} attacks #{targets}"
+
+  puts pieces.at(1).moves.to_list.sort
+
+  k2 = pieces.at(2).moved((1, 3))
+  puts k2.describe
+  puts k2.attacks?(pieces.at(1))
+  puts pieces.at(1).attacks?(k2)
+
+  var covered: {(Int, Int)} = {}
+  for p in pieces:
+    for m in p.moves:
+      covered.add(m)
+  occupied = pieces.map { |p| p.at }.to_set
+  var safe = 0
+  for r in 0...SIZE:
+    for c in 0...SIZE:
+      safe += 1 unless covered.contains?((r, c)) or occupied.contains?((r, c))
+  puts "covered #{covered.len}, safe #{safe}"
+
+  # an endless chain from a generator, handed to a generator: stays lazy
+  puts turns(naturals().map { |n| n + 1 }).take(4).to_list
+
+  # each turn moves the next piece to its first move
+  for t, side in turns(naturals().skip(1)):
+    break if t > 4
+    p = pieces.at((t - 1) % pieces.len)
+    first = p.moves.first
+    match (first, Some(side)):
+      (Some(sq), Some(s)) -> puts "turn #{t}: #{s} #{p.symbol} to #{sq.0},#{sq.1}"
+      (None, _) -> puts "turn #{t}: #{side} #{p.symbol} is stuck"
+      (_, None) -> puts "no side"

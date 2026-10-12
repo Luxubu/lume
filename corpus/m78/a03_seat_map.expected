@@ -1,0 +1,10 @@
+4x3
+#..#
+.##.
+....
+taken: (0,0) (0,3) (1,1) (1,2)
+free per row: [2, 2, 4]
+comfy: row 3 seat 2
+comfy: row 3 seat 3
+bad plan: row 2 has 1 seats, not 2
+exit: 0

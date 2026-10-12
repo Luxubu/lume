@@ -1,0 +1,40 @@
+# a09_sensor_twice: a temperature sensor's readings, averaged and then
+# asked for their peak.
+# Probes: the result of a generator method kept in a local, handed to a
+# plain function's `Iterator[Int]` parameter (which takes it by move), then
+# used again. The docs say a generator "is used up as it is walked" and that
+# a parameter `xs: Iterator[T]` takes a generator by move; the error should
+# point at the place it was used up, as examples/errors/generator_used_twice
+# does for `e.sum`.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `rs` is a generator, and it is used up here, so it cannot be used after
+#   --> corpus/m78/a09_sensor_twice.lume:39:16
+#    |
+# 39 |   puts average(rs)
+#    |                ^
+#   help: a generator hands out each item once: to walk the items twice, keep them with `.to_list` first
+
+struct Sensor:
+  name: Str
+  raw: [Str]
+
+  def readings -> Iterator[Int]:
+    for r in raw:
+      match r.to_int:
+        Ok(n) -> yield n
+        Error(_) -> ()
+
+def average(xs: Iterator[Int]) -> Float:
+  var total = 0
+  var count = 0
+  for x in xs:
+    total += x
+    count += 1
+  if count == 0: 0.0 else: total.to_float / count.to_float
+
+def main:
+  s = Sensor(name: "porch", raw: ["18", "21", "--", "24"])
+  rs = s.readings
+  puts average(rs)
+  puts rs.max

@@ -1,0 +1,109 @@
+# b05: Interface methods that take an interface value (a value of another
+#   type, and items of a `[Shape]` list on both sides), give one back (of
+#   another type than the receiver), and a default that calls both. A
+#   generic `Source[T]` whose required `-> Iterator[T]` one type writes as
+#   a generator and another as a chain over its own list field; a default
+#   that hands back a chain, a generator default; a bound `[S: Source[Int]]`;
+#   a `[Source[Int]]` list walked and its generator default called.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# true
+# bar(8) vs sq(9)
+# sq
+# false
+# false
+# [16, 9, 4]
+# sq(9) vs sq(4)
+# ["sq"]
+# [1, 2]
+# [40, 10]
+# [1, 3, 5]
+# [40, 30]
+# 15
+# 80
+# 40
+# 9
+# 70
+# EXPECTED STDERR:
+# warning: `all` holds values of different types behind `Shape`, so calls on its items go through a pointer
+#   --> corpus/m78/b05_iface_in_signatures.lume:92:3
+#    |
+# 92 |   all: [Shape] = [a, b, Sq(s: 1)]
+#    |   ^
+#   help: fine for most code; use a single concrete type or an enum if this is a hot loop
+# warning: `srcs` holds values of different types behind `Source`, so calls on its items go through a pointer
+#   --> corpus/m78/b05_iface_in_signatures.lume:107:3
+#     |
+# 107 |   srcs: [Source[Int]] = [c, l]
+#     |   ^
+#   help: fine for most code; use a single concrete type or an enum if this is a hot loop
+
+interface Shape:
+  def area -> Int
+  def name -> Str
+  def grown(by: Int) -> Shape
+  def beats?(o: Shape) -> Bool = area > o.area
+  def versus(o: Shape) -> Str = "#{name}(#{area}) vs #{o.name}(#{o.area})"
+
+struct Sq:
+  s: Int
+  def area -> Int = s * s
+  def name -> Str = "sq"
+  def grown(by: Int) -> Shape = Sq(s: s + by)
+
+struct Bar:
+  w: Int
+  h: Int
+  def area -> Int = w * h
+  def name -> Str = "bar"
+  def grown(by: Int) -> Shape = Sq(s: w + by)
+
+interface Source[T]:
+  def each_item -> Iterator[T]
+  def firsts(n: Int) -> Iterator[T] = each_item.take(n)
+  def every_other -> Iterator[T]:
+    var keep = true
+    for x in each_item:
+      yield x if keep
+      keep = not keep
+
+struct Countup:
+  n: Int
+  def each_item -> Iterator[Int]:
+    var i = 1
+    while i <= n:
+      yield i
+      i += 1
+
+struct Listed:
+  xs: [Int]
+  def each_item -> Iterator[Int] = xs.map { |x| x * 10 }
+
+def total[S: Source[Int]](s: S) -> Int = s.each_item.sum
+def biggest[S: Source[Int]](s: S) -> Int = s.every_other.max.or(0)
+
+def main:
+  a = Sq(s: 3)
+  b = Bar(w: 2, h: 4)
+  puts a.beats?(b)
+  puts b.versus(a)
+  puts b.grown(1).name
+  puts a.grown(1).beats?(b.grown(2))
+  all: [Shape] = [a, b, Sq(s: 1)]
+  puts all.at(2).beats?(all.at(1))
+  puts all.map { |x| x.grown(1).area }.to_list
+  puts all.at(0).versus(all.at(1).grown(0))
+  puts all.filter { |x| x.beats?(b) }.map { |x| x.name }.to_list
+
+  c = Countup(n: 5)
+  l = Listed(xs: [4, 1, 3])
+  puts c.firsts(2).to_list
+  puts l.firsts(2).to_list
+  puts c.every_other.to_list
+  puts l.every_other.to_list
+  puts total(c)
+  puts total(l)
+  puts biggest(l)
+  srcs: [Source[Int]] = [c, l]
+  for src in srcs:
+    puts src.every_other.sum

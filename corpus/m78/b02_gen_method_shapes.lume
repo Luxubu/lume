@@ -1,0 +1,81 @@
+# b02: Generator methods on a generic struct (`Ring[T]`, used at Int and Str),
+#   on an enum with `match self` in the body (one-line `yield` arm, an
+#   indented arm, a `for` over a list of tuples), giving pairs taken apart
+#   by `for x, y` and a two-name block, recursive on an enum's own fields,
+#   and a static `def self.` generator, called on the type and by bare name
+#   from another `def self.` function.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# [1, 2, 1, 2]
+# ababab
+# 0,0
+# 2,0
+# 2,3
+# 0,3
+# [(0, 0), (5, 0)]
+# 1
+# [1, 2, 4]
+# [1, 2, 3]
+# [3, 7, 11]
+# [0, 1, 2]
+
+struct Ring[T]:
+  items: [T]
+
+  def cycle(times: Int) -> Iterator[T]:
+    for i in 0...times:
+      for x in items:
+        yield x
+
+enum Shape:
+  Dot
+  Seg(size: Int)
+  Rect(w: Int, h: Int)
+
+  def corners -> Iterator[(Int, Int)]:
+    match self:
+      Dot -> yield (0, 0)
+      Seg(n) ->
+        yield (0, 0)
+        yield (n, 0)
+      Rect(w, h) ->
+        for p in [(0, 0), (w, 0), (w, h), (0, h)]:
+          yield p
+
+enum Tree:
+  Tip(v: Int)
+  Fork(left: Tree, right: Tree)
+
+  def leaves -> Iterator[Int]:
+    match self:
+      Tip(v) -> yield v
+      Fork(l, r) ->
+        for x in l.leaves:
+          yield x
+        for x in r.leaves:
+          yield x
+
+struct Steps:
+  start: Int
+
+  def self.counting(lo: Int, step: Int) -> Iterator[Int]:
+    var n = lo
+    while true:
+      yield n
+      n += step
+
+  def self.first_three -> [Int] = counting(0, 1).take(3).to_list
+
+def main:
+  puts Ring(items: [1, 2]).cycle(2).to_list
+  puts Ring(items: ["a", "b"]).cycle(3).join("")
+  for x, y in Rect(w: 2, h: 3).corners:
+    puts "#{x},#{y}"
+  puts Seg(size: 5).corners.to_list
+  puts Dot.corners.count { |x, y| x == 0 }
+  shapes = [Dot, Seg(size: 1), Rect(w: 1, h: 1)]
+  puts shapes.map { |s| s.corners.len }.to_list
+  t = Fork(Tip(1), Fork(Tip(2), Tip(3)))
+  puts t.leaves.to_list
+  puts Steps.counting(3, 4).take(3).to_list
+  puts Steps.first_three

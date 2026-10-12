@@ -1,0 +1,19 @@
+home/
+  home/docs/
+    home/docs/cv.pdf (120)
+    home/docs/notes.txt (4)
+  home/todo.txt (2)
+  home/photos/
+    home/photos/cat.jpg (300)
+    home/photos/old/
+      home/photos/old/dog.jpg (250)
+entries: 9
+files: 5
+big: home/docs/cv.pdf, home/photos/cat.jpg, home/photos/old/dog.jpg
+Some(("home/photos/cat.jpg", 300, 2))
+deepest: home/photos/old/dog.jpg at 3
+pdf: 120
+txt: 6
+jpg: 550
+total 676 = 676
+exit: 0

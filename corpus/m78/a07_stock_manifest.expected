@@ -1,0 +1,12 @@
+bolt     40  A1
+nut      25  A1
+washer  100  B2
+hinge     6  C3
+A1: 2 skus, 65 units
+B2: 1 skus, 100 units
+C3: 1 skus, 6 units
+["nut@A1", "hinge@C3"]
+Some(("washer", 100, "B2"))
+line 1: `4O` is not an integer
+line 2: expected 3 fields, got 2
+exit: 0

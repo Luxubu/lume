@@ -1,0 +1,58 @@
+# a04_playlist_shuffle: a playlist shuffled the same way every time from a
+# seed, by a small random-number sequence of its own.
+# Probes: an endless sequence of your own (`def next(var self)`) turned into
+# an endless chain with `.map`, handed straight to a generator function
+# that takes `Iterator[Int]` and stops itself with `return`; a generator
+# method building that chain from a local its block copies; `take` and
+# `enumerate` on a generator method; a `var` sequence moved on by hand and
+# then copied into a chain, leaving the original where it was.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ["Delta", "Alpha", "Charlie", "Echo", "Bravo"]
+# true
+# 1. Delta
+# 2. Bravo
+# 3. Alpha
+# [5, 1, 2]
+# Some(28)
+# [0, 2]
+# Some(30)
+
+struct Lcg:
+  state: Int
+
+  def next(var self) -> Int?:
+    state = (state * 13 + 7) % 31
+    Some(state)
+
+def pick_distinct(rolls: Iterator[Int], count: Int) -> Iterator[Int]:
+  var seen: {Int} = {}
+  for r in rolls:
+    if seen.add(r):
+      yield r
+      if seen.len == count:
+        return
+
+struct Playlist:
+  name: Str
+  songs: [Str]
+
+  def shuffled(seed: Int) -> Iterator[Str]:
+    n = songs.len
+    for i in pick_distinct(Lcg(state: seed).map { |x| x % n }, n):
+      yield songs.at(i)
+
+def main:
+  p = Playlist(name: "road trip", songs: ["Alpha", "Bravo", "Charlie", "Delta", "Echo"])
+  puts p.shuffled(4).to_list
+  puts p.shuffled(4).join(" > ") == p.shuffled(4).join(" > ")
+  for i, song in p.shuffled(10).take(3).enumerate:
+    puts "#{i + 1}. #{song}"
+
+  # three different dice faces, from an endless chain
+  puts pick_distinct(Lcg(state: 4).map { |x| x % 6 + 1 }, 3).to_list
+
+  var rng = Lcg(state: 4)
+  puts rng.next
+  puts pick_distinct(rng.map { |x| x % 5 }, 2).to_list
+  puts rng.next

@@ -1,0 +1,28 @@
+warning: `pieces` holds values of different types behind `Piece`, so calls on its items go through a pointer
+  --> corpus/m78/c02_board_pieces.lume:117:3
+    |
+117 |   pieces: [Piece] = [Rook(pos: (0, 0)), Knight(pos: (2, 2)), King(pos: (0, 3))]
+    |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+R..K.
+.....
+..N..
+.....
+.....
+R@0,0: 8 moves
+N@2,2: 8 moves
+K@0,3: 5 moves
+R attacks ["K"]
+N attacks ["K"]
+K attacks []
+[(0, 1), (0, 3), (1, 0), (1, 4), (3, 0), (3, 4), (4, 1), (4, 3)]
+K@1,3
+true
+false
+covered 14, safe 9
+[(1, "white"), (2, "black"), (3, "white"), (4, "black")]
+turn 1: white R to 1,0
+turn 2: black N to 3,4
+turn 3: white K to 0,2
+turn 4: black R to 1,0
+exit: 0

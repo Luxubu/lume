@@ -1,0 +1,7 @@
+error: this block names 4 arguments, but the items have 2 parts
+  --> corpus/m78/b10_enumerate_flatten.lume:14:27
+   |
+14 |   puts rows.enumerate.map { |i, name, n, ok| name }.to_list
+   |                           ^
+  help: name one for each part, `{ |a, b| ... }`, or one for the whole tuple
+exit: 1

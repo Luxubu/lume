@@ -1,0 +1,157 @@
+# c04_scheduler: event sources behind an interface `Source` whose endless
+# generator default `times` is built from the required methods, a second
+# generator default `events` that walks the first, a plain default handing
+# back a chain off the generator (`upto`), and a default taking another
+# `Source`. A free generator merges two endless sequences with `next` on
+# its `Iterator` parameters; an endless chain (with a block that copies a
+# local) goes into it and stays lazy. Around them: a spec parser using `?`
+# inside a constructor call, a map of lists filled through missing keys,
+# `pad`, tasks that each walk a copy of a source, and a `[Source]` list.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# Every(name: "tea", first: 0, step: 5)
+# cake every x from 1: `x` is not an integer
+# nap at noon: cannot read `nap at noon`
+# tea: [0, 5, 10, 15]
+# retry: [1, 2, 4, 8]
+# bus: [3, 7, 13, 17]
+# after 50: [Some(55), Some(64), Some(53)]
+#  0- 4: tea retry retry bus retry
+#  5- 9: tea bus retry
+# 10-14: tea bus
+# 15-19: tea retry bus
+# 20-24: tea
+# 14 events, busiest slot 0 with 3 sources
+# {"tea": 5, "retry": 5, "bus": 4}
+# false
+# true
+# tea@0 ping@1 tea@5 ping@7 tea@10
+# [21, 7, 20]
+# EXPECTED STDERR:
+# warning: `sources` holds values of different types behind `Source`, so calls on its items go through a pointer
+#   --> corpus/m78/c04_scheduler.lume:127:3
+#     |
+# 127 |   sources: [Source] = [tea, retry, bus]
+#     |   ^
+#   help: fine for most code; use a single concrete type or an enum if this is a hot loop
+
+interface Source:
+  def label -> Str
+  def start -> Int
+  def gap(n: Int) -> Int
+
+  # endless: the time of every event this source makes
+  def times -> Iterator[Int]:
+    var t = start
+    var n = 0
+    while true:
+      yield t
+      t += gap(n)
+      n += 1
+
+  def events -> Iterator[(Int, Str)]:
+    for t in times:
+      yield (t, label)
+
+  def upto(limit: Int) -> Iterator[Int] = times.take_while { |t| t <= limit }
+  def busier?(o: Source, limit: Int) -> Bool = upto(limit).len > o.upto(limit).len
+
+struct Every:
+  name: Str
+  first: Int
+  step: Int
+
+  def label -> Str = name
+  def start -> Int = first
+  def gap(n: Int) -> Int = step
+
+struct Backoff:
+  name: Str
+  first: Int
+
+  def label -> Str = name
+  def start -> Int = first
+  def gap(n: Int) -> Int = 2.pow(n)
+
+struct Pattern:
+  name: Str
+  first: Int
+  gaps: [Int]
+
+  def label -> Str = name
+  def start -> Int = first
+  def gap(n: Int) -> Int = gaps.at(n % gaps.len)
+
+def parse_every(spec: Str) -> Every or Error:
+  match spec.split:
+    [name, "every", n, "from", m] -> Every(name: name, first: m.to_int?, step: n.to_int?)
+    _ -> Error("cannot read `#{spec}`")
+
+def naturals -> Iterator[Int]:
+  var n = 0
+  while true:
+    yield n
+    n += 1
+
+# two sequences in time order; on a tie the left one goes first
+def merge(a: Iterator[(Int, Str)], b: Iterator[(Int, Str)]) -> Iterator[(Int, Str)]:
+  var x = a.next
+  var y = b.next
+  while true:
+    match (x, y):
+      (Some(p), Some(q)) ->
+        if p.0 <= q.0:
+          yield p
+          x = a.next
+        else:
+          yield q
+          y = b.next
+      (Some(p), None) ->
+        yield p
+        x = a.next
+      (None, Some(q)) ->
+        yield q
+        y = b.next
+      (None, None) -> return
+
+async def main -> () or Error:
+  tea = parse_every("tea every 5 from 0")?
+  puts tea
+  for spec in ["cake every x from 1", "nap at noon"]:
+    match parse_every(spec):
+      Ok(e) -> puts "#{spec}: #{e}"
+      Error(e) -> puts "#{spec}: #{e.message}"
+
+  retry = Backoff(name: "retry", first: 1)
+  bus = Pattern(name: "bus", first: 3, gaps: [4, 6])
+  sources: [Source] = [tea, retry, bus]
+  for s in sources:
+    puts "#{s.label}: #{s.times.take(4).to_list}"
+  later = sources.map { |s| s.times.find { |t| t > 50 } }.to_list
+  puts "after 50: #{later}"
+
+  timeline = merge(merge(tea.events, retry.events), bus.events).take_while { |t, who| t <= 20 }.to_list
+  var slots: {Int: [Str]} = {}
+  for t, who in timeline:
+    slots[t / 5].push(who)
+  for k, whos in slots:
+    puts "#{(k * 5).pad(2)}-#{(k * 5 + 4).pad(2)}: #{whos.join(" ")}"
+  best = slots.max_by { |k, whos| whos.to_set.len }.map { |pair| pair.0 }.or(0 - 1)
+  puts "#{timeline.len} events, busiest slot #{best} with #{slots[best].or([]).to_set.len} sources"
+
+  var per: {Str: Int} = {}
+  for t, who in timeline:
+    per[who] = per[who].or(0) + 1
+  puts per
+
+  puts tea.busier?(retry, 20)
+  puts bus.busier?(retry, 100)
+
+  spacing = 6
+  puts merge(tea.events, naturals().map { |n| (n * spacing + 1, "ping") }).take(5).map { |t, w| "#{w}@#{t}" }.join(" ")
+
+  var tasks: [Task[Int]] = []
+  tasks.push(spawn: tea.upto(100).len)
+  tasks.push(spawn: retry.upto(100).len)
+  tasks.push(spawn: bus.upto(100).len)
+  puts await tasks

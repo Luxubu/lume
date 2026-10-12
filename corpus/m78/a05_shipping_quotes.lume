@@ -1,0 +1,85 @@
+# a05_shipping_quotes: choosing a carrier for a parcel.
+# Probes: an interface whose required method gives back another value of
+# the interface (`-> Carrier`), and whose default takes one (`o: Carrier`);
+# calling both on concrete values, on a value a call gave back, and on items
+# of a `[Carrier]` list; a function that gives back an item of that list as
+# a `Carrier`; `sort_by` over interface values; a parser that gives
+# `Carrier or Error` from a concrete struct, with `?` inside the arms of a
+# list `match`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# false
+# true
+# courier+: 13
+# post++: 24
+# 1 kg -> courier: 5
+# 2 kg -> courier: 8
+# 3 kg -> post: 9
+# courier, post, post+
+# drone: 4
+# skip: `x` is not an integer
+# skip: cannot read `boat 3`
+# EXPECTED STDERR:
+# warning: `options` holds values of different types behind `Carrier`, so calls on its items go through a pointer
+#   --> corpus/m78/a05_shipping_quotes.lume:76:3
+#    |
+# 76 |   options: [Carrier] = [post, courier, post.with_surcharge(1)]
+#    |   ^
+#   help: fine for most code; use a single concrete type or an enum if this is a hot loop
+
+interface Carrier:
+  def name -> Str
+  def cost(kg: Int) -> Int
+  def with_surcharge(extra: Int) -> Carrier
+  def cheaper?(o: Carrier, kg: Int) -> Bool = cost(kg) < o.cost(kg)
+  def quote(kg: Int) -> Str = "#{name}: #{cost(kg)}"
+
+struct Flat:
+  label: Str
+  fee: Int
+
+  def name -> Str = label
+  def cost(kg: Int) -> Int = if kg > 20: fee * 2 else: fee
+  def with_surcharge(extra: Int) -> Carrier = Flat(label: "#{label}+", fee: fee + extra)
+
+struct PerKg:
+  label: Str
+  base: Int
+  rate: Int
+
+  def name -> Str = label
+  def cost(kg: Int) -> Int = base + rate * kg
+  def with_surcharge(extra: Int) -> Carrier = PerKg(label: "#{label}+", base: base + extra, rate: rate)
+
+def cheapest(cs: [Carrier], kg: Int) -> Carrier:
+  var best = cs.at(0)
+  for c in cs:
+    if c.cheaper?(best, kg):
+      best = c
+  best
+
+def parse_carrier(line: Str) -> Carrier or Error:
+  parts = line.split(" ").to_list
+  match parts:
+    ["flat", label, fee] -> Flat(label: label, fee: fee.to_int?)
+    ["perkg", label, base, rate] -> PerKg(label: label, base: base.to_int?, rate: rate.to_int?)
+    _ -> Error("cannot read `#{line}`")
+
+def main:
+  post = Flat(label: "post", fee: 9)
+  courier = PerKg(label: "courier", base: 2, rate: 3)
+  puts post.cheaper?(courier, 1)
+  puts post.cheaper?(courier, 4)
+  puts courier.with_surcharge(5).quote(2)
+  puts post.with_surcharge(1).with_surcharge(2).quote(25)
+
+  options: [Carrier] = [post, courier, post.with_surcharge(1)]
+  for kg in 1..3:
+    best = cheapest(options, kg)
+    puts "#{kg} kg -> #{best.quote(kg)}"
+  puts options.sort_by { |c| c.cost(2) }.map { |c| c.name }.join(", ")
+
+  for line in ["flat drone 4", "perkg van 1 x", "boat 3"]:
+    match parse_carrier(line):
+      Ok(c) -> puts c.quote(2)
+      Error(e) -> puts "skip: #{e.message}"

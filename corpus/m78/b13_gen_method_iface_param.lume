@@ -1,0 +1,28 @@
+# b13: A generator *method* with a parameter of an interface type (the docs
+#   list "a generator that takes ... an interface value" as not yet).
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: a generator cannot take `who` yet: it keeps what it is given, and a block or an interface value cannot be kept that way
+#   --> corpus/m78/b13_gen_method_iface_param.lume:22:13
+#    |
+# 22 |   def greet(who: Named) -> Iterator[Str]:
+#    |             ^
+#   help: pass the values the generator needs instead
+
+interface Named:
+  def name -> Str
+
+struct Dog:
+  call: Str
+  def name -> Str = call
+
+struct Kennel:
+  size: Int
+
+  def greet(who: Named) -> Iterator[Str]:
+    for i in 0...size:
+      yield "#{i} #{who.name}"
+
+def main:
+  k = Kennel(size: 2)
+  puts k.greet(Dog(call: "rex")).to_list

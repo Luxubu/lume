@@ -1,0 +1,24 @@
+# b08: A generator method on an enum, with `match self`, declared `var self`.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `trail` is a generator, which walks its own copy of the value, so `var self` would change nothing
+#   --> corpus/m78/b08_enum_gen_var_self.lume:15:3
+#    |
+# 15 |   def trail(var self) -> Iterator[Int]:
+#    |   ^
+#   help: drop `var`; to move a value along by hand, give it `def next(var self) -> T?`
+
+enum Walker:
+  Still
+  Moving(steps: Int)
+
+  def trail(var self) -> Iterator[Int]:
+    match self:
+      Still -> yield 0
+      Moving(n) ->
+        for i in 0...n:
+          yield i
+
+def main:
+  var w = Moving(steps: 2)
+  puts w.trail.to_list

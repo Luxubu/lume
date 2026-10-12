@@ -1,0 +1,53 @@
+# b01: A generator method walks its own copy of the value, taken at the call:
+#   fields changed after the call and before the walk (a `var` binding,
+#   field assignment) do not show. The generator method calls another
+#   plain method of its type by bare name (`tag`), takes a parameter, and
+#   a second generator method calls itself recursively on the values in a
+#   field. A generator method's result handed to an `Iterator[Str]` parameter.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# A:pear
+# A:kiwi
+# ["B:plum", "B:lime"]
+# 16
+# 0root 1a 2x 1b
+# ["5top"]
+
+struct Shelf:
+  label: Str
+  books: [Str]
+
+  def tag(b: Str) -> Str = "#{label}:#{b}"
+
+  def tagged(min: Int) -> Iterator[Str]:
+    for b in books:
+      yield tag(b) if b.len >= min
+
+struct Dir:
+  name: Str
+  subs: [Dir]
+
+  def walk(depth: Int) -> Iterator[Str]:
+    yield "#{depth}#{name}"
+    for d in subs:
+      for n in d.walk(depth + 1):
+        yield n
+
+def total_len(xs: Iterator[Str]) -> Int = xs.map { |x| x.len }.sum
+
+def main:
+  var s = Shelf(label: "A", books: ["fig", "pear", "kiwi"])
+  g = s.tagged(4)
+  s.label = "B"
+  s.books = ["plum", "lime", "ab"]
+  for t in g:
+    puts t
+  puts s.tagged(4).to_list
+  puts total_len(s.tagged(1))
+
+  var tree = Dir(name: "root", subs: [Dir(name: "a", subs: [Dir(name: "x", subs: [])]), Dir(name: "b", subs: [])])
+  names = tree.walk(0)
+  tree.name = "top"
+  tree.subs = []
+  puts names.join(" ")
+  puts tree.walk(5).to_list

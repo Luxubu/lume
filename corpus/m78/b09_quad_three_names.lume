@@ -1,0 +1,13 @@
+# b09: A block naming three arguments over quadruples, on `sort_by`.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: this block names 3 arguments, but the items have 4 parts
+#   --> corpus/m78/b09_quad_three_names.lume:13:22
+#    |
+# 13 |   puts quads.sort_by { |a, b, c| c }
+#    |                      ^
+#   help: name one for each part, `{ |a, b, c, d| ... }`, or one for the whole tuple
+
+def main:
+  quads = [(1, 2, 3, 4), (4, 3, 2, 1)]
+  puts quads.sort_by { |a, b, c| c }

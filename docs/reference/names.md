@@ -8,13 +8,13 @@
 
 ## The keywords
 
-**These 35 words are keywords. None of them can name a variable, a
+**These 36 words are keywords. None of them can name a variable, a
 parameter or a function.**
 
 | | |
 |---|---|
 | defining | `def` `var` `const` `struct` `enum` `interface` `extend` `pub` `import` `test` |
-| control | `if` `elif` `else` `unless` `while` `for` `in` `where` `match` `return` `break` `next` |
+| control | `if` `elif` `else` `unless` `while` `for` `in` `where` `match` `return` `break` `next` `yield` |
 | values | `true` `false` `and` `or` `not` |
 | output and checks | `puts` `warn` `assert` |
 | concurrency | `async` `await` `spawn` `shared` |
@@ -84,7 +84,7 @@ puts [type, loop, fn, impl, mod, move, ref].join(" ")    #=> 1 2 3 4 5 6 7
 ```
 
 The same goes for `as`, `box`, `crate`, `dyn`, `let`, `mut`, `static`,
-`super`, `trait`, `union`, `unsafe`, `use`, `yield`, `try`, `continue`,
+`super`, `trait`, `union`, `unsafe`, `use`, `try`, `continue`,
 `macro`, `extern`, `abstract` and `typeof`. They work as fields and
 function names too:
 

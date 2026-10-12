@@ -1,0 +1,24 @@
+# b11: An interface *default* (not a required method) whose second parameter
+#   is an interface with an `async` method.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `show` takes a `Feed`, which has `pull`, a method only a known type can call, so it cannot be lent to an interface's method
+#   --> corpus/m78/b11_iface_default_async_param.lume:17:25
+#    |
+# 17 |   def show(prefix: Str, f: Feed) -> Str = "#{prefix}#{width}"
+#    |                         ^
+#   help: take what `show` needs from it instead, or write `show` as a function with a parameter `f: Feed`
+
+interface Feed:
+  async def pull -> Str
+
+interface Viewer:
+  def width -> Int
+  def show(prefix: Str, f: Feed) -> Str = "#{prefix}#{width}"
+
+struct Panel:
+  w: Int
+  def width -> Int = w
+
+def main:
+  puts Panel(w: 3).width

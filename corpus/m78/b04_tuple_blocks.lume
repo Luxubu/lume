@@ -1,0 +1,56 @@
+# b04: Blocks over triples on map, filter, sort_by, max_by, min_by (tie: the
+#   first), any?, count and find; a block that builds a triple and a second
+#   block that takes it apart; quadruples on map and sum-with-block; `fold`
+#   whose item is a quadruple (two names: total and item, no taking apart);
+#   one name for the whole tuple; pairs still taken apart; `enumerate` over
+#   triples giving pairs whose second part is a tuple; three names over a
+#   generator that yields triples.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ["ann3true", "bo5false", "cy3true"]
+# ann,cy
+# [("bo", 5, false), ("ann", 3, true), ("cy", 3, true)]
+# Some(("bo", 5, false))
+# Some(("ann", 3, true))
+# false
+# 2
+# Some(("bo", 5, false))
+# Some((3, "ann", true))
+# [-2, 6]
+# 15
+# 7
+# [5, 5]
+# x1 y2
+# ["0:ann", "1:bo", "2:cy"]
+# Some((1, ("bo", 5, false)))
+# [14, 39]
+
+def triples(n: Int) -> Iterator[(Int, Int, Int)]:
+  for i in 1..n:
+    yield (i, i * i, i * i * i)
+
+def main:
+  rows = [("ann", 3, true), ("bo", 5, false), ("cy", 3, true)]
+  puts rows.map { |name, n, ok| "#{name}#{n}#{ok}" }.to_list
+  puts rows.filter { |name, n, ok| ok }.map { |name, n, ok| name }.join(",")
+  puts rows.sort_by { |name, n, ok| 0 - n }
+  puts rows.max_by { |name, n, ok| n }
+  puts rows.min_by { |name, n, ok| n }
+  puts rows.any? { |name, n, ok| n > 4 and ok }
+  puts rows.count { |name, n, ok| ok }
+  puts rows.find { |name, n, ok| not ok }
+  puts rows.map { |name, n, ok| (n, name, ok) }.max_by { |n, name, ok| name.len }
+
+  quads = [(1, 2, 3, 4), (2, 0, 0, 3)]
+  puts quads.map { |a, b, c, d| a * d - b * c }.to_list
+  puts quads.sum { |a, b, c, d| a + b + c + d }
+  puts quads.fold(0) { |t, q| t + q.3 }
+  puts quads.map { |q| q.0 + q.3 }.to_list
+
+  pairs = [("x", 1), ("y", 2)]
+  puts pairs.map { |k, v| "#{k}#{v}" }.join(" ")
+
+  puts rows.enumerate.map { |i, row| "#{i}:#{row.0}" }.to_list
+  puts rows.enumerate.find { |i, row| row.1 == 5 }
+
+  puts triples(3).filter { |a, b, c| c > 1 }.map { |a, b, c| a + b + c }.to_list

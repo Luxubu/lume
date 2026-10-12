@@ -1,0 +1,7 @@
+error: `e` is a generator, and it is used up here, so it cannot be used after
+  --> corpus/m78/b07_gen_method_twice.lume:22:8
+   |
+22 |   puts e.sum
+   |        ^
+  help: a generator hands out each item once: to walk the items twice, keep them with `.to_list` first
+exit: 1

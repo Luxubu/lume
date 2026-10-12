@@ -1,0 +1,14 @@
+# b10: `enumerate` over triples gives pairs `(Int, (Str, Int, Bool))`; a block
+#   naming four arguments (index plus the three parts) does not flatten it.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: this block names 4 arguments, but the items have 2 parts
+#   --> corpus/m78/b10_enumerate_flatten.lume:14:27
+#    |
+# 14 |   puts rows.enumerate.map { |i, name, n, ok| name }.to_list
+#    |                           ^
+#   help: name one for each part, `{ |a, b| ... }`, or one for the whole tuple
+
+def main:
+  rows = [("ann", 3, true), ("bo", 5, false)]
+  puts rows.enumerate.map { |i, name, n, ok| name }.to_list

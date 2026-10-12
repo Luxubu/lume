@@ -1,0 +1,61 @@
+# a07_stock_manifest: reading a warehouse manifest, line by line.
+# Probes: a generator method over `text.lines.enumerate` that skips blank
+# and comment lines with `next` and yields (line number, line) pairs; a
+# function giving a triple `(Str, Int, Str) or Error`, with `map_error`
+# then `?`; a loop over the generator that passes failures up with `?`;
+# triples taken apart by `for a, b, c in`, and by three-name blocks on
+# group_by, sum, filter, map and max_by; `pad` and `pad_right` in columns.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# bolt     40  A1
+# nut      25  A1
+# washer  100  B2
+# hinge     6  C3
+# A1: 2 skus, 65 units
+# B2: 1 skus, 100 units
+# C3: 1 skus, 6 units
+# ["nut@A1", "hinge@C3"]
+# Some(("washer", 100, "B2"))
+# line 1: `4O` is not an integer
+# line 2: expected 3 fields, got 2
+
+struct Manifest:
+  text: Str
+
+  def rows -> Iterator[(Int, Str)]:
+    for i, line in text.lines.enumerate:
+      t = line.trim
+      next if t.empty? or t.starts_with?("#")
+      yield (i + 1, t)
+
+def parse_row(no: Int, line: Str) -> (Str, Int, Str) or Error:
+  parts = line.split(",").map { |p| p.trim }.to_list
+  if parts.len != 3:
+    return Error("line #{no}: expected 3 fields, got #{parts.len}")
+  qty = parts.at(1).to_int.map_error { |e| Error("line #{no}: #{e.message}") }?
+  return (parts.at(0), qty, parts.at(2))
+
+def load(m: Manifest) -> [(Str, Int, Str)] or Error:
+  var out: [(Str, Int, Str)] = []
+  for no, line in m.rows:
+    out.push(parse_row(no, line)?)
+  out
+
+def main -> () or Error:
+  good = Manifest(text: "# sku, qty, bin\nbolt, 40, A1\nnut, 25, A1\n\nwasher, 100, B2\nhinge, 6, C3\n")
+  items = load(good)?
+  for sku, qty, bin in items:
+    puts "#{sku.pad_right(7)}#{qty.pad(4)}  #{bin}"
+
+  by_bin = items.group_by { |sku, qty, bin| bin }
+  for bin, rows in by_bin:
+    units = rows.sum { |s, q, b| q }
+    puts "#{bin}: #{rows.len} skus, #{units} units"
+
+  puts items.filter { |s, q, b| q < 30 }.map { |s, q, b| "#{s}@#{b}" }.to_list
+  puts items.max_by { |s, q, b| q }
+
+  for text in ["bolt, 4O, A1\nnut, 25", "bolt, 4, A1\nnut, 25"]:
+    match load(Manifest(text: text)):
+      Ok(xs) -> puts "loaded #{xs.len}"
+      Error(e) -> puts e.message

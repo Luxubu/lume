@@ -1,0 +1,200 @@
+# c05_type_checker: an expression enum with generator methods `nodes`
+# (yields `self` first) and `tree` ((depth, kind, text) triples), a checker
+# giving `Ty or Error` with `?` through recursion, and lints behind an
+# interface `Lint`: a generator default `report(e: Expr)` with an argument,
+# a default `overlaps` taking a `Lint`, a required `renamed` giving one.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 1. let x = 2 in (x + 0) : TInt
+# 2. if true then 'a' else ('b' + 'c') : TStr
+# 3. if (y == y) then 1 else 'one' ! branches differ: TInt and TStr
+# 4. size((1 + false)) ! cannot add TInt and TBool
+# 5. (z + 1) ! unknown name `z`
+# 6. let s = 'hey' in size((s + s)) : TInt
+# 7. ((0 + y) == (0 + y)) : TBool
+# 4 of 7 check
+# let let x = 2 in (x + 0)
+#   lit 2
+#   op (x + 0)
+#     name x
+#     lit 0
+# add-zero: (x + 0)
+# const-cond: if true then 'a' else ('b' + 'c')
+# self-compare: (y == y)
+# add-zero: (0 + y)
+# add-zero: (0 + y)
+# self-compare: ((0 + y) == (0 + y))
+# 2
+# 0
+# ["az: (x + 0)"]
+# {"let": 2, "lit": 14, "op": 9, "name": 8, "if": 2, "call": 2}
+# {"x", "y", "z", "s"}
+# EXPECTED STDERR:
+# warning: `lints` holds values of different types behind `Lint`, so calls on its items go through a pointer
+#   --> corpus/m78/c05_type_checker.lume:185:3
+#     |
+# 185 |   lints: [Lint] = [AddZero(tag: "add-zero"), SelfCompare(tag: "self-compare"), ConstCond(tag: "const-cond")]
+#     |   ^
+#   help: fine for most code; use a single concrete type or an enum if this is a hot loop
+
+enum Ty:
+  TInt
+  TBool
+  TStr
+
+enum Expr:
+  Num(v: Int)
+  Flag(b: Bool)
+  Text(s: Str)
+  Name(n: Str)
+  Add(l: Expr, r: Expr)
+  Same(l: Expr, r: Expr)
+  Cond(c: Expr, yes: Expr, no: Expr)
+  Let(n: Str, value: Expr, body: Expr)
+  Size(e: Expr)
+
+  def kids -> [Expr] = match self:
+    Add(l, r) | Same(l, r) -> [l, r]
+    Cond(c, y, n) -> [c, y, n]
+    Let(_, v, b) -> [v, b]
+    Size(e) -> [e]
+    _ -> []
+
+  def kind -> Str = match self:
+    Num(..) | Flag(..) | Text(..) -> "lit"
+    Name(..) -> "name"
+    Add(..) | Same(..) -> "op"
+    Cond(..) -> "if"
+    Let(..) -> "let"
+    Size(..) -> "call"
+
+  def show -> Str = match self:
+    Num(v) -> "#{v}"
+    Flag(b) -> "#{b}"
+    Text(s) -> "'#{s}'"
+    Name(n) -> n
+    Add(l, r) -> "(#{l.show} + #{r.show})"
+    Same(l, r) -> "(#{l.show} == #{r.show})"
+    Cond(c, y, n) -> "if #{c.show} then #{y.show} else #{n.show}"
+    Let(n, v, b) -> "let #{n} = #{v.show} in #{b.show}"
+    Size(e) -> "size(#{e.show})"
+
+  def nodes -> Iterator[Expr]:
+    yield self
+    for k in kids:
+      for n in k.nodes:
+        yield n
+
+  def tree(depth: Int) -> Iterator[(Int, Str, Str)]:
+    yield (depth, kind, show)
+    for k in kids:
+      for t in k.tree(depth + 1):
+        yield t
+
+def check(e: Expr, env: {Str: Ty}) -> Ty or Error:
+  match e:
+    Num(_) -> TInt
+    Flag(_) -> TBool
+    Text(_) -> TStr
+    Name(n) -> return env[n].or_error("unknown name `#{n}`")
+    Add(l, r) ->
+      a = check(l, env)?
+      b = check(r, env)?
+      if a != b or a == TBool:
+        return Error("cannot add #{a} and #{b}")
+      a
+    Same(l, r) ->
+      a = check(l, env)?
+      b = check(r, env)?
+      if a != b:
+        return Error("cannot compare #{a} with #{b}")
+      TBool
+    Cond(c, y, n) ->
+      if check(c, env)? != TBool:
+        return Error("condition #{c.show} is not a TBool")
+      a = check(y, env)?
+      b = check(n, env)?
+      if a != b:
+        return Error("branches differ: #{a} and #{b}")
+      a
+    Let(n, v, b) ->
+      t = check(v, env)?
+      var inner = env
+      inner[n] = t
+      return check(b, inner)
+    Size(x) ->
+      if check(x, env)? != TStr:
+        return Error("size needs a TStr")
+      TInt
+
+interface Lint:
+  def code -> Str
+  def flags?(e: Expr) -> Bool
+  def renamed(c: Str) -> Lint
+  def report(e: Expr) -> Iterator[Str]:
+    for n in e.nodes:
+      yield "#{code}: #{n.show}" if flags?(n)
+  def overlaps(o: Lint, e: Expr) -> Int = e.nodes.count { |n| flags?(n) and o.flags?(n) }
+
+struct AddZero:
+  tag: Str
+  def code -> Str = tag
+  def flags?(e: Expr) -> Bool = match e:
+    Add(Num(0), _) -> true
+    Add(_, Num(0)) -> true
+    _ -> false
+  def renamed(c: Str) -> Lint = AddZero(tag: c)
+
+struct SelfCompare:
+  tag: Str
+  def code -> Str = tag
+  def flags?(e: Expr) -> Bool = match e:
+    Same(l, r) -> l == r
+    _ -> false
+  def renamed(c: Str) -> Lint = SelfCompare(tag: c)
+
+struct ConstCond:
+  tag: Str
+  def code -> Str = tag
+  def flags?(e: Expr) -> Bool = match e:
+    Cond(Flag(_), _, _) -> true
+    _ -> false
+  def renamed(c: Str) -> Lint = ConstCond(tag: c)
+
+def names_in(e: Expr) -> Iterator[Str] = e.nodes.filter { |n| n.kind == "name" }.map { |n| n.show }
+
+def main:
+  env: {Str: Ty} = {"y": TInt}
+  exprs = [
+    Let("x", Num(2), Add(Name("x"), Num(0))),
+    Cond(Flag(true), Text("a"), Add(Text("b"), Text("c"))),
+    Cond(Same(Name("y"), Name("y")), Num(1), Text("one")),
+    Size(Add(Num(1), Flag(false))),
+    Add(Name("z"), Num(1)),
+    Let("s", Text("hey"), Size(Add(Name("s"), Name("s")))),
+    Same(Add(Num(0), Name("y")), Add(Num(0), Name("y"))),
+  ]
+  for i, e in exprs.enumerate:
+    match check(e, env):
+      Ok(t) -> puts "#{i + 1}. #{e.show} : #{t}"
+      Error(err) -> puts "#{i + 1}. #{e.show} ! #{err.message}"
+  good = exprs.filter { |e| check(e, env).ok? }.len
+  puts "#{good} of #{exprs.len} check"
+  for d, kind, text in exprs.at(0).tree(0):
+    puts "#{"  ".repeat(d)}#{kind} #{text}"
+  lints: [Lint] = [AddZero(tag: "add-zero"), SelfCompare(tag: "self-compare"), ConstCond(tag: "const-cond")]
+  for e in exprs:
+    for l in lints:
+      for line in l.report(e):
+        puts line
+  az = lints.at(0).renamed("az")
+  puts lints.at(0).overlaps(az, exprs.at(6))
+  puts lints.at(0).overlaps(lints.at(1), exprs.at(6))
+  puts az.report(exprs.at(0)).to_list
+
+  var kinds: {Str: Int} = {}
+  for e in exprs:
+    for n in e.nodes:
+      kinds[n.kind] = kinds[n.kind].or(0) + 1
+  puts kinds
+  puts exprs.flat_map { |e| names_in(e).to_list }.to_set

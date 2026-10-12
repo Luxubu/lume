@@ -1,0 +1,80 @@
+# a01_disk_usage: a folder tree as a recursive enum, walked by a generator
+# method that yields (path, size, depth) triples.
+# Probes: `yield` inside the arms of `match self` in an enum method (a
+# one-line arm and an indented arm), the generator method calling itself on
+# the payload, `for a, b, c in` over it, blocks naming three parts on
+# filter, map, max_by, sort_by and sum, `Some((a, _, c))`, a map tally.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# home/
+#   home/docs/
+#     home/docs/cv.pdf (120)
+#     home/docs/notes.txt (4)
+#   home/todo.txt (2)
+#   home/photos/
+#     home/photos/cat.jpg (300)
+#     home/photos/old/
+#       home/photos/old/dog.jpg (250)
+# entries: 9
+# files: 5
+# big: home/docs/cv.pdf, home/photos/cat.jpg, home/photos/old/dog.jpg
+# Some(("home/photos/cat.jpg", 300, 2))
+# deepest: home/photos/old/dog.jpg at 3
+# pdf: 120
+# txt: 6
+# jpg: 550
+# total 676 = 676
+
+enum Entry:
+  Doc(name: Str, size: Int)
+  Folder(name: Str, kids: [Entry])
+
+  def walk(prefix: Str, depth: Int) -> Iterator[(Str, Int, Int)]:
+    match self:
+      Doc(n, s) -> yield ("#{prefix}#{n}", s, depth)
+      Folder(n, kids) ->
+        here = "#{prefix}#{n}/"
+        yield (here, 0, depth)
+        for k in kids:
+          for t in k.walk(here, depth + 1):
+            yield t
+
+  def total -> Int:
+    match self:
+      Doc(_, s) -> s
+      Folder(_, kids) -> kids.map { |k| k.total }.sum
+
+def ext(path: Str) -> Str = path.split(".").last.or("none")
+
+def main:
+  root = Folder("home", [
+    Folder("docs", [Doc("cv.pdf", 120), Doc("notes.txt", 4)]),
+    Doc("todo.txt", 2),
+    Folder("photos", [Doc("cat.jpg", 300), Folder("old", [Doc("dog.jpg", 250)])]),
+  ])
+
+  for path, size, depth in root.walk("", 0):
+    indent = "  ".repeat(depth)
+    if path.ends_with?("/"):
+      puts "#{indent}#{path}"
+    else:
+      puts "#{indent}#{path} (#{size})"
+  puts "entries: #{root.walk("", 0).len}"
+
+  files = root.walk("", 0).filter { |p, s, d| s > 0 }.to_list
+  puts "files: #{files.len}"
+  big = files.filter { |p, s, d| s >= 100 }.map { |p, s, d| p }.join(", ")
+  puts "big: #{big}"
+  puts files.max_by { |p, s, d| s }
+  match files.sort_by { |p, s, d| 0 - d }.first:
+    Some((p, _, d)) -> puts "deepest: #{p} at #{d}"
+    None -> puts "no files"
+
+  var by_ext: {Str: Int} = {}
+  for p, s, d in files:
+    by_ext[ext(p)] = by_ext[ext(p)].or(0) + s
+  for e, n in by_ext:
+    puts "#{e}: #{n}"
+
+  summed = files.sum { |p, s, d| s }
+  puts "total #{root.total} = #{summed}"

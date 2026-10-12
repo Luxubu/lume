@@ -1,0 +1,7 @@
+error: a generator cannot take `cal` yet: it keeps what it is given, and a block or an interface value cannot be kept that way
+  --> corpus/m78/a08_free_slots.lume:30:18
+   |
+30 |   def free_slots(cal: Calendar) -> Iterator[Str]:
+   |                  ^
+  help: pass the values the generator needs instead
+exit: 1

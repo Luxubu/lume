@@ -1,0 +1,68 @@
+# a03_seat_map: a cinema seat map read from text, walked by rows and by
+# cells.
+# Probes: two generator methods on one struct, one giving each row as a
+# list and one giving (row, column, seat) triples; a generator method that
+# calls another method (`height`) by its bare name; triples taken apart by
+# `for r, c, s in` and by `{ |r, c, s| ... }` on filter and map; a block in
+# a block over a generator's items; a parse that fails with `Error` and is
+# passed on with `?` from `main -> () or Error`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 4x3
+# #..#
+# .##.
+# ....
+# taken: (0,0) (0,3) (1,1) (1,2)
+# free per row: [2, 2, 4]
+# comfy: row 3 seat 2
+# comfy: row 3 seat 3
+# bad plan: row 2 has 1 seats, not 2
+
+struct Grid:
+  width: Int
+  cells: [Str]
+
+  def height -> Int = cells.len / width
+
+  def rows -> Iterator[[Str]]:
+    var r = 0
+    while r < height:
+      yield cells.skip(r * width).take(width).to_list
+      r += 1
+
+  def spots -> Iterator[(Int, Int, Str)]:
+    for i, c in cells.enumerate:
+      yield (i / width, i % width, c)
+
+  def at(r: Int, c: Int) -> Str:
+    if r < 0 or c < 0 or r >= height or c >= width: "|" else: cells.at(r * width + c)
+
+def parse(plan: Str) -> Grid or Error:
+  lines = plan.split("/").to_list
+  w = lines.at(0).len
+  var cells: [Str] = []
+  for i, line in lines.enumerate:
+    if line.len != w:
+      return Error("row #{i + 1} has #{line.len} seats, not #{w}")
+    for ch in line.chars:
+      cells.push(ch.to_s)
+  Grid(width: w, cells: cells)
+
+def main -> () or Error:
+  g = parse("#..#/.##./....")?
+  puts "#{g.width}x#{g.height}"
+  for row in g.rows:
+    puts row.join("")
+
+  taken = g.spots.filter { |r, c, s| s == "#" }.map { |r, c, s| "(#{r},#{c})" }.join(" ")
+  puts "taken: #{taken}"
+  puts "free per row: #{g.rows.map { |row| row.count { |s| s == "." } }.to_list}"
+
+  for r, c, s in g.spots:
+    next if s != "."
+    if g.at(r, c - 1) == "." and g.at(r, c + 1) == ".":
+      puts "comfy: row #{r + 1} seat #{c + 1}"
+
+  match parse("##/#"):
+    Ok(bad) -> puts bad.width
+    Error(e) -> puts "bad plan: #{e.message}"

@@ -1,0 +1,25 @@
+warning: `sources` holds values of different types behind `Source`, so calls on its items go through a pointer
+  --> corpus/m78/c04_scheduler.lume:127:3
+    |
+127 |   sources: [Source] = [tea, retry, bus]
+    |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+Every(name: "tea", first: 0, step: 5)
+cake every x from 1: `x` is not an integer
+nap at noon: cannot read `nap at noon`
+tea: [0, 5, 10, 15]
+retry: [1, 2, 4, 8]
+bus: [3, 7, 13, 17]
+after 50: [Some(55), Some(64), Some(53)]
+ 0- 4: tea retry retry bus retry
+ 5- 9: tea bus retry
+10-14: tea bus
+15-19: tea retry bus
+20-24: tea
+14 events, busiest slot 0 with 3 sources
+{"tea": 5, "retry": 5, "bus": 4}
+false
+true
+tea@0 ping@1 tea@5 ping@7 tea@10
+[21, 7, 20]
+exit: 0

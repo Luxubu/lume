@@ -1,0 +1,88 @@
+# a06_news_feeds: a reader following a blog and a price ticker.
+# Probes: an interface whose required method gives `Iterator[Str]` (one type
+# hands back a list, the other is an endless generator), a generator default
+# made from it, a plain default that walks it with a block reading a
+# parameter; a plain function taking `[Feed]` and giving `Iterator[Str]` by
+# handing back a list it built; a plain function giving `Iterator[Str]` as a
+# chain over its parameter; `zip` of a finite sequence with an endless one;
+# a generator method on a struct whose field is a `[Feed]`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ["notes: on lume", "notes: on rust"]
+# ["ACME: 10c", "ACME: 14c", "ACME: 18c"]
+# 2
+# notes: on lume
+# ACME: 10c
+# NOTES: ON LUME / NOTES: ON RUST / ACME: 10C / ACME: 14C
+# ["on lume @ 10c", "on rust @ 14c", "hello world @ 18c"]
+# ["kim <- notes: on lume", "kim <- ACME: 10c"]
+# EXPECTED STDERR:
+# warning: `feeds` holds values of different types behind `Feed`, so calls on its items go through a pointer
+#   --> corpus/m78/a06_news_feeds.lume:80:3
+#    |
+# 80 |   feeds: [Feed] = [blog, tick]
+#    |   ^
+#   help: fine for most code; use a single concrete type or an enum if this is a hot loop
+
+interface Feed:
+  def title -> Str
+  def entries -> Iterator[Str]
+
+  def headlines(n: Int) -> Iterator[Str]:
+    for e in entries.take(n):
+      yield "#{title}: #{e}"
+
+  def count_matching(word: Str) -> Int = entries.filter { |e| e.contains?(word) }.len
+
+struct Blog:
+  name: Str
+  posts: [Str]
+
+  def title -> Str = name
+  def entries -> Iterator[Str] = posts.reverse
+
+struct Ticker:
+  symbol: Str
+  start: Int
+
+  def title -> Str = symbol
+  def entries -> Iterator[Str]:
+    var p = start
+    while true:
+      yield "#{p}c"
+      p += 4
+
+struct Reader:
+  who: Str
+  follows: [Feed]
+
+  def inbox(n: Int) -> Iterator[Str]:
+    for f in follows:
+      for h in f.headlines(n):
+        yield "#{who} <- #{h}"
+
+def digest(feeds: [Feed], n: Int) -> Iterator[Str]:
+  var out: [Str] = []
+  for f in feeds:
+    for h in f.headlines(n):
+      out.push(h)
+  out
+
+def shouting(xs: [Str]) -> Iterator[Str] = xs.map { |x| x.upcase }
+
+def main:
+  blog = Blog(name: "notes", posts: ["hello world", "on rust", "on lume"])
+  tick = Ticker(symbol: "ACME", start: 10)
+  puts blog.headlines(2).to_list
+  puts tick.headlines(3).to_list
+  puts blog.count_matching("on")
+
+  feeds: [Feed] = [blog, tick]
+  for line in digest(feeds, 1):
+    puts line
+  puts shouting(digest(feeds, 2).to_list).join(" / ")
+
+  puts blog.entries.zip(tick.entries).map { |post, price| "#{post} @ #{price}" }.to_list
+
+  reader = Reader(who: "kim", follows: [blog, tick])
+  puts reader.inbox(1).to_list

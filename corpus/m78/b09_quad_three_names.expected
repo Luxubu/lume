@@ -1,0 +1,7 @@
+error: this block names 3 arguments, but the items have 4 parts
+  --> corpus/m78/b09_quad_three_names.lume:13:22
+   |
+13 |   puts quads.sort_by { |a, b, c| c }
+   |                      ^
+  help: name one for each part, `{ |a, b, c, d| ... }`, or one for the whole tuple
+exit: 1

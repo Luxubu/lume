@@ -1,0 +1,200 @@
+# c03_document: a document (an enum of blocks in nested sections) rendered
+# by generator methods: an enum generator `lines` walked by another of its
+# generators by bare name, struct generators recursing with a number
+# argument, (depth, title, words) triples taken apart by a three-name
+# block, a word tally, a set, a parser failing as `Block or Error`, and an
+# interface `Style` with a generator default taking a list, a default
+# taking a `Style`, and a required method giving a `Style` back.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# skipped: unknown kind `x`
+# skipped: no kind in `no colon here`
+# skipped: a quote needs `text | who`, got `just text`
+# parsed Quote(text: "Small programs travel well.", who: "a reviewer")
+# FIELD GUIDE
+# ===========
+#
+# # 1. Getting started
+# Lume reads like a script.
+# - install the compiler
+# - write a file
+# - run the file
+# ## 1.1. Your first file
+# A file starts at main.
+#
+# # 2. Sharing
+# > Small programs travel well.
+# >   -- a reviewer
+# 1. Getting started (15 words)
+#   1.1. Your first file (3 words)
+# 2. Sharing (5 words)
+# 20 words, 17 different
+# file 3
+# the 2
+# lume 1
+# {"install", "compiler", "programs", "reviewer"}
+# +--------+
+# |intro   |
+# |body    |
+# +--------+
+# +------+
+# | INTRO|
+# |  BODY|
+# +------+
+# true
+# false
+# ["+-----+", "|ok   |", "+-----+"]
+# EXPECTED STDERR:
+# warning: `styles` holds values of different types behind `Style`, so calls on its items go through a pointer
+#   --> corpus/m78/c03_document.lume:194:3
+#     |
+# 194 |   styles: [Style] = [Plain(w: 8), Shout(w: 6)]
+#     |   ^
+#   help: fine for most code; use a single concrete type or an enum if this is a hot loop
+
+enum Block:
+  Para(text: Str)
+  Bullets(items: [Str])
+  Quote(text: Str, who: Str)
+
+  def lines -> Iterator[Str]:
+    match self:
+      Para(t) ->
+        yield t
+      Bullets(items) ->
+        for i in items:
+          yield "- " + i
+      Quote(t, who) ->
+        yield "> " + t
+        yield ">   -- " + who
+
+  def words -> Iterator[Str]:
+    for l in lines:
+      for w in l.split:
+        clean = w.downcase.replace(",", "").replace(".", "")
+        yield clean if clean.len > 2
+
+struct Section:
+  title: Str
+  blocks: [Block]
+  subs: [Section]
+
+  def render(number: Str, depth: Int) -> Iterator[Str]:
+    marks = "#".repeat(depth)
+    yield "#{marks} #{number} #{title}"
+    for b in blocks:
+      for l in b.lines:
+        yield l
+    for i, s in subs.enumerate:
+      for l in s.render("#{number}#{i + 1}.", depth + 1):
+        yield l
+
+  def words -> Iterator[Str]:
+    for b in blocks:
+      for w in b.words:
+        yield w
+    for s in subs:
+      for w in s.words:
+        yield w
+
+  def outline(number: Str, depth: Int) -> Iterator[(Int, Str, Int)]:
+    yield (depth, "#{number} #{title}", words.len)
+    for i, s in subs.enumerate:
+      for t in s.outline("#{number}#{i + 1}.", depth + 1):
+        yield t
+
+struct Doc:
+  name: Str
+  sections: [Section]
+
+  def render -> Iterator[Str]:
+    yield name.upcase
+    yield "=".repeat(name.len)
+    for i, s in sections.enumerate:
+      yield ""
+      for l in s.render("#{i + 1}.", 1):
+        yield l
+
+  def outline -> Iterator[(Int, Str, Int)]:
+    for i, s in sections.enumerate:
+      for t in s.outline("#{i + 1}.", 1):
+        yield t
+
+  def words -> Iterator[Str]:
+    for s in sections:
+      for w in s.words:
+        yield w
+
+def parse_block(line: Str) -> Block or Error:
+  at = line.index_of(":").or_error("no kind in `#{line}`")?
+  kind = line.slice(0, at)
+  rest = line.slice(at + 1, line.len).trim
+  match kind:
+    "p" -> Para(rest)
+    "*" -> Bullets(rest.split(",").map { |s| s.trim }.to_list)
+    ">" ->
+      match rest.split("|"):
+        [t, w] -> Quote(t.trim, w.trim)
+        _ -> Error("a quote needs `text | who`, got `#{rest}`")
+    _ -> Error("unknown kind `#{kind}`")
+
+def parse_blocks(lines: [Str]) -> [Block] or Error:
+  var out: [Block] = []
+  for l in lines:
+    out.push(parse_block(l)?)
+  out
+
+interface Style:
+  def mark(line: Str) -> Str
+  def width -> Int
+  def narrower(by: Int) -> Style
+  def wider?(o: Style) -> Bool = width > o.width
+  def restyle(xs: [Str]) -> Iterator[Str]:
+    edge = "+" + "-".repeat(width) + "+"
+    yield edge
+    for x in xs:
+      yield mark(x)
+    yield edge
+
+struct Plain:
+  w: Int
+  def mark(line: Str) -> Str = "|" + line.pad_right(w) + "|"
+  def width -> Int = w
+  def narrower(by: Int) -> Style = Plain(w: w - by)
+
+struct Shout:
+  w: Int
+  def mark(line: Str) -> Str = "|" + line.upcase.pad(w) + "|"
+  def width -> Int = w
+  def narrower(by: Int) -> Style = Shout(w: w - by)
+
+def main -> () or Error:
+  for bad in ["x: what", "no colon here", ">: just text", ">: Small programs travel well. | a reviewer"]:
+    match parse_block(bad):
+      Ok(b) -> puts "parsed #{b}"
+      Error(e) -> puts "skipped: #{e.message}"
+
+  intro = parse_blocks(["p: Lume reads like a script.", "*: install the compiler, write a file, run the file"])?
+  first = Section(title: "Getting started", blocks: intro, subs: [
+    Section(title: "Your first file", blocks: [Para("A file starts at main.")], subs: []),
+  ])
+  second = Section(title: "Sharing", blocks: [Quote("Small programs travel well.", "a reviewer")], subs: [])
+  doc = Doc(name: "Field guide", sections: [first, second])
+  for line in doc.render:
+    puts line
+  for line in doc.outline.map { |d, t, n| "#{"  ".repeat(d - 1)}#{t} (#{n} words)" }:
+    puts line
+  var freq: {Str: Int} = {}
+  for w in doc.words:
+    freq[w] = freq[w].or(0) + 1
+  puts "#{freq.values.sum} words, #{freq.len} different"
+  for w, n in freq.sort_by { |w, n| 0 - n }.take(3):
+    puts "#{w} #{n}"
+  puts doc.words.filter { |w| w.len > 6 }.to_set
+  styles: [Style] = [Plain(w: 8), Shout(w: 6)]
+  for s in styles:
+    for l in s.restyle(["intro", "body"]):
+      puts l
+  puts styles.at(0).wider?(styles.at(1))
+  puts styles.at(1).wider?(styles.at(0))
+  puts styles.at(0).narrower(3).restyle(["ok"]).to_list

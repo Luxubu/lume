@@ -1,0 +1,7 @@
+error: `show` takes a `Feed`, which has `pull`, a method only a known type can call, so it cannot be lent to an interface's method
+  --> corpus/m78/b11_iface_default_async_param.lume:17:25
+   |
+17 |   def show(prefix: Str, f: Feed) -> Str = "#{prefix}#{width}"
+   |                         ^
+  help: take what `show` needs from it instead, or write `show` as a function with a parameter `f: Feed`
+exit: 1

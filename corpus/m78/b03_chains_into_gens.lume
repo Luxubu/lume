@@ -1,0 +1,99 @@
+# b03: Lazy chains handed to generators. Endless chains from a generator whose
+#   blocks read an Int local (changed after the call: the block's copy
+#   wins), a Str local and a list local (still whole afterwards). A chain
+#   over a list into a generator is worked out at the call: the side
+#   effects of its `map` print before "called". A chain over a range stays
+#   lazy: its `map` runs as the generator is walked. A chain over a list
+#   into a plain function stays lazy too. A struct sequence (`next`) as the
+#   start of an endless chain, and the struct still at its start after.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# [0, 6, 12]
+# 100
+# ["1=n0", "2=n1"]
+# 1=ann 2=bo 3=cy 4=ann
+# ["ann", "bo", "cy"]
+# [6, 8]
+# map 1
+# map 2
+# map 3
+# called
+# got 2
+# called
+# map 1
+# map 2
+# got 2
+# map 3
+# drain starts
+# map 1
+# map 2
+# map 3
+# 60
+# [2, 2, 4]
+# [0, 1, 1]
+
+struct Fib:
+  a: Int
+  b: Int
+
+  def next(var self) -> Int?:
+    x = a
+    a = b
+    b = x + b
+    Some(x)
+
+def naturals -> Iterator[Int]:
+  var n = 0
+  while true:
+    yield n
+    n += 1
+
+def evens(xs: Iterator[Int]) -> Iterator[Int]:
+  for x in xs:
+    yield x if x % 2 == 0
+
+def labelled(xs: Iterator[Str]) -> Iterator[Str]:
+  var i = 0
+  for x in xs:
+    i += 1
+    yield "#{i}=#{x}"
+
+def noisy(x: Int) -> Int:
+  puts "map #{x}"
+  x
+
+def drain(xs: Iterator[Int]) -> Int:
+  puts "drain starts"
+  xs.sum
+
+def main:
+  var step = 3
+  g = evens(naturals().map { |n| n * step })
+  step = 100
+  puts g.take(3).to_list
+  puts step
+
+  prefix = "n"
+  puts labelled(naturals().map { |n| "#{prefix}#{n}" }).take(2).to_list
+  names = ["ann", "bo", "cy"]
+  puts labelled(naturals().map { |n| names.at(n % names.len) }).take(4).join(" ")
+  puts names
+  limit = 4
+  puts evens(naturals().filter { |n| n > limit }).take(2).to_list
+
+  xs = [1, 2, 3]
+  e = evens(xs.map { |x| noisy(x) })
+  puts "called"
+  for x in e:
+    puts "got #{x}"
+
+  r = evens((1..3).map { |x| noisy(x) })
+  puts "called"
+  for x in r:
+    puts "got #{x}"
+
+  puts drain(xs.map { |x| noisy(x) * 10 })
+
+  fib = Fib(a: 0, b: 1)
+  puts evens(fib.map { |x| x + 1 }).take(3).to_list
+  puts fib.take(3).to_list

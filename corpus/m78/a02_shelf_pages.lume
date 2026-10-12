@@ -1,0 +1,81 @@
+# a02_shelf_pages: paging through a bookshelf, a few books at a time.
+# Probes: a generator method that yields lists (`Iterator[[Book]]`), with
+# a `var` page reset after each `yield` and a trailing `yield .. if`; a
+# plain method `-> Iterator[Book]` that hands back a chain over its own
+# field; a plain function `-> Iterator[Str]` that hands back a list; a
+# generator method walking its own copy when the value changes after the
+# call; `enumerate`, `skip`, `first` and `len` on a generator.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# page 1: Dune, Emma, Persuasion
+# page 2: Ubik, Valis, Solaris
+# page 3: Eden
+# 4
+# [3, 3, 1]
+# [7]
+# [Book(title: "Eden", author: "Lem", year: 1959)]
+# Emma, 1815
+# Persuasion, 1817
+# Solaris (1961) | Eden (1959)
+# 4
+# 3
+# [4, 4]
+
+struct Book:
+  title: Str
+  author: Str
+  year: Int
+
+struct Shelf:
+  name: Str
+  books: [Book]
+
+  def pages(size: Int) -> Iterator[[Book]]:
+    var page: [Book] = []
+    for b in books:
+      page.push(b)
+      if page.len == size:
+        yield page
+        page = []
+    yield page if page.len > 0
+
+  def by(author: Str) -> Iterator[Book] = books.filter { |b| b.author == author }
+
+def titles(books: [Book]) -> Iterator[Str]:
+  var out: [Str] = []
+  for b in books:
+    out.push("#{b.title} (#{b.year})")
+  out
+
+def main:
+  shelf = Shelf(name: "fiction", books: [
+    Book("Dune", "Herbert", 1965),
+    Book("Emma", "Austen", 1815),
+    Book("Persuasion", "Austen", 1817),
+    Book("Ubik", "Dick", 1969),
+    Book("Valis", "Dick", 1981),
+    Book("Solaris", "Lem", 1961),
+    Book("Eden", "Lem", 1959),
+  ])
+
+  for i, page in shelf.pages(3).enumerate:
+    line = page.map(_.title).join(", ")
+    puts "page #{i + 1}: #{line}"
+  puts shelf.pages(2).len
+  puts shelf.pages(3).map { |p| p.len }.to_list
+  puts shelf.pages(10).map { |p| p.len }.to_list
+  match shelf.pages(3).skip(2).first:
+    Some(p) -> puts p
+    None -> puts "no third page"
+
+  for b in shelf.by("Austen"):
+    puts "#{b.title}, #{b.year}"
+  puts titles(shelf.by("Lem").to_list).join(" | ")
+
+  # the pager walks the shelf as it was when it was asked for
+  var live = shelf
+  pager = live.pages(4)
+  live.books = live.books + [Book("Neuromancer", "Gibson", 1984)]
+  for p in pager:
+    puts p.len
+  puts live.pages(4).map { |p| p.len }.to_list

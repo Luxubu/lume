@@ -1,0 +1,14 @@
+page 1: Dune, Emma, Persuasion
+page 2: Ubik, Valis, Solaris
+page 3: Eden
+4
+[3, 3, 1]
+[7]
+[Book(title: "Eden", author: "Lem", year: 1959)]
+Emma, 1815
+Persuasion, 1817
+Solaris (1961) | Eden (1959)
+4
+3
+[4, 4]
+exit: 0

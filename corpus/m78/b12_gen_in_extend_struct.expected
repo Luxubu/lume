@@ -1,0 +1,7 @@
+error: `spread` is in an `extend`, and a method there cannot be a generator yet
+  --> corpus/m78/b12_gen_in_extend_struct.lume:19:3
+   |
+19 |   def spread -> Iterator[Str]:
+   |   ^
+  help: write the generator as a default in the interface, or as a method of the struct or enum itself
+exit: 1

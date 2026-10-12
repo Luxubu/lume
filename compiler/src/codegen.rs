@@ -7119,6 +7119,11 @@ impl Gen {
         if et == err_t && et != ok_t {
             return Ok(format!("Err({})", text));
         }
+        // `-> Shape or Error`: the value is boxed as the interface first
+        if self.is_interface(&ok_t) && !self.is_interface(&et) && et != Type::Unknown {
+            let boxed = self.coerce(text, &et, &ok_t, e.line, e.col)?;
+            return Ok(format!("Ok({})", boxed));
+        }
         Ok(format!("Ok({})", text))
     }
 
@@ -8314,7 +8319,8 @@ impl Gen {
                         }
                     }
                 };
-                self.line(&format!("for {} in {} {{", pattern, it));
+                // in brackets: Rust reads a struct literal there as the loop's body
+                self.line(&format!("for {} in ({}) {{", pattern, it));
                 self.indent += 1;
                 // A number, flag or character in a pair is declared as a
                 // value, but what arrives depends on where the pairs come
@@ -8695,8 +8701,9 @@ impl Gen {
         } else if !t.is_copy() && self.is_borrowed_place(e) {
             // a borrowed string may be a `&str`: to_string covers both
             if t == Type::Str { Ok(format!("{}.to_string()", s)) } else { Ok(format!("{}.clone()", s)) }
-        } else if !t.is_copy() && matches!(&e.kind, ExprKind::Ident(n) if self.lookup(n).is_some() && !self.dead_now(n)) {
-            // an owned local that is used again later: give away a copy, keep the value
+        } else if !t.is_copy() && matches!(&e.kind, ExprKind::Ident(n) if self.lookup(n).is_some() && (!self.dead_now(n) || self.stmt_stack.last().map(|st| mention_count(st, n) > 1).unwrap_or(false))) {
+            // an owned local that is used again — later, or elsewhere in this
+            // statement, such as the arms of a `match` on it: give away a copy
             Ok(format!("{}.clone()", s))
         } else {
             Ok(s)
@@ -8893,10 +8900,14 @@ impl Gen {
             }
             (ExprKind::List(items), Type::List(elem)) if self.is_interface(elem) => {
                 let mut parts = Vec::new();
-                for i in items {
+                for (k, i) in items.iter().enumerate() {
                     let it = self.ty_of(i).materialized();
-                    let v = self.expr_owned(i)?;
-                    parts.push(self.coerce(v, &it, elem, i.line, i.col)?);
+                    // the items after this one still read what it might give away
+                    let later: Vec<Stmt> = items[k + 1..].iter().map(|x| Stmt::Expr(x.clone())).collect();
+                    self.rest_stack.push(later);
+                    let v = self.expr_owned(i);
+                    self.rest_stack.pop();
+                    parts.push(self.coerce(v?, &it, elem, i.line, i.col)?);
                 }
                 Ok(format!("vec![{}]", parts.join(", ")))
             }
@@ -10617,7 +10628,8 @@ impl Gen {
                 parts.push(format!("{}: {}", rust_name(fname), v));
             }
         }
-        Ok(format!("{}::{} {{ {} }}", epath, vname, parts.join(", ")))
+        // in brackets, so it may head an `if`, a `while`, a `for` or a `match`
+        Ok(format!("({}::{} {{ {} }})", epath, vname, parts.join(", ")))
     }
 
     fn expr(&mut self, e: &Expr) -> Result<String> {
@@ -10765,11 +10777,13 @@ impl Gen {
                     }
                 }
                 let mut parts = Vec::new();
-                for i in items {
+                for (k, i) in items.iter().enumerate() {
                     if type_is_known(&et) && !self.is_interface(&et) {
                         self.check_assign(i, &et, &format!("the items of a list must all be the same type; the first is {}", a_type(&et)))?;
                     }
-                    parts.push(self.expr_owned_as(i, &et)?);
+                    // the items after this one still read what it might give away
+                    let rest: Vec<&Expr> = items[k + 1..].iter().collect();
+                    parts.push(self.arg_with_rest(i, &et, &rest)?);
                 }
                 format!("vec![{}]", parts.join(", "))
             }
@@ -11280,7 +11294,8 @@ impl Gen {
                         let v = self.arg_with_rest(a, fty, &rest)?;
                         parts.push(format!("{}: {}", rust_name(fname), v));
                     }
-                    format!("{} {{ {} }}", self.path_of(name), parts.join(", "))
+                    // in brackets, so it may head an `if`, a `while`, a `for` or a `match`
+                    format!("({} {{ {} }})", self.path_of(name), parts.join(", "))
                 } else if let Some(en) = self.resolve_variant(name, e.line, e.col)? {
                     self.variant_ctor(&en, name, args, e)?
                 } else if self.lookup(name).is_some() {

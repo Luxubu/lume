@@ -1,0 +1,7 @@
+error: `p` is a generator, and it is used up here, so it cannot be used after
+  --> corpus/m78/b14_iter_fn_twice.lume:17:8
+   |
+17 |   puts p.sum
+   |        ^
+  help: a generator hands out each item once: to walk the items twice, keep them with `.to_list` first
+exit: 1

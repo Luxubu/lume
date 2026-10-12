@@ -1,0 +1,165 @@
+# c01_file_tree: a file system as a recursive enum, walked by generator
+# methods on the enum itself: `paths` (takes a prefix, recurses into the
+# children's own generator), `walk` (gives (depth, title, size) triples),
+# `files` (gives pairs). Around them: `for` with three names, blocks taking
+# triples and pairs apart, a map tally by extension in insertion order, a
+# set from a chain, `max_by` on a generator and on a map, a lookup that fails
+# as `Entry or Error` and is passed up with `?` in `main -> () or Error`, and
+# a generator method that keeps walking its own copy after the `var` it was
+# called on is replaced.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# total 5306 bytes
+# home/
+# home/notes.txt
+# home/src/
+# home/src/main.lume
+# home/src/util.lume
+# home/src/old/
+# home/src/old/main.lume.bak
+# home/pics/
+# home/pics/cat.png
+# home/pics/dog.png
+# home/pics/README
+# home/ 5306
+#   notes.txt 120
+#   src/ 2050
+#     main.lume 900
+#     util.lume 300
+#     old/ 850
+#       main.lume.bak 850
+#   pics/ 3136
+#     cat.png 2048
+#     dog.png 1024
+#     README 64
+# ["home/", "src/", "pics/"]
+# Some(("cat.png", 2048))
+# {"txt", "lume", "bak", "png", "(none)"}
+# txt       120
+# lume     1200
+# bak       850
+# png      3072
+# (none)     64
+# Some(("png", 3072))
+# 850
+# src/main.lume/x: main.lume is a file, not a folder
+# pics/bird.png: no bird.png in pics/
+# pics: 3136
+# 4
+# 0
+# 4 files over 500 bytes: main.lume, main.lume.bak, cat.png, dog.png
+
+enum Entry:
+  Item(name: Str, size: Int)
+  Folder(name: Str, kids: [Entry])
+
+  def bare -> Str = match self:
+    Item(n, _) -> n
+    Folder(n, _) -> n
+
+  def title -> Str = match self:
+    Item(n, _) -> n
+    Folder(n, _) -> n + "/"
+
+  def total -> Int = match self:
+    Item(_, s) -> s
+    Folder(_, kids) -> kids.map { |k| k.total }.sum
+
+  # every path under this entry, depth first
+  def paths(prefix: Str) -> Iterator[Str]:
+    match self:
+      Item(n, _) ->
+        yield prefix + n
+      Folder(n, kids) ->
+        here = prefix + n + "/"
+        yield here
+        for k in kids:
+          for p in k.paths(here):
+            yield p
+
+  # (depth, title, size) for this entry and everything under it
+  def walk(depth: Int) -> Iterator[(Int, Str, Int)]:
+    yield (depth, title, total)
+    match self:
+      Item(..) -> ()
+      Folder(_, kids) ->
+        for k in kids:
+          for t in k.walk(depth + 1):
+            yield t
+
+  # each file as (name, size)
+  def files -> Iterator[(Str, Int)]:
+    match self:
+      Item(n, s) ->
+        yield (n, s)
+      Folder(_, kids) ->
+        for k in kids:
+          for f in k.files:
+            yield f
+
+def ext(name: Str) -> Str:
+  parts = name.split(".")
+  if parts.len < 2: "(none)" else: parts.last.or("?")
+
+def child(e: Entry, part: Str) -> Entry or Error:
+  match e:
+    Item(n, _) -> return Error("#{n} is a file, not a folder")
+    Folder(n, kids) -> kids.find { |k| k.bare == part }.or_error("no #{part} in #{n}/")
+
+def lookup(root: Entry, path: Str) -> Int or Error:
+  var here = root
+  for part in path.split("/"):
+    here = child(here, part)?
+  here.total
+
+# a sequence handed back from a plain function, no `yield`
+def big_files(root: Entry, over: Int) -> Iterator[Str] =
+  root.files.filter { |n, s| s > over }.map { |n, s| n }
+
+def sample -> Entry:
+  Folder("home", [
+    Item("notes.txt", 120),
+    Folder("src", [
+      Item("main.lume", 900),
+      Item("util.lume", 300),
+      Folder("old", [Item("main.lume.bak", 850)]),
+    ]),
+    Folder("pics", [Item("cat.png", 2048), Item("dog.png", 1024), Item("README", 64)]),
+  ])
+
+def main -> () or Error:
+  root = sample()
+  puts "total #{root.total} bytes"
+  for p in root.paths(""):
+    puts p
+
+  for depth, title, size in root.walk(0):
+    puts "#{"  ".repeat(depth)}#{title} #{size}"
+
+  big = root.walk(0).filter { |d, t, s| t.ends_with?("/") and s > 1000 }.map { |d, t, s| t }.to_list
+  puts big
+  puts root.files.max_by { |n, s| s }
+  puts root.files.map { |n, s| ext(n) }.to_set
+
+  var by_ext: {Str: Int} = {}
+  for n, s in root.files:
+    by_ext[ext(n)] = by_ext[ext(n)].or(0) + s
+  for e, bytes in by_ext:
+    puts "#{e.pad_right(7)}#{bytes.pad(6)}"
+  puts by_ext.max_by { |e, b| b }
+
+  puts lookup(root, "src/old")?
+  for path in ["src/main.lume/x", "pics/bird.png", "pics"]:
+    match lookup(root, path):
+      Ok(n) -> puts "#{path}: #{n}"
+      Error(e) -> puts "#{path}: #{e.message}"
+
+  # the generator took its own copy of `tree` at the call
+  var tree = sample()
+  walker = tree.paths("/")
+  tree = Folder("empty", [])
+  puts walker.count { |p| p.ends_with?("/") }
+  puts tree.total
+
+  names = big_files(root, 500).to_list
+  puts "#{names.len} files over 500 bytes: #{names.join(", ")}"

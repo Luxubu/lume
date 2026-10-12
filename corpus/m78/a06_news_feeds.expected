@@ -1,0 +1,15 @@
+warning: `feeds` holds values of different types behind `Feed`, so calls on its items go through a pointer
+  --> corpus/m78/a06_news_feeds.lume:80:3
+   |
+80 |   feeds: [Feed] = [blog, tick]
+   |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+["notes: on lume", "notes: on rust"]
+["ACME: 10c", "ACME: 14c", "ACME: 18c"]
+2
+notes: on lume
+ACME: 10c
+NOTES: ON LUME / NOTES: ON RUST / ACME: 10C / ACME: 14C
+["on lume @ 10c", "on rust @ 14c", "hello world @ 18c"]
+["kim <- notes: on lume", "kim <- ACME: 10c"]
+exit: 0

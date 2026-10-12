@@ -1,0 +1,18 @@
+["ann3true", "bo5false", "cy3true"]
+ann,cy
+[("bo", 5, false), ("ann", 3, true), ("cy", 3, true)]
+Some(("bo", 5, false))
+Some(("ann", 3, true))
+false
+2
+Some(("bo", 5, false))
+Some((3, "ann", true))
+[-2, 6]
+15
+7
+[5, 5]
+x1 y2
+["0:ann", "1:bo", "2:cy"]
+Some((1, ("bo", 5, false)))
+[14, 39]
+exit: 0

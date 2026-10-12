@@ -1,0 +1,18 @@
+warning: `options` holds values of different types behind `Carrier`, so calls on its items go through a pointer
+  --> corpus/m78/a05_shipping_quotes.lume:76:3
+   |
+76 |   options: [Carrier] = [post, courier, post.with_surcharge(1)]
+   |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+false
+true
+courier+: 13
+post++: 24
+1 kg -> courier: 5
+2 kg -> courier: 8
+3 kg -> post: 9
+courier, post, post+
+drone: 4
+skip: `x` is not an integer
+skip: cannot read `boat 3`
+exit: 0

@@ -1,0 +1,81 @@
+# c06_catalogue_fail: a library catalogue with search pipelines. Searches
+# are interface values (`Query`), and the natural way to write "the books a
+# query keeps" is a generator method on the catalogue that takes the query.
+# The docs list "a generator that takes a block or an interface value" as
+# not yet supported, so this probes that the refusal also covers a
+# generator *method* (not only a free function), and that it points at the
+# parameter. Everything else in the file is meant to be valid: generator
+# methods giving triples, a set-valued field, `group_by`, `map_values`,
+# and `?` in a parser.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: a generator cannot take `q` yet: it keeps what it is given, and a block or an interface value cannot be kept that way
+#   --> corpus/m78/c06_catalogue_fail.lume:51:16
+#    |
+# 51 |   def matching(q: Query) -> Iterator[Book]:
+#    |                ^
+#   help: pass the values the generator needs instead
+
+struct Book:
+  title: Str
+  author: Str
+  year: Int
+  tags: {Str}
+
+interface Query:
+  def label -> Str
+  def keep?(b: Book) -> Bool
+  def count_in(bs: [Book]) -> Int = bs.count { |b| keep?(b) }
+
+struct ByAuthor:
+  name: Str
+
+  def label -> Str = "by #{name}"
+  def keep?(b: Book) -> Bool = b.author == name
+
+struct Tagged:
+  tag: Str
+
+  def label -> Str = "tagged #{tag}"
+  def keep?(b: Book) -> Bool = b.tags.contains?(tag)
+
+struct Catalogue:
+  books: [Book]
+
+  # (year, title, author), oldest first
+  def by_year -> Iterator[(Int, Str, Str)]:
+    for b in books.sort_by { |b| b.year }:
+      yield (b.year, b.title, b.author)
+
+  # the search, written as a generator that takes the query
+  def matching(q: Query) -> Iterator[Book]:
+    for b in books:
+      yield b if q.keep?(b)
+
+def parse_book(line: Str) -> Book or Error:
+  match line.split(";"):
+    [title, author, year, tags] ->
+      Book(title: title.trim, author: author.trim, year: year.trim.to_int?, tags: tags.split(",").map { |t| t.trim }.to_set)
+    _ -> Error("expected 4 fields in `#{line}`")
+
+def main -> () or Error:
+  lines = [
+    "Dune; Herbert; 1965; sf, desert",
+    "Emma; Austen; 1815; romance",
+    "Persuasion; Austen; 1817; romance, sea",
+    "Solaris; Lem; 1961; sf, sea",
+  ]
+  var books: [Book] = []
+  for l in lines:
+    books.push(parse_book(l)?)
+  cat = Catalogue(books: books)
+
+  for year, title, author in cat.by_year:
+    puts "#{year} #{title.pad_right(11)}#{author}"
+  puts cat.by_year.filter { |y, t, a| y < 1900 }.map { |y, t, a| t }.to_list
+
+  queries: [Query] = [ByAuthor(name: "Austen"), Tagged(tag: "sea")]
+  for q in queries:
+    found = cat.matching(q).map { |b| b.title }.to_list
+    puts "#{q.label}: #{found.join(", ")} (#{q.count_in(cat.books)})"
+  puts cat.books.group_by { |b| b.year / 100 * 100 }.map_values { |bs| bs.len }

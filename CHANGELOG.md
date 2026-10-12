@@ -15,6 +15,9 @@
   interface values and sequences, and a default may be a generator.
 - **`-> Iterator[T]`** gives a sequence from any function, with `yield` or
   without.
+- **Fixed**: a struct built at the head of an `if`, `while`, `for` or
+  `match`; `-> Shape or Error` giving a plain value; a list literal or a
+  `match` head moving a value that is read again in the same statement.
 
 ## 0.2.0 — sequences
 

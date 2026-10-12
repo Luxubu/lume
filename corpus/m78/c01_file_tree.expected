@@ -1,0 +1,40 @@
+total 5306 bytes
+home/
+home/notes.txt
+home/src/
+home/src/main.lume
+home/src/util.lume
+home/src/old/
+home/src/old/main.lume.bak
+home/pics/
+home/pics/cat.png
+home/pics/dog.png
+home/pics/README
+home/ 5306
+  notes.txt 120
+  src/ 2050
+    main.lume 900
+    util.lume 300
+    old/ 850
+      main.lume.bak 850
+  pics/ 3136
+    cat.png 2048
+    dog.png 1024
+    README 64
+["home/", "src/", "pics/"]
+Some(("cat.png", 2048))
+{"txt", "lume", "bak", "png", "(none)"}
+txt       120
+lume     1200
+bak       850
+png      3072
+(none)     64
+Some(("png", 3072))
+850
+src/main.lume/x: main.lume is a file, not a folder
+pics/bird.png: no bird.png in pics/
+pics: 3136
+4
+0
+4 files over 500 bytes: main.lume, main.lume.bak, cat.png, dog.png
+exit: 0
