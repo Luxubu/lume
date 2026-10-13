@@ -68,4 +68,18 @@ def main -> () or Error:
   for w in all:
     puts w
   puts all.map { |w| w.upcase }.to_list
+
+  # an item kept under a name, and a piece of it read in place; the line is
+  # copied into `kept` because `name` still reads it afterwards
+  var names: [Str] = []
+  for l in "ann 31ms\nbo 7ms".lines:
+    row = l.trim
+    fields = row.split(" ")
+    name = fields.at(0)
+    took = fields.at(1)
+    kept.push(row)
+    names.push(name)
+    puts "#{name} took #{took.slice(0, took.len - 2).to_int.or(0) * 2}"
+  puts names
+  puts kept
   ()

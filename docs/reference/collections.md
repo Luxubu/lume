@@ -450,7 +450,9 @@ of copying it.
 is only read by position — `parts.at(i)`, `parts.len`, `parts.empty?` —
 and `line` is a local that does not change while `parts` is in use. Then
 the list holds slices of `line`, as a Rust `Vec<&str>` does, and an item is
-copied only where it is kept: `name = parts.at(0)`, a field, a `push`.
+copied only where it is kept: a field, a `push`, a result. A name bound to
+an item, `took = parts.at(5)`, is a slice too, and so is
+`took.slice(0, 2)` when a text method reads it (`.to_int`, `.len`).
 Splitting a log line into fields and reading them costs no strings at all.
 
 None of this changes what a program prints. It changes only how much work

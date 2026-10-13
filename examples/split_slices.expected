@@ -13,3 +13,7 @@ p
 q
 r
 ["P", "Q", "R"]
+ann took 62
+bo took 14
+["ann", "bo"]
+["ALPHA BETA", "GAMMA DELTA", "ann 31ms", "bo 7ms"]

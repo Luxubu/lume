@@ -15,6 +15,8 @@
   interface values and sequences, and a default may be a generator.
 - **`-> Iterator[T]`** gives a sequence from any function, with `yield` or
   without.
+- **Faster**: an item of a list of slices bound to a name, and a
+  `.slice` read by a text method, are read in place.
 - **VS Code**: the extension packages and installs; `yield` is coloured;
   completion after `.` on a generator, and go to definition on an
   interface's default method.

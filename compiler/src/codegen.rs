@@ -380,6 +380,14 @@ fn lume_char_at(s: &str, i: i64) -> Option<char> {
 }
 /// `s[a..b]` in characters; positions are clamped to the string, an
 /// empty result when they cross.
+/// `s.slice(from, count)` read where it is: the same characters as
+/// `.slice`, borrowed from `s` instead of copied.
+fn lume_slice_ref(s: &str, from: i64, count: i64) -> &str {
+    let at = |k: i64| s.char_indices().nth(k.max(0) as usize).map(|(i, _)| i).unwrap_or(s.len());
+    let a = at(from);
+    let b = if count <= 0 { a } else { at(from.max(0) + count).max(a) };
+    &s[a..b]
+}
 fn lume_slice_str(s: &str, a: i64, b: i64) -> String {
     let n = s.chars().count() as i64;
     let (a, b) = (a.clamp(0, n), b.clamp(0, n));
@@ -1079,6 +1087,8 @@ pub struct Gen {
     /// Lists of text held as slices of another local's text, which they
     /// borrow: name -> the local they borrow.
     slices: HashMap<String, (String, usize)>,
+    /// Text locals that are slices of another local's text: name -> that local.
+    text_borrows: HashMap<String, (String, usize)>,
     /// The program uses async somewhere: tokio goes in the dependencies.
     uses_async: bool,
     /// Set by `iter_base` for a map: its items are `(key, value)` pairs of
@@ -1167,6 +1177,7 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, module_id: &str
         gen_item: None,
         arg_for_gen: false,
         slices: HashMap::new(),
+        text_borrows: HashMap::new(),
         fn_params: Vec::new(),
         loop_depth: 0,
         in_block: false,
@@ -7161,7 +7172,16 @@ impl Gen {
         }
         // lists of slices of `name` still need it while they are used
         let borrowers: Vec<String> = self.slices.iter().filter(|(_, (src, _))| src == name).map(|(n, _)| n.clone()).collect();
-        borrowers.iter().any(|b| self.slice_source(b).is_some() && self.rest_stack.iter().any(|rest| rest.iter().any(|st| stmt_mentions(st, b))))
+        if borrowers.iter().any(|b| self.slice_source(b).is_some() && self.rest_stack.iter().any(|rest| rest.iter().any(|st| stmt_mentions(st, b)))) {
+            return true;
+        }
+        let texts: Vec<String> = self
+            .text_borrows
+            .iter()
+            .filter(|(n, (src, line))| src == name && self.lookup(n).map(|b| b.line == *line && b.ty == Type::Str).unwrap_or(false))
+            .map(|(n, _)| n.clone())
+            .collect();
+        texts.iter().any(|b| self.rest_stack.iter().any(|rest| rest.iter().any(|st| stmt_mentions(st, b))))
     }
 
     /// Emits one argument of a call while the arguments still to come count
@@ -7840,6 +7860,14 @@ impl Gen {
                             let ft = self.field_type(name).unwrap_or(Type::Unknown);
                             let v = self.expr_owned_as(value, &ft)?;
                             self.line(&format!("self.{} = {};", rust_name(name), v));
+                        } else if let Some(src) = if ty.is_none() { self.slice_item_of(value) } else { None } {
+                            // `took = parts.at(5)` on a list of slices: a slice
+                            // too, borrowed as a text parameter is, and copied
+                            // wherever it is kept
+                            let v = self.expr(value)?;
+                            self.declare(name, false, true, Type::Str, *line);
+                            self.text_borrows.insert(name.clone(), (src, *line));
+                            self.line(&format!("let {}: &str = {};", rust_name(name), v));
                         } else if let Some(src) = if ty.is_none() { self.slices_of(name, value) } else { None } {
                             let v = self.expr(value)?;
                             self.declare(name, false, true, Type::List(Box::new(Type::Str)), *line);
@@ -8766,6 +8794,17 @@ impl Gen {
             Type::List(_) | Type::Set(_) => Ok(format!("{}.into_iter()", self.expr_owned(e)?)),
             _ if self.seq_item_of_type(&at.materialized()).is_some() => self.expr_owned(e),
             other => Err(LumeError::new(e.line, e.col, format!("a sequence is wanted here, and this is {}", a_type(&other)))),
+        }
+    }
+
+    /// `parts.at(i)` on a list of slices: the text it borrows from, if so.
+    fn slice_item_of(&self, e: &Expr) -> Option<String> {
+        match &e.kind {
+            ExprKind::Method { recv, name, args } if name == "at" && args.len() == 1 => match &recv.kind {
+                ExprKind::Ident(n) => self.slice_source(n),
+                _ => None,
+            },
+            _ => None,
         }
     }
 
@@ -11657,6 +11696,17 @@ impl Gen {
                     }
                 }
                 let mut r = self.expr(recv)?;
+                // `took.slice(0, n).to_int`: likewise, the piece is read in place
+                if rt == Type::Str {
+                    if let ExprKind::Method { recv: text, name: sl, args: sl_args } = &recv.kind {
+                        if sl == "slice" && sl_args.len() == 2 && self.ty_of(text) == Type::Str {
+                            let t = self.expr(text)?;
+                            let a = self.expr_val(&sl_args[0].value)?;
+                            let n = self.expr_val(&sl_args[1].value)?;
+                            r = format!("lume_slice_ref(&{}, {}, {})", t, a, n);
+                        }
+                    }
+                }
                 // `parts.at(4).to_int`: every method of text only reads it,
                 // so the item is read where it is, not copied out first
                 if rt == Type::Str {
