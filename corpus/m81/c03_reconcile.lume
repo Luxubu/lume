@@ -1,0 +1,161 @@
+# c03_reconcile: a bank-statement reconciler that joins two CSV tables on
+# their `ref` column.
+# Probes: a header row split once and its names kept as the keys of every
+# row's map; fields copied out of `split(",")` into maps, then into structs
+# whose id is also the outer map's key (one item used twice); amounts read
+# with `split(".")` and `slice`; `T or Error` with `?`, `.or_error` and
+# `map_error`; a generator joining two maps; `group_by` on a text key; and
+# a `var` CSV text replaced after the table read from it is built.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ok      R100   -45.20
+# ok      R101  1200.00
+# DIFFERS R102    -9.99 (ledger -9.90, off by -0.09)
+# BANK    R104   -60.00 (2026-10-05, not in the ledger)
+# ok      R105    -3.50
+# LEDGER  R103  -800.00 (Rent, not on the statement)
+# ok 3, differs 1, bank only 1, ledger only 1
+# statement 1081.31, ledger 341.40, gap 739.91
+# rejected: R106: `12.345`: more than two decimals
+# rejected: line 2: expected 3 fields, found 2
+# rejected: missing column `ref`
+# rejected: R109: `ten` is not an integer
+# 5 rows; first ref R100; text now starts Q00
+
+BANK = [
+  "date,ref,amount",
+  "2026-10-01,R100,-45.20",
+  "2026-10-02,R101,1200.00",
+  "2026-10-03,R102,-9.99",
+  "2026-10-05,R104,-60.00",
+  "2026-10-06,R105,-3.5",
+].join("\n")
+
+LEDGER = [
+  "ref, payee, amount",
+  "R100,Grocer,-45.20",
+  "R101,Salary,1200.00",
+  "R102,Cafe,-9.90",
+  "R103,Rent,-800.00",
+  "R105,Parking,-3.50",
+].join("\n")
+
+BAD = [
+  ["date,ref,amount", "2026-10-07,R106,12.345"].join("\n"),
+  ["date,ref,amount", "2026-10-07,R107"].join("\n"),
+  ["date,id,amount", "2026-10-07,R108,1.00"].join("\n"),
+  ["date,ref,amount", "2026-10-07,R109,ten"].join("\n"),
+]
+
+struct Entry:
+  id: Str
+  label: Str
+  cents: Int
+
+enum Outcome:
+  Matched(id: Str, cents: Int)
+  Differs(id: Str, bank: Int, ledger: Int)
+  BankOnly(id: Str, cents: Int, date: Str)
+  LedgerOnly(id: Str, cents: Int, payee: Str)
+
+# Every row after the header, as a map from column name to field.
+def read_table(text: Str) -> [{Str: Str}] or Error:
+  all = text.lines
+  if all.empty?:
+    return Error("no header")
+  header = all.at(0).split(",").map { |h| h.trim }.to_list
+  var out: [{Str: Str}] = []
+  for i, line in all.skip(1).enumerate:
+    fields = line.split(",")
+    if fields.len != header.len:
+      return Error("line #{i + 2}: expected #{header.len} fields, found #{fields.len}")
+    var row: {Str: Str} = {}
+    for k in 0...header.len:
+      row[header.at(k)] = fields.at(k).trim
+    out.push(row)
+  out
+
+def field(row: {Str: Str}, name: Str) -> Str or Error = row[name].or_error("missing column `#{name}`")
+
+# "-45.20" is -4520 cents; "-3.5" is -350.
+def cents(text: Str) -> Int or Error:
+  neg = text.starts_with?("-")
+  body = if neg: text.slice(1, text.len) else: text
+  parts = body.split(".")
+  if parts.len > 2:
+    return Error("`#{text}` is not an amount")
+  whole = parts.at(0).to_int?
+  var frac = 0
+  if parts.len == 2:
+    f = parts.at(1)
+    if f.len > 2 or not f.digit?:
+      return Error("`#{text}`: more than two decimals")
+    frac = f.to_int?
+    frac = frac * 10 if f.len == 1
+  total = whole * 100 + frac
+  if neg: 0 - total else: total
+
+def money(c: Int) -> Str:
+  sign = if c < 0: "-" else: ""
+  a = c.abs
+  "#{sign}#{a / 100}.#{(a % 100 + 100).to_s.slice(1, 2)}"
+
+def entries(rows: [{Str: Str}], label_col: Str) -> {Str: Entry} or Error:
+  var out: {Str: Entry} = {}
+  for row in rows:
+    id = field(row, "ref")?
+    label = field(row, label_col)?
+    amount = cents(field(row, "amount")?).map_error { |e| Error("#{id}: #{e.message}") }
+    out[id] = Entry(id: id, label: label, cents: amount?)
+  out
+
+def load(text: Str, label_col: Str) -> {Str: Entry} or Error:
+  rows = read_table(text)?
+  entries(rows, label_col)
+
+def reconcile(bank: {Str: Entry}, ledger: {Str: Entry}) -> Iterator[Outcome]:
+  for id, b in bank:
+    match ledger[id]:
+      Some(l) if l.cents == b.cents -> yield Matched(id, b.cents)
+      Some(l) -> yield Differs(id, b.cents, l.cents)
+      None -> yield BankOnly(id, b.cents, b.label)
+  for id, l in ledger:
+    yield LedgerOnly(id, l.cents, l.label) if not bank.contains?(id)
+
+def kind(o: Outcome) -> Str:
+  match o:
+    Matched(..) -> "ok"
+    Differs(..) -> "differs"
+    BankOnly(..) -> "bank only"
+    LedgerOnly(..) -> "ledger only"
+
+def describe(o: Outcome) -> Str:
+  match o:
+    Matched(id, c) -> "ok      #{id} #{money(c).pad(8)}"
+    Differs(id, b, l) -> "DIFFERS #{id} #{money(b).pad(8)} (ledger #{money(l)}, off by #{money(b - l)})"
+    BankOnly(id, c, date) -> "BANK    #{id} #{money(c).pad(8)} (#{date}, not in the ledger)"
+    LedgerOnly(id, c, payee) -> "LEDGER  #{id} #{money(c).pad(8)} (#{payee}, not on the statement)"
+
+def main -> () or Error:
+  bank = load(BANK, "date")?
+  ledger = load(LEDGER, "payee")?
+  outcomes = reconcile(bank, ledger).to_list
+  for o in outcomes:
+    puts describe(o)
+  groups = outcomes.group_by { |o| kind(o) }
+  puts groups.map { |k, os| "#{k} #{os.len}" }.join(", ")
+  b = bank.values.map { |e| e.cents }.sum
+  l = ledger.values.map { |e| e.cents }.sum
+  puts "statement #{money(b)}, ledger #{money(l)}, gap #{money(b - l)}"
+
+  for text in BAD:
+    match load(text, "date"):
+      Ok(m) -> puts "loaded #{m.len}"
+      Error(e) -> puts "rejected: #{e.message}"
+
+  # the table keeps its own text after the CSV it came from is replaced
+  var csv = BANK
+  table = read_table(csv).or([])
+  csv = csv.replace("R1", "Q")
+  first = table.at(0)["ref"].or("?")
+  puts "#{table.len} rows; first ref #{first}; text now starts #{csv.lines.at(1).slice(11, 3)}"

@@ -1,0 +1,51 @@
+# Probes: a name bound to an item (`w = parts.at(1)`) of a `var` line that
+# is reassigned straight after, then kept in a set, a map key, a struct
+# field, a list, and handed to a function that keeps it; an item returned
+# from a function whose list was a local.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# true
+# false
+# {"local"}
+# {"local": 2, "usr": 1}
+# Tag(name: "local")
+# Tag(name: "usr")
+# ["local", "bin"]
+# gone
+# a
+# gone
+
+struct Tag:
+  name: Str
+
+def wrap(s: Str) -> Tag = Tag(name: s)
+
+def head(line: Str) -> Str:
+  parts = line.split("/")
+  w = parts.at(0)
+  w
+
+def main:
+  var src = "usr/local/bin"
+  parts = src.split("/")
+  w = parts.at(1)
+  src = "gone"
+  var seen: {Str} = {}
+  puts seen.add(w)
+  puts seen.add(parts.at(1))
+  var counts: {Str: Int} = {}
+  for x in [w, parts.at(0), w]:
+    counts[x] = counts[x].or(0) + 1
+  t = Tag(name: w)
+  t2 = wrap(parts.at(0))
+  var names: [Str] = []
+  names.push(w)
+  names.push(parts.at(2))
+  puts seen
+  puts counts
+  puts t
+  puts t2
+  puts names
+  puts src
+  puts head("a/b")
+  puts head(src)

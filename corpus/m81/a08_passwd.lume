@@ -1,0 +1,95 @@
+# a08_passwd: an /etc/passwd-style record parser, joined with a group
+# file. Probes: a seven-item list pattern over `split(":")` binding every
+# field, two of them parsed with `?` and one read inside a `map_error`
+# block; a catch-all arm binding the whole split; the GECOS field split
+# again on "," and its first piece kept; `split("/").last`; one item from a
+# split used twice, as a map value and as a map key; `group_by` and
+# `partition` over the parsed structs; the text cleared afterwards.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# skip: broken: uid `abc` is not an integer
+# skip: short: expected 7 fields, found 3
+# 5 users
+# system: root, daemon
+# people: ann, bo, cy
+# bash    root bo cy
+# nologin daemon
+# zsh     ann
+# root, daemon, Ann Lee, Bo, Cy
+# ann in ann
+# bo in bo
+# cy in users
+# {"root": [], "users": ["ann", "cy"], "ann": [], "bo": []}
+# unusual home: daemon /usr/sbin
+# User(name: "ann", uid: 1000, gid: 1000, full: "Ann Lee", home: "/home/ann", shell: "/bin/zsh")
+
+struct User:
+  name: Str
+  uid: Int
+  gid: Int
+  full: Str
+  home: Str
+  shell: Str
+
+def parse_user(line: Str) -> User or Error:
+  match line.split(":"):
+    [name, _, uid, gid, gecos, home, shell] ->
+      full = gecos.split(",").at(0)
+      id = uid.to_int.map_error { |e| Error("#{name}: uid #{e.message}") }?
+      User(name: name, uid: id, gid: gid.to_int?, full: full, home: home, shell: shell)
+    parts -> Error("#{parts.at(0)}: expected 7 fields, found #{parts.len}")
+
+def main:
+  var passwd = """
+    root:x:0:0:root:/root:/bin/bash
+    daemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin
+    ann:x:1000:1000:Ann Lee,,,:/home/ann:/bin/zsh
+    bo:x:1001:1001::/home/bo:/bin/bash
+    broken:x:abc:1002::/home/broken:/bin/sh
+    short:x:5
+    # a comment
+    cy:x:1002:100:Cy:/home/cy:/bin/bash
+    """
+  var group = """
+    root:x:0:
+    users:x:100:ann,cy
+    ann:x:1000:
+    bo:x:1001:
+    """
+
+  var users: [User] = []
+  for line in passwd.lines:
+    next if line.starts_with?("#") or line.trim.empty?
+    match parse_user(line):
+      Ok(u) -> users.push(u)
+      Error(e) -> puts "skip: #{e.message}"
+
+  var gids: {Int: Str} = {}
+  var members: {Str: [Str]} = {}
+  for line in group.lines:
+    f = line.split(":")
+    name = f.at(0)
+    gids[f.at(2).to_int.or(0 - 1)] = name
+    members[name] = f.at(3).split(",").filter { |m| not m.empty? }.to_list
+  passwd = ""
+  group = ""
+
+  puts "#{users.len} users"
+  (system, people) = users.partition { |u| u.uid < 1000 }
+  sys_names = system.map { |u| u.name }.join(", ")
+  people_names = people.map { |u| u.name }.join(", ")
+  puts "system: #{sys_names}"
+  puts "people: #{people_names}"
+
+  for shell, us in users.group_by { |u| u.shell.split("/").last.or("?") }:
+    names = us.map { |u| u.name }.join(" ")
+    puts "#{shell.pad_right(8)}#{names}"
+
+  shown = users.map { |u| if u.full.empty?: u.name.capitalize else: u.full }.join(", ")
+  puts shown
+  for u in people:
+    puts "#{u.name} in #{gids[u.gid].or("?")}"
+  puts members
+  for u in users where not u.home.ends_with?("/" + u.name):
+    puts "unusual home: #{u.name} #{u.home}"
+  puts people.at(0)

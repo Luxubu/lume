@@ -1,0 +1,32 @@
+# Probes: items of each line of a log added to a set, used as map keys
+# with another item as the value (a key set twice keeps its place),
+# `group_by` keyed on an item of a split inside the block, a list of items
+# built by `map` then `uniq`, `sort`, `to_set` and `max_by`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# {"ann", "bo", "cy"}
+# {"ann": "logout", "bo": "logout", "cy": "login"}
+# {"login": ["ann login", "bo login", "cy login"], "logout": ["ann logout", "bo logout"]}
+# ["ann", "bo", "cy"]
+# ["ann", "ann", "bo", "bo", "cy"]
+# 3
+# Some("ann")
+
+def main:
+  log = "ann login\nbo login\nann logout\ncy login\nbo logout"
+  var users: {Str} = {}
+  var last: {Str: Str} = {}
+  for line in log.lines:
+    f = line.split(" ")
+    who = f.at(0)
+    users.add(who)
+    last[who] = f.at(1)
+  puts users
+  puts last
+  by_action = log.lines.group_by { |l| l.split(" ").at(1) }
+  puts by_action
+  names = log.lines.map { |l| l.split(" ").at(0) }.to_list
+  puts names.uniq
+  puts names.sort
+  puts names.to_set.len
+  puts names.max_by { |n| n.len }

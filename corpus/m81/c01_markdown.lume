@@ -1,0 +1,115 @@
+# c01_markdown: a Markdown-to-plain-text renderer.
+# Probes: `lines` read by a generator, `split(" ")` taken apart by list
+# patterns with literals, guards and `..rest`; enum payloads built from
+# pieces of a line (so they must be copies once the line is gone); one
+# pattern-bound name kept in two places (a list and a map of lists); and a
+# `var` line replaced while a word split from it is still in use.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# RELEASE NOTES
+# =============
+# Lume now reads text in place.
+#
+# Changes
+# -------
+#   * fewer copies when splitting
+#   * names kept safely
+#   1) split
+#   2) lines
+#
+#   | measure, do not guess
+# Thanks
+# ------
+# Plain words end here.
+# --
+# Release Notes
+#   Changes
+#     Thanks
+# {1: ["Release Notes"], 2: ["Changes"], 3: ["Thanks"]}
+# 15 lines, 10 words in paragraphs
+# Draft -> ## Final heading (5)
+# level 2: Final heading
+
+SOURCE = [
+  "# Release Notes",
+  "Lume now reads *text* in **place**.",
+  "",
+  "## Changes",
+  "- fewer `copies` when splitting",
+  "- names kept *safely*",
+  "1. split",
+  "2. lines",
+  "",
+  "> measure, do not guess",
+  "### Thanks",
+  "Plain words end here.",
+].join("\n")
+
+enum Block:
+  Heading(level: Int, text: Str)
+  Bullet(text: Str)
+  Numbered(n: Int, text: Str)
+  Quote(text: Str)
+  Para(text: Str)
+  Blank
+
+def strip(s: Str) -> Str = s.replace("**", "").replace("*", "").replace("`", "")
+
+def heading_marker?(m: Str) -> Bool = not m.empty? and m.replace("#", "").empty?
+
+def number_marker?(m: Str) -> Bool = m.ends_with?(".") and m.slice(0, m.len - 1).digit?
+
+def classify(line: Str) -> Block:
+  if line.trim.empty?:
+    return Blank
+  match line.split(" "):
+    [m, ..rest] if heading_marker?(m) -> Heading(m.len, strip(rest.join(" ")))
+    ["-", ..rest] -> Bullet(strip(rest.join(" ")))
+    [">", ..rest] -> Quote(strip(rest.join(" ")))
+    [m, ..rest] if number_marker?(m) -> Numbered(m.slice(0, m.len - 1).to_int.or(0), strip(rest.join(" ")))
+    _ -> Para(strip(line))
+
+def blocks(text: Str) -> Iterator[Block]:
+  for line in text.lines:
+    yield classify(line)
+
+def render(b: Block) -> [Str]:
+  match b:
+    Heading(1, t) -> [t.upcase, "=".repeat(t.len)]
+    Heading(_, t) -> [t, "-".repeat(t.len)]
+    Bullet(t) -> ["  * " + t]
+    Numbered(n, t) -> ["  #{n}) #{t}"]
+    Quote(t) -> ["  | " + t]
+    Para(t) -> [t]
+    Blank -> [""]
+
+def main:
+  var out: [Str] = []
+  var toc: [Str] = []
+  var by_level: {Int: [Str]} = {}
+  var words = 0
+  for b in blocks(SOURCE):
+    match b:
+      Heading(level, t) ->
+        toc.push("  ".repeat(level - 1) + t)
+        by_level[level].push(t)
+      Para(t) -> words += t.split.len
+      _ -> ()
+    for l in render(b):
+      out.push(l)
+
+  for l in out:
+    puts l
+  puts "--"
+  puts toc.join("\n")
+  puts by_level
+  puts "#{out.len} lines, #{words} words in paragraphs"
+
+  # a `var` line replaced while a word split from it is still held
+  var line = "## Draft heading"
+  word = line.split(" ").at(1)
+  line = line.replace("Draft", "Final")
+  puts "#{word} -> #{line} (#{word.len})"
+  match classify(line):
+    Heading(level, t) -> puts "level #{level}: #{t}"
+    other -> puts "not a heading: #{other}"

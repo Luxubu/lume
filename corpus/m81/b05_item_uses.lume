@@ -1,0 +1,58 @@
+# Probes: names bound to items, read every way a `Str` is read: rebound by
+# a self-transform (`a = a.trim`), interpolated, matched in `match` (literal
+# alternatives, `""`, a binding catch-all), given to a function taking
+# `Str`, compared with `==` and `<`, used to look up a map, and the same
+# item used twice in one expression and in one tuple.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# [get] [box] [] [put]
+# verb
+# noun 3
+# empty
+# verb
+# BOX!
+# false
+# false
+# true
+# 4
+# 1
+# 2
+# 0
+# false
+# boxbox
+# ("box", "box")
+
+def shout(s: Str) -> Str = s.upcase + "!"
+
+def kind(w: Str) -> Str:
+  match w:
+    "get" | "put" -> "verb"
+    "" -> "empty"
+    other -> "noun #{other.len}"
+
+def main:
+  line = " get ,box, ,put"
+  parts = line.split(",")
+  a = parts.at(0)
+  a = a.trim
+  b = parts.at(1)
+  c = parts.at(2)
+  c = c.trim
+  puts "[#{a}] [#{b}] [#{c}] [#{parts.at(3)}]"
+  puts kind(a)
+  puts kind(b)
+  puts kind(c)
+  puts kind(parts.at(3))
+  puts shout(b)
+  puts a == parts.at(3)
+  puts a == parts.at(0)
+  puts a == parts.at(0).trim
+  puts parts.len
+  lookup = {"get": 1, "box": 2}
+  puts lookup[a].or(0)
+  puts lookup[b].or(0)
+  puts lookup[parts.at(0)].or(0)
+  puts a < b
+  puts parts.at(1) + parts.at(1)
+  pair = (b, b)
+  puts pair

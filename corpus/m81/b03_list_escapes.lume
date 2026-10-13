@@ -1,0 +1,52 @@
+# Probes: the list from `split` itself leaving: returned from a function
+# after being read by position, pushed into a list of lists, stored as a
+# map value under one of its own items, compared with `==`, walked with
+# `for`, given to a block, sorted, and printed whole.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 3
+# ["x", "y", "z"]
+# 1
+# 3
+# [["1", "2"], ["3"]]
+# {"p": ["p", "q", "r"], "s": ["s", "t"]}
+# true
+# true
+# b
+# a
+# b
+# b!,a!,b!
+# ["a", "b", "b"]
+# ["b", "a", "b"]
+
+def fields(line: Str) -> [Str]:
+  parts = line.split(",")
+  puts parts.len
+  parts
+
+def main:
+  line = "x,y,z"
+  a = fields(line)
+  puts a
+
+  var all: [[Str]] = []
+  for l in "1,2\n3".lines:
+    ps = l.split(",")
+    puts ps.at(0)
+    all.push(ps)
+  puts all
+
+  var by: {Str: [Str]} = {}
+  for l in "p:q:r\ns:t".lines:
+    ps = l.split(":")
+    by[ps.at(0)] = ps
+  puts by
+
+  ws = "b a b".split(" ")
+  puts ws == ["b", "a", "b"]
+  puts ws.at(0) == ws.at(2)
+  for w in ws:
+    puts w
+  puts ws.map { |w| w + "!" }.join(",")
+  puts ws.sort
+  puts ws

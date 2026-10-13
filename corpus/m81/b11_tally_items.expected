@@ -1,0 +1,8 @@
+{"ann", "bo", "cy"}
+{"ann": "logout", "bo": "logout", "cy": "login"}
+{"login": ["ann login", "bo login", "cy login"], "logout": ["ann logout", "bo logout"]}
+["ann", "bo", "cy"]
+["ann", "ann", "bo", "bo", "cy"]
+3
+Some("ann")
+exit: 0

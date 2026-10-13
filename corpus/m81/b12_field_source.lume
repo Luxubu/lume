@@ -1,0 +1,31 @@
+# Probes: a struct field split (the source is a field, not a local), an
+# item named, then the field of the `var` struct reassigned while the list
+# and the item are still read; a method that splits its own field and
+# returns an item; a copy of the struct changed through its field.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# one three 3 four
+# four
+# four
+# five
+# Line(text: "four five")
+
+struct Line:
+  text: Str
+
+  def word(i: Int) -> Str:
+    ws = text.split(" ")
+    ws.at(i)
+
+def main:
+  var l = Line(text: "one two three")
+  ws = l.text.split(" ")
+  w = ws.at(2)
+  l.text = "four"
+  puts "#{ws.at(0)} #{w} #{ws.len} #{l.text}"
+  puts l.word(0)
+  var l2 = l
+  l2.text = l2.text + " five"
+  puts l.word(0)
+  puts l2.word(1)
+  puts l2

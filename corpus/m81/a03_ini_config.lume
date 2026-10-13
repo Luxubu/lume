@@ -1,0 +1,93 @@
+# a03_ini_config: an INI parser. Sections, `key = value` pairs, `;`
+# comment lines, blank lines, a repeated key, a value that holds `;` and
+# `=`, an empty section, and a broken file that fails with the line number.
+# Probes: a `var` section name assigned a `.slice` of the current line and
+# kept after that line is gone; keys and values cut with `s[a...b]` and
+# `.trim` kept in a map that is pushed into a struct field and then
+# replaced; `index_of`; `?` on a `T?` and on a `T or Error`; `.or_error`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# [server] 2 keys
+# [paths] 2 keys
+# [empty] 0 keys
+# [users] 1 keys
+# Section(name: "server", pairs: {"host": "example.local", "port": "8081"})
+# Some("8081")
+# 8082
+# /var/log/app ; not = a comment
+# None
+# ["ann", "bo", "cy"]
+# line 3: expected key = value, found `broken line`
+# Error("no section `db`")
+
+struct Section:
+  name: Str
+  pairs: {Str: Str}
+
+def parse_ini(text: Str) -> [Section] or Error:
+  var out: [Section] = []
+  var name = ""
+  var pairs: {Str: Str} = {}
+  for n, raw in text.lines.enumerate:
+    line = raw.trim
+    if line.empty? or line.starts_with?(";"):
+      next
+    if line.starts_with?("[") and line.ends_with?("]"):
+      if name != "" or pairs.any?:
+        out.push(Section(name: name, pairs: pairs))
+      name = line.slice(1, line.len - 2).trim
+      pairs = {}
+      next
+    match line.index_of("="):
+      Some(i) ->
+        key = line[0...i].trim
+        value = line[i + 1...line.len].trim
+        pairs[key] = value
+      None -> return Error("line #{n + 1}: expected key = value, found `#{line}`")
+  if name != "" or pairs.any?:
+    out.push(Section(name: name, pairs: pairs))
+  out
+
+def get(secs: [Section], sec: Str, key: Str) -> Str?:
+  found = secs.find { |x| x.name == sec }?
+  found.pairs[key]
+
+def section(secs: [Section], sec: Str) -> Section or Error:
+  secs.find { |x| x.name == sec }.or_error("no section `#{sec}`")
+
+def main -> () or Error:
+  text = """
+    ; app settings
+    [server]
+    host = example.local
+    port = 8080
+    port = 8081
+
+    [paths]
+    root = /srv/app
+    logs = /var/log/app ; not = a comment
+    [empty]
+    [users]
+    names = ann, bo , cy
+    """
+  secs = parse_ini(text)?
+  for s in secs:
+    puts "[#{s.name}] #{s.pairs.len} keys"
+  puts secs.at(0)
+  puts get(secs, "server", "port")
+  port = get(secs, "server", "port").or("0").to_int?
+  puts port + 1
+  puts get(secs, "paths", "logs").or("-")
+  puts get(secs, "nope", "x")
+  names = get(secs, "users", "names").or("").split(",").map { |w| w.trim }.to_list
+  puts names
+
+  bad = """
+    [a]
+    ok = 1
+    broken line
+    """
+  match parse_ini(bad):
+    Ok(s) -> puts "parsed #{s.len} sections"
+    Error(e) -> puts e.message
+  puts section(secs, "db")

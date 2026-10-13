@@ -1,0 +1,51 @@
+# Probes: `.slice(a, n)` on items of a split, read by `.to_int`, `.len`,
+# `.upcase`, `==` and interpolation, and kept in a list; offsets and counts
+# past the end, a zero count, a negative offset and a negative count; the
+# same on text with accented characters, counted in characters.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 2027
+# true
+# 45
+# 13/10
+# 4
+# 1185
+# ["26", "", ""]
+# [20]
+# []
+# sé
+# É
+# 3
+# true
+# ÚÑ
+# Error("`osé` is not an integer")
+
+def main:
+  stamp = "2026-10-13T19:45"
+  parts = stamp.split("T")
+  date = parts.at(0)
+  time = parts.at(1)
+  year = date.slice(0, 4).to_int.or(0)
+  puts year + 1
+  puts date.slice(5, 2) == "10"
+  puts time.slice(3, 99)
+  puts "#{date.slice(8, 2)}/#{date.slice(5, 2)}"
+  puts date.slice(0, 4).len
+  puts time.slice(0, 2).to_int.or(0) * 60 + time.slice(3, 2).to_int.or(0)
+  var bits: [Str] = []
+  bits.push(date.slice(2, 2))
+  bits.push(time.slice(99, 2))
+  bits.push(time.slice(1, 0))
+  puts bits
+  puts "[#{date.slice(0 - 3, 2)}]"
+  puts "[#{date.slice(2, 0 - 1)}]"
+
+  name = "José Ñúñez".split(" ")
+  first = name.at(0)
+  last = name.at(1)
+  puts first.slice(2, 2)
+  puts first.slice(3, 1).upcase
+  puts last.slice(1, 3).len
+  puts last.slice(0, 1) == "Ñ"
+  puts "#{last.slice(1, 2).upcase}"
+  puts first.slice(1, 9).to_int

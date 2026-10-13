@@ -1,0 +1,53 @@
+# Probes: generators that walk `lines`, split each line and yield an item,
+# or a tuple of an item and a number read from another; the text handed to
+# a generator is a `var` reassigned before the generator is walked; a
+# generator method over a field that is reassigned after the call; yielded
+# items pushed into a list.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ["a", "c"]
+# x:1
+# y:22
+# [("p", 3), ("q", 4)]
+# ["one", "three"]
+# changed
+# GET,PUT
+# ["DEL"]
+
+struct Log:
+  raw: Str
+
+  def verbs -> Iterator[Str]:
+    for l in raw.lines:
+      yield l.split(" ").at(0)
+
+def firsts(text: Str) -> Iterator[Str]:
+  for line in text.lines:
+    parts = line.split(" ")
+    yield parts.at(0) if parts.len > 1
+
+def pairs(text: Str) -> Iterator[(Str, Int)]:
+  for line in text.lines:
+    f = line.split("=")
+    yield (f.at(0), f.at(1).to_int.or(0))
+
+def main:
+  var doc = "a b\nsolo\nc d e"
+  g = firsts(doc)
+  doc = "changed"
+  puts g.to_list
+  for k, v in pairs("x=1\ny=22"):
+    puts "#{k}:#{v}"
+  kept = pairs("p=3\nq=4").to_list
+  puts kept
+  var acc: [Str] = []
+  for w in firsts("one two\nthree four"):
+    acc.push(w)
+  puts acc
+  puts doc
+
+  var log = Log(raw: "GET /a\nPUT /b")
+  vs = log.verbs
+  log.raw = "DEL /c"
+  puts vs.join(",")
+  puts log.verbs.to_list

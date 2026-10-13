@@ -1,0 +1,86 @@
+# a05_fixed_width: fixed-width records read by column position, then laid
+# out again as an aligned table with a rule and a total. Probes: `.slice`
+# at fixed offsets, `.trim`, `.to_int` on a slice; a name bound to a slice
+# read again inside a `map_error` block and kept in a struct field; a price
+# split on "." with both pieces read by position; the source text, a
+# `var`, cleared after parsing; a `var` line replaced while pieces cut from
+# it are still to be printed; widths worked out over a list of lists.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# skipped doohickey: `x` is not an integer
+# item    qty   each   total
+# ------  ---  -----  ------
+# widget   12   2.50   30.00
+# gadget    3  10.00   30.00
+# gizmo   100   0.75   75.00
+# total               135.00
+# Item(name: "gizmo", qty: 100, cents: 75)
+# abc|7|changed
+# Error("bad price `1,25`")
+
+struct Item:
+  name: Str
+  qty: Int
+  cents: Int
+
+  def total -> Int = qty * cents
+
+def parse_money(s: Str) -> Int or Error:
+  parts = s.trim.split(".")
+  if parts.len != 2:
+    return Error("bad price `#{s.trim}`")
+  parts.at(0).to_int? * 100 + parts.at(1).to_int?
+
+def money(c: Int) -> Str = (c.to_float / 100.0).decimals(2)
+
+def parse_row(line: Str) -> Item or Error:
+  name = line.slice(0, 10).trim
+  qty = line.slice(10, 5).trim.to_int.map_error { |e| Error("#{name}: #{e.message}") }?
+  price = parse_money(line.slice(15, 6))?
+  Item(name: name, qty: qty, cents: price)
+
+def render(rows: [[Str]]) -> [Str]:
+  var widths: [Int] = [0, 0, 0, 0]
+  for r in rows:
+    for i, c in r.enumerate:
+      widths[i] = widths.at(i).max(c.len)
+  var out: [Str] = []
+  for n, r in rows.enumerate:
+    var cells: [Str] = []
+    for i, c in r.enumerate:
+      cell = if i == 0: c.pad_right(widths.at(i)) else: c.pad(widths.at(i))
+      cells.push(cell)
+    out.push(cells.join("  ").trim_right)
+    if n == 0:
+      out.push(widths.map { |w| "-".repeat(w) }.join("  "))
+  out
+
+def main:
+  var text = """
+    widget       12  2.50
+    gadget        3 10.00
+    gizmo       100  0.75
+    doohickey     x  1.00
+    """
+  var items: [Item] = []
+  for line in text.lines:
+    match parse_row(line):
+      Ok(it) -> items.push(it)
+      Error(e) -> puts "skipped #{e.message}"
+  text = ""
+
+  var rows: [[Str]] = [["item", "qty", "each", "total"]]
+  for it in items:
+    rows.push([it.name, it.qty.to_s, money(it.cents), money(it.total)])
+  grand = items.map { |it| it.total }.sum
+  rows.push(["total", "", "", money(grand)])
+  for l in render(rows):
+    puts l
+  puts items.max_by { |it| it.qty }.or(items.at(0))
+
+  var line = "abc       7     1,25"
+  first = line.slice(0, 10).trim
+  qty = line.slice(10, 5).trim
+  line = "changed"
+  puts "#{first}|#{qty}|#{line}"
+  puts parse_money("abc       7     1,25".slice(15, 6))

@@ -1,0 +1,29 @@
+# Probes: an item of a `var` line captured by a kept block, the list itself
+# read inside another kept block, an item and the list read by a one-line
+# `spawn:`, then the line reassigned before any of them runs; the list
+# mapped into one task per item.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# BETA
+# >-gamma
+# beta/alpha/3
+# beta
+# zzz
+# [5, 4, 5]
+
+async def main:
+  var line = "alpha beta gamma"
+  parts = line.split(" ")
+  w = parts.at(1)
+  f: () -> Str = do
+    w.upcase
+  g: (Str) -> Str = { |p| p + "-" + parts.at(2) }
+  t = spawn: "#{w}/#{parts.at(0)}/#{parts.len}"
+  line = "zzz"
+  puts f()
+  puts g(">")
+  puts await t
+  puts w
+  puts line
+  ts = parts.map { |p| spawn: p.len }.to_list
+  puts await ts

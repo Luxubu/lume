@@ -1,0 +1,16 @@
+skip: broken: uid `abc` is not an integer
+skip: short: expected 7 fields, found 3
+5 users
+system: root, daemon
+people: ann, bo, cy
+bash    root bo cy
+nologin daemon
+zsh     ann
+root, daemon, Ann Lee, Bo, Cy
+ann in ann
+bo in bo
+cy in users
+{"root": [], "users": ["ann", "cy"], "ann": [], "bo": []}
+unusual home: daemon /usr/sbin
+User(name: "ann", uid: 1000, gid: 1000, full: "Ann Lee", home: "/home/ann", shell: "/bin/zsh")
+exit: 0

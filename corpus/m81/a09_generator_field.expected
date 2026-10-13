@@ -1,0 +1,7 @@
+error: a generator cannot be held as an `Iterator[Str]` value: it is used up as it is walked, and such a value is copied
+  --> corpus/m81/a09_generator_field.lume:24:39
+   |
+24 |   src = Source(name: "inline", lines: nonblank(text))
+   |                                       ^
+  help: a generator lives in a local, a parameter `xs: Iterator[T]`, or a function's result `-> Iterator[T]`; to keep the items, `.to_list`
+exit: 1

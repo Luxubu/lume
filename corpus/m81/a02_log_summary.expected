@@ -1,0 +1,16 @@
+7 events from 8 lines
+Event(time: "09:00:01", level: "INFO", source: "auth", text: "login ann")
+INFO  3
+WARN  1
+ERROR 3
+auth: 09:01, 09:04
+web: 09:02
+repeat: bad password for bo
+busiest minute 09:00: 2
+09:00:01 ann logged in
+09:01:15 bo failed
+09:03:10 cy logged in
+09:04:45 bo failed
+log now: []
+last: Event(time: "09:04:45", level: "ERROR", source: "auth", text: "bad password for bo")
+exit: 0

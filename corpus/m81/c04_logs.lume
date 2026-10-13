@@ -1,0 +1,153 @@
+# c04_logs: an access-log analyser: requests per minute (gaps filled), the
+# top N paths, and a breakdown by status class.
+# Probes: `split(" ")` read only by position with a duration item named and
+# then `.slice`d and read by `to_int`; a clock item split again by `:`;
+# fields copied out into a struct kept in a list; the same list of hits
+# given to two report structs; an interface with a default method held in a
+# `[Report]`; `group_by` then `sort_by` on a tuple key and `take`; `match`
+# on Int ranges; `warn` for lines that cannot be read; and a `var` line
+# replaced while its split list and an item of it are still read.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# == requests per minute ==
+# 09:01 ###   3
+# 09:02 ###   3
+# 09:03       0
+# 09:04 ###   3
+# == top 2 paths ==
+#   5 /api/items   avg 158ms
+#   3 /home        avg 12ms
+# == by status ==
+# 2xx 6
+# 5xx 2
+# 4xx 1
+# slowest: GET /api/items at 09:02 (310ms)
+# 9 read, 2 skipped
+# /late 5 5 09:59:59 GET /LATE 200 1MS
+# EXPECTED STDERR:
+# line 5: expected 6 fields, found 3
+# line 8: bad duration `fast`
+
+LOG = [
+  "2026-10-13 09:01:05 GET /home 200 12ms",
+  "2026-10-13 09:01:40 GET /api/items 200 48ms",
+  "2026-10-13 09:01:59 POST /api/items 201 95ms",
+  "2026-10-13 09:02:03 GET /home 200 10ms",
+  "garbage line here",
+  "2026-10-13 09:02:30 GET /api/items 500 310ms",
+  "2026-10-13 09:02:31 GET /api/items 500 290ms",
+  "2026-10-13 09:03:15 GET /home 200 fast",
+  "2026-10-13 09:04:00 GET /login 404 5ms",
+  "2026-10-13 09:04:10 GET /home 200 14ms",
+  "2026-10-13 09:04:12 GET /api/items 200 51ms",
+].join("\n")
+
+struct Hit:
+  minute: Int
+  method: Str
+  path: Str
+  status: Int
+  ms: Int
+
+# "09:01:05" is minute 541 of the day.
+def minute_of(clock: Str) -> Int or Error:
+  hms = clock.split(":")
+  if hms.len != 3:
+    return Error("bad time `#{clock}`")
+  hms.at(0).to_int? * 60 + hms.at(1).to_int?
+
+def parse(line: Str) -> Hit or Error:
+  f = line.split(" ")
+  if f.len != 6:
+    return Error("expected 6 fields, found #{f.len}")
+  took = f.at(5)
+  if not took.ends_with?("ms"):
+    return Error("bad duration `#{took}`")
+  Hit(minute: minute_of(f.at(1))?, method: f.at(2), path: f.at(3), status: f.at(4).to_int?, ms: took.slice(0, took.len - 2).to_int?)
+
+def two(n: Int) -> Str = (n + 100).to_s.slice(1, 2)
+
+def clock(m: Int) -> Str = "#{two(m / 60)}:#{two(m % 60)}"
+
+def class_of(status: Int) -> Str:
+  match status:
+    200..299 -> "2xx"
+    400..499 -> "4xx"
+    500..599 -> "5xx"
+    _ -> "other"
+
+interface Report:
+  def title -> Str
+  def body -> [Str]
+
+  def render -> Str:
+    "== #{title} ==\n" + body.join("\n")
+
+struct ByMinute:
+  counts: {Int: Int}
+
+  def title -> Str = "requests per minute"
+
+  def body -> [Str]:
+    lo = counts.keys.min.or(0)
+    hi = counts.keys.max.or(0)
+    var out: [Str] = []
+    for m in lo..hi:
+      n = counts[m].or(0)
+      bar = "#".repeat(n).pad_right(5)
+      out.push("#{clock(m)} #{bar} #{n}")
+    out
+
+struct Top:
+  hits: [Hit]
+  n: Int
+
+  def title -> Str = "top #{n} paths"
+
+  def body -> [Str]:
+    ranked = hits.group_by { |h| h.path }.to_list.sort_by { |p| (0 - p.1.len, p.0) }
+    var out: [Str] = []
+    for path, hs in ranked.take(n):
+      avg = hs.map { |h| h.ms }.sum / hs.len
+      out.push("#{hs.len.pad(3)} #{path.pad_right(12)} avg #{avg}ms")
+    out
+
+struct Classes:
+  hits: [Hit]
+
+  def title -> Str = "by status"
+
+  def body -> [Str]:
+    var out: [Str] = []
+    for k, hs in hits.group_by { |h| class_of(h.status) }:
+      out.push("#{k} #{hs.len}")
+    match hits.max_by { |h| h.ms }:
+      Some(h) -> out.push("slowest: #{h.method} #{h.path} at #{clock(h.minute)} (#{h.ms}ms)")
+      None -> out.push("slowest: -")
+    out
+
+def main:
+  var hits: [Hit] = []
+  var skipped = 0
+  for i, line in LOG.lines.enumerate:
+    match parse(line):
+      Ok(h) -> hits.push(h)
+      Error(e) ->
+        skipped += 1
+        warn "line #{i + 1}: #{e.message}"
+
+  var counts: {Int: Int} = {}
+  for h in hits:
+    counts[h.minute] = counts[h.minute].or(0) + 1
+
+  reports: [Report] = [ByMinute(counts: counts), Top(hits: hits, n: 2), Classes(hits: hits)]
+  for r in reports:
+    puts r.render
+  puts "#{hits.len} read, #{skipped} skipped"
+
+  # a `var` line replaced while its pieces are still read
+  var last = "09:59:59 GET /late 200 1ms"
+  pieces = last.split(" ")
+  path = pieces.at(2)
+  last = last.upcase
+  puts "#{path} #{path.len} #{pieces.len} #{last}"

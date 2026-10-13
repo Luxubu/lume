@@ -1,0 +1,11 @@
+skipped doohickey: `x` is not an integer
+item    qty   each   total
+------  ---  -----  ------
+widget   12   2.50   30.00
+gadget    3  10.00   30.00
+gizmo   100   0.75   75.00
+total               135.00
+Item(name: "gizmo", qty: 100, cents: 75)
+abc|7|changed
+Error("bad price `1,25`")
+exit: 0

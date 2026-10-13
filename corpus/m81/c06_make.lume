@@ -1,0 +1,128 @@
+# c06_make: a Makefile-like dependency resolver over `target: deps` lines:
+# a build order, the source files, what a changed file forces to rebuild,
+# and the errors (a cycle, a missing rule, a bad line, a target twice).
+# Probes: `split("#").at(0)` to cut comments; `split(":")` taken apart by a
+# list pattern, its first item trimmed and kept twice (a map key and a
+# list); bare `split` on the rest kept as a map value; a depth-first walk
+# through a method with a `var` list parameter and `T or Error`; generator
+# methods using `var` locals and a set; and a `var` spec text replaced after
+# the rules parsed from it are built.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# targets: app, main.o, util.o, libnet.a, net.o, test, fixtures
+# build test: main.o util.o net.o libnet.a app fixtures test
+# build app: main.o util.o net.o libnet.a app
+# sources: main.c util.h util.c net.c net.h
+# util.h changed: main.o util.o app test
+# net.c changed: net.o libnet.a app test
+# README changed: (nothing)
+# error: cycle: a -> b -> c -> a
+# error: `x` needs `y`, and there is no rule for it
+# error: line 2: expected `target: deps`
+# error: line 3: `a` has two rules
+# x.o y.o / lib.a: z.o y.o
+
+MAKEFILE = [
+  "# build rules",
+  "app: main.o util.o libnet.a",
+  "main.o: main.c util.h",
+  "util.o: util.c util.h",
+  "libnet.a: net.o   # static",
+  "net.o: net.c net.h",
+  "test: app fixtures",
+  "fixtures:",
+].join("\n")
+
+CYCLIC = "a: b\nb: c\nc: a"
+MISSING = "x: y"
+BROKEN = "all: a b\nall: a: b"
+TWICE = "a: x.c\nb: a\na: y.c"
+
+struct Rules:
+  deps: {Str: [Str]}
+  order: [Str]
+
+  def target?(name: Str) -> Bool = deps.contains?(name)
+
+  def deps_of(name: Str) -> [Str] = deps.get(name).or([])
+
+  # Depth first: everything a target needs comes before it. A name with no
+  # rule is a source file if it has a `.` in it.
+  def visit(name: Str, path: [Str], var done: [Str]) -> () or Error:
+    if done.contains?(name):
+      return ()
+    if path.contains?(name):
+      return Error("cycle: #{(path + [name]).join(" -> ")}")
+    if not target?(name):
+      if name.contains?("."):
+        return ()
+      return Error("`#{path.last.or("?")}` needs `#{name}`, and there is no rule for it")
+    for d in deps_of(name):
+      visit(d, path + [name], done)?
+    done.push(name)
+
+  def build_order(goal: Str) -> [Str] or Error:
+    var done: [Str] = []
+    visit(goal, [], done)?
+    done
+
+  def depends_on?(name: Str, file: Str) -> Bool:
+    for d in deps_of(name):
+      if d == file or depends_on?(d, file):
+        return true
+    false
+
+  def sources -> Iterator[Str]:
+    var seen: {Str} = {}
+    for t in order:
+      for d in deps_of(t):
+        if not target?(d) and seen.add(d):
+          yield d
+
+  def rebuilt_by(file: Str, goal: Str) -> Iterator[Str]:
+    for t in build_order(goal).or([]):
+      yield t if depends_on?(t, file)
+
+def parse_rules(text: Str) -> Rules or Error:
+  var deps: {Str: [Str]} = {}
+  var order: [Str] = []
+  for i, raw in text.lines.enumerate:
+    line = raw.split("#").at(0).trim
+    next if line.empty?
+    match line.split(":"):
+      [target, rest] ->
+        name = target.trim
+        if name.empty? or name.contains?(" "):
+          return Error("line #{i + 1}: bad target `#{name}`")
+        if deps.contains?(name):
+          return Error("line #{i + 1}: `#{name}` has two rules")
+        deps[name] = rest.split.to_list
+        order.push(name)
+      _ -> return Error("line #{i + 1}: expected `target: deps`")
+  Rules(deps: deps, order: order)
+
+def main -> () or Error:
+  rules = parse_rules(MAKEFILE)?
+  puts "targets: #{rules.order.join(", ")}"
+  for goal in ["test", "app"]:
+    steps = rules.build_order(goal)?
+    puts "build #{goal}: #{steps.join(" ")}"
+  puts "sources: #{rules.sources.to_list.join(" ")}"
+  for f in ["util.h", "net.c", "README"]:
+    changed = rules.rebuilt_by(f, "test").to_list
+    shown = if changed.empty?: "(nothing)" else: changed.join(" ")
+    puts "#{f} changed: #{shown}"
+
+  for text in [CYCLIC, MISSING, BROKEN, TWICE]:
+    match parse_rules(text):
+      Ok(r) ->
+        match r.build_order(r.order.at(0)):
+          Ok(steps) -> puts steps.join(" ")
+          Error(e) -> puts "error: #{e.message}"
+      Error(e) -> puts "error: #{e.message}"
+
+  # the rules keep their own names after the spec they came from changes
+  var spec = "lib.a: x.o y.o"
+  r2 = parse_rules(spec)?
+  spec = spec.replace("x.o", "z.o")
+  puts "#{r2.deps_of("lib.a").join(" ")} / #{spec}"

@@ -1,0 +1,9 @@
+["a", "c"]
+x:1
+y:22
+[("p", 3), ("q", 4)]
+["one", "three"]
+changed
+GET,PUT
+["DEL"]
+exit: 0

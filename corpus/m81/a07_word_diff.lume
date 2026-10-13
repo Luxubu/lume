@@ -1,0 +1,64 @@
+# a07_word_diff: a diff of two word lists, then of two short texts line by
+# line. Probes: words from a bare `split` of two `var` texts, both replaced
+# while the lists are still in use; an item bound to a name and given to a
+# task (`spawn:`) that runs after its text was replaced; sets built from
+# the lists, `diff`, `intersect`, `sort`; `zip` + `enumerate` comparing
+# words by position; `[i]` on lists of lines matched as a tuple of two
+# optionals with a guard.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# removed: ["brown", "dog", "jumps"]
+# added: ["cat", "leaps", "red", "today"]
+# common: 5
+# 2: brown -> red
+# 4: jumps -> leaps
+# 8: dog -> cat
+# + today
+# longest new word: quick
+#   alpha
+# - beta
+# + BETA
+#   gamma
+# - delta
+# THE 9/10
+# texts now: replaced, replaced
+
+def mark(a: Str?, b: Str?) -> Str:
+  match (a, b):
+    (Some(x), Some(y)) if x == y -> "  #{x}"
+    (Some(x), Some(y)) -> "- #{x}\n+ #{y}"
+    (Some(x), None) -> "- #{x}"
+    (None, Some(y)) -> "+ #{y}"
+    (None, None) -> ""
+
+async def main:
+  var old_text = "the quick brown fox jumps over the lazy dog"
+  var new_text = "the quick red fox leaps over the lazy cat today"
+  olds = old_text.split
+  news = new_text.split
+  first_old = olds.at(0)
+  t = spawn: "#{first_old.upcase} #{olds.len}/#{news.len}"
+  old_text = "replaced"
+  new_text = "replaced"
+
+  removed = olds.to_set.diff(news.to_set).sort
+  added = news.to_set.diff(olds.to_set).sort
+  common = olds.to_set.intersect(news.to_set).len
+  puts "removed: #{removed}"
+  puts "added: #{added}"
+  puts "common: #{common}"
+  for i, p in olds.zip(news).enumerate:
+    puts "#{i}: #{p.0} -> #{p.1}" if p.0 != p.1
+  for w in news.skip(olds.len):
+    puts "+ #{w}"
+  longest = news.max_by { |w| w.len }.or("")
+  puts "longest new word: #{longest}"
+
+  old_lines = "alpha\nbeta\ngamma\ndelta".lines.to_list
+  new_lines = "alpha\nBETA\ngamma".lines.to_list
+  n = old_lines.len.max(new_lines.len)
+  for i in 0...n:
+    puts mark(old_lines[i], new_lines[i])
+
+  puts await t
+  puts "texts now: #{old_text}, #{new_text}"

@@ -1,0 +1,71 @@
+# a06_template: a template filler for `{{name}}` placeholders, with the
+# values read from `key: value` lines. Probes: a `var rest` replaced by a
+# `.slice` of a piece that was itself sliced from `rest`; keys cut with
+# `.slice` and `.trim` used for a lookup and inside an error message; map
+# keys and values from `.slice` kept after their source text, a `var`, is
+# cleared; a value holding `:`; `index_of`, `.or_error` and `?`; `while
+# true` left by `break` from a `match` arm.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# {"name": "Ada", "city": "London", "items": "3", "greeting": "Hello: friend"}
+# 7 placeholders
+# Hello: friend, Ada!
+# You have 3 items waiting in London.
+# Ada, Ada, Ada.
+# Error("no value for `title`")
+# Error("unclosed placeholder: name")
+# Ok("no placeholders here")
+# 6
+
+def parse_vars(text: Str) -> {Str: Str}:
+  var vars: {Str: Str} = {}
+  for line in text.lines:
+    match line.index_of(":"):
+      Some(i) -> vars[line.slice(0, i).trim] = line.slice(i + 1, line.len).trim
+      None -> ()
+  vars
+
+def fill(tpl: Str, vars: {Str: Str}) -> Str or Error:
+  var out = ""
+  var rest = tpl
+  while true:
+    match rest.index_of("{{"):
+      None ->
+        out = out + rest
+        break
+      Some(i) ->
+        out = out + rest.slice(0, i)
+        tail = rest.slice(i + 2, rest.len)
+        match tail.index_of("}}"):
+          None -> return Error("unclosed placeholder: #{tail}")
+          Some(j) ->
+            key = tail.slice(0, j).trim
+            value = vars[key].or_error("no value for `#{key}`")?
+            out = out + value
+            rest = tail.slice(j + 2, tail.len)
+  out
+
+def main -> () or Error:
+  var src = """
+    name: Ada
+    city:  London
+    items: 3
+    greeting: Hello: friend
+    """
+  vars = parse_vars(src)
+  src = ""
+  puts vars
+
+  tpl = """
+    {{greeting}}, {{ name }}!
+    You have {{items}} items waiting in {{city}}.
+    {{name}}, {{name}}, {{name}}.
+    """
+  count = tpl.split("{{").len - 1
+  puts "#{count} placeholders"
+  puts fill(tpl, vars)?
+  puts fill("Dear {{title}} {{name}}", vars)
+  puts fill("oops {{name", vars)
+  puts fill("no placeholders here", vars)
+  n = vars["items"].or("0").to_int.or(0)
+  puts n * 2

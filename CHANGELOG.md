@@ -17,6 +17,7 @@
   without.
 - **Faster**: an item of a list of slices bound to a name, and a
   `.slice` read by a text method, are read in place.
+- **Fixed**: `enumerate` and `zip` over split text, used as map keys.
 - **VS Code**: the extension packages and installs; `yield` is coloured;
   completion after `.` on a generator, and go to definition on an
   interface's default method.

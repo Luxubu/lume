@@ -17,3 +17,5 @@ ann took 62
 bo took 14
 ["ann", "bo"]
 ["ALPHA BETA", "GAMMA DELTA", "ann 31ms", "bo 7ms"]
+{"region": 0, "rep": 1}
+{"x": "p", "y": "q"}

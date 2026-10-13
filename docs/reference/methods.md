@@ -62,7 +62,7 @@ lists its methods. In short:
 | `chars` | | `[Char]` | the characters, as a list |
 | `split` | | chain of `Str` | the words, split on whitespace, empty pieces dropped |
 | `split` | `Str` | chain of `Str` | every piece between separators, empties kept |
-| `lines` | | chain of `Str` | the lines |
+| `lines` | | chain of `Str` | the lines; an empty line between two others is an empty `Str` |
 | `to_int` | | `Int or Error` | reads a whole number |
 | `to_float` | | `Float or Error` | reads a number |
 | `digit?`, `alpha?`, `space?` | | `Bool` | true when every character is one; false for `""` |

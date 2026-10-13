@@ -1,0 +1,16 @@
+removed: ["brown", "dog", "jumps"]
+added: ["cat", "leaps", "red", "today"]
+common: 5
+2: brown -> red
+4: jumps -> leaps
+8: dog -> cat
++ today
+longest new word: quick
+  alpha
+- beta
++ BETA
+  gamma
+- delta
+THE 9/10
+texts now: replaced, replaced
+exit: 0

@@ -1,0 +1,13 @@
+{"region": 0, "rep": 1, "units": 2, "price": 3}
+5 sales, 2 skipped
+region reps     units  revenue
+north  ann+cy      19     5100
+south  bo+ed       14     9050
+east   gus          2     2400
+total 16550
+best: bo in south, 5000
+skipped line 5: di: `x` is not an integer
+skipped line 6: expected 4 fields, found 3
+first rep of each region: ann, bo, gus
+source now: gone
+exit: 0

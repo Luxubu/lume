@@ -1,0 +1,174 @@
+# c05_sheet: a mini spreadsheet. Each line is `CELL=formula`; a formula is
+# numbers and cell names joined by + - * /, with * and / binding tighter.
+# Probes: `split("=")` read by position with both items trimmed and the
+# name kept twice (a map key and a list); a tokenizer over `chars` that
+# builds a `var` word, hands it to a function that keeps it in an enum
+# payload, then resets the word; `Char` matched against one-character
+# literals; recursive evaluation through methods with `T or Error` and `?`;
+# cycle detection with a list of names; and a grid laid out with `pad`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# A1 = 3
+# B1 = 6
+# C1 = 15
+# A2 = 13
+# B2 = 69
+# D1 = 0
+# C2 = error: division by zero
+# A3 = error: cycle: A3 -> B3 -> A3
+# B3 = error: cycle: B3 -> A3 -> B3
+# C3 = error: `Z9` is empty
+# D3 = error: two values in a row
+# E1 = error: `2x` is not a number or a cell
+# E2 = error: unexpected `%`
+# cannot read `oops`
+# 6 worked out, 7 failed, total 106
+#        A     B     C     D
+# 1      3     6    15     0
+# 2     13    69  #ERR     .
+# 3   #ERR  #ERR  #ERR  #ERR
+
+TEXT = [
+  "A1=3",
+  "B1=A1*2",
+  "C1=A1+B1*2",
+  "A2=C1-B1/3",
+  "B2=A2*A2-100",
+  "D1=A1-3",
+  "C2=B2/D1",
+  "A3=B3+1",
+  "B3=A3*2",
+  "C3=Z9+1",
+  "D3=4 5",
+  "E1=2x",
+  "E2=A1%2",
+  "oops",
+].join("\n")
+
+enum Tok:
+  Num(v: Int)
+  Ref(name: Str)
+  Op(sym: Str)
+
+def to_tok(w: Str) -> Tok or Error:
+  if w.digit?:
+    return Num(w.to_int?)
+  first = w[0].or(" ")
+  if first.alpha? and first.upper? and w.slice(1, w.len).digit?:
+    return Ref(w)
+  Error("`#{w}` is not a number or a cell")
+
+def tokens(src: Str) -> [Tok] or Error:
+  var out: [Tok] = []
+  var word = ""
+  for c in src.chars:
+    if c.alnum?:
+      word = word + c
+    else:
+      if not word.empty?:
+        out.push(to_tok(word)?)
+        word = ""
+      match c:
+        "+" | "-" | "*" | "/" -> out.push(Op(c.to_s))
+        " " -> ()
+        _ -> return Error("unexpected `#{c}`")
+  if not word.empty?:
+    out.push(to_tok(word)?)
+  out
+
+def combine(op: Str, a: Int, b: Int) -> Int or Error:
+  match op:
+    "" -> b
+    "*" -> a * b
+    "/" ->
+      if b == 0:
+        return Error("division by zero")
+      a / b
+    _ -> Error("unknown operator `#{op}`")
+
+struct Sheet:
+  formulas: {Str: Str}
+
+  def value(cell: Str, seen: [Str]) -> Int or Error:
+    if seen.contains?(cell):
+      return Error("cycle: #{(seen + [cell]).join(" -> ")}")
+    src = formulas[cell].or_error("`#{cell}` is empty")?
+    eval(tokens(src)?, seen + [cell])
+
+  def operand(t: Tok, seen: [Str]) -> Int or Error:
+    match t:
+      Num(v) -> v
+      Ref(name) -> value(name, seen)
+      Op(sym) -> Error("`#{sym}` is not a value")
+
+  def eval(toks: [Tok], seen: [Str]) -> Int or Error:
+    var total = 0
+    var sign = 1
+    var term = 0
+    var pending = ""
+    var want_value = true
+    for t in toks:
+      match t:
+        Op(sym) ->
+          if want_value:
+            return Error("`#{sym}` where a value should be")
+          want_value = true
+          if sym == "+" or sym == "-":
+            total += sign * term
+            sign = if sym == "+": 1 else: 0 - 1
+            pending = ""
+          else:
+            pending = sym
+        other ->
+          if not want_value:
+            return Error("two values in a row")
+          want_value = false
+          term = combine(pending, term, operand(other, seen)?)?
+    if want_value:
+      return Error("ends where a value should be")
+    total + sign * term
+
+def read_sheet(text: Str) -> (Sheet, [Str], [Str]):
+  var formulas: {Str: Str} = {}
+  var order: [Str] = []
+  var problems: [Str] = []
+  for line in text.lines:
+    parts = line.split("=")
+    if parts.len != 2:
+      problems.push("cannot read `#{line}`")
+      next
+    name = parts.at(0).trim
+    formulas[name] = parts.at(1).trim
+    order.push(name)
+  (Sheet(formulas: formulas), order, problems)
+
+def cell_text(sheet: Sheet, name: Str) -> Str:
+  if not sheet.formulas.contains?(name):
+    return ".".pad(6)
+  match sheet.value(name, []):
+    Ok(v) -> v.pad(6)
+    Error(_) -> "#ERR".pad(6)
+
+def main:
+  (sheet, order, problems) = read_sheet(TEXT)
+  var good = 0
+  var failed = 0
+  var total = 0
+  for name in order:
+    match sheet.value(name, []):
+      Ok(v) ->
+        good += 1
+        total += v
+        puts "#{name} = #{v}"
+      Error(e) ->
+        failed += 1
+        puts "#{name} = error: #{e.message}"
+  for p in problems:
+    puts p
+  puts "#{good} worked out, #{failed} failed, total #{total}"
+
+  cols = ["A", "B", "C", "D"]
+  puts "  " + cols.map { |c| c.pad(6) }.join("")
+  for row in 1..3:
+    cells = cols.map { |c| cell_text(sheet, "#{c}#{row}") }.join("")
+    puts "#{row} #{cells}"

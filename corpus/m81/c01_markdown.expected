@@ -1,0 +1,24 @@
+RELEASE NOTES
+=============
+Lume now reads text in place.
+
+Changes
+-------
+  * fewer copies when splitting
+  * names kept safely
+  1) split
+  2) lines
+
+  | measure, do not guess
+Thanks
+------
+Plain words end here.
+--
+Release Notes
+  Changes
+    Thanks
+{1: ["Release Notes"], 2: ["Changes"], 3: ["Thanks"]}
+15 lines, 10 words in paragraphs
+Draft -> ## Final heading (5)
+level 2: Final heading
+exit: 0

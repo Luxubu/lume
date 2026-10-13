@@ -82,4 +82,14 @@ def main -> () or Error:
     puts "#{name} took #{took.slice(0, took.len - 2).to_int.or(0) * 2}"
   puts names
   puts kept
+
+  # the parts of `enumerate` and `zip` over split text are text of their own
+  var cols: {Str: Int} = {}
+  for i, col in "region,rep".split(",").enumerate:
+    cols[col] = i
+  var pairs: {Str: Str} = {}
+  for a, b in "x y".split(" ").zip("p q".split(" ")):
+    pairs[a] = b
+  puts cols
+  puts pairs
   ()

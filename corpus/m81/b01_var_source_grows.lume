@@ -1,0 +1,32 @@
+# Probes: a `var` line split and read by position, then grown in place with
+# `line = line + item` (the `acc = acc + w` form) while the list and a name
+# bound to an item are still used; then replaced outright. A second `var` is
+# replaced each time round a `while` by a slice of itself, with the list
+# from that round read after the replacement.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ab cdcd
+# ab cd 2
+# abab x
+# a 4 d [b,c,d]
+# b 3 d [c,d]
+# c 2 d [d]
+# d
+
+def main:
+  var line = "ab cd"
+  parts = line.split(" ")
+  first = parts.at(0)
+  line = line + parts.at(1)
+  puts line
+  puts "#{first} #{parts.at(1)} #{parts.len}"
+  line = "x"
+  puts "#{parts.at(0)}#{first} #{line}"
+
+  var s = "a,b,c,d"
+  while s.contains?(","):
+    ps = s.split(",")
+    head = ps.at(0)
+    s = s.slice(head.len + 1, s.len)
+    puts "#{head} #{ps.len} #{ps.at(ps.len - 1)} [#{s}]"
+  puts s

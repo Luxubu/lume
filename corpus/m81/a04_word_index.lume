@@ -1,0 +1,63 @@
+# a04_word_index: a word index, word -> the line numbers it is on, over a
+# short text with capitals and punctuation. Probes: words from a bare
+# `split` of each line, cleaned by a function and used twice (as a key in
+# two maps); a map of sets written through missing keys; the text, a `var`,
+# replaced after indexing; a query split into words and kept in a list;
+# set `intersect` and `sort`; `max_by` and `filter` on a map; words kept in
+# a list of tuples next to the line they came from.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# a     2
+# cat   1,2
+# dog   2
+# end   3
+# ran   2
+# sat   1,2
+# the   1,2,3
+# then  2
+# Some(("the", 3))
+# ["a", "dog", "then", "ran", "end"]
+# Cat dog: [2]
+# the SAT: [1, 2]
+# cat end: []
+# THE END
+# [("the", "The"), ("a", "A"), ("the", "the")]
+
+def clean(w: Str) -> Str = w.downcase.chars.filter { |c| c.alpha? }.join("")
+
+def lookup(idx: {Str: {Int}}, query: Str) -> [Int]:
+  words = query.split.map { |w| clean(w) }.to_list
+  var hits = idx[words.at(0)].or({})
+  for w in words.skip(1):
+    hits = hits.intersect(idx[w].or({}))
+  hits.sort
+
+def main:
+  var text = """
+    The cat sat.
+    A dog sat, then the cat ran!
+    the end
+    """
+  var idx: {Str: {Int}} = {}
+  var counts: {Str: Int} = {}
+  var openers: [(Str, Str)] = []
+  for i, line in text.lines.enumerate:
+    ws = line.split
+    first = ws.at(0)
+    openers.push((clean(first), first))
+    for raw in ws:
+      w = clean(raw)
+      next if w.empty?
+      idx[w].add(i + 1)
+      counts[w] = counts[w].or(0) + 1
+  text = text.upcase
+
+  for w in idx.keys.sort:
+    nums = idx[w].or({}).to_list.join(",")
+    puts "#{w.pad_right(5)} #{nums}"
+  puts counts.max_by { |k, v| v }
+  puts counts.filter { |k, v| v == 1 }.keys
+  for q in ["Cat dog", "the SAT", "cat end"]:
+    puts "#{q}: #{lookup(idx, q)}"
+  puts text.lines.to_list.at(2)
+  puts openers

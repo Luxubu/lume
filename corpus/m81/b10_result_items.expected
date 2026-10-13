@@ -1,0 +1,7 @@
+Entry(key: "a", val: 1)
+Error("`x` is not an integer")
+Error("no key in [=3]")
+Error("bad line: c")
+zed
+q=5 q=6
+exit: 0

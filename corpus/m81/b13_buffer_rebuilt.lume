@@ -1,0 +1,29 @@
+# Probes: a `var` buffer declared outside a loop, set from each chunk,
+# split, an item named, then the buffer replaced by a changed copy of
+# itself before the item and the list are read; the item used as a map
+# key. Then `lines` read by position, with an item named and the last
+# item found by a computed position.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# k1 v K1 V
+# k2 w K2 W
+# k1 x K1 X
+# {"k1": 2, "k2": 1}
+# 3 SECOND third
+
+def main:
+  var buf = ""
+  var index: {Str: Int} = {}
+  for i, chunk in ["k1 v", "k2 w", "k1 x"].enumerate:
+    buf = chunk
+    parts = buf.split(" ")
+    key = parts.at(0)
+    buf = buf.upcase
+    index[key] = index[key].or(0) + i
+    puts "#{key} #{parts.at(1)} #{buf}"
+  puts index
+
+  text = "first\nsecond\nthird"
+  ls = text.lines
+  mid = ls.at(1)
+  puts "#{ls.len} #{mid.upcase} #{ls.at(ls.len - 1)}"

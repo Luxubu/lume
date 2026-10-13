@@ -1,0 +1,13 @@
+targets: app, main.o, util.o, libnet.a, net.o, test, fixtures
+build test: main.o util.o net.o libnet.a app fixtures test
+build app: main.o util.o net.o libnet.a app
+sources: main.c util.h util.c net.c net.h
+util.h changed: main.o util.o app test
+net.c changed: net.o libnet.a app test
+README changed: (nothing)
+error: cycle: a -> b -> c -> a
+error: `x` needs `y`, and there is no rule for it
+error: line 2: expected `target: deps`
+error: line 3: `a` has two rules
+x.o y.o / lib.a: z.o y.o
+exit: 0

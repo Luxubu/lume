@@ -1,0 +1,20 @@
+# Probes: a generator that splits each line and yields an item, walked to
+# the end by `.to_list` and then asked for `.len`, which is refused: a
+# generator is used up as it is walked.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `ws` is a generator, and it is used up here, so it cannot be used after
+#   --> corpus/m81/b15_generator_twice_fail.lume:19:8
+#    |
+# 19 |   puts ws.to_list
+#    |        ^
+#   help: a generator hands out each item once: to walk the items twice, keep them with `.to_list` first
+
+def words(text: Str) -> Iterator[Str]:
+  for line in text.lines:
+    yield line.split(" ").at(0)
+
+def main:
+  ws = words("a b\nc d")
+  puts ws.to_list
+  puts ws.len

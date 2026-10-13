@@ -210,7 +210,10 @@ puts "abcdef".slice(1, 3)   #=> bcd
 puts "[" + "abc".slice(1, 99) + "]"    #=> [bc]
 puts "[" + "abc".slice(99, 2) + "]"    #=> []
 puts "[" + "abc".slice(1, 0) + "]"     #=> []
+puts "2026".slice(0 - 3, 2)            #=> 20
 ```
+
+A negative position counts as 0, and a negative length as 0 characters.
 
 ## `s[a..b]` is start and end, and `..` includes the end
 
@@ -409,6 +412,7 @@ while `to_int` and `to_float` give a `T or Error`:
 puts "banana".index_of("n")    #=> Some(2)
 puts "banana".index_of("z")    #=> None
 puts "42".to_int               #=> Ok(42)
+puts "09".to_int               #=> Ok(9)
 puts "x".to_int                #=> Error("`x` is not an integer")
 ```
 

@@ -1,0 +1,7 @@
+error: `w` is immutable and cannot be reassigned
+  --> corpus/m81/b14_item_rebind_fail.lume:16:3
+   |
+16 |   w = "<" + w
+   |   ^
+  help: declare it with `var w = ...` on line 15 if it needs to change; `w = w.something` is allowed as a transform of the same value
+exit: 1

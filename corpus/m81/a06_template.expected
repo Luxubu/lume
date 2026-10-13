@@ -1,0 +1,10 @@
+{"name": "Ada", "city": "London", "items": "3", "greeting": "Hello: friend"}
+7 placeholders
+Hello: friend, Ada!
+You have 3 items waiting in London.
+Ada, Ada, Ada.
+Error("no value for `title`")
+Error("unclosed placeholder: name")
+Ok("no placeholders here")
+6
+exit: 0

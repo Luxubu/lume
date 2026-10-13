@@ -1,0 +1,16 @@
+a     2
+cat   1,2
+dog   2
+end   3
+ran   2
+sat   1,2
+the   1,2,3
+then  2
+Some(("the", 3))
+["a", "dog", "then", "ran", "end"]
+Cat dog: [2]
+the SAT: [1, 2]
+cat end: []
+THE END
+[("the", "The"), ("a", "A"), ("the", "the")]
+exit: 0

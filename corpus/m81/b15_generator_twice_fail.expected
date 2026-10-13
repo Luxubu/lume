@@ -1,0 +1,7 @@
+error: `ws` is a generator, and it is used up here, so it cannot be used after
+  --> corpus/m81/b15_generator_twice_fail.lume:19:8
+   |
+19 |   puts ws.to_list
+   |        ^
+  help: a generator hands out each item once: to walk the items twice, keep them with `.to_list` first
+exit: 1

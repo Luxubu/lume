@@ -1,0 +1,20 @@
+A1 = 3
+B1 = 6
+C1 = 15
+A2 = 13
+B2 = 69
+D1 = 0
+C2 = error: division by zero
+A3 = error: cycle: A3 -> B3 -> A3
+B3 = error: cycle: B3 -> A3 -> B3
+C3 = error: `Z9` is empty
+D3 = error: two values in a row
+E1 = error: `2x` is not a number or a cell
+E2 = error: unexpected `%`
+cannot read `oops`
+6 worked out, 7 failed, total 106
+       A     B     C     D
+1      3     6    15     0
+2     13    69  #ERR     .
+3   #ERR  #ERR  #ERR  #ERR
+exit: 0

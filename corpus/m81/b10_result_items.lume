@@ -1,0 +1,42 @@
+# Probes: items read by position inside a function that gives
+# `T or Error`, an item trimmed and kept in a struct, `?` on `to_int` of an
+# item inside a constructor, the line interpolated into an `Error`, an item
+# handed back through a second function with `?`, and a struct parsed from
+# a `var` line that is reassigned afterwards.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# Entry(key: "a", val: 1)
+# Error("`x` is not an integer")
+# Error("no key in [=3]")
+# Error("bad line: c")
+# zed
+# q=5 q=6
+
+struct Entry:
+  key: Str
+  val: Int
+
+def parse(line: Str) -> Entry or Error:
+  parts = line.split("=")
+  if parts.len != 2:
+    return Error("bad line: #{line}")
+  key = parts.at(0).trim
+  if key.empty?:
+    return Error("no key in [#{line}]")
+  Entry(key: key, val: parts.at(1).trim.to_int?)
+
+def key_of(line: Str) -> Str or Error:
+  e = parse(line)?
+  e.key
+
+def main -> () or Error:
+  puts parse(" a = 1 ")?
+  puts parse("b=x")
+  puts parse("=3")
+  puts parse("c")
+  k = key_of("zed=9")?
+  puts k
+  var line = "q=5"
+  e = parse(line)?
+  line = "q=6"
+  puts "#{e.key}=#{e.val} #{line}"

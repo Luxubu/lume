@@ -1,0 +1,92 @@
+# a01_csv_report: a sales CSV (no quoted fields) read into structs and
+# reported by region. Probes: header names from a split kept as map keys
+# after the header line is gone; fields read by position (`f.at(i)`), bound
+# to names and kept in struct fields; one of them read again inside a
+# `map_error` block; `?` in a parser; `group_by` over structs; the source
+# text, a `var`, replaced after the rows were built; pad / pad_right columns.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# {"region": 0, "rep": 1, "units": 2, "price": 3}
+# 5 sales, 2 skipped
+# region reps     units  revenue
+# north  ann+cy      19     5100
+# south  bo+ed       14     9050
+# east   gus          2     2400
+# total 16550
+# best: bo in south, 5000
+# skipped line 5: di: `x` is not an integer
+# skipped line 6: expected 4 fields, found 3
+# first rep of each region: ann, bo, gus
+# source now: gone
+
+struct Sale:
+  region: Str
+  rep: Str
+  units: Int
+  price: Int
+
+  def total -> Int = units * price
+
+def columns(header: Str) -> {Str: Int}:
+  var cols: {Str: Int} = {}
+  for i, name in header.split(",").enumerate:
+    cols[name] = i
+  cols
+
+def parse_sale(line: Str, cols: {Str: Int}) -> Sale or Error:
+  f = line.split(",")
+  if f.len != cols.len:
+    return Error("expected #{cols.len} fields, found #{f.len}")
+  region = f.at(cols["region"].or(0))
+  rep = f.at(cols["rep"].or(0))
+  units = f.at(cols["units"].or(0)).to_int.map_error { |e| Error("#{rep}: #{e.message}") }?
+  price = f.at(cols["price"].or(0)).to_int?
+  Sale(region: region, rep: rep, units: units, price: price)
+
+def load(text: Str) -> ([Sale], [Str]):
+  rows = text.lines.to_list
+  cols = columns(rows.at(0))
+  var sales: [Sale] = []
+  var bad: [Str] = []
+  for i, line in rows.enumerate:
+    next if i == 0
+    match parse_sale(line, cols):
+      Ok(s) -> sales.push(s)
+      Error(e) -> bad.push("line #{i + 1}: #{e.message}")
+  (sales, bad)
+
+def row(a: Str, b: Str, c: Str, d: Str) -> Str =
+  "#{a.pad_right(7)}#{b.pad_right(8)}#{c.pad(6)}#{d.pad(9)}"
+
+def main:
+  var text = """
+    region,rep,units,price
+    north,ann,12,250
+    south,bo,5,1000
+    north,cy,7,300
+    east,di,x,1200
+    west,fay,4
+    south,ed,9,450
+    east,gus,2,1200
+    """
+  puts columns(text.lines.at(0))
+  (sales, bad) = load(text)
+  text = "gone"
+  puts "#{sales.len} sales, #{bad.len} skipped"
+  puts row("region", "reps", "units", "revenue")
+  by_region = sales.group_by { |s| s.region }
+  for region, ss in by_region:
+    reps = ss.map { |s| s.rep }.join("+")
+    units = ss.map { |s| s.units }.sum
+    revenue = ss.map { |s| s.total }.sum
+    puts row(region, reps, units.to_s, revenue.to_s)
+  grand = sales.map { |s| s.total }.sum
+  puts "total #{grand}"
+  match sales.max_by { |s| s.total }:
+    Some(s) -> puts "best: #{s.rep} in #{s.region}, #{s.total}"
+    None -> puts "no sales"
+  for b in bad:
+    puts "skipped #{b}"
+  firsts = by_region.map { |region, ss| ss.at(0).rep }
+  puts "first rep of each region: #{firsts.join(", ")}"
+  puts "source now: #{text}"

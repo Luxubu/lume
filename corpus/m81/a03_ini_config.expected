@@ -1,0 +1,13 @@
+[server] 2 keys
+[paths] 2 keys
+[empty] 0 keys
+[users] 1 keys
+Section(name: "server", pairs: {"host": "example.local", "port": "8081"})
+Some("8081")
+8082
+/var/log/app ; not = a comment
+None
+["ann", "bo", "cy"]
+line 3: expected key = value, found `broken line`
+Error("no section `db`")
+exit: 0

@@ -1,0 +1,39 @@
+# Probes: a field split again (a split of an item of a split), its items
+# read by position, `.to_int` on an inner item, an inner item that is
+# empty; an inner item used as a map key while the outer list is indexed
+# in a loop; an inner split taken apart by a list pattern, with the rest
+# interpolated.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ann 3 [3] 6
+# bo 1 [7] 14
+# cy 1 [] 0
+# {"a": 6, "b": 2}
+# x is 1
+# y alone
+# z with ["2", "3"]
+
+def main:
+  text = "ann:3,4,5;bo:7;cy:"
+  for rec in text.split(";"):
+    halves = rec.split(":")
+    who = halves.at(0)
+    nums = halves.at(1).split(",")
+    first = nums.at(0)
+    puts "#{who} #{nums.len} [#{first}] #{first.to_int.or(0) * 2}"
+
+  var total: {Str: Int} = {}
+  rows = "a=1|b=2|a=5"
+  cells = rows.split("|")
+  for i in 0...cells.len:
+    kv = cells.at(i).split("=")
+    key = kv.at(0)
+    total[key] = total[key].or(0) + kv.at(1).to_int.or(0)
+  puts total
+
+  for cell in "x=1|y|z=2=3".split("|"):
+    match cell.split("="):
+      [k, v] -> puts "#{k} is #{v}"
+      [k] -> puts "#{k} alone"
+      [k, ..rest] -> puts "#{k} with #{rest}"
+      _ -> puts "nothing"

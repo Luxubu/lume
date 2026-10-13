@@ -1,0 +1,24 @@
+warning: `reports` holds values of different types behind `Report`, so calls on its items go through a pointer
+  --> corpus/m81/c04_logs.lume:143:3
+    |
+143 |   reports: [Report] = [ByMinute(counts: counts), Top(hits: hits, n: 2), Classes(hits: hits)]
+    |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+line 5: expected 6 fields, found 3
+line 8: bad duration `fast`
+== requests per minute ==
+09:01 ###   3
+09:02 ###   3
+09:03       0
+09:04 ###   3
+== top 2 paths ==
+  5 /api/items   avg 158ms
+  3 /home        avg 12ms
+== by status ==
+2xx 6
+5xx 2
+4xx 1
+slowest: GET /api/items at 09:02 (310ms)
+9 read, 2 skipped
+/late 5 5 09:59:59 GET /LATE 200 1MS
+exit: 0

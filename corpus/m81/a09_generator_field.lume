@@ -1,0 +1,25 @@
+# a09_generator_field: a line reader kept in a struct. A generator that
+# yields the trimmed, non-blank lines of a text is put in a field typed
+# `Iterator[Str]`, as one might for a "source" with a name. A generator is
+# used up as it is walked and a field is copied, so this is refused.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: a generator cannot be held as an `Iterator[Str]` value: it is used up as it is walked, and such a value is copied
+#   --> corpus/m81/a09_generator_field.lume:24:39
+#    |
+# 24 |   src = Source(name: "inline", lines: nonblank(text))
+#    |                                       ^
+#   help: a generator lives in a local, a parameter `xs: Iterator[T]`, or a function's result `-> Iterator[T]`; to keep the items, `.to_list`
+
+def nonblank(text: Str) -> Iterator[Str]:
+  for line in text.lines:
+    yield line.trim if not line.trim.empty?
+
+struct Source:
+  name: Str
+  lines: Iterator[Str]
+
+def main:
+  text = "  alpha \n\n beta"
+  src = Source(name: "inline", lines: nonblank(text))
+  puts src.name

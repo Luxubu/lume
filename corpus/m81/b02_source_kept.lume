@@ -1,0 +1,39 @@
+# Probes: the source line pushed into a list before its items are read,
+# handed to a function that keeps it in a struct, and put in a struct
+# alongside one of its own items (keywords out of field order); a local
+# line returned in a tuple next to one of its items.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# v1
+# k1:2
+# v2
+# k2:2
+# ["k1=v1", "k2=v2"]
+# [Rec(raw: "k1=v1", key: "k1"), Rec(raw: "k1=v1", key: "k1"), Rec(raw: "k2=v2", key: "k2"), Rec(raw: "k2=v2", key: "k2")]
+# ("A B C", "C")
+
+struct Rec:
+  raw: Str
+  key: Str
+
+def keep(s: Str) -> Rec = Rec(raw: s, key: s.slice(0, 2))
+
+def tag(raw: Str) -> (Str, Str):
+  line = raw.upcase
+  parts = line.split(" ")
+  (line, parts.at(parts.len - 1))
+
+def main:
+  var kept: [Str] = []
+  var recs: [Rec] = []
+  for l in "k1=v1\nk2=v2".lines:
+    line = l.trim
+    parts = line.split("=")
+    kept.push(line)
+    puts parts.at(1)
+    recs.push(keep(line))
+    recs.push(Rec(key: parts.at(0), raw: line))
+    puts "#{parts.at(0)}:#{parts.len}"
+  puts kept
+  puts recs
+  puts tag("a b c")

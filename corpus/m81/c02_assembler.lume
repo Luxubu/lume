@@ -1,0 +1,168 @@
+# c02_assembler: a two-pass assembler for a tiny accumulator machine, and
+# the machine to run what it makes.
+# Probes: a generator over `lines` that cuts comments with
+# `split(";").at(0)`; bare `split` read by position, an item used twice and
+# a `.slice` of it kept as a map key (the symbol table outlives the text);
+# struct fields filled from slices; `match` on text with `|`; `T or Error`
+# through two passes with `?`; `.or_error` on a map lookup; a `var self`
+# method that writes into a list field.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# start   0
+# loop    2
+# n      15
+# total  16
+# 1 3 3 15 4 16 3 16 2 15 5 1 6 2 0 0 10
+# halted at 14 after 20 steps; total = 16, n = 1
+# error: line 2: unknown label `nowhere`
+# error: line 2: label `a` defined twice
+# error: line 2: unknown instruction `MUL`
+# error: line 1: `only` labels nothing
+# error: line 1: too many operands
+
+SOURCE = [
+  "; sum 3 + 2 + 1 onto total",
+  "start: LOADI 3",
+  "loop:  STORE n",
+  "       ADD total     ; acc = n + total",
+  "       STORE total",
+  "       LOAD n",
+  "       SUBI 1",
+  "       JNZ loop",
+  "       HALT",
+  "n:     DATA 0",
+  "total: DATA 10",
+].join("\n")
+
+BAD = [
+  ["start: LOADI 1", "  JNZ nowhere"].join("\n"),
+  ["a: HALT", "a: HALT"].join("\n"),
+  ["x: LOADI 1", "  MUL 2"].join("\n"),
+  "only:",
+  "  LOADI 1 2",
+]
+
+struct Instr:
+  line_no: Int
+  label: Str
+  op: Str
+  arg: Str
+
+  def size -> Int or Error:
+    match op:
+      "HALT" | "DATA" -> 1
+      "LOADI" | "LOAD" | "STORE" | "ADD" | "SUBI" | "JNZ" -> 2
+      _ -> Error("line #{line_no}: unknown instruction `#{op}`")
+
+def opcode(op: Str) -> Int:
+  match op:
+    "LOADI" -> 1
+    "LOAD" -> 2
+    "STORE" -> 3
+    "ADD" -> 4
+    "SUBI" -> 5
+    "JNZ" -> 6
+    _ -> 0
+
+# Each line that has code on it, numbered from 1, comments cut off.
+def code_lines(text: Str) -> Iterator[(Int, Str)]:
+  for i, raw in text.lines.enumerate:
+    code = raw.split(";").at(0).trim
+    yield (i + 1, code) if not code.empty?
+
+def parse_line(n: Int, code: Str) -> Instr or Error:
+  parts = code.split
+  first = parts.at(0)
+  var k = 0
+  var label = ""
+  if first.ends_with?(":"):
+    label = first.slice(0, first.len - 1)
+    k = 1
+  if parts.len <= k:
+    return Error("line #{n}: `#{label}` labels nothing")
+  if parts.len > k + 2:
+    return Error("line #{n}: too many operands")
+  arg = if parts.len == k + 2: parts.at(k + 1) else: ""
+  Instr(line_no: n, label: label, op: parts.at(k), arg: arg)
+
+def pass_one(prog: [Instr]) -> {Str: Int} or Error:
+  var symbols: {Str: Int} = {}
+  var addr = 0
+  for ins in prog:
+    if not ins.label.empty?:
+      if symbols.contains?(ins.label):
+        return Error("line #{ins.line_no}: label `#{ins.label}` defined twice")
+      symbols[ins.label] = addr
+    addr += ins.size?
+  symbols
+
+def operand(ins: Instr, symbols: {Str: Int}) -> Int or Error:
+  if ins.arg.empty?:
+    return Error("line #{ins.line_no}: `#{ins.op}` needs an operand")
+  match ins.arg.to_int:
+    Ok(v) -> v
+    Error(_) -> symbols[ins.arg].or_error("line #{ins.line_no}: unknown label `#{ins.arg}`")
+
+def pass_two(prog: [Instr], symbols: {Str: Int}) -> [Int] or Error:
+  var mem: [Int] = []
+  for ins in prog:
+    match ins.op:
+      "HALT" -> mem.push(0)
+      "DATA" -> mem.push(operand(ins, symbols)?)
+      op ->
+        mem.push(opcode(op))
+        mem.push(operand(ins, symbols)?)
+  mem
+
+def assemble(text: Str) -> ([Int], {Str: Int}) or Error:
+  var prog: [Instr] = []
+  for n, code in code_lines(text):
+    prog.push(parse_line(n, code)?)
+  symbols = pass_one(prog)?
+  mem = pass_two(prog, symbols)?
+  (mem, symbols)
+
+struct Machine:
+  mem: [Int]
+  acc: Int
+  pc: Int
+  steps: Int
+
+  # One instruction; false once the machine has halted.
+  def step(var self) -> Bool:
+    op = mem[pc].or(0)
+    x = mem[pc + 1].or(0)
+    steps += 1
+    match op:
+      1 -> acc = x
+      2 -> acc = mem[x].or(0)
+      3 -> mem[x] = acc
+      4 -> acc += mem[x].or(0)
+      5 -> acc -= x
+      6 ->
+        if acc != 0:
+          pc = x
+          return true
+      _ -> return false
+    pc += 2
+    true
+
+def main:
+  match assemble(SOURCE):
+    Ok((mem, symbols)) ->
+      for name, addr in symbols:
+        puts "#{name.pad_right(6)}#{addr.pad(3)}"
+      puts mem.join(" ")
+      var m = Machine(mem: mem, acc: 0, pc: 0, steps: 0)
+      var running = true
+      while running:
+        running = m.step
+      total = m.mem.at(symbols["total"].or(0))
+      n = m.mem.at(symbols["n"].or(0))
+      puts "halted at #{m.pc} after #{m.steps} steps; total = #{total}, n = #{n}"
+    Error(e) -> puts "error: #{e.message}"
+
+  for text in BAD:
+    match assemble(text):
+      Ok(_) -> puts "assembled"
+      Error(e) -> puts "error: #{e.message}"

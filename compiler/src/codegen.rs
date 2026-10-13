@@ -11623,8 +11623,8 @@ impl Gen {
                 if name == "zip" && args.len() == 1 && matches!(rt, Type::List(_)) && !matches!(self.ty_of(&args[0].value), Type::List(_)) {
                     let (r, _, r_ref) = self.iter_base(recv, e)?;
                     let (o, _, o_ref) = self.iter_base(&args[0].value, e)?;
-                    let a = if r_ref { "a.clone()" } else { "a" };
-                    let b = if o_ref { "b.clone()" } else { "b" };
+                    let a = if r_ref { "a.to_owned()" } else { "a" };
+                    let b = if o_ref { "b.to_owned()" } else { "b" };
                     return Ok(format!("{}.zip({}).map(|(a, b)| ({}, {})).collect::<Vec<_>>()", r, o, a, b));
                 }
                 // Lazy chains: a few methods stay lazy, the rest collect first.
@@ -11637,14 +11637,15 @@ impl Gen {
                         }
                         "enumerate" if args.is_empty() => {
                             // pairs are values: a borrowed item is copied into its pair
-                            let x = if *by_ref { "x.clone()" } else { "x" };
+                            // (`to_owned`, so a slice of text becomes text of its own)
+                            let x = if *by_ref { "x.to_owned()" } else { "x" };
                             return Ok(format!("{}.enumerate().map(|(i, x)| (i as i64, {}))", r, x));
                         }
                         "zip" if args.len() == 1 => {
                             // stays lazy, so an endless chain stops with the other side
                             let (o, _, o_ref) = self.iter_base(&args[0].value, e)?;
-                            let a = if *by_ref { "a.clone()" } else { "a" };
-                            let b = if o_ref { "b.clone()" } else { "b" };
+                            let a = if *by_ref { "a.to_owned()" } else { "a" };
+                            let b = if o_ref { "b.to_owned()" } else { "b" };
                             return Ok(format!("{}.zip({}).map(|(a, b)| ({}, {}))", r, o, a, b));
                         }
                         "len" if args.is_empty() => return Ok(format!("({}.count() as i64)", r)),

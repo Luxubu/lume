@@ -1,0 +1,8 @@
+v1
+k1:2
+v2
+k2:2
+["k1=v1", "k2=v2"]
+[Rec(raw: "k1=v1", key: "k1"), Rec(raw: "k1=v1", key: "k1"), Rec(raw: "k2=v2", key: "k2"), Rec(raw: "k2=v2", key: "k2")]
+("A B C", "C")
+exit: 0

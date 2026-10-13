@@ -1,0 +1,14 @@
+ok      R100   -45.20
+ok      R101  1200.00
+DIFFERS R102    -9.99 (ledger -9.90, off by -0.09)
+BANK    R104   -60.00 (2026-10-05, not in the ledger)
+ok      R105    -3.50
+LEDGER  R103  -800.00 (Rent, not on the statement)
+ok 3, differs 1, bank only 1, ledger only 1
+statement 1081.31, ledger 341.40, gap 739.91
+rejected: R106: `12.345`: more than two decimals
+rejected: line 2: expected 3 fields, found 2
+rejected: missing column `ref`
+rejected: R109: `ten` is not an integer
+5 rows; first ref R100; text now starts Q00
+exit: 0
