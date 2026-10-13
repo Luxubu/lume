@@ -7201,6 +7201,7 @@ impl Gen {
             Type::Set(_) => "Set".into(),
             Type::Option(_) => "Option".into(),
             Type::Result(..) => "Result".into(),
+            Type::Gen(_) => "Iterator".into(),
             _ => return None,
         })
     }
@@ -7226,7 +7227,7 @@ impl Gen {
             }
             crate::diag::note_members(key.clone(), m);
         }
-        for (name, t) in [("Str", Type::Str), ("Char", Type::Char), ("Int", Type::Int), ("Float", Type::Float), ("Bool", Type::Bool), ("List", Type::List(Box::new(Type::Unknown))), ("Map", Type::Map(Box::new(Type::Unknown), Box::new(Type::Unknown))), ("Set", Type::Set(Box::new(Type::Unknown))), ("Option", Type::Option(Box::new(Type::Unknown))), ("Result", Type::Result(Box::new(Type::Unknown), Box::new(Type::Unknown)))] {
+        for (name, t) in [("Str", Type::Str), ("Char", Type::Char), ("Int", Type::Int), ("Float", Type::Float), ("Bool", Type::Bool), ("List", Type::List(Box::new(Type::Unknown))), ("Map", Type::Map(Box::new(Type::Unknown), Box::new(Type::Unknown))), ("Set", Type::Set(Box::new(Type::Unknown))), ("Option", Type::Option(Box::new(Type::Unknown))), ("Result", Type::Result(Box::new(Type::Unknown), Box::new(Type::Unknown))), ("Iterator", Type::Gen(Box::new(Type::Unknown)))] {
             let m = builtins_for(&t).iter().map(|n| Member { label: n.to_string(), detail: format!("{}.{}", name, n), kind: 2 }).collect();
             crate::diag::note_members(name.to_string(), m);
         }
@@ -7377,6 +7378,13 @@ impl Gen {
                         }
                     }
                     if let Some(sg) = self.methods_of(&key).and_then(|m| m.get(name).cloned()) {
+                        let rt2 = self.ty_of(e).materialized();
+                        self.note_typed(line, col, name, format!("def {}.{}{}", shown, name, self.hover_sig(&sg)), site, Some(&rt2));
+                        return;
+                    }
+                    // an interface's default: written in the interface
+                    if let (Some(owner), Some(sg)) = (self.default_owner(&rt, name), self.iface_default(&rt, name)) {
+                        let site = self.def_sites.get(&format!("{}::{}", owner, name)).cloned();
                         let rt2 = self.ty_of(e).materialized();
                         self.note_typed(line, col, name, format!("def {}.{}{}", shown, name, self.hover_sig(&sg)), site, Some(&rt2));
                         return;

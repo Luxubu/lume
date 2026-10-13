@@ -129,6 +129,8 @@ out=$("$LUME" check examples/errors/arity.lume --json 2>&1; echo "exit: $?"; "$L
 check "check --json" "examples/check_json.expected" "$out"
 out=$(python3 tests/lsp_test.py "$LUME" 2>&1)
 check "lume lsp" "tests/lsp_test.expected" "$out"
+# the VS Code grammar knows every keyword
+if python3 tests/grammar_keywords.py >/dev/null; then pass=$((pass+1)); else echo "FAIL grammar keywords: $(python3 tests/grammar_keywords.py)"; fail=$((fail+1)); failed+=("grammar keywords"); fi
 
 # the json package: its own tests, and a program that depends on it by path
 LUME_ABS2="$(cd "$(dirname "$LUME")" && pwd)/$(basename "$LUME")"

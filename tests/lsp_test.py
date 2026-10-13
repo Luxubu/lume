@@ -163,6 +163,61 @@ for typed in ["puts later.", "puts helper.", "puts later.name.", "puts la"]:
         wanted = ["ann", "later", "older", "Person", "helper", "def", "while"]
         print("%-18s -> offers %s" % (typed, ", ".join(w for w in wanted if w in labels)))
 
+print("--- generators and interfaces (milestones 70-77)")
+seq_text = """interface Source:
+  def each_item -> Iterator[Int]
+  def doubled -> Iterator[Int]:
+    for x in each_item:
+      yield x * 2
+
+struct Bag:
+  xs: [Int]
+  def each_item -> Iterator[Int] = xs.filter { |x| x > 0 }
+
+def naturals -> Iterator[Int]:
+  var n = 0
+  while true:
+    yield n
+    n += 1
+
+def main:
+  var g = naturals()
+  bag = Bag(xs: [1, 2])
+  puts g.next
+  puts bag.doubled.to_list
+"""
+seq = write("mods/seq.lume", seq_text)
+send("textDocument/didOpen", {"textDocument": {"uri": uri(seq), "languageId": "lume", "version": 1, "text": seq_text}})
+diagnostics_until(seq)
+lines = seq_text.split("\n")
+for what, tok, nth, line_has in [
+    ("a generator", "naturals", 1, "var g"),
+    ("a generator held in a var", "g", 1, "puts g.next"),
+    ("next on it", "next", 1, "puts g.next"),
+    ("a generator default", "doubled", 1, "bag.doubled"),
+]:
+    pos = at(tok, nth, line_has)
+    send("textDocument/hover", {"textDocument": {"uri": uri(seq)}, "position": pos}, True)
+    h = recv().get("result")
+    shown = h["contents"]["value"].replace("```lume\n", "").replace("\n```", "") if h else None
+    send("textDocument/definition", {"textDocument": {"uri": uri(seq)}, "position": pos}, True)
+    d = recv().get("result")
+    where = None
+    if d:
+        where = "%s:%d:%d" % (d["uri"].replace("file://" + tmp, "<tmp>"), d["range"]["start"]["line"] + 1, d["range"]["start"]["character"] + 1)
+    print("%-30s hover %s | definition %s" % (what, json.dumps(shown), where))
+send("textDocument/didChange", {"textDocument": {"uri": uri(seq), "version": 2}, "contentChanges": [{"text": seq_text + "  puts g.\n"}]})
+while True:
+    m = recv()
+    if m.get("method") == "textDocument/publishDiagnostics" and m["params"]["uri"] == uri(seq):
+        break
+send("textDocument/completion", {"textDocument": {"uri": uri(seq)}, "position": {"line": len(seq_text.split("\n")) - 1, "character": len("  puts g.")}}, True)
+labels = [i["label"] for i in recv()["result"]["items"]]
+print("puts g.            -> offers %s" % ", ".join(w for w in ["next", "take", "filter", "to_list", "zip"] if w in labels))
+bad = seq_text.replace("  puts g.next\n", "  yield 1\n")
+send("textDocument/didChange", {"textDocument": {"uri": uri(seq), "version": 3}, "contentChanges": [{"text": bad}]})
+diagnostics_until(seq)
+
 print("--- a request it does not answer, then shutdown")
 send("textDocument/rename", {"textDocument": {"uri": uri(one)}, "position": {"line": 0, "character": 0}, "newName": "x"}, True)
 show(recv())

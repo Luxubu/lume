@@ -151,7 +151,7 @@
       "patterns": [
         {
           "name": "keyword.control.lume",
-          "match": "\\b(if|elif|else|unless|while|for|in|where|return|break|next|match|await|spawn|do)\\b"
+          "match": "\\b(if|elif|else|unless|while|for|in|where|return|yield|break|next|match|await|spawn|do)\\b"
         },
         {
           "name": "keyword.other.lume",

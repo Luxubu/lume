@@ -4,3 +4,5 @@ examples/site/out/
 bench/words.txt
 bench/access.log
 bench/.build/
+editors/vscode/node_modules/
+editors/vscode/*.vsix

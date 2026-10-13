@@ -27,7 +27,15 @@ puts later.        -> name, age, greet
 puts helper.       -> twice
 puts later.name.   -> len, empty?, to_int, to_float, upcase, downcase, trim, lines, split, chars, contains?, starts_with? ...
 puts la            -> offers ann, later, older, Person, helper, def, while
+--- generators and interfaces (milestones 70-77)
+{"jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": {"diagnostics": [], "uri": "<tmp>/mods/seq.lume"}}
+a generator                    hover "def naturals -> Iterator[Int]" | definition <tmp>/mods/seq.lume:11:5
+a generator held in a var      hover "var g: Iterator[Int]" | definition <tmp>/mods/seq.lume:18:7
+next on it                     hover "Iterator[Int].next -> Int?" | definition None
+a generator default            hover "def Bag.doubled -> Iterator[Int]" | definition <tmp>/mods/seq.lume:3:7
+puts g.            -> offers next, take, filter, to_list, zip
+{"jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": {"diagnostics": [{"message": "`main` hands out items with `yield`, so it gives `Iterator[T]`\nhelp: say what it gives: `def main(...) -> Iterator[Int]:`, with the type its `yield`s have", "range": {"end": {"character": 3, "line": 16}, "start": {"character": 0, "line": 16}}, "severity": 1, "source": "lume"}], "uri": "<tmp>/mods/seq.lume"}}
 --- a request it does not answer, then shutdown
-{"error": {"code": -32601, "message": "`textDocument/rename` is not supported"}, "id": 26, "jsonrpc": "2.0"}
-{"id": 27, "jsonrpc": "2.0", "result": null}
+{"error": {"code": -32601, "message": "`textDocument/rename` is not supported"}, "id": 35, "jsonrpc": "2.0"}
+{"id": 36, "jsonrpc": "2.0", "result": null}
 exit: 0
