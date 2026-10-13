@@ -2,28 +2,85 @@
 
 ## Unreleased
 
-- **Generator methods**: a method may have `yield`; it walks its own copy
-  of the value.
+Nothing yet.
+
+## 0.3.0 — interfaces all the way
+
+Eight milestones after 0.2.0 (75–81). Generators became complete enough
+to build programs around: methods may be generators, interfaces may give
+sequences and take and give each other, and every function that says
+`-> Iterator[T]` hands one back. Two programs were written on them, two
+review rounds checked them, and the VS Code extension was packaged for
+the first time.
+
+### Install
+
+```sh
+git clone https://github.com/Luxubu/lume && cd lume && git checkout v0.3.0
+./install.sh
+lume run examples/interface_signatures.lume
+```
+
+It needs a Rust toolchain (<https://rustup.rs>). See `docs/install.md`.
+
+### What is new
+
+- **Generator methods**: a method of a struct or enum may have `yield`. It
+  walks its own copy of the value, taken at the call.
+- **Interfaces in signatures**: an interface method may take an interface
+  value (`def bigger?(o: Shape)`), give one back (`-> Shape`), and give a
+  sequence (`-> Iterator[T]`); a default may be a generator built from the
+  interface's other methods. The trait stays usable through a pointer.
+- **`-> Iterator[T]` on any function**, with `yield` or without: a function
+  may hand back a generator, a chain, a list or a sequence of your own, as
+  Rust's `-> impl Iterator` does.
 - **Lazy into generators**: a chain that starts from a generator, a range
   or a sequence of your own stays lazy when given to a generator, so an
-  endless one works.
+  endless one works: `evens(naturals().map { |n| n * k })`.
 - **Blocks over tuples**: a block names one argument for each part of a
-  tuple, three or more as well as two.
-- **`examples/deps/`**: a dependency-graph tool built on generator methods.
-- **Fixed**: `text.split(sep).at(i)` followed by a text method.
-- **Interfaces in signatures**: an interface method may take and give
-  interface values and sequences, and a default may be a generator.
-- **`-> Iterator[T]`** gives a sequence from any function, with `yield` or
-  without.
-- **Faster**: an item of a list of slices bound to a name, and a
-  `.slice` read by a text method, are read in place.
-- **Fixed**: `enumerate` and `zip` over split text, used as map keys.
-- **VS Code**: the extension packages and installs; `yield` is coloured;
-  completion after `.` on a generator, and go to definition on an
-  interface's default method.
-- **Fixed**: a struct built at the head of an `if`, `while`, `for` or
-  `match`; `-> Shape or Error` giving a plain value; a list literal or a
-  `match` head moving a value that is read again in the same statement.
+  tuple, three or more as well as two, as `for` does.
+- **VS Code**: `editors/vscode/` packages to a `.vsix` and installs; `yield`
+  is coloured; completion after `.` on a generator, and go to definition on
+  an interface's default method.
+- **`examples/deps/`**: a dependency-graph tool whose every answer is a
+  generator method.
+
+### Faster
+
+- **Reading text in place**: a name bound to an item of a split line, and a
+  `.slice` read by a text method, are slices of the line, not copies.
+  `logq`'s parse and summary of a 500,000-line log is 2.0 times the
+  hand-written Rust, from 2.2.
+
+### Fixed
+
+- A struct or variant built at the head of an `if`, `while`, `for` or
+  `match`.
+- `-> Shape or Error` giving a plain value.
+- A list literal, or a `match` head, moving a value the same statement
+  reads again.
+- `enumerate` and `zip` over split text, and `text.split(sep).at(i)`
+  followed by a text method.
+
+### How it was checked
+
+- **The suite**: `tests/run.sh`, 1110 checks and 415 docs examples, byte for
+  byte, with the language server driven by VS Code's own messages and the
+  editor grammar checked against every keyword.
+- **Error messages**: 365 of the compiler's 380 messages are shown by a test.
+- **Review rounds**: rounds sixteen and seventeen, 59 programs written from
+  the docs alone. Round seventeen: 12 guesses, 26 of 27 programs right on the
+  first run, no wrong output.
+- **Benchmarks**: eight programs against the Rust a person would write; six
+  are within 10% of it.
+
+### Known limits
+
+- **Generators**: not yet `async`, nor in an `extend`, nor taking a block.
+- **VS Code**: packaged and installed, and its language server checked with
+  VS Code's messages, but not yet looked at in an editor window.
+- **Time zones**: dates and times are UTC only.
+- **No registry**: packages come from paths and git.
 
 ## 0.2.0 — sequences
 
