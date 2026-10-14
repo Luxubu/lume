@@ -215,6 +215,14 @@ puts "2026".slice(0 - 3, 2)            #=> 20
 
 A negative position counts as 0, and a negative length as 0 characters.
 
+**Positions count characters, not bytes**, so finding position `i` walks
+the text from its start: `.slice(i, n)` and `s[i]` cost as much as the text
+before `i` is long. That is nothing for a line, but scanning a long text
+position by position that way costs its length squared. Take the
+characters once, `cs = text.chars.to_list`, and index the list:
+`cs.at(i)` costs the same wherever `i` is. `tools/lumecheck/coverage.lume`
+reads the compiler's 700 KB source that way.
+
 ## `s[a..b]` is start and end, and `..` includes the end
 
 The range form is the other one: it takes a **start and an end position**.

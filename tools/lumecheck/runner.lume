@@ -1,0 +1,103 @@
+# Running an example with the compiler, and saying whether it did what its
+# documentation claims.
+
+import fences
+import fences.Block
+import fences.Kind
+
+# What became of one example: `None` when it behaved as documented, or why
+# not.
+pub struct Outcome:
+  place: Str
+  why: Str?
+
+# The first `n` characters of `text`, as the Python checker cut its quotes.
+def cut(text: Str, n: Int) -> Str = text.slice(0, n)
+
+# Runs one block from the docs, in a folder of its own under `scratch`.
+pub def check_block(lume: Str, scratch: Str, place: Str, b: Block) -> Outcome:
+  why = match judge(lume, scratch, b):
+    Ok(w) -> w
+    Error(e) -> Some("could not be run: #{e.message}")
+  Outcome(place: place, why: why)
+
+def judge(lume: Str, scratch: Str, b: Block) -> Str? or Error:
+  Dir.make(scratch)?
+  file = Path.join(scratch, "doc.lume")
+  bad = match b.kind:
+    Bad -> true
+    _ -> false
+  src = if bad: fences.program(fences.without_claims(b.body)) else: fences.program(b.body)
+  File.write(file, src)?
+  (code, out, err) = Process.run(lume, [if bad: "check" else: "run", file])?
+  Dir.remove(scratch)?
+  if bad:
+    if code == 0:
+      return Ok(Some("expected this to be rejected, but it was accepted"))
+    said = out + err
+    for phrase in fences.wanted_errors(b.body):
+      if not said.contains?(phrase):
+        return Ok(Some("error did not mention #{quoted(phrase)}; it said:\n#{cut(said.trim, 400)}"))
+    return Ok(None)
+  if code != 0:
+    return Ok(Some("did not run:\n#{cut((out + err).trim, 600)}"))
+  var got = out.split("\n")
+  while not got.empty? and got.last == Some(""):
+    got.pop
+  want = fences.expected_out(b.body)
+  if got != want:
+    return Ok(Some("output does not match the docs\n  docs say: #{py_list(want)}\n  it says:  #{py_list(got)}"))
+  Ok(None)
+
+# A multi-file example: `main.lume` beside `main.expected`, copied away so
+# that building it leaves nothing behind in docs/.
+pub def check_folder(lume: Str, scratch: Str, root: Str, folder: Str) -> Outcome:
+  place = Path.join(folder, "main.lume").slice(root.len + 1, 1000)
+  why = match judge_folder(lume, scratch, folder):
+    Ok(w) -> w
+    Error(e) -> Some("could not be run: #{e.message}")
+  Outcome(place: place, why: why)
+
+def judge_folder(lume: Str, scratch: Str, folder: Str) -> Str? or Error:
+  want_text = File.read(Path.join(folder, "main.expected"))?
+  work = Path.join(scratch, "example")
+  Dir.make(work)?
+  for f in Dir.walk(folder)?:
+    rel = f.slice(folder.len + 1, f.len)
+    # what building it left behind is not copied
+    if not (rel.starts_with?(".lume/") or rel.contains?("/.lume/")):
+      Dir.make(Path.dir(Path.join(work, rel)))?
+      File.write(Path.join(work, rel), File.read(f)?)?
+  (code, out, err) = Process.run("sh", ["-c", "cd \"$0\" && \"$1\" run main.lume", work, lume])?
+  Dir.remove(scratch)?
+  if code != 0:
+    return Ok(Some("did not run:\n#{cut((out + err).trim, 600)}"))
+  got = without_newlines(out).split("\n")
+  want = without_newlines(want_text).split("\n")
+  if got != want:
+    return Ok(Some("output does not match main.expected\n  expected: #{py_list(want)}\n  it says:  #{py_list(got)}"))
+  Ok(None)
+
+# `text` without the newlines at its end.
+def without_newlines(text: Str) -> Str:
+  var t = text
+  while t.ends_with?("\n"):
+    t = t.slice(0, t.len - 1)
+  t
+
+# Text written as Python's `repr` writes it, so a failure reads the same as
+# the Python checker's did.
+pub def quoted(s: Str) -> Str:
+  q = if s.contains?("'") and not s.contains?("\""): "\"" else: "'"
+  var out = q
+  for c in s.chars:
+    t = c.to_s
+    out += match t:
+      "\\" -> "\\\\"
+      "\n" -> "\\n"
+      "\t" -> "\\t"
+      "\r" -> "\\r"
+      _ -> if t == q: "\\" + q else: t
+  out + q
+
+def py_list(xs: [Str]) -> Str = "[" + xs.map { |x| quoted(x) }.join(", ") + "]"

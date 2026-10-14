@@ -22,7 +22,7 @@ this folder in a window of its own:
 
 `tests/lsp_test.py` drives `lume lsp` with the messages VS Code sends —
 opening and changing files, hover, go to definition and completion — and
-`tests/grammar_keywords.py` checks that the highlighting knows every
+`tests/lumecheck.sh keywords` checks that the highlighting knows every
 keyword; both run in `tests/run.sh`.
 
 Hover over a name to see its type or signature. Go to definition

@@ -7,7 +7,7 @@ leaves `tests/run.sh` passing. A milestone is done when:
    checked (`name.lume` beside `name.expected`).
 2. **Every way to get it wrong has an example** in `examples/errors/`: the
    smallest program that makes `lume check` give the message, with its
-   output in `name.expected`. `tests/message_coverage.py` counts the
+   output in `name.expected`. `tests/lumecheck.sh coverage` counts the
    compiler's messages that some test shows, and the suite fails if that
    number falls below `tests/message_coverage.min`; raise it when you add
    examples. A message that cannot be reached goes in

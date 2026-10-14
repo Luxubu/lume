@@ -1,0 +1,191 @@
+# Which of the compiler's error messages some test shows. Every message is
+# a template in the compiler's source; it is shown when some text a test
+# checks matches it, with each `{}` standing for at least one character.
+
+pub struct Template:
+  # `codegen.rs:1234`
+  place: Str
+  text: Str
+
+# The characters of `word`, to compare against a list of characters.
+def word(text: Str) -> [Char] = text.chars.to_list
+
+# Whether `pat` is at position `at` of `cs`.
+def at?(cs: [Char], at: Int, pat: [Char]) -> Bool:
+  if at + pat.len > cs.len:
+    return false
+  for i in 0...pat.len:
+    return false if cs.at(at + i) != pat.at(i)
+  true
+
+def skip_space(cs: [Char], from: Int) -> Int:
+  var i = from
+  while i < cs.len and cs.at(i).space?:
+    i += 1
+  i
+
+# Past `n` arguments that hold no comma, each at least one character, and
+# the comma after each: where the next argument starts.
+def past_args(cs: [Char], from: Int, n: Int) -> Int?:
+  var i = from
+  for _ in 0...n:
+    start = i
+    while i < cs.len and cs.at(i) != ",":
+      i += 1
+    return None if i == start or i >= cs.len
+    i += 1
+  Some(i)
+
+# A string literal starting at `from`: its text as written, escapes kept,
+# and where it ends.
+def literal_at(cs: [Char], from: Int) -> (Str, Int)?:
+  return None if from >= cs.len or cs.at(from) != "\""
+  var i = from + 1
+  var text = ""
+  while i < cs.len:
+    c = cs.at(i)
+    if c == "\"":
+      return Some((text, i + 1))
+    if c == "\\":
+      return None if i + 1 >= cs.len
+      text += "\\" + cs.at(i + 1).to_s
+      i += 2
+    else:
+      text += c.to_s
+      i += 1
+  None
+
+# The message argument that follows one of the two ways the compiler makes
+# an error at `at`, if it is a literal: `LumeError::new(<a>, <b>, "…")`, or
+# `self.err("…")`, either one possibly through `format!(`.
+def message_at(cs: [Char], at: Int) -> (Str, Int)?:
+  start = if at?(cs, at, word("LumeError::new(")):
+    past_args(cs, at + 15, 2).map { |i| skip_space(cs, i) }
+  elif at?(cs, at, word("self.err(")):
+    Some(skip_space(cs, at + 9))
+  else:
+    None
+  match start:
+    None -> None
+    Some(s) ->
+      lit = if at?(cs, s, word("format!(")): skip_space(cs, s + 8) else: s
+      literal_at(cs, lit)
+
+# Every message template in one file's source, as long as twelve
+# characters or more, where it is.
+pub def templates_in(file: Str, src: Str) -> Iterator[Template]:
+  cs = word(src)
+  var i = 0
+  var line = 1
+  while i < cs.len:
+    if cs.at(i) == "\n":
+      line += 1
+      i += 1
+    else:
+      match message_at(cs, i):
+        Some((text, end)) ->
+          yield Template(place: "#{file}:#{line}", text: text) if text.len >= 12
+          # the literal may run over lines; count them as it is skipped
+          while i < end:
+            line += 1 if cs.at(i) == "\n"
+            i += 1
+        None -> i += 1
+
+# A template as the text a test would show: escapes read, and split at
+# each `{…}`. A doubled brace is a brace.
+pub def parts(template: Str) -> [Str]:
+  t = template.replace("\\\"", "\"").replace("\\\\", "\\")
+  cs = t.chars.to_list
+  var out: [Str] = []
+  var cur = ""
+  var i = 0
+  while i < cs.len:
+    c = cs.at(i)
+    if c == "{" and i + 1 < cs.len and cs.at(i + 1) == "{":
+      cur += "{"
+      i += 2
+    elif c == "}" and i + 1 < cs.len and cs.at(i + 1) == "}":
+      cur += "}"
+      i += 2
+    elif c == "{":
+      # a hole runs to the next `}`, with no brace inside it
+      var j = i + 1
+      while j < cs.len and cs.at(j) != "}" and cs.at(j) != "{":
+        j += 1
+      if j < cs.len and cs.at(j) == "}":
+        out.push(cur)
+        cur = ""
+        i = j + 1
+      else:
+        cur += "{"
+        i += 1
+    else:
+      cur += c.to_s
+      i += 1
+  out.push(cur)
+  out
+
+# The ways a part may be written: the article before a filled-in name is
+# chosen afterwards, so "a `" may read "an `".
+def spellings(part: Str) -> [Str]:
+  var forms = [""]
+  cs = part.chars.to_list
+  var i = 0
+  while i < cs.len:
+    article = cs.at(i) == "a" and (i == 0 or cs.at(i - 1) == " ") and i + 2 < cs.len and cs.at(i + 1) == " " and cs.at(i + 2) == "`"
+    if article:
+      forms = forms.flat_map { |f| [f + "a", f + "an"] }
+    else:
+      c = cs.at(i).to_s
+      forms = forms.map { |f| f + c }.to_list
+    i += 1
+  forms
+
+# Where the earliest spelling of `part` starts in `line` at or after
+# `from`, and where it ends.
+def find_part(line: Str, forms: [Str], from: Int) -> (Int, Int)?:
+  var best: (Int, Int)? = None
+  rest = line.slice(from, line.len)
+  for f in forms:
+    match rest.index_of(f):
+      Some(k) ->
+        hit = (from + k, from + k + f.len)
+        best = match best:
+          Some(b) -> if hit.0 < b.0: Some(hit) else: Some(b)
+          None -> Some(hit)
+      None -> next
+  best
+
+# Whether the parts appear in `line` in order, with at least one character
+# between each two — what `.+?` between them asks of a single line.
+def matches_line?(line: Str, forms: [[Str]]) -> Bool:
+  var at = 0
+  while at <= line.len:
+    match find_part(line, forms.at(0), at):
+      None -> return false
+      Some((s, e)) ->
+        if rest_match?(line, forms, 1, e):
+          return true
+        at = s + 1
+  false
+
+def rest_match?(line: Str, forms: [[Str]], k: Int, from: Int) -> Bool:
+  if k == forms.len:
+    return true
+  # at least one character for the hole, and the earliest place for the
+  # next part after that is the only one worth trying first; a later one
+  # can only be needed when this one fails further on
+  var at = from + 1
+  while at <= line.len:
+    match find_part(line, forms.at(k), at):
+      None -> return false
+      Some((s, e)) ->
+        if rest_match?(line, forms, k + 1, e):
+          return true
+        at = s + 1
+  false
+
+# Whether some line of `text` shows the template.
+pub def shown?(template: Str, lines: [Str]) -> Bool:
+  forms = parts(template).map { |p| spellings(p) }.to_list
+  lines.any? { |l| matches_line?(l, forms) }

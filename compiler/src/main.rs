@@ -422,6 +422,18 @@ fn tokio_dep() -> (String, String) {
 }
 
 /// The cargo project for a program: `.lume/cargo-<stem>/` next to it.
+/// The name of a program's binary in the shared cargo cache: its file's
+/// name and a hash of where its project is. Two programs called `main.lume`
+/// in two folders, built at the same time, each get their own binary.
+fn cargo_bin_name(path: &Path) -> String {
+    use std::hash::{Hash, Hasher};
+    let (stem, proj) = cargo_project_dir(path);
+    let pkg = stem.replace(|c: char| !c.is_alphanumeric() && c != '_', "_");
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    fs::canonicalize(&proj).unwrap_or(proj).hash(&mut h);
+    format!("{}_{:08x}", pkg, h.finish() as u32)
+}
+
 fn cargo_project_dir(path: &Path) -> (String, PathBuf) {
     let stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or("out".into());
     let dir = path.parent().map(|p| p.to_path_buf()).unwrap_or_else(|| PathBuf::from("."));
@@ -446,6 +458,7 @@ fn write_cargo_project(path: &Path, deps: &[(String, String)]) -> Result<PathBuf
     }
     // `release` is what `lume run` uses: the program at opt-level 1 with an
     // incremental cache, every crate at opt-level 3. `ship` is `lume build`.
+    toml.push_str(&format!("\n[[bin]]\nname = \"{}\"\npath = \"src/main.rs\"\n", cargo_bin_name(path)));
     toml.push_str("\n[profile.release]\nopt-level = 1\ndebug = false\nincremental = true\noverflow-checks = true\n\n[profile.release.package.\"*\"]\nopt-level = 3\noverflow-checks = false\n\n[profile.ship]\ninherits = \"release\"\nopt-level = 3\nincremental = false\noverflow-checks = false\n\n[profile.ship-checked]\ninherits = \"ship\"\noverflow-checks = true\n");
     let toml_path = proj.join("Cargo.toml");
     if fs::read_to_string(&toml_path).ok().as_deref() != Some(toml.as_str()) {
@@ -477,10 +490,8 @@ fn cargo_in(proj: &Path) -> Command {
 
 /// Builds through cargo when the program imports Rust crates or uses async.
 fn build_with_cargo(path: &Path, rust: &str, deps: &[(String, String)], bin: &Path, has_rust_blocks: bool, mode: Mode) -> Result<(), String> {
-    let (stem, _) = cargo_project_dir(path);
     let proj = write_cargo_project(path, deps)?;
     let src_dir = proj.join("src");
-    let pkg = stem.replace(|c: char| !c.is_alphanumeric() && c != '_', "_");
     fs::write(src_dir.join("main.rs"), rust).map_err(|e| format!("error: cannot write main.rs: {}", e))?;
     let profile = match mode {
         Mode::Ship => "ship",
@@ -497,7 +508,7 @@ fn build_with_cargo(path: &Path, rust: &str, deps: &[(String, String)], bin: &Pa
         let err = String::from_utf8_lossy(&out.stderr);
         return Err(rustc_failed_banner(has_rust_blocks, &src_dir.join("main.rs"), "cargo", &err));
     }
-    let built = shared_target_dir().join(profile).join(&pkg);
+    let built = shared_target_dir().join(profile).join(cargo_bin_name(path));
     fs::copy(&built, bin).map_err(|e| format!("error: cannot copy `{}` to `{}`: {}", built.display(), bin.display(), e))?;
     Ok(())
 }

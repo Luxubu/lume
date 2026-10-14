@@ -113,8 +113,8 @@ check "packages from git" "tests/git_packages.expected" "$out"
 
 # every error message the compiler gives is shown by some test; the number
 # shown may grow and never shrink (tests/message_coverage.min holds it)
-out=$(python3 tests/message_coverage.py --check "$(cat tests/message_coverage.min)" 2>&1)
-if [ $? -eq 0 ]; then pass=$((pass+1)); else echo "FAIL message coverage: $out"; python3 tests/message_coverage.py | tail -n +2 | head -10 | sed 's/^/    /'; fail=$((fail+1)); failed+=("message coverage"); fi
+out=$(tests/lumecheck.sh coverage --check "$(cat tests/message_coverage.min)" 2>&1)
+if [ $? -eq 0 ]; then pass=$((pass+1)); else echo "FAIL message coverage: $out"; tests/lumecheck.sh coverage | tail -n +2 | head -10 | sed 's/^/    /'; fail=$((fail+1)); failed+=("message coverage"); fi
 
 # overflow, as Rust has it: checked by run, wrapped by build, checked by build --checked
 tmpo=$(mktemp -d)
@@ -130,7 +130,7 @@ check "check --json" "examples/check_json.expected" "$out"
 out=$(python3 tests/lsp_test.py "$LUME" 2>&1)
 check "lume lsp" "tests/lsp_test.expected" "$out"
 # the VS Code grammar knows every keyword
-if python3 tests/grammar_keywords.py >/dev/null; then pass=$((pass+1)); else echo "FAIL grammar keywords: $(python3 tests/grammar_keywords.py)"; fail=$((fail+1)); failed+=("grammar keywords"); fi
+if tests/lumecheck.sh keywords >/dev/null; then pass=$((pass+1)); else echo "FAIL grammar keywords: $(tests/lumecheck.sh keywords)"; fail=$((fail+1)); failed+=("grammar keywords"); fi
 
 # the json package: its own tests, and a program that depends on it by path
 LUME_ABS2="$(cd "$(dirname "$LUME")" && pwd)/$(basename "$LUME")"

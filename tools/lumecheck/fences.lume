@@ -1,0 +1,84 @@
+# The Lume examples in a Markdown file: fenced blocks, what kind each is,
+# and what it claims about itself.
+
+pub enum Kind:
+  Run
+  Bad
+  Skip
+
+pub struct Block:
+  kind: Kind
+  # the line of the opening fence, counted from 1
+  line: Int
+  body: [Str]
+
+# ```lume, ```lume-bad or ```lume-skip, and nothing else on the line
+def fence_kind(line: Str) -> Kind?:
+  match line.trim_right:
+    "```lume" -> Some(Kind.Run)
+    "```lume-bad" -> Some(Kind.Bad)
+    "```lume-skip" -> Some(Kind.Skip)
+    _ -> None
+
+# Every fenced Lume block of a file's text, in order.
+pub def blocks(text: Str) -> Iterator[Block]:
+  lines = text.split("\n")
+  var i = 0
+  while i < lines.len:
+    match fence_kind(lines.at(i)):
+      None -> i += 1
+      Some(kind) ->
+        start = i + 1
+        i += 1
+        var body: [Str] = []
+        while i < lines.len and lines.at(i).trim != "```":
+          body.push(lines.at(i))
+          i += 1
+        i += 1
+        yield Block(kind: kind, line: start, body: body)
+
+# A block is a whole program when it defines `main`; anything else is
+# statements, wrapped in one.
+pub def program(body: [Str]) -> Str:
+  if body.any? { |l| defines_main?(l) }:
+    return body.join("\n") + "\n"
+  indented = body.map { |l| if l.trim.empty?: "" else: "  " + l }.join("\n")
+  "def main:\n" + indented + "\n"
+
+# `def main` or `async def main` at the start of a line, and not a longer
+# name such as `def mainly`.
+def defines_main?(line: Str) -> Bool:
+  rest = if line.starts_with?("async "): line.slice(6, line.len) else: line
+  if not rest.starts_with?("def main"):
+    return false
+  match rest[8]:
+    Some(c) -> not (c.alnum? or c == "_")
+    None -> true
+
+# What follows `marker` on a line, with one space after it dropped: the text
+# of a `#=>` or a `#!` claim.
+def after(line: Str, marker: Str) -> Str?:
+  at = line.index_of(marker)?
+  rest = line.slice(at + marker.len, line.len)
+  Some(if rest.starts_with?(" ") or rest.starts_with?("\t"): rest.slice(1, rest.len) else: rest)
+
+# The `#=>` claims, in order: the whole output the example promises.
+pub def expected_out(body: [Str]) -> [Str]:
+  var out: [Str] = []
+  for l in body:
+    match after(l, "#=>"):
+      Some(t) -> out.push(t.trim_right)
+      None -> next
+  out
+
+# The `#!` claims of a `lume-bad` block: text its error must contain.
+pub def wanted_errors(body: [Str]) -> [Str]:
+  var out: [Str] = []
+  for l in body:
+    match after(l, "#!"):
+      Some(t) -> out.push(t.trim)
+      None -> next
+  out
+
+# A `lume-bad` block without its `#!` lines.
+pub def without_claims(body: [Str]) -> [Str] = body.reject { |l| l.contains?("#!") }.to_list

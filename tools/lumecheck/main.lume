@@ -1,0 +1,140 @@
+# lumecheck — the checks the test suite runs on Lume's own docs and
+# compiler, written in Lume.
+#
+#   lumecheck docs [-v] [-j N]     run every example in docs/ against what it claims
+#   lumecheck coverage [--check N] which compiler messages some test shows
+#   lumecheck keywords             every keyword is in the VS Code grammar
+#
+# Run it from the root of the repository.
+
+import fences
+import runner
+import runner.Outcome
+import coverage
+import keywords
+
+COMPILER_FILES = ["codegen.rs", "parser.rs", "lexer.rs", "loader.rs", "manifest.rs", "fetch.rs", "main.rs"]
+
+# What a flag such as `-j 8` was given, or `fallback`.
+def flag(args: [Str], name: Str, fallback: Int) -> Int:
+  match args.index_of(name):
+    Some(i) -> args[i + 1].map { |v| v.to_int.or(fallback) }.or(fallback)
+    None -> fallback
+
+def docs_files -> [Str] or Error:
+  Ok(Dir.walk("docs")?.filter { |p| p.ends_with?(".md") }.sort)
+
+# Every example, numbered so each runs in a folder of its own.
+def examples(scratch: Str) -> [(Int, Str, fences.Block)] or Error:
+  var out: [(Int, Str, fences.Block)] = []
+  for path in docs_files()?:
+    for b in fences.blocks(File.read(path)?):
+      match b.kind:
+        Skip -> next
+        _ -> out.push((out.len, "#{path}:#{b.line}", b))
+  Ok(out)
+
+async def docs(args: [Str]) -> Int or Error:
+  lume = Path.join(Env.get("PWD").or("."), "compiler/target/release/lume")
+  if not File.exists?(lume):
+    puts "build the compiler first: cd compiler && cargo build --release"
+    return Ok(1)
+  verbose = args.contains?("-v")
+  workers = flag(args, "-j", 8).max(1)
+  scratch = Path.join(Env.get("TMPDIR").or("/tmp"), "lumecheck-#{Time.now_ms}")
+  all = examples(scratch)?
+  # each worker takes every `workers`-th example, so the order they finish
+  # in does not matter: the outcomes are put back in the docs' order
+  var tasks: [Task[[(Int, Outcome)]]] = []
+  for w in 0...workers:
+    mine = all.filter { |i, at, b| i % workers == w }.to_list
+    tasks.push(spawn: mine.map { |i, at, b| (i, runner.check_block(lume, Path.join(scratch, "#{i}"), at, b)) }.to_list)
+  var outcomes = (await tasks).flatten.sort_by { |i, o| i }.map { |i, o| o }.to_list
+  # the multi-file examples: a folder under docs/ with main.lume and main.expected
+  root = Env.get("PWD").or(".")
+  for path in docs_files_all()?:
+    if Path.base(path) == "main.lume" and File.exists?(Path.join(Path.dir(path), "main.expected")):
+      outcomes.push(runner.check_folder(lume, Path.join(scratch, "folder"), root, Path.join(root, Path.dir(path))))
+  var ok = 0
+  var failed = 0
+  for o in outcomes:
+    match o.why:
+      None ->
+        ok += 1
+        puts "ok   #{o.place}" if verbose
+      Some(why) ->
+        failed += 1
+        puts "FAIL #{o.place}\n    #{why.replace("\n", "\n    ")}"
+  Dir.remove(scratch)? if Dir.exists?(scratch)
+  puts "#{ok} examples ok, #{failed} failed"
+  Ok(if failed > 0: 1 else: 0)
+
+def docs_files_all -> [Str] or Error = Dir.walk("docs")
+
+def coverage_check(args: [Str]) -> Int or Error:
+  var all: [coverage.Template] = []
+  for f in COMPILER_FILES:
+    for t in coverage.templates_in(f, File.read(Path.join("compiler/src", f))?):
+      all.push(t)
+  lines = shown_lines()?
+  var seen: {Str} = {}
+  var covered = 0
+  var missing: [coverage.Template] = []
+  for t in all:
+    next if seen.contains?(t.text)
+    seen.add(t.text)
+    if coverage.shown?(t.text, lines):
+      covered += 1
+    else:
+      missing.push(t)
+  total = covered + missing.len
+  if args.contains?("--check"):
+    need = flag(args, "--check", 0)
+    puts "#{covered} of #{total} messages shown by a test (at least #{need} wanted)"
+    return Ok(if covered >= need: 0 else: 1)
+  puts "#{covered} of #{total} messages shown by a test"
+  for t in missing:
+    puts "  #{t.place}: #{t.text}"
+  Ok(0)
+
+# Every line a test checks: the expected outputs, and the `#!`, `error:`
+# and `warning:` lines of the docs. A folder whose name starts with `.`
+# holds build output, not tests.
+def shown_lines -> [Str] or Error:
+  var lines: [Str] = []
+  var files: [Str] = []
+  for root in ["examples", "corpus"]:
+    for p in Dir.walk(root)?:
+      if not p.contains?("/.") and (p.ends_with?(".expected") or Path.base(p) == "expected"):
+        files.push(p)
+  for p in Dir.list("tests")?:
+    files.push(Path.join("tests", p)) if p.ends_with?(".expected")
+  for p in files:
+    for l in File.read(p)?.lines:
+      lines.push(l)
+  for p in Dir.walk("docs")?:
+    if p.ends_with?(".md"):
+      for l in File.read(p)?.lines:
+        lines.push(l) if l.starts_with?("#!") or l.starts_with?("error:") or l.starts_with?("warning:")
+  Ok(lines)
+
+def keywords_check -> Int or Error:
+  kws = keywords.compiler_keywords(File.read("compiler/src/lexer.rs")?)
+  gone = keywords.missing(kws, File.read("editors/vscode/syntaxes/lume.tmLanguage.json")?)
+  if gone.empty?:
+    puts "#{kws.len} keywords, all in the grammar"
+    return Ok(0)
+  puts "#{kws.len} keywords, missing from the grammar: #{gone.join(", ")}"
+  Ok(1)
+
+async def main -> () or Error:
+  args = Env.args
+  code = match args.first.or(""):
+    "docs" -> await docs(args)?
+    "coverage" -> coverage_check(args)?
+    "keywords" -> keywords_check()?
+    _ ->
+      warn "usage: lumecheck docs [-v] [-j N] | coverage [--check N] | keywords"
+      2
+  Env.exit(code) if code != 0
+  ()

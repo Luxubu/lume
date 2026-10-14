@@ -2,7 +2,11 @@
 
 ## Unreleased
 
-Nothing yet.
+- **`tools/lumecheck/`**: the suite's docs, message-coverage and grammar
+  checks, written in Lume; the docs check runs three times faster.
+- **Fixed**: two programs with the same file name, built at the same time,
+  could run each other's binary; a generator from another module lost the
+  type of its items.
 
 ## 0.3.0 — interfaces all the way
 

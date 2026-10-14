@@ -1,6 +1,6 @@
 # Messages no example shows
 
-`tests/message_coverage.py` lists these as not shown by any test. Each one was
+`tests/lumecheck.sh coverage` lists these as not shown by any test. Each one was
 tried; this is why there is no `examples/errors/*.lume` for it.
 
 ## Not reachable from `lume check`

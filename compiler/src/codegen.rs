@@ -1318,6 +1318,11 @@ fn qualify_type(t: &Type, id: &str, ex: &Exports) -> Type {
         Type::Result(a, b) => Type::Result(Box::new(qualify_type(a, id, ex)), Box::new(qualify_type(b, id, ex))),
         Type::Map(a, b) => Type::Map(Box::new(qualify_type(a, id, ex)), Box::new(qualify_type(b, id, ex))),
         Type::Set(t) => Type::Set(Box::new(qualify_type(t, id, ex))),
+        // a module's generator, task or future hands out the module's types
+        Type::Gen(t) => Type::Gen(Box::new(qualify_type(t, id, ex))),
+        Type::Task(t) => Type::Task(Box::new(qualify_type(t, id, ex))),
+        Type::Future(t) => Type::Future(Box::new(qualify_type(t, id, ex))),
+        Type::Shared(t, m) => Type::Shared(Box::new(qualify_type(t, id, ex)), *m),
         other => other.clone(),
     }
 }

@@ -4,6 +4,7 @@
 #
 #   tests/docs.sh          check every example
 #   tests/docs.sh -v       name each one as it passes
+#   tests/docs.sh -j 4     run four at a time (eight by default)
 #
 # The convention, in a ```lume fenced block:
 #
@@ -23,4 +24,4 @@
 
 set -u
 cd "$(dirname "$0")/.."
-exec python3 tests/docs_check.py "$@"
+exec tests/lumecheck.sh docs "$@"

@@ -1,0 +1,31 @@
+# Every keyword the compiler knows is one the VS Code grammar colours: a
+# keyword added to the lexer and not to the grammar shows here.
+
+# The quoted words of the lexer's `KEYWORDS`, in order.
+pub def compiler_keywords(lexer_src: Str) -> [Str]:
+  start = lexer_src.index_of("pub const KEYWORDS").or(0)
+  block = lexer_src.slice(start, lexer_src.len)
+  list = block.slice(0, block.index_of("];").or(block.len))
+  # the words are every other piece between quotes
+  list.split("\"").enumerate.filter { |i, piece| i % 2 == 1 }.map { |i, piece| piece }.to_list
+
+# Whether `w` appears in `text` as a whole word.
+def word_in?(text: Str, w: Str) -> Bool:
+  cs = text.chars.to_list
+  var from = 0
+  while true:
+    rest = text.slice(from, text.len)
+    match rest.index_of(w):
+      None -> return false
+      Some(k) ->
+        at = from + k
+        before_ok = at == 0 or not part_of_word?(cs.at(at - 1))
+        after_ok = at + w.len >= cs.len or not part_of_word?(cs.at(at + w.len))
+        return true if before_ok and after_ok
+        from = at + 1
+  false
+
+def part_of_word?(c: Char) -> Bool = c.alnum? or c == "_"
+
+# The keywords the grammar does not mention.
+pub def missing(keywords: [Str], grammar: Str) -> [Str] = keywords.reject { |k| word_in?(grammar, k) }.to_list
