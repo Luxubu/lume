@@ -328,11 +328,47 @@ def main:
 - **In an interface** a default may be a generator, made from the
   interface's other methods; see
   [Interfaces](interfaces.md#an-interfaces-own-methods-may-use-interfaces).
-- **Not yet:** an `async` generator, a generator in an `extend`, and a
-  generator that takes a block or an interface value.
+- **`async def` with `yield`** is an async generator; see below.
+- **Not yet:** an `async` generator method, a generator in an `extend`, and
+  a generator that takes a block or an interface value.
 - **Speed:** `bench/b7_generators.lume` is `b6` as a generator; it runs at
   about 1.3 times the hand-written Rust iterator.
 - **More:** `examples/generators.lume` shows each of these.
+
+### Async generators: `async def` with `yield`
+
+**An `async def` that gives `Iterator[T]` and has `yield` in it is an async
+generator**: its body may `await`, so its items arrive one at a time. It
+runs as a task that is never more than one item ahead of whoever walks it,
+and `for` waits for each item. Stable Rust has no async generators yet;
+this is what the `async-stream` crate's `stream!` does.
+
+```lume
+async def fetch(n: Int) -> Int:
+  await Time.sleep(1)
+  n * 10
+
+async def results(ids: [Int]) -> Iterator[Int]:
+  for id in ids:
+    yield await fetch(id)
+
+async def main:
+  for r in results([1, 2]):
+    puts r            #=> 10
+                      #=> 20
+  puts results([3]).to_list    #=> [30]
+```
+
+- **It is walked in async code**: a `for` over it, `s.next` on a `var` and
+  `.to_list` wait, so they go in an `async def` or a `spawn:` body; so does
+  calling one, which starts its task.
+- **Letting go ends it.** After a `break`, or once nothing holds it, the
+  body stops at its next `yield`, so an endless one is fine.
+- **It moves like a generator**, and a task that uses one takes it.
+- **Not yet:** chain methods over it (`map`, `filter`, `take`) — keep its
+  items with `.to_list` and chain over the list — and an async generator
+  method.
+- **More:** `examples/async_generators.lume` shows each of these.
 
 ### Taking a sequence: `xs: Iterator[T]`
 

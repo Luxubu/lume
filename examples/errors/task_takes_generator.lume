@@ -1,0 +1,10 @@
+# A generator cannot be copied: a task that uses one takes it, so it is gone after the `spawn:`.
+
+def ones -> Iterator[Int]:
+  yield 1
+
+async def main:
+  g = ones()
+  t = spawn: g.to_list
+  puts await t
+  puts g.to_list

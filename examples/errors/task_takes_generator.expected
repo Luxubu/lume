@@ -1,0 +1,6 @@
+error: `g` cannot be copied, and the task takes it, so it cannot be used after the `spawn:`
+  --> examples/errors/task_takes_generator.lume:8:7
+  |
+8 |   t = spawn: g.to_list
+  |       ^
+  help: use `g` only inside the task, or keep what you need from it before

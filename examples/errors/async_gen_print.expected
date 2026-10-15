@@ -1,0 +1,6 @@
+error: the items of an async sequence arrive later, so it is not a value to print or keep as it is
+  --> examples/errors/async_gen_print.lume:7:8
+  |
+7 |   puts nums()
+  |        ^
+  help: walk it with `for` in async code, or keep its items with `.to_list`

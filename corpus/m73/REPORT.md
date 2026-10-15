@@ -59,3 +59,9 @@ is better now (below).
   where it stopped (A); an endless chain given to a generator never returns,
   because a chain into a generator is worked out at the call (A).
 - `io.md`: the "has days 1 to N" error, for any month (A, C).
+
+## Since
+
+- Milestone 85 made `async def` with `yield` an async generator, so b14,
+  written to be refused, now runs and prints `1`; its expected file says
+  so. The header keeps what the reviewer predicted at the time.

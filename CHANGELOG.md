@@ -7,6 +7,10 @@
 - **The test suite is written in Lume** and runs its checks in parallel:
   2 minutes instead of 15. `tests/run.sh` runs it, with `-j N`.
 - **`Process.run_in(dir, program, args)`** runs a program in a folder.
+- **Async generators**: an `async def` with `yield` may `await`; its items
+  are walked with `for` in async code.
+- **Fixed**: a task that used a generator, a stream or another task copied
+  it, which cannot be done; the task now takes it.
 - **Fixed**: two programs with the same file name, built at the same time,
   could run each other's binary; a generator from another module lost the
   type of its items.

@@ -1161,6 +1161,7 @@ pub fn type_str(t: &Type) -> String {
         Type::Iter(e, _) => format!("[{}]", type_str(e)),
         Type::Task(e) => format!("Task[{}]", type_str(e)),
         Type::Gen(e) => format!("Iterator[{}]", type_str(e)),
+        Type::AsyncGen(e) => format!("async Iterator[{}]", type_str(e)),
         Type::Future(e) => format!("async {}", type_str(e)),
         Type::App(n, args) => format!("{}[{}]", n, args.iter().map(type_str).collect::<Vec<_>>().join(", ")),
         Type::Fn(ps, r) => format!("({}) -> {}", ps.iter().map(type_str).collect::<Vec<_>>().join(", "), type_str(r)),

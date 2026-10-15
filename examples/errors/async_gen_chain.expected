@@ -1,0 +1,6 @@
+error: `async Iterator[Int]` values cannot take a block; only lists and ranges can
+  --> examples/errors/async_gen_chain.lume:7:14
+  |
+7 |   puts nums().map { |x| x * 2 }.to_list
+  |              ^
+  help: walk it with `for` in async code, or keep its items with `.to_list` and chain over the list

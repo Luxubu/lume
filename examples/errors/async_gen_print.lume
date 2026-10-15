@@ -1,0 +1,7 @@
+# An async sequence is not a value to print: its items have not arrived.
+
+async def nums -> Iterator[Int]:
+  yield 1
+
+async def main:
+  puts nums()

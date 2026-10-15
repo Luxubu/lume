@@ -1,0 +1,6 @@
+error: `nums()` is an `async` generator, which runs as a task, so it is called from async code
+  --> examples/errors/async_gen_outside_async.lume:7:7
+  |
+7 |   g = nums()
+  |       ^
+  help: call it in an `async def` or a `spawn:` body

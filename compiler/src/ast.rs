@@ -40,6 +40,10 @@ pub enum Type {
     /// What calling a generator (a `def` with `yield`) gives: a lazy
     /// sequence that moves, as a Rust iterator does. Written `Iterator[T]`.
     Gen(Box<Type>),
+    /// What calling an `async def` with `yield` gives: items that arrive
+    /// one at a time and are awaited, walked with `for` in async code.
+    /// Written `async Iterator[T]` in messages.
+    AsyncGen(Box<Type>),
     /// The value of calling an `async def` before `await`. Internal.
     Future(Box<Type>),
     /// `shared T` (one value, many handles) / `shared var T` (behind a lock)

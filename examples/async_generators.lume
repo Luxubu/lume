@@ -1,0 +1,46 @@
+# An `async def` with `yield` is an async generator: its body may `await`,
+# and its items arrive one at a time. It runs as a task that is never more
+# than one item ahead of whoever walks it; `for` waits for each item, and
+# letting go of it ends the body at its next `yield`. Rust has this as the
+# `async-stream` crate's `stream!`.
+
+async def fetch_score(name: Str) -> Int:
+  # stands for a request: what comes back depends only on the name
+  await Time.sleep(2)
+  name.len * 10
+
+# each item needs a wait of its own
+async def scores(names: [Str]) -> Iterator[(Str, Int)]:
+  for n in names:
+    yield (n, await fetch_score(n))
+
+# never ends: whoever walks it decides when to stop
+async def ticks(label: Str) -> Iterator[Str]:
+  var n = 0
+  while true:
+    await Time.sleep(1)
+    n += 1
+    yield "#{label} #{n}"
+
+async def main:
+  for name, score in scores(["ann", "bob", "cy"]):
+    puts "#{name}: #{score}"
+
+  # moved along by hand, then walked; breaking out ends it
+  var t = ticks("tick")
+  puts t.next
+  for x in t:
+    puts x
+    break if x == "tick 3"
+
+  # all of its items at once
+  puts scores(["dee"]).to_list
+
+  # a task may walk one; the task takes it
+  s = scores(["eve", "flo"])
+  total = spawn:
+    var sum = 0
+    for _, v in s:
+      sum += v
+    sum
+  puts await total

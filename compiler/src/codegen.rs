@@ -755,6 +755,63 @@ impl<T, F: std::future::Future<Output = ()>> Iterator for LumeGen<T, F> {
         self.slot.take()
     }
 }
+/// What an `async def` with `yield` gives: a one-item channel between the
+/// body, running as a task, and whoever walks it. The body waits at each
+/// `yield` until the item before has been taken, so it is never more than
+/// one item ahead; when the walker lets go, the next `yield` ends the body.
+struct LumeChan<T> { slot: Option<T>, body_done: bool, walker_gone: bool, walker: Option<std::task::Waker>, body: Option<std::task::Waker> }
+struct LumeStream<T> { ch: std::sync::Arc<std::sync::Mutex<LumeChan<T>>> }
+struct LumeSender<T> { ch: std::sync::Arc<std::sync::Mutex<LumeChan<T>>> }
+fn lume_stream<T>() -> (LumeSender<T>, LumeStream<T>) {
+    let ch = std::sync::Arc::new(std::sync::Mutex::new(LumeChan { slot: None, body_done: false, walker_gone: false, walker: None, body: None }));
+    (LumeSender { ch: ch.clone() }, LumeStream { ch })
+}
+impl<T> LumeSender<T> {
+    /// Hands over one item; false once nobody walks the stream any more.
+    fn put(&self, v: T) -> impl std::future::Future<Output = bool> + '_ {
+        let mut v = Some(v);
+        std::future::poll_fn(move |cx| {
+            let mut c = self.ch.lock().unwrap();
+            if c.walker_gone { return std::task::Poll::Ready(false); }
+            if c.slot.is_none() {
+                c.slot = v.take();
+                if let Some(w) = c.walker.take() { w.wake(); }
+                return std::task::Poll::Ready(true);
+            }
+            c.body = Some(cx.waker().clone());
+            std::task::Poll::Pending
+        })
+    }
+}
+impl<T> Drop for LumeSender<T> {
+    fn drop(&mut self) {
+        let mut c = self.ch.lock().unwrap();
+        c.body_done = true;
+        if let Some(w) = c.walker.take() { w.wake(); }
+    }
+}
+impl<T> LumeStream<T> {
+    /// The next item, once the body has made it; `None` when it has ended.
+    fn next(&mut self) -> impl std::future::Future<Output = Option<T>> + '_ {
+        std::future::poll_fn(move |cx| {
+            let mut c = self.ch.lock().unwrap();
+            if let Some(v) = c.slot.take() {
+                if let Some(w) = c.body.take() { w.wake(); }
+                return std::task::Poll::Ready(Some(v));
+            }
+            if c.body_done { return std::task::Poll::Ready(None); }
+            c.walker = Some(cx.waker().clone());
+            std::task::Poll::Pending
+        })
+    }
+}
+impl<T> Drop for LumeStream<T> {
+    fn drop(&mut self) {
+        let mut c = self.ch.lock().unwrap();
+        c.walker_gone = true;
+        if let Some(w) = c.body.take() { w.wake(); }
+    }
+}
 // ---- end prelude ----
 "#;
 
@@ -1094,6 +1151,9 @@ pub struct Gen {
     /// Inside a generator: the item type, and how many blocks deep the
     /// generator's own body is, so a `yield` in a block it passes is caught.
     gen_item: Option<(Type, usize)>,
+    /// The generator being compiled is an `async def`: its items go through
+    /// a channel, and a `yield` waits until the one before was taken.
+    gen_async: bool,
     /// The arguments being written are for a generator.
     arg_for_gen: bool,
     /// Lists of text held as slices of another local's text, which they
@@ -1187,6 +1247,7 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, module_id: &str
         current_ret: Type::Unit,
         current_fn: String::new(),
         gen_item: None,
+        gen_async: false,
         arg_for_gen: false,
         slices: HashMap::new(),
         text_borrows: HashMap::new(),
@@ -1332,6 +1393,7 @@ fn qualify_type(t: &Type, id: &str, ex: &Exports) -> Type {
         Type::Set(t) => Type::Set(Box::new(qualify_type(t, id, ex))),
         // a module's generator, task or future hands out the module's types
         Type::Gen(t) => Type::Gen(Box::new(qualify_type(t, id, ex))),
+        Type::AsyncGen(t) => Type::AsyncGen(Box::new(qualify_type(t, id, ex))),
         Type::Task(t) => Type::Task(Box::new(qualify_type(t, id, ex))),
         Type::Future(t) => Type::Future(Box::new(qualify_type(t, id, ex))),
         Type::Shared(t, m) => Type::Shared(Box::new(qualify_type(t, id, ex)), *m),
@@ -1392,6 +1454,7 @@ pub fn rust_type(t: &Type) -> String {
         Type::Iter(inner, _) => format!("Vec<{}>", rust_type(inner)),
         Type::Task(inner) => format!("tokio::task::JoinHandle<{}>", rust_type(inner)),
         Type::Gen(inner) => format!("impl Iterator<Item = {}> + Send", rust_type(inner)),
+        Type::AsyncGen(inner) => format!("LumeStream<{}>", rust_type(inner)),
         Type::Future(inner) => format!("impl std::future::Future<Output = {}>", rust_type(inner)),
         Type::Shared(inner, true) => format!("std::sync::Arc<std::sync::Mutex<{}>>", rust_type(inner)),
         Type::Shared(inner, false) => format!("std::sync::Arc<{}>", rust_type(inner)),
@@ -1424,6 +1487,7 @@ pub fn type_name(t: &Type) -> String {
         Type::Iter(i, _) => format!("[{}]", type_name(i)),
         Type::Task(i) => format!("Task[{}]", type_name(i)),
         Type::Gen(i) => format!("Iterator[{}]", type_name(i)),
+        Type::AsyncGen(i) => format!("async Iterator[{}]", type_name(i)),
         Type::Future(i) => format!("async {}", type_name(i)),
         Type::Shared(i, true) => format!("shared var {}", type_name(i)),
         Type::Shared(i, false) => format!("shared {}", type_name(i)),
@@ -1478,6 +1542,7 @@ impl Gen {
             Type::Iter(inner, _) => format!("Vec<{}>", self.rt(inner)),
             Type::Task(inner) => format!("tokio::task::JoinHandle<{}>", self.rt(inner)),
             Type::Gen(inner) => format!("impl Iterator<Item = {}> + Send", self.rt(inner)),
+            Type::AsyncGen(inner) => format!("LumeStream<{}>", self.rt(inner)),
             Type::Shared(inner, true) => format!("std::sync::Arc<std::sync::Mutex<{}>>", self.rt(inner)),
             Type::Shared(inner, false) => format!("std::sync::Arc<{}>", self.rt(inner)),
             Type::Fn(ins, out) => format!("LumeFn<{}>", self.dyn_fn(ins, out)),
@@ -1524,6 +1589,7 @@ impl Gen {
             Type::Task(i) if self.own_task => Type::App(self.canon("Task"), vec![self.ct(i)]),
             Type::Task(i) => Type::Task(Box::new(self.ct(i))),
             Type::Gen(i) => Type::Gen(Box::new(self.ct(i))),
+            Type::AsyncGen(i) => Type::AsyncGen(Box::new(self.ct(i))),
             Type::Future(i) => Type::Future(Box::new(self.ct(i))),
             Type::Shared(i, m) => Type::Shared(Box::new(self.ct(i)), *m),
             Type::Fn(ps, r) => Type::Fn(ps.iter().map(|x| self.ct(x)).collect(), Box::new(self.ct(r))),
@@ -1546,6 +1612,7 @@ impl Gen {
             Type::Set(i) => Type::Set(go(i)),
             Type::Task(i) => Type::Task(go(i)),
             Type::Gen(i) => Type::Gen(go(i)),
+            Type::AsyncGen(i) => Type::AsyncGen(go(i)),
             Type::Future(i) => Type::Future(go(i)),
             Type::Iter(i, b) => Type::Iter(go(i), *b),
             Type::Shared(i, b) => Type::Shared(go(i), *b),
@@ -1572,6 +1639,8 @@ impl Gen {
             params: f.params.iter().map(|p| (p.name.clone(), param_type(Self::as_vars(&self.ct(&p.ty), &f.generics)))).collect(),
             var_params: f.params.iter().map(|p| p.mutable).collect(),
             ret: match f.ret.as_ref().map(|t| Self::as_vars(&self.ct(t), &f.generics)) {
+                // an `async def` with `yield`: items that arrive and are awaited
+                Some(Type::App(n, args)) if args.len() == 1 && is_iterator_name(&n) && f.is_async && block_yields(&f.body) => Type::AsyncGen(Box::new(args[0].clone())),
                 // a `def` that gives `Iterator[T]` gives a sequence by move, as
                 // Rust's `-> impl Iterator` does: a generator when it has `yield`
                 Some(Type::App(n, args)) if args.len() == 1 && is_iterator_name(&n) => Type::Gen(Box::new(args[0].clone())),
@@ -1579,7 +1648,9 @@ impl Gen {
                 None => Type::Unknown,
             },
             self_kind: f.self_kind,
-            is_async: f.is_async,
+            // calling an async generator starts it at once and gives the
+            // stream: there is nothing to await at the call
+            is_async: f.is_async && !(block_yields(&f.body) && f.ret.as_ref().map(|t| matches!(self.ct(t), Type::App(n, ref a) if a.len() == 1 && is_iterator_name(&n))).unwrap_or(false)),
             generics: self.norm_generics(&f.generics),
             kept_params: f.params.iter().map(|p| matches!(p.ty, Type::Fn(..)) && keeps_name(&f.body, &p.name, self)).collect(),
             dyn_blocks: f.params.iter().any(|p| matches!(p.ty, Type::Fn(..))) && calls_self_with_block(&f.body, &f.name),
@@ -1703,6 +1774,7 @@ impl Gen {
             Type::Set(i) => Type::Set(go(i)),
             Type::Task(i) => Type::Task(go(i)),
             Type::Gen(i) => Type::Gen(go(i)),
+            Type::AsyncGen(i) => Type::AsyncGen(go(i)),
             Type::Future(i) => Type::Future(go(i)),
             Type::Iter(i, b) => Type::Iter(go(i), *b),
             Type::Shared(i, b) => Type::Shared(go(i), *b),
@@ -5778,6 +5850,13 @@ impl Gen {
             let rn = rust_name(n);
             let copy = if matches!(b.ty, Type::Shared(..)) {
                 format!("{}.clone()", rn)
+            } else if matches!(b.ty, Type::Task(_) | Type::Gen(_) | Type::AsyncGen(_)) {
+                // what cannot be copied, the task takes, as Rust's `move` does
+                if self.rest_stack.iter().any(|rest| reads_before_rebind(rest, n)) {
+                    return Err(LumeError::new(e.line, e.col, format!("`{}` cannot be copied, and the task takes it, so it cannot be used after the `spawn:`", n))
+                        .with_help(format!("use `{}` only inside the task, or keep what you need from it before", n)));
+                }
+                rn.clone()
             } else if b.ty.is_copy() {
                 if b.borrowed { format!("*{}", rn) } else { rn.clone() }
             } else if b.ty == Type::Str {
@@ -5798,7 +5877,14 @@ impl Gen {
         // run, a computation — and goes to Tokio's pool for such work, as
         // Rust's `spawn_blocking` does: it holds up no other task, and as
         // many run at once as there are tasks, not as there are cores.
-        let blocking = { let d = format!("{:?}", body); !d.contains("Await(") && !d.contains("Spawn(") };
+        // Walking an async sequence waits as `await` does: a body that holds
+        // one from outside, or makes one, is async work too.
+        let blocking = {
+            let d = format!("{:?}", body);
+            let streams = captured.iter().any(|(_, b)| matches!(b.ty, Type::AsyncGen(_)))
+                || self.fns.iter().any(|(n, sg)| matches!(sg.ret, Type::AsyncGen(_)) && d.contains(&format!("name: {:?}", n)));
+            !d.contains("Await(") && !d.contains("Spawn(") && !streams
+        };
         self.loop_depth = 0;
         self.in_block = false;
         self.tail_of_fn = true;
@@ -6727,10 +6813,13 @@ impl Gen {
         // a generator has `yield`; a `def` that gives `Iterator[T]` without
         // it hands on a sequence it makes some other way
         let gen_item = match &sig.ret {
-            Type::Gen(t) if block_yields(&f.body) => Some((**t).clone()),
+            Type::Gen(t) | Type::AsyncGen(t) if block_yields(&f.body) => Some((**t).clone()),
             _ => None,
         };
-        if gen_item.is_none() && block_yields(&f.body) && !matches!(sig.ret, Type::Gen(_)) {
+        // `async def` with `yield`: the body runs as a task that hands its
+        // items over one at a time
+        let async_gen = gen_item.is_some() && matches!(sig.ret, Type::AsyncGen(_));
+        if gen_item.is_none() && block_yields(&f.body) && !matches!(sig.ret, Type::Gen(_) | Type::AsyncGen(_)) {
             return Err(LumeError::new(f.line, f.col, format!("`{}` hands out items with `yield`, so it gives `Iterator[T]`", f.name))
                 .with_help(format!("say what it gives: `def {}(...) -> Iterator[Int]:`, with the type its `yield`s have", f.name)));
         }
@@ -6742,8 +6831,8 @@ impl Gen {
             if owner.is_some() && f.self_kind == SelfKind::Mutate {
                 return refuse(&format!("`{}` is a generator, which walks its own copy of the value, so `var self` would change nothing", f.name), "drop `var`; to move a value along by hand, give it `def next(var self) -> T?`");
             }
-            if f.is_async {
-                return refuse(&format!("`{}` cannot be both `async` and a generator", f.name), "a generator's items are worked out when they are asked for; drop `async`");
+            if async_gen && owner.is_some() && f.self_kind != SelfKind::Static {
+                return refuse(&format!("`{}` is an `async` generator method, which cannot be written yet", f.name), "write it as an `async def` function that takes the value");
             }
             if let Some(p) = f.params.iter().find(|p| p.mutable) {
                 return Err(LumeError::new(p.line, p.col, format!("a generator takes a copy of what it is given, so `var {}` would change nothing the caller sees", p.name))
@@ -6893,7 +6982,7 @@ impl Gen {
         // not promise a future that can move between tasks, so it is
         // written as one that does, over an `async move` block
         let async_default = self.in_trait_decl && f.is_async;
-        let mut header = format!("{}{}fn {}{}({})", vis, if f.is_async && !async_default { "async " } else { "" }, fn_name, gen, parts.join(", "));
+        let mut header = format!("{}{}fn {}{}({})", vis, if f.is_async && !async_default && !async_gen { "async " } else { "" }, fn_name, gen, parts.join(", "));
         if async_default {
             header.push_str(&format!(" -> impl std::future::Future<Output = {}> + Send", self.rt(&sig.ret)));
         } else if sig.ret != Type::Unit {
@@ -6961,6 +7050,12 @@ impl Gen {
                 }
                 self.line(&format!("async fn lume_gen_{}{}({}) {{", rust_name(&f.name), gen, owned.join(", ")));
                 self.indent += 1;
+            } else if async_gen {
+                // the body runs as a task; the caller gets the stream at once
+                self.uses_async = true;
+                self.line(&format!("let (lume_co, lume_rx) = lume_stream::<{}>();", self.rt(item)));
+                self.line("tokio::spawn(async move {");
+                self.indent += 1;
             } else {
                 self.line(&format!("LumeGen::new(move |lume_co: LumeYield<{}>| async move {{", self.rt(item)));
                 self.indent += 1;
@@ -6985,6 +7080,7 @@ impl Gen {
         }
         self.current_ret = if gen_item.is_some() { Type::Unit } else { sig.ret.clone() };
         let saved_gen = std::mem::replace(&mut self.gen_item, gen_item.clone().map(|t| (t, self.closure_barriers.len())));
+        let saved_gen_async = std::mem::replace(&mut self.gen_async, async_gen);
         self.current_type = self.owner_type(owner);
         self.current_self_ty = owner.and_then(|o| self.ext_targets.get(o).cloned());
         self.current_self = f.self_kind;
@@ -7011,7 +7107,12 @@ impl Gen {
             self.line("})())");
         }
         self.gen_item = saved_gen;
-        if gen_item.is_some() && !(owner.is_some() && f.self_kind == SelfKind::Read) {
+        self.gen_async = saved_gen_async;
+        if async_gen {
+            self.indent -= 1;
+            self.line("});");
+            self.line("lume_rx");
+        } else if gen_item.is_some() && !(owner.is_some() && f.self_kind == SelfKind::Read) {
             self.indent -= 1;
             self.line("})");
         }
@@ -8154,7 +8255,12 @@ impl Gen {
                 }
                 self.check_assign(value, &item, &format!("{} gives `Iterator[{}]`", self.who(), type_name(&item)))?;
                 let v = self.expr_owned_as(value, &item)?;
-                self.line(&format!("lume_co.put({}).await;", v));
+                if self.gen_async {
+                    // nobody walks it any more: the body ends here
+                    self.line(&format!("if !lume_co.put({}).await {{ return; }}", v));
+                } else {
+                    self.line(&format!("lume_co.put({}).await;", v));
+                }
                 if is_tail {
                     return self.tail_unit(*line, *col);
                 }
@@ -8297,7 +8403,13 @@ impl Gen {
                     || (self.current_self == SelfKind::Mutate
                         && matches!(self.place_root(iter).map(|r| &r.kind), Some(ExprKind::Ident(n)) if self.lookup(n).is_none() && self.field_type(n).is_some()));
                 let chars_of = if vars.len() == 1 && !*mutable { self.chars_source(iter) } else { None };
+                let walks_stream = matches!(it_ty, Type::AsyncGen(_));
+                if walks_stream && !self.in_async {
+                    return Err(LumeError::new(iter.line, iter.col, format!("`{}` hands out items that arrive later, so a `for` over it waits for each: it goes in async code", describe_value(iter)))
+                        .with_help("loop over it in an `async def` or a `spawn:` body"));
+                }
                 let (it, elem_ty, borrowed) = match &it_ty {
+                    Type::AsyncGen(elem) => (self.give_away(iter)?, (**elem).clone(), false),
                     _ if chars_of.is_some() => (format!("({}).chars()", self.expr_val(chars_of.as_ref().unwrap())?), Type::Char, false),
                     Type::Iter(elem, by_ref) => (self.expr(iter)?, (**elem).clone(), *by_ref && !elem.is_copy()),
                     Type::Set(elem) if self_rooted => (format!("({}).iter().cloned().collect::<Vec<_>>().into_iter()", self.expr(iter)?), (**elem).clone(), false),
@@ -8372,8 +8484,15 @@ impl Gen {
                         }
                     }
                 };
-                // in brackets: Rust reads a struct literal there as the loop's body
-                self.line(&format!("for {} in ({}) {{", pattern, it));
+                if walks_stream {
+                    // each item is awaited as it arrives
+                    let sname = self.fresh("stream");
+                    self.line(&format!("let mut {} = {};", sname, it));
+                    self.line(&format!("while let Some({}) = {}.next().await {{", pattern, sname));
+                } else {
+                    // in brackets: Rust reads a struct literal there as the loop's body
+                    self.line(&format!("for {} in ({}) {{", pattern, it));
+                }
                 self.indent += 1;
                 // A number, flag or character in a pair is declared as a
                 // value, but what arrives depends on where the pairs come
@@ -8706,6 +8825,10 @@ impl Gen {
     /// interpolating): lazy chains are collected, everything else passes.
     fn expr_val(&mut self, e: &Expr) -> Result<String> {
         let t = self.ty_of(e);
+        if let Type::AsyncGen(_) = t {
+            return Err(LumeError::new(e.line, e.col, "the items of an async sequence arrive later, so it is not a value to print or keep as it is")
+                .with_help("walk it with `for` in async code, or keep its items with `.to_list`"));
+        }
         // a generator read as a value is its items, as a chain is: it is used up
         if let Type::Gen(_) = t {
             let s = self.give_away(e)?;
@@ -8744,7 +8867,7 @@ impl Gen {
             let s = self.expr(e)?;
             return Ok(self.collect_iter_t(&s, by_ref, &elem));
         }
-        if matches!(t, Type::Task(_) | Type::Gen(_)) {
+        if matches!(t, Type::Task(_) | Type::Gen(_) | Type::AsyncGen(_)) {
             return self.give_away(e);
         }
         let s = self.expr(e)?;
@@ -8913,7 +9036,7 @@ impl Gen {
         if let ExprKind::Ident(n) = &e.kind {
             if self.lookup(n).is_some() && self.rest_stack.iter().any(|rest| reads_before_rebind(rest, n)) {
                 return Err(match t {
-                    Type::Gen(_) => LumeError::new(e.line, e.col, format!("`{}` is a generator, and it is used up here, so it cannot be used after", n))
+                    Type::Gen(_) | Type::AsyncGen(_) => LumeError::new(e.line, e.col, format!("`{}` is a generator, and it is used up here, so it cannot be used after", n))
                         .with_help("a generator hands out each item once: to walk the items twice, keep them with `.to_list` first"),
                     _ => LumeError::new(e.line, e.col, format!("`{}` is a task, and it is given away here, so it cannot be used after", n))
                         .with_help("a task is awaited once, wherever it ends up: await it here or there, not both"),
@@ -9153,6 +9276,8 @@ impl Gen {
                         Some(why) => err.with_help(why),
                         None => err.with_help(format!("a type with `def items -> [T]` takes the list's methods too; give `{}` one", type_name(&other))),
                     },
+                    // items that arrive later: no chain runs over them yet
+                    Type::AsyncGen(_) => err.with_help("walk it with `for` in async code, or keep its items with `.to_list` and chain over the list"),
                     _ => err,
                 })
             }
@@ -11296,6 +11421,10 @@ impl Gen {
                     _ => format!("({} {} {})", l, op, r),
                 }
             }
+            ExprKind::Call { .. } if !self.in_async && matches!(self.ty_of(e), Type::AsyncGen(_)) => {
+                return Err(LumeError::new(e.line, e.col, format!("`{}` is an `async` generator, which runs as a task, so it is called from async code", describe_value(e)))
+                    .with_help("call it in an `async def` or a `spawn:` body"));
+            }
             ExprKind::Call { name: raw_name, args } => {
                 if args.is_empty() {
                     if let Some(ne) = self.split_ident_try(e) {
@@ -11723,7 +11852,8 @@ impl Gen {
                         }
                     }
                 }
-                let mut r = self.expr(recv)?;
+                // an async sequence is used up by `.to_list`
+                let mut r = if matches!(rt, Type::AsyncGen(_)) && name == "to_list" { self.give_away(recv)? } else { self.expr(recv)? };
                 // `took.slice(0, n).to_int`: likewise, the piece is read in place
                 if rt == Type::Str {
                     if let ExprKind::Method { recv: text, name: sl, args: sl_args } = &recv.kind {
@@ -11958,7 +12088,7 @@ impl Gen {
                         want_types = want;
                     }
                 }
-                if matches!(name.as_str(), "push" | "pop" | "insert" | "remove_at" | "add") || (name == "remove" && matches!(rt, Type::Map(..) | Type::Set(_))) || (name == "next" && matches!(rt, Type::Gen(_))) {
+                if matches!(name.as_str(), "push" | "pop" | "insert" | "remove_at" | "add") || (name == "remove" && matches!(rt, Type::Map(..) | Type::Set(_))) || (name == "next" && matches!(rt, Type::Gen(_) | Type::AsyncGen(_))) {
                     self.check_receiver_mutable(recv, name, e.line, e.col)?;
                 }
                 let mut parts = Vec::new();
@@ -12118,6 +12248,18 @@ impl Gen {
         Ok(match name {
             // a generator moved on by hand
             "next" if matches!(rt, Type::Gen(_)) => { need(0)?; format!("{}.next()", recv) }
+            "next" | "to_list" if matches!(rt, Type::AsyncGen(_)) => {
+                need(0)?;
+                if !self.in_async {
+                    return Err(LumeError::new(e.line, e.col, format!("`.{}` waits for items that arrive later, so it goes in async code", name))
+                        .with_help("call it in an `async def` or a `spawn:` body"));
+                }
+                if name == "next" {
+                    format!("{}.next().await", recv)
+                } else {
+                    format!("{{ let mut lume_s = {}; let mut lume_v = Vec::new(); while let Some(x) = lume_s.next().await {{ lume_v.push(x); }} lume_v }}", recv)
+                }
+            }
             "pad" => { need(1)?; format!("lume_pad(&({}), {})", recv, args[0]) }
             "pad_right" => { need(1)?; format!("lume_pad_right(&({}), {})", recv, args[0]) }
             "capitalize" => { need(0)?; format!("lume_capitalize(&{})", recv) }
@@ -12610,6 +12752,8 @@ fn builtins_for(recv: &Type) -> Vec<&'static str> {
             "zip", "flatten", "uniq", "index_of", "avg", "group_by", "partition", "flat_map", "to_set",
         ],
         Type::Map(..) => vec!["len", "empty?", "any?", "contains?", "keys", "values", "to_list", "remove", "get", "merge", "filter", "reject", "map_values", "each", "count", "all?", "find"],
+        // items that arrive later: awaited one at a time, or all of them
+        Type::AsyncGen(_) => return vec!["next", "to_list"],
         // `next`, and through a chain every method a list has
         Type::Gen(_) => {
             let mut v = vec!["next"];
@@ -12743,6 +12887,7 @@ fn rename_ext_vars(t: &Type, prefix: &str) -> Type {
         Type::Set(i) => Type::Set(Box::new(rename_ext_vars(i, prefix))),
         Type::Task(i) => Type::Task(Box::new(rename_ext_vars(i, prefix))),
         Type::Gen(i) => Type::Gen(Box::new(rename_ext_vars(i, prefix))),
+        Type::AsyncGen(i) => Type::AsyncGen(Box::new(rename_ext_vars(i, prefix))),
         Type::Map(a, b) => Type::Map(Box::new(rename_ext_vars(a, prefix)), Box::new(rename_ext_vars(b, prefix))),
         Type::Result(a, b) => Type::Result(Box::new(rename_ext_vars(a, prefix)), Box::new(rename_ext_vars(b, prefix))),
         Type::Tuple(ts) => Type::Tuple(ts.iter().map(|x| rename_ext_vars(x, prefix)).collect()),
@@ -12761,6 +12906,7 @@ fn strip_ext_vars(t: &Type) -> Type {
         Type::Set(i) => Type::Set(Box::new(strip_ext_vars(i))),
         Type::Task(i) => Type::Task(Box::new(strip_ext_vars(i))),
         Type::Gen(i) => Type::Gen(Box::new(strip_ext_vars(i))),
+        Type::AsyncGen(i) => Type::AsyncGen(Box::new(strip_ext_vars(i))),
         Type::Map(a, b) => Type::Map(Box::new(strip_ext_vars(a)), Box::new(strip_ext_vars(b))),
         Type::Result(a, b) => Type::Result(Box::new(strip_ext_vars(a)), Box::new(strip_ext_vars(b))),
         Type::Tuple(ts) => Type::Tuple(ts.iter().map(strip_ext_vars).collect()),
@@ -12788,6 +12934,7 @@ fn normalize_vars(t: &Type) -> Type {
             Type::Set(i) => Type::Set(Box::new(go(i, seen))),
             Type::Task(i) => Type::Task(Box::new(go(i, seen))),
             Type::Gen(i) => Type::Gen(Box::new(go(i, seen))),
+            Type::AsyncGen(i) => Type::AsyncGen(Box::new(go(i, seen))),
             Type::Map(a, b) => {
                 let a = go(a, seen);
                 Type::Map(Box::new(a), Box::new(go(b, seen)))
@@ -12816,6 +12963,7 @@ fn overlap_resolve(t: &Type, sub: &HashMap<String, Type>) -> Type {
         Type::Set(i) => Type::Set(Box::new(overlap_resolve(i, sub))),
         Type::Task(i) => Type::Task(Box::new(overlap_resolve(i, sub))),
         Type::Gen(i) => Type::Gen(Box::new(overlap_resolve(i, sub))),
+        Type::AsyncGen(i) => Type::AsyncGen(Box::new(overlap_resolve(i, sub))),
         Type::Map(a, b) => Type::Map(Box::new(overlap_resolve(a, sub)), Box::new(overlap_resolve(b, sub))),
         Type::Result(a, b) => Type::Result(Box::new(overlap_resolve(a, sub)), Box::new(overlap_resolve(b, sub))),
         Type::Tuple(ts) => Type::Tuple(ts.iter().map(|x| overlap_resolve(x, sub)).collect()),
@@ -12858,7 +13006,7 @@ fn overlap_unify(a: &Type, b: &Type, sub: &mut HashMap<String, Type>) -> bool {
         }
         (Type::Unknown, _) | (_, Type::Unknown) => true,
         (Type::List(x), Type::List(y)) | (Type::Iter(x, _), Type::List(y)) | (Type::List(x), Type::Iter(y, _)) | (Type::Iter(x, _), Type::Iter(y, _)) => overlap_unify(x, y, sub),
-        (Type::Option(x), Type::Option(y)) | (Type::Set(x), Type::Set(y)) | (Type::Task(x), Type::Task(y)) | (Type::Gen(x), Type::Gen(y)) => overlap_unify(x, y, sub),
+        (Type::Option(x), Type::Option(y)) | (Type::Set(x), Type::Set(y)) | (Type::Task(x), Type::Task(y)) | (Type::Gen(x), Type::Gen(y)) | (Type::AsyncGen(x), Type::AsyncGen(y)) => overlap_unify(x, y, sub),
         (Type::Map(a1, b1), Type::Map(a2, b2)) | (Type::Result(a1, b1), Type::Result(a2, b2)) => overlap_unify(a1, a2, sub) && overlap_unify(b1, b2, sub),
         (Type::Tuple(xs), Type::Tuple(ys)) => xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| overlap_unify(x, y, sub)),
         (Type::App(n, xs), Type::App(m, ys)) => n == m && xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| overlap_unify(x, y, sub)),
@@ -12884,7 +13032,7 @@ fn ext_fits(pat: &Type, t: &Type, sub: &mut HashMap<String, Type>) -> bool {
         (_, Type::Unknown) => true,
         (_, Type::Shared(inner, _)) => ext_fits(pat, inner, sub),
         (Type::List(x), Type::List(y)) | (Type::List(x), Type::Iter(y, _)) => ext_fits(x, y, sub),
-        (Type::Option(x), Type::Option(y)) | (Type::Set(x), Type::Set(y)) | (Type::Task(x), Type::Task(y)) | (Type::Gen(x), Type::Gen(y)) => ext_fits(x, y, sub),
+        (Type::Option(x), Type::Option(y)) | (Type::Set(x), Type::Set(y)) | (Type::Task(x), Type::Task(y)) | (Type::Gen(x), Type::Gen(y)) | (Type::AsyncGen(x), Type::AsyncGen(y)) => ext_fits(x, y, sub),
         (Type::Map(a1, b1), Type::Map(a2, b2)) | (Type::Result(a1, b1), Type::Result(a2, b2)) => ext_fits(a1, a2, sub) && ext_fits(b1, b2, sub),
         (Type::Tuple(xs), Type::Tuple(ys)) => xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| ext_fits(x, y, sub)),
         (Type::App(n, xs), Type::App(m, ys)) => n == m && xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| ext_fits(x, y, sub)),
@@ -13038,8 +13186,11 @@ fn builtin_namespace_type(ns: &str, name: &str) -> Option<Type> {
 
 /// Result type of a built-in method on a value of type `recv`.
 fn builtin_method_type(recv: &Type, name: &str) -> Type {
-    if let (Type::Gen(item), "next") = (recv, name) {
+    if let (Type::Gen(item) | Type::AsyncGen(item), "next") = (recv, name) {
         return Type::Option(item.clone());
+    }
+    if let (Type::AsyncGen(item), "to_list") = (recv, name) {
+        return Type::List(item.clone());
     }
     let elem = match recv {
         Type::List(e) | Type::Iter(e, _) => Some((**e).clone()),

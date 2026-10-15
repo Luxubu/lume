@@ -1,0 +1,8 @@
+# An async generator runs as a task, so only async code can start one.
+
+async def nums -> Iterator[Int]:
+  yield 1
+
+def main:
+  g = nums()
+  puts 1

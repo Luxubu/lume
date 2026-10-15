@@ -1,0 +1,7 @@
+# The items of an async sequence arrive later: there are no chains over them yet.
+
+async def nums -> Iterator[Int]:
+  yield 1
+
+async def main:
+  puts nums().map { |x| x * 2 }.to_list

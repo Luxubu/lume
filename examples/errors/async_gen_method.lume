@@ -1,0 +1,10 @@
+# A method cannot be an async generator yet.
+
+struct Feed:
+  url: Str
+
+  async def items -> Iterator[Str]:
+    yield url
+
+async def main:
+  puts Feed(url: "x").items.to_list
