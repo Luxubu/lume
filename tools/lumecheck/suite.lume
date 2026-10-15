@@ -1,0 +1,161 @@
+# The test suite: every example, error case, package, dogfood program and
+# review program, each compared with what it is expected to print. Checks
+# run on several tasks at once; the steps of one check run in order.
+
+pub enum How:
+  # `lume run`: must exit 0, and print what is expected
+  Runs
+  # `lume check`: must be refused, with the expected message and no rustc
+  Refused
+  # a review program: run, with its exit code; a leak into rustc fails it
+  # when it has an expected file, and one without is a known gap
+  Corpus
+  # `lume fmt --stdout`: must exit 0, and print what is expected
+  Formats
+  # a script for `bash -c`, run from the repository's root, whose output
+  # is compared as it is
+  Script
+  # a script whose output may say it was skipped
+  Skippable(skip: Str)
+  # formatting is idempotent and keeps the program's meaning
+  RoundTrip
+
+pub struct Step:
+  name: Str
+  how: How
+  # the file for `Runs`, `Refused`, `Corpus` and `Formats`; the script for
+  # `Script` and `Skippable`
+  what: Str
+  expected: Str
+
+# Steps that share files run in order, on one task.
+pub struct Check:
+  steps: [Step]
+
+pub struct Verdict:
+  name: Str
+  # `None` when it passed (or was updated); what went wrong otherwise
+  failure: Str?
+  # nothing was checked: a review program with no expected file
+  skipped: Bool
+
+pub def one(name: Str, how: How, what: Str, expected: Str) -> Check = Check(steps: [Step(name: name, how: how, what: what, expected: expected)])
+
+# What `$(...)` gives in bash: the text without its newlines at the end.
+pub def trimmed(text: Str) -> Str:
+  var t = text
+  while t.ends_with?("\n"):
+    t = t.slice(0, t.len - 1)
+  t
+
+# A command's output, standard error included in the order it came, and
+# its exit code: `bash -c '<script> 2>&1'`.
+def shell(lume: Str, script: Str) -> (Int, Str) or Error:
+  (code, out, _) = Process.run("bash", ["-c", "LUME=\"$0\"; exec 2>&1; #{script}", lume])?
+  Ok((code, trimmed(out)))
+
+# The compiler run on a file, its errors and the program's output
+# together in the order they were written, as `2>&1` gives them.
+def lume_cmd(lume: Str, args: [Str]) -> (Int, Str) or Error = shell(lume, "\"$LUME\" " + args.map { |a| "'" + a + "'" }.join(" "))
+
+# Up to twenty lines of `diff expected actual`, indented, as the failure.
+def differ(scratch: Str, expected: Str, actual: Str) -> Str or Error:
+  Dir.make(scratch)?
+  a = Path.join(scratch, "expected")
+  b = Path.join(scratch, "actual")
+  File.write(a, expected + "\n")?
+  File.write(b, actual + "\n")?
+  (_, out, _) = Process.run("diff", [a, b])?
+  Dir.remove(scratch)?
+  Ok(out.lines.take(20).map { |l| "    " + l }.join("\n"))
+
+# Compares `actual` with the expected file, or writes it there when
+# updating.
+def compare(step: Step, actual: Str, update: Bool, scratch: Str) -> Verdict or Error:
+  if update:
+    File.write(step.expected, actual + "\n")?
+    return Ok(Verdict(name: step.name, failure: None, skipped: false))
+  if not File.exists?(step.expected):
+    return Ok(Verdict(name: step.name, failure: Some(": no expected file #{step.expected} (run with --update)"), skipped: false))
+  want = trimmed(File.read(step.expected)?)
+  if actual == want:
+    return Ok(Verdict(name: step.name, failure: None, skipped: false))
+  Ok(Verdict(name: step.name, failure: Some("\n" + differ(scratch, want, actual)?), skipped: false))
+
+def leaked?(text: Str) -> Bool = text.contains?("generated Rust did not compile")
+
+def failed(step: Step, why: Str) -> Verdict = Verdict(name: step.name, failure: Some(why), skipped: false)
+
+# Runs one step and judges it.
+pub def run_step(lume: Str, step: Step, update: Bool, scratch: Str) -> Verdict or Error:
+  match step.how:
+    Runs ->
+      (code, out) = lume_cmd(lume, ["run", step.what])?
+      if code != 0:
+        return Ok(failed(step, ": exit #{code}\n" + out.lines.take(15).map { |l| "    " + l }.join("\n")))
+      compare(step, out, update, scratch)
+    Refused ->
+      (code, out) = lume_cmd(lume, ["check", step.what])?
+      if code == 0:
+        return Ok(failed(step, ": expected a compile error, but it compiled"))
+      if leaked?(out):
+        return Ok(failed(step, ": rustc error leaked instead of a Lume error"))
+      compare(step, out, update, scratch)
+    Corpus ->
+      (code, out) = lume_cmd(lume, ["run", step.what])?
+      has_expected = File.exists?(step.expected)
+      if leaked?(out):
+        return Ok(if has_expected: failed(step, ": rustc error leaked") else: Verdict(name: step.name, failure: None, skipped: true))
+      if not has_expected and not update:
+        return Ok(Verdict(name: step.name, failure: None, skipped: true))
+      compare(step, "#{out}\nexit: #{code}", update, scratch)
+    Formats ->
+      (code, out) = lume_cmd(lume, ["fmt", step.what, "--stdout"])?
+      if code != 0:
+        return Ok(failed(step, ": exit #{code}\n" + out.lines.take(15).map { |l| "    " + l }.join("\n")))
+      compare(step, out, update, scratch)
+    Script ->
+      (_, out) = shell(lume, step.what)?
+      compare(step, out, update, scratch)
+    Skippable(skip) ->
+      (_, out) = shell(lume, step.what)?
+      if out == skip:
+        # nothing to compare here, which is a pass: the sandbox said no
+        return Ok(Verdict(name: step.name, failure: None, skipped: false))
+      compare(step, out, update, scratch)
+    RoundTrip -> round_trip(lume, step.what, scratch)
+
+# Formatting a program twice gives what once does, and the formatted
+# program compiles to the same Rust. The copy keeps the program's
+# neighbours, which it may import.
+pub def round_trip(lume: Str, file: Str, scratch: Str) -> Verdict or Error:
+  name = "fmt-roundtrip/" + file.slice(9, file.len)
+  dir = Path.dir(file)
+  copy_dir = Path.join(scratch, dir)
+  Dir.make(copy_dir)?
+  for n in Dir.list(dir)?:
+    File.write(Path.join(copy_dir, n), File.read(Path.join(dir, n))?)? if n.ends_with?(".lume") and not n.starts_with?(".")
+  for m in Dir.walk("examples/modules")?:
+    if m.ends_with?(".lume"):
+      Dir.make(Path.join(scratch, Path.dir(m)))?
+      File.write(Path.join(scratch, m), File.read(m)?)?
+  copy = Path.join(scratch, file)
+  (code, once, err) = Process.run(lume, ["fmt", file, "--stdout"])?
+  if code != 0:
+    Dir.remove(scratch)?
+    return Ok(Verdict(name: name, failure: Some(": fmt failed\n" + err.lines.take(5).map { |l| "    " + l }.join("\n")), skipped: false))
+  File.write(copy, once)?
+  (_, twice, _) = Process.run(lume, ["fmt", copy, "--stdout"])?
+  if twice != once:
+    why = ": formatting twice differs from formatting once\n" + differ(Path.join(scratch, "diff"), once, twice)?
+    Dir.remove(scratch)?
+    return Ok(Verdict(name: name, failure: Some(why), skipped: false))
+  (_, a, _) = Process.run(lume, ["emit", file])?
+  (_, b, _) = Process.run(lume, ["emit", copy])?
+  Dir.remove(scratch)?
+  if without_banner(a) != without_banner(b):
+    return Ok(Verdict(name: name, failure: Some(": formatted program compiles to different Rust"), skipped: false))
+  Ok(Verdict(name: name, failure: None, skipped: false))
+
+# Generated Rust without the line that says when it was generated.
+def without_banner(text: Str) -> Str = text.lines.reject { |l| l.starts_with?("// Generated") }.to_list.join("\n")

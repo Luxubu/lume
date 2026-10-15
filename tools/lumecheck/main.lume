@@ -4,6 +4,7 @@
 #   lumecheck docs [-v] [-j N]     run every example in docs/ against what it claims
 #   lumecheck coverage [--check N] which compiler messages some test shows
 #   lumecheck keywords             every keyword is in the VS Code grammar
+#   lumecheck suite [--update] [-j N]  the whole test suite
 #
 # Run it from the root of the repository.
 
@@ -12,6 +13,10 @@ import runner
 import runner.Outcome
 import coverage
 import keywords
+import plan
+import suite
+import suite.Check
+import suite.Verdict
 
 COMPILER_FILES = ["codegen.rs", "parser.rs", "lexer.rs", "loader.rs", "manifest.rs", "fetch.rs", "main.rs"]
 
@@ -71,7 +76,9 @@ async def docs(args: [Str]) -> Int or Error:
 
 def docs_files_all -> [Str] or Error = Dir.walk("docs")
 
-def coverage_check(args: [Str]) -> Int or Error:
+# How many of the compiler's messages some test shows, of how many, and
+# the ones none does.
+def coverage_counts -> (Int, Int, [coverage.Template]) or Error:
   var all: [coverage.Template] = []
   for f in COMPILER_FILES:
     for t in coverage.templates_in(f, File.read(Path.join("compiler/src", f))?):
@@ -87,7 +94,10 @@ def coverage_check(args: [Str]) -> Int or Error:
       covered += 1
     else:
       missing.push(t)
-  total = covered + missing.len
+  Ok((covered, covered + missing.len, missing))
+
+def coverage_check(args: [Str]) -> Int or Error:
+  (covered, total, missing) = coverage_counts()?
   if args.contains?("--check"):
     need = flag(args, "--check", 0)
     puts "#{covered} of #{total} messages shown by a test (at least #{need} wanted)"
@@ -96,6 +106,80 @@ def coverage_check(args: [Str]) -> Int or Error:
   for t in missing:
     puts "  #{t.place}: #{t.text}"
   Ok(0)
+
+# The whole suite: what tests/run.sh did, on several tasks at once.
+async def run_suite(args: [Str]) -> Int or Error:
+  lume = Path.join(Env.get("PWD").or("."), "compiler/target/release/lume")
+  update = args.contains?("--update")
+  workers = flag(args, "-j", 8).max(1)
+  # every program is compiled afresh: a warning is shown only when a
+  # program is compiled, so a build left behind would change what a test sees
+  clean_builds()?
+  checks = plan.checks()?
+  scratch = Path.join(Env.get("TMPDIR").or("/tmp"), "lumesuite-#{Time.now_ms}")
+  numbered = checks.enumerate.to_list
+  (timed, rest) = numbered.partition { |i, c| c.steps.any? { |s| plan.TIMED.contains?(s.name) } }
+  var tasks: [Task[[(Int, [Verdict])]]] = []
+  for w in 0...workers:
+    mine = rest.filter { |i, c| i % workers == w }.to_list
+    tasks.push(spawn: mine.map { |i, c| (i, run_check(lume, c, update, Path.join(scratch, "#{i}"))) }.to_list)
+  var done = (await tasks).flatten
+  # the checks that measure time, one at a time on a quiet machine
+  for i, c in timed:
+    done.push((i, run_check(lume, c, update, Path.join(scratch, "#{i}"))))
+  results = done.sort_by { |i, vs| i }.flat_map { |i, vs| vs }.to_list
+  var pass = 0
+  var failed: [Str] = []
+  for v in results:
+    match v.failure:
+      None -> pass += 1 if not v.skipped
+      Some(why) ->
+        puts "FAIL #{v.name}#{why}"
+        failed.push(v.name)
+  # every error message the compiler gives is shown by some test; the
+  # number shown may grow and never shrink
+  (covered, total, missing) = coverage_counts()?
+  need = File.read("tests/message_coverage.min")?.trim.to_int.or(0)
+  if covered >= need:
+    pass += 1
+  else:
+    puts "FAIL message coverage: #{covered} of #{total} messages shown by a test (at least #{need} wanted)"
+    for t in missing.take(10):
+      puts "    #{t.place}: #{t.text}"
+    failed.push("message coverage")
+  # the VS Code grammar knows every keyword
+  gone = keywords.missing(keywords.compiler_keywords(File.read("compiler/src/lexer.rs")?), File.read("editors/vscode/syntaxes/lume.tmLanguage.json")?)
+  if gone.empty?:
+    pass += 1
+  else:
+    puts "FAIL grammar keywords: missing #{gone.join(", ")}"
+    failed.push("grammar keywords")
+  clean_builds()?
+  Dir.remove(scratch)? if Dir.exists?(scratch)
+  if update:
+    puts "expected files updated"
+    return Ok(0)
+  # every example in docs/ is run and checked against what the docs claim
+  docs_code = await docs(["-j", "#{workers}"])?
+  failed.push("docs") if docs_code != 0
+  puts "#{pass} passed, #{failed.len} failed"
+  for n in failed:
+    puts "  #{n}"
+  Ok(if failed.empty?: 0 else: 1)
+
+# The steps of one check, in order; a step that could not be run at all
+# fails with why.
+def run_check(lume: Str, c: Check, update: Bool, scratch: Str) -> [Verdict] = c.steps.map { |s| verdict_of(lume, s, update, scratch) }.to_list
+
+def verdict_of(lume: Str, s: suite.Step, update: Bool, scratch: Str) -> Verdict:
+  match suite.run_step(lume, s, update, scratch):
+    Ok(v) -> v
+    Error(e) -> Verdict(name: s.name, failure: Some(": could not be run: #{e.message}"), skipped: false)
+
+# Build output left in examples/ and corpus/ by an earlier run.
+def clean_builds -> () or Error:
+  _ = Process.run("find", ["examples", "corpus", "-name", ".lume", "-type", "d", "-prune", "-exec", "rm", "-rf", "{}", "+"])?
+  ()
 
 # Every line a test checks: the expected outputs, and the `#!`, `error:`
 # and `warning:` lines of the docs. A folder whose name starts with `.`
@@ -131,10 +215,11 @@ async def main -> () or Error:
   args = Env.args
   code = match args.first.or(""):
     "docs" -> await docs(args)?
+    "suite" -> await run_suite(args)?
     "coverage" -> coverage_check(args)?
     "keywords" -> keywords_check()?
     _ ->
-      warn "usage: lumecheck docs [-v] [-j N] | coverage [--check N] | keywords"
+      warn "usage: lumecheck docs [-v] [-j N] | coverage [--check N] | keywords | suite [--update] [-j N]"
       2
   Env.exit(code) if code != 0
   ()

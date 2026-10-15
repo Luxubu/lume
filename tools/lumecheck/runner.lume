@@ -68,7 +68,7 @@ def judge_folder(lume: Str, scratch: Str, folder: Str) -> Str? or Error:
     if not (rel.starts_with?(".lume/") or rel.contains?("/.lume/")):
       Dir.make(Path.dir(Path.join(work, rel)))?
       File.write(Path.join(work, rel), File.read(f)?)?
-  (code, out, err) = Process.run("sh", ["-c", "cd \"$0\" && \"$1\" run main.lume", work, lume])?
+  (code, out, err) = Process.run_in(work, lume, ["run", "main.lume"])?
   Dir.remove(scratch)?
   if code != 0:
     return Ok(Some("did not run:\n#{cut((out + err).trim, 600)}"))

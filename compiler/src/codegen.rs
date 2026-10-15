@@ -472,7 +472,19 @@ fn lume_install_panic_hook() {
 /// start it is an error; a program that exits non-zero has still run. A
 /// program ended by a signal has no code, and gives -1.
 fn lume_process_run(program: &str, args: &[String]) -> ::std::result::Result<(i64, String, String), Error> {
-    match std::process::Command::new(program).args(args).output() {
+    lume_process_run_in(None, program, args)
+}
+/// `Process.run_in(dir, ..)`: the same, run in that folder.
+fn lume_process_run_in(dir: Option<&str>, program: &str, args: &[String]) -> ::std::result::Result<(i64, String, String), Error> {
+    let mut c = std::process::Command::new(program);
+    c.args(args);
+    if let Some(d) = dir {
+        if !std::path::Path::new(d).is_dir() {
+            return Err(Error { message: format!("cannot run `{}` in `{}`: no such folder", program, d) });
+        }
+        c.current_dir(d);
+    }
+    match c.output() {
         Ok(o) => Ok((o.status.code().map(|c| c as i64).unwrap_or(-1), String::from_utf8_lossy(&o.stdout).into_owned(), String::from_utf8_lossy(&o.stderr).into_owned())),
         Err(e) => Err(Error { message: format!("cannot run `{}`: {}", program, e) }),
     }
@@ -11567,6 +11579,16 @@ impl Gen {
                                     format!("lume_process_run(&{}, &{})", parts[0], parts[1])
                                 }
                             }
+                            ("Process", "run_in") => {
+                                need(3)?;
+                                let call = format!("lume_process_run_in(Some(&{}), &{}, &{})", parts[0], parts[1], parts[2]);
+                                if self.in_async {
+                                    self.uses_async = true;
+                                    format!("tokio::task::block_in_place(|| {})", call)
+                                } else {
+                                    call
+                                }
+                            }
                             ("Time", "format") => { need(2)?; format!("lume_time_format({}, &{})", parts[0], parts[1]) }
                             ("Time", "parse") => { need(2)?; format!("lume_time_parse(&{}, &{})", parts[0], parts[1]) }
                             ("Time", "date") => { need(3)?; format!("lume_time_date({}, {}, {})", parts[0], parts[1], parts[2]) }
@@ -11596,7 +11618,7 @@ impl Gen {
                                 "Env" => "Env has args, get(name), stdin and exit(code)",
                                 "Dir" => "Dir has exists?, make, list, walk and remove",
                                 "Path" => "Path has join(a, b), dir, base, ext and stem",
-                                "Process" => "Process has run(program, args)",
+                                "Process" => "Process has run(program, args) and run_in(dir, program, args)",
                                 _ => "Time has now (seconds), now_ms, sleep(ms), format(t, pattern), parse(text, pattern), date(y, m, d), and year, month, day, hour, minute, second, weekday and day_of_year of a time",
                             }));
                     }
@@ -12977,6 +12999,7 @@ fn builtin_namespace_params(ns: &str, name: &str) -> Option<Vec<Type>> {
         ("File", _) | ("Dir", _) | ("Path", _) | ("Env", "get") => vec![s()],
         ("Env", "exit") | ("Time", "sleep") => vec![Type::Int],
         ("Process", "run") => vec![s(), Type::List(Box::new(s()))],
+        ("Process", "run_in") => vec![s(), s(), Type::List(Box::new(s()))],
         ("Time", "format") => vec![Type::Int, s()],
         ("Time", "parse") => vec![s(), s()],
         ("Time", "date") => vec![Type::Int, Type::Int, Type::Int],
@@ -13002,7 +13025,7 @@ fn builtin_namespace_type(ns: &str, name: &str) -> Option<Type> {
         ("Env", "stdin") => Type::Result(Box::new(Type::Str), err()),
         ("Env", "args") => Type::List(Box::new(Type::Str)),
         ("Env", "get") => Type::Option(Box::new(Type::Str)),
-        ("Process", "run") => Type::Result(Box::new(Type::Tuple(vec![Type::Int, Type::Str, Type::Str])), err()),
+        ("Process", "run") | ("Process", "run_in") => Type::Result(Box::new(Type::Tuple(vec![Type::Int, Type::Str, Type::Str])), err()),
         ("Time", "format") => Type::Str,
         ("Time", "parse") | ("Time", "date") => Type::Result(Box::new(Type::Int), err()),
         ("Time", "year" | "month" | "day" | "hour" | "minute" | "second" | "weekday" | "day_of_year") => Type::Int,

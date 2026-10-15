@@ -34,6 +34,25 @@ same order. `docs` runs the examples eight at a time on tasks, so it takes
    with the module's name everywhere but inside a generator, a task, a
    future and a `shared` value; now there too.
 
+## The whole suite (milestone 84)
+
+`lumecheck suite` is now the test suite: `tests/run.sh` runs it.
+`plan.lume` lists every check `run.sh` made, one for one, and `suite.lume`
+runs them eight at a time on tasks, with the steps of one check — the site
+generator's four runs — in order on one task. The checks that measure time
+(`healthcheck`, `jobr`, the local `http` server, `tasks_blocking`) run alone
+afterwards, because the first run, with them in the crowd, failed
+`healthcheck`'s "the slow checks ran together". It reports the same 1110
+checks as `run.sh` did, finds a broken expectation of each kind, and
+`--update` rewrote nothing: **2 minutes 18 seconds, where `run.sh` took
+about 15 minutes.**
+
+It found `Process.run` had no working directory; `Process.run_in(dir,
+program, args)` is new, and the docs check uses it. Two of its own first
+mistakes are worth knowing: a folder named `.lume` ends in `.lume` too, and
+standard error added to standard output after the fact is not the order a
+program wrote them in — only the shell's `2>&1` keeps that.
+
 ## Left as it is
 
 - **Positions in text count characters**, so finding position `i` walks
@@ -41,8 +60,6 @@ same order. `docs` runs the examples eight at a time on tasks, so it takes
   `slice` and `index_of` from a position was quadratic and never finished;
   taking `chars.to_list` once and indexing it was instant.
   [Strings](../../docs/reference/strings.md) now says so.
-- **`Process.run` has no working directory.** A multi-file example has to
-  run in its own folder; the program runs `sh -c 'cd "$0" && ...'`.
 - **`where` is a keyword**, so it cannot name a field, a parameter or a
   block's argument; the message said so each time. **There is no character
   literal**: `'_'` was refused with a message pointing at `"_"`, which is a

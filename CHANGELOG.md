@@ -4,6 +4,9 @@
 
 - **`tools/lumecheck/`**: the suite's docs, message-coverage and grammar
   checks, written in Lume; the docs check runs three times faster.
+- **The test suite is written in Lume** and runs its checks in parallel:
+  2 minutes instead of 15. `tests/run.sh` runs it, with `-j N`.
+- **`Process.run_in(dir, program, args)`** runs a program in a folder.
 - **Fixed**: two programs with the same file name, built at the same time,
   could run each other's binary; a generator from another module lost the
   type of its items.

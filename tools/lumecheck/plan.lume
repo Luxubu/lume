@@ -1,0 +1,129 @@
+# What the suite checks, in the order it reports them: the same checks
+# tests/run.sh made, one by one.
+
+import suite
+import suite.Check
+import suite.How
+import suite.Step
+
+# Checks that measure time: they run alone, after the others, so a busy
+# machine does not decide whether they pass.
+pub TIMED = ["healthcheck", "jobr", "http package, local server", "tasks_blocking"]
+
+def lume_files(dir: Str) -> [Str] or Error = Ok(Dir.list(dir)?.filter { |n| n.ends_with?(".lume") }.map { |n| Path.join(dir, n) }.to_list)
+
+def expected_of(file: Str) -> Str = file.slice(0, file.len - 5) + ".expected"
+
+# `examples/port/x.lume` is `port/x`; one at the top is just `x`.
+def example_name(file: Str) -> Str:
+  dir = Path.dir(file)
+  if dir == "examples":
+    return Path.stem(file)
+  "#{Path.base(dir)}/#{Path.stem(file)}"
+
+# A script that runs `command` and adds its exit code, as the suite has
+# always written it: the output, a newline, `exit: N`.
+def with_exit(command: Str) -> Str = "out=$(#{command} 2>&1); code=$?; printf '%s\\nexit: %s' \"$out\" \"$code\""
+
+def script(name: Str, text: Str, expected: Str) -> Check = suite.one(name, How.Script, text, expected)
+
+# The review programs: a file directly in `corpus/` or one folder down, a
+# `main.lume` two folders down, and the packages' `app/main.lume`. A
+# program in a folder is named by its folder.
+def corpus -> [Check] or Error:
+  var out: [Check] = []
+  for f in Dir.walk("corpus")?:
+    next if not f.ends_with?(".lume") or f.contains?("/.")
+    parts = f.split("/")
+    program = parts.len <= 3 or (parts.len == 4 and parts.at(3) == "main.lume") or (parts.len == 5 and parts.at(3) == "app" and parts.at(4) == "main.lume")
+    next if not program
+    name = if parts.len == 5: parts.take(3).join("/") elif parts.len == 4: Path.dir(f) else: f.slice(0, f.len - 5)
+    out.push(suite.one(name, How.Corpus, f, expected_of(f)))
+  Ok(out)
+
+pub def checks -> [Check] or Error:
+  var all: [Check] = []
+
+  # every example runs and prints what it is expected to
+  var runs: [Str] = lume_files("examples")?
+  for d in ["examples/port", "examples/modules"]:
+    for f in lume_files(d)?:
+      runs.push(f)
+  for f in ["examples/json/json.lume", "examples/mini/main.lume", "examples/lib/report.lume", "examples/travel/main.lume", "examples/shipping/main.lume", "examples/match/main.lume", "examples/packages/shelf/main.lume"]:
+    runs.push(f)
+  for f in runs:
+    all.push(suite.one(example_name(f), How.Runs, f, expected_of(f)))
+
+  # every way to get it wrong is refused, with the expected message
+  for f in lume_files("examples/errors")?:
+    all.push(suite.one("errors/#{Path.stem(f)}", How.Refused, f, expected_of(f)))
+  for d in ["travel", "reexport"]:
+    all.push(suite.one("errors/#{d}", How.Refused, "examples/errors/#{d}/main.lume", "examples/errors/#{d}/main.expected"))
+  for d in Dir.list("examples/errors/packages")?:
+    folder = "examples/errors/packages/#{d}"
+    if Dir.exists?(folder):
+      all.push(suite.one("errors/packages/#{d}", How.Refused, "#{folder}/app/main.lume", "#{folder}/expected"))
+
+  # packages: a library's tests from inside it, and packages from git
+  all.push(script("packages/tally tests", with_exit("cd examples/packages/tally && \"$LUME\" test"), "examples/packages/tally/test.expected"))
+  all.push(script("packages from git", "tests/git_packages.sh \"$LUME\"", "tests/git_packages.expected"))
+
+  # overflow, as Rust has it: checked by run, wrapped by build, checked by build --checked
+  overflow = """tmpo=$(mktemp -d)
+"$LUME" run tests/overflow.lume; echo "exit: $?"
+"$LUME" build tests/overflow.lume -o "$tmpo/fast" >/dev/null 2>&1 && "$tmpo/fast"; echo "exit: $?"
+"$LUME" build tests/overflow.lume -o "$tmpo/safe" --checked >/dev/null 2>&1 && "$tmpo/safe"; echo "exit: $?"
+rm -rf "$tmpo" tests/.lume"""
+  all.push(script("overflow by build mode", overflow, "tests/overflow.expected"))
+
+  # editors: diagnostics as JSON, and the language server driven as an editor would
+  all.push(script("check --json", "\"$LUME\" check examples/errors/arity.lume --json; echo \"exit: $?\"; \"$LUME\" check examples/fib.lume --json; echo \"exit: $?\"", "examples/check_json.expected"))
+  all.push(script("lume lsp", "python3 tests/lsp_test.py \"$LUME\"", "tests/lsp_test.expected"))
+
+  # the json and http packages, their tests and programs that use them
+  all.push(script("json package tests", "cd packages/json && \"$LUME\" test; echo \"exit: $?\"", "packages/json/test.expected"))
+  all.push(script("json_config", "cd examples/json_config && \"$LUME\" run; echo \"exit: $?\"", "examples/json_config/main.expected"))
+  all.push(suite.one("http package, local server", How.Skippable("skipped: no local connection allowed here"), "tests/http_local.sh \"$LUME\"", "tests/http_local.expected"))
+  all.push(script("http package tests", "cd packages/http && \"$LUME\" test 2>&1 | grep -v \"^warning\\|^ *|\\|^  -->\\|^  help\"; echo \"exit: ${PIPESTATUS[0]}\"", "packages/http/test.expected"))
+
+  # the dogfood programs
+  all.push(suite.one("healthcheck", How.Skippable("skipped: no local connection allowed here"), "examples/healthcheck/check.sh \"$LUME\"", "examples/healthcheck/check.expected"))
+  all.push(script("jobr", "examples/jobr/check.sh \"$LUME\"", "examples/jobr/queries.expected"))
+  all.push(script("deps", "examples/deps/check.sh \"$LUME\"", "examples/deps/check.expected"))
+  all.push(script("logq", "examples/logq/check.sh \"$LUME\"", "examples/logq/check.expected"))
+  all.push(script("csvq", "examples/csvq/queries.sh \"$LUME\"", "examples/csvq/queries.expected"))
+
+  # `lume new`, then run and test what it made, with no file named
+  fresh = """tmp=$(mktemp -d)
+out=$(cd "$tmp" && "$LUME" new hello 2>&1 && cd hello && "$LUME" run 2>&1 && "$LUME" new ../greet --lib 2>&1 && cd ../greet && "$LUME" test 2>&1); code=$?
+rm -rf "$tmp"
+printf '%s\\nexit: %s' "$out" "$code"
+"""
+  all.push(script("lume new", fresh, "examples/packages/new.expected"))
+
+  # `lume test`, and programs that keep their tests beside the code
+  for f in lume_files("examples/tests")?:
+    all.push(script("tests/#{Path.stem(f)}", with_exit("\"$LUME\" test '#{f}'"), expected_of(f)))
+  for (name, f, exp) in [("json tests", "examples/json/json.lume", "examples/json/json.test.expected"), ("mini tests", "examples/mini/main.lume", "examples/mini/main.test.expected"), ("site tests", "examples/site/main.lume", "examples/site/main.test.expected"), ("lib tests", "examples/lib/report.lume", "examples/lib/report.test.expected")]:
+    all.push(script(name, with_exit("\"$LUME\" test '#{f}'"), exp))
+
+  # the site generator writes files: four runs in order, on one task
+  all.push(Check(steps: [
+    Step(name: "site build", how: How.Script, what: "rm -rf examples/site/out; " + with_exit("\"$LUME\" run examples/site/main.lume -- --force"), expected: "examples/site/main.expected"),
+    Step(name: "site rebuild", how: How.Script, what: with_exit("\"$LUME\" run examples/site/main.lume"), expected: "examples/site/rebuild.expected"),
+    Step(name: "site stdin", how: How.Script, what: with_exit("cat examples/site/content/guide.md | \"$LUME\" run examples/site/main.lume -- --stdin"), expected: "examples/site/stdin.expected"),
+    Step(name: "site missing dir", how: How.Script, what: with_exit("\"$LUME\" run examples/site/main.lume -- nope out") + "; rm -rf examples/site/out", expected: "examples/site/missing.expected"),
+  ]))
+
+  # the formatter: what it writes, and that it changes no program's meaning
+  for f in lume_files("examples/fmt")?:
+    all.push(suite.one("fmt/#{Path.stem(f)}", How.Formats, f, expected_of(f)))
+  for c in corpus()?:
+    all.push(c)
+  var rounds: [Str] = []
+  for d in ["examples", "examples/port", "examples/modules", "examples/modules/users", "examples/tests", "examples/json", "examples/mini", "examples/site", "examples/lib", "examples/travel", "examples/shipping"]:
+    for f in lume_files(d)?:
+      rounds.push(f)
+  for f in rounds:
+    all.push(suite.one("fmt-roundtrip/#{f.slice(9, f.len)}", How.RoundTrip, f, ""))
+  Ok(all)

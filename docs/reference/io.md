@@ -215,6 +215,7 @@ def main:
 | call | gives | |
 |---|---|---|
 | `Process.run(program, args)` | `(Int, Str, Str) or Error` | runs it and waits: its exit code, then what it wrote to standard output and to standard error |
+| `Process.run_in(dir, program, args)` | `(Int, Str, Str) or Error` | the same, run in the folder `dir`; a folder that does not exist is an `Error` |
 
 **Only failing to start the program is an `Error`.** Its message names the
 program and what the system said, as in ``cannot run `no-such-program`: No
