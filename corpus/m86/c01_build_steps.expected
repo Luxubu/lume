@@ -1,0 +1,13 @@
+ok    gen: wrote 4 lines
+ok    sort: alpha | beta | gamma
+skip  docs: no folder
+ok    count: 3
+FAIL  check (exit 2)
+3 passed: gen, sort, count
+docs -> no folder
+check -> exit 2: no delta
+not reached: pack
+["out", "src"]
+["alpha", "beta", "gamma"]
+false
+exit: 0

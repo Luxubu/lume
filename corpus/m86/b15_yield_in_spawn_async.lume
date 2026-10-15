@@ -1,0 +1,22 @@
+# Probes: `yield` inside a `spawn:` inside an async generator: still
+# refused. (The help line of this error, as examples/errors/yield_in_spawn
+# shows it, says "a generator cannot be `async`", which milestone 85 made
+# untrue; predicted unchanged.)
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `yield` inside `spawn:` hands nothing out: the task runs apart from the generator
+#   --> corpus/m86/b15_yield_in_spawn_async.lume:17:7
+#    |
+# 17 |       yield x * x
+#    |       ^
+#   help: work the item out in the generator itself; a generator cannot be `async`, so it cannot wait for a task
+
+async def squares(xs: [Int]) -> Iterator[Int]:
+  for x in xs:
+    t = spawn:
+      yield x * x
+      0
+    yield await t
+
+async def main:
+  puts squares([1, 2]).to_list

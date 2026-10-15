@@ -1,0 +1,9 @@
+three 3
+doubled 8
+doubled 14
+end
+["doubled 2"]
+[2, 4, 6]
+[]
+after
+exit: 0

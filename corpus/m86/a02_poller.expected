@@ -1,0 +1,13 @@
+build 30%
+build 60%
+build 90%
+done: build ok after 4 checks
+[Pending(pct: 50)]
+[Pending(pct: 50), Done(result: "lint ok after 2 checks")]
+Some(Failed(reason: "unknown job deploy"))
+None
+after 2 checks: Pending(pct: 60)
+lint: done
+build: done
+deploy: unknown job deploy
+exit: 0

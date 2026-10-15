@@ -1,0 +1,83 @@
+# Probes: an async generator that pages through a fake paged API. Each page
+# comes from an `async def` that sleeps and gives `Page or Error`; the
+# generator awaits it as a `match` subject, yields each item, and follows
+# the page's `following` link until there is none. Walked with `for`, with
+# `break`, with `.to_list`, from inside another `async def` that returns
+# early with an `Error`, and into a map built with `index[k].push`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ann
+# bo
+# cy
+# dee
+# eve
+# flo
+# --
+# early ann
+# early bo
+# ["cy", "dee", "eve", "flo"]
+# ["(no page 4)"]
+# {3: ["ann", "dee", "eve", "flo"], 2: ["bo", "cy"]}
+# page 3 has 3 items
+# Ok(6)
+# stopped after 0: (no page 4)
+
+struct Page:
+  number: Int
+  items: [Str]
+  following: Int?
+
+PAGES = {1: ["ann", "bo"], 2: ["cy"], 3: ["dee", "eve", "flo"]}
+LAST = 3
+
+# the fake API: what comes back depends only on the page number
+async def fetch_page(n: Int) -> Page or Error:
+  await Time.sleep(2)
+  match PAGES[n]:
+    Some(items) ->
+      following: Int? = if n < LAST: Some(n + 1) else: None
+      Page(number: n, items: items, following: following)
+    None -> Error("no page #{n}")
+
+async def all_items(first: Int) -> Iterator[Str]:
+  var page = first
+  while page > 0:
+    match await fetch_page(page):
+      Ok(p) ->
+        for item in p.items:
+          yield item
+        page = p.following.or(0)
+      Error(e) ->
+        yield "(#{e.message})"
+        page = 0
+
+async def count_from(first: Int) -> Int or Error:
+  var n = 0
+  for item in all_items(first):
+    if item.starts_with?("("):
+      return Error("stopped after #{n}: #{item}")
+    n += 1
+  n
+
+async def main:
+  for name in all_items(1):
+    puts name
+  puts "--"
+  for name in all_items(1):
+    break if name == "cy"
+    puts "early #{name}"
+  puts all_items(2).to_list
+  puts all_items(4).to_list
+
+  var by_len: {Int: [Str]} = {}
+  for name in all_items(1):
+    by_len[name.len].push(name)
+  puts by_len
+
+  third = all_items(3).to_list
+  puts "page 3 has #{third.len} items"
+
+  puts await count_from(1)
+  match await count_from(4):
+    Ok(n) -> puts "counted #{n}"
+    Error(e) -> puts e.message

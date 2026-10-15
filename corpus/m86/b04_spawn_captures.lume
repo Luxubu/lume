@@ -1,0 +1,61 @@
+# Probes: what a `spawn:` captures: a list, a struct and text that are
+# changed after the spawn, and a `var Int` reassigned after it (each task
+# keeps its copy); a one-line `spawn:` with `await` and one without; a task
+# that takes another task; a task that takes an async generator and walks
+# it; async generators started inside tasks made in a block.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 6 box[7] ann 1
+# 4
+# 201
+# [1, 2, 3, 4]
+# Box(label: "crate", items: [7])
+# ann!
+# ABC
+# ["P", "P"]
+# ["Q", "Q"]
+
+struct Box:
+  label: Str
+  items: [Int]
+
+async def slow_len(xs: [Int]) -> Int:
+  await Time.sleep(1)
+  xs.len
+
+async def caps(xs: [Str]) -> Iterator[Str]:
+  for x in xs:
+    await Time.sleep(1)
+    yield x.upcase
+
+async def main:
+  var xs = [1, 2, 3]
+  var b = Box(label: "box", items: [7])
+  var name = "ann"
+  var n = 1
+  t = spawn: "#{xs.sum} #{b.label}#{b.items} #{name} #{n}"
+  xs.push(4)
+  b.label = "crate"
+  name = name + "!"
+  n = 2
+  u = spawn: await slow_len(xs)
+  inner = spawn: n * 100
+  outer = spawn:
+    k = await inner
+    k + 1
+  puts await t
+  puts await u
+  puts await outer
+  puts xs
+  puts b
+  puts name
+  g = caps(["a", "b", "c"])
+  w = spawn:
+    var out = ""
+    for x in g:
+      out = out + x
+    out
+  puts await w
+  tasks = ["p", "q"].map { |s| spawn: caps([s, s]).to_list }.to_list
+  for r in await tasks:
+    puts r

@@ -1,0 +1,7 @@
+error: `async Iterator[Int]` values cannot take a block; only lists and ranges can
+  --> corpus/m86/b11_gen_filter.lume:18:12
+   |
+18 |   total = g.filter { |x| x > 1 }.len
+   |            ^
+  help: walk it with `for` in async code, or keep its items with `.to_list` and chain over the list
+exit: 1

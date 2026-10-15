@@ -1,0 +1,10 @@
+0 one.txt,two.txt []
+5
+first
+second
+0 BRIEF.md
+true
+0
+false
+cannot run `ls` in `/tmp/lume-review-b/no-such-folder`: no such folder
+exit: 0

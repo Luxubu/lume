@@ -1,0 +1,73 @@
+# Probes: a retry loop around a command, in an `async def` that gives
+# `[Attempt] or Error`. Each try is `Process.run_in` with `?` (so a program
+# that cannot start ends the retries at once), a non-zero exit waits with
+# `await Time.sleep` and doubles the wait. The flaky command keeps its own
+# counter in a file under /tmp/lume-review-a/retry, so it fails twice and
+# then passes. Two retry runs also go out as tasks and are awaited in order.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# try 1: exit 1
+# try 2: exit 1
+# try 3: exit 0
+# counter 3
+# broken failed 3 times, last exit 4
+# cannot run `no-such-program-a`: No such file or directory (os error 2)
+# Ok(1)
+# Error("loud failed 2 times, last exit 7")
+# {"flaky": 3, "quiet": 1}
+
+ROOT = "/tmp/lume-review-a/retry"
+
+# reads the counter, adds one, writes it back, and passes from the third run
+FLAKY = "n=$(cat count); n=$((n+1)); echo $n > count; test $n -ge 3"
+
+struct Attempt:
+  n: Int
+  code: Int
+
+async def with_retries(label: Str, program: Str, args: [Str], tries: Int) -> [Attempt] or Error:
+  var made: [Attempt] = []
+  var wait = 1
+  var last = 0
+  while made.len < tries:
+    (code, _, _) = Process.run_in(ROOT, program, args)?
+    made.push(Attempt(n: made.len + 1, code: code))
+    if code == 0:
+      return made
+    last = code
+    await Time.sleep(wait)
+    wait = wait * 2
+  Error("#{label} failed #{tries} times, last exit #{last}")
+
+async def main -> () or Error:
+  _ = Dir.remove(ROOT)
+  Dir.make(ROOT)?
+  File.write(Path.join(ROOT, "count"), "0\n")?
+
+  attempts = await with_retries("flaky", "sh", ["-c", FLAKY], 5)?
+  for a in attempts:
+    puts "try #{a.n}: exit #{a.code}"
+  count = File.read(Path.join(ROOT, "count"))?
+  puts "counter #{count.trim}"
+
+  match await with_retries("broken", "sh", ["-c", "echo no >&2; exit 4"], 3):
+    Ok(made) -> puts "ok after #{made.len}"
+    Error(e) -> puts e.message
+
+  match await with_retries("ghost", "no-such-program-a", [], 3):
+    Ok(_) -> puts "ghost ran"
+    Error(e) -> puts e.message
+
+  quiet = spawn:
+    made = await with_retries("quiet", "echo", ["hi"], 2)?
+    made.len
+  loud = spawn:
+    made = await with_retries("loud", "sh", ["-c", "exit 7"], 2)?
+    made.len
+  puts await quiet
+  puts await loud
+
+  var tries: {Str: Int} = {}
+  tries["flaky"] = attempts.len
+  tries["quiet"] = 1
+  puts tries

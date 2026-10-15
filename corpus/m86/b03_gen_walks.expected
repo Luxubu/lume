@@ -1,0 +1,21 @@
+10
+11
+12
+Some("x")
+Some("y")
+None
+None
+a
+b
+c
+d
+["p", "q"]
+Some(1)
+2
+3
+ann 3
+bo 102
+Some(("cyd", 3))
+None
+[("dee", 3), ("e", 101)]
+exit: 0

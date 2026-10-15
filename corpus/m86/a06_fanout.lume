@@ -1,0 +1,71 @@
+# Probes: a fan-out of tasks, each walking its own async generator. The
+# generators are made in a loop and each one is taken by the task that
+# walks it; the feeds wait for different times, so the tasks finish out of
+# order, but `await` on the list gives the results in the order the tasks
+# started. A `shared var` counts every item across the tasks. Then a second
+# fan-out starts each generator inside a one-line `spawn:` in a `.map`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# news (3)
+#   news/1: rain
+#   news/2: vote
+#   news/3: strike
+# sport (2)
+#   sport/1: goal
+#   sport/2: draw
+# tech (3)
+#   tech/1: chip
+#   tech/2: patch
+#   tech/3: leak
+# fetched 8
+# [["news/1: rain"], ["sport/1: goal"], ["tech/1: chip"]]
+# EXPECTED STDERR:
+# warning: `fetched` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+#   --> corpus/m86/a06_fanout.lume:52:3
+#    |
+# 52 |   shared var fetched = 0
+#    |   ^
+#   help: fine for a store or a counter; keep the work done while it is locked short
+
+struct Feed:
+  name: Str
+  delay: Int
+  posts: [Str]
+
+FEEDS = [
+  Feed(name: "news", delay: 9, posts: ["rain", "vote", "strike"]),
+  Feed(name: "sport", delay: 1, posts: ["goal", "draw"]),
+  Feed(name: "tech", delay: 4, posts: ["chip", "patch", "leak", "merge"]),
+]
+
+async def fetch_post(feed: Feed, i: Int) -> Str:
+  await Time.sleep(feed.delay)
+  "#{feed.name}/#{i + 1}: #{feed.posts.at(i)}"
+
+async def headlines(feed: Feed, limit: Int) -> Iterator[Str]:
+  var i = 0
+  while i < feed.posts.len and i < limit:
+    yield await fetch_post(feed, i)
+    i += 1
+
+async def main:
+  shared var fetched = 0
+  var tasks: [Task[[Str]]] = []
+  for feed in FEEDS:
+    g = headlines(feed, 3)
+    t = spawn:
+      var got: [Str] = []
+      for h in g:
+        got.push(h)
+        fetched += 1
+      got
+    tasks.push(t)
+  results = await tasks
+  for feed, got in FEEDS.zip(results):
+    puts "#{feed.name} (#{got.len})"
+    for h in got:
+      puts "  #{h}"
+  puts "fetched #{fetched}"
+
+  firsts = await FEEDS.map { |f| spawn: headlines(f, 1).to_list }.to_list
+  puts firsts

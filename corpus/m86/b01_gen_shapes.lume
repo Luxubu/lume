@@ -1,0 +1,46 @@
+# Probes: an async generator with `yield` inside `for`, `if` and `match`
+# (one arm yields, one arm is `()`), `yield await f()`, a bare `return` in
+# the middle of a loop, and one whose body never reaches a `yield`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# three 3
+# doubled 8
+# doubled 14
+# end
+# ["doubled 2"]
+# [2, 4, 6]
+# []
+# after
+
+async def double(n: Int) -> Int:
+  await Time.sleep(1)
+  n * 2
+
+async def shapes(xs: [Int]) -> Iterator[Str]:
+  for x in xs:
+    if x < 0:
+      return
+    match x % 3:
+      0 -> yield "three #{x}"
+      1 -> yield "doubled #{await double(x)}"
+      _ -> ()
+  yield "end"
+
+async def doubles(xs: [Int]) -> Iterator[Int]:
+  for x in xs:
+    yield await double(x)
+
+async def nothing(n: Int) -> Iterator[Int]:
+  if n > 100:
+    yield n
+  await Time.sleep(1)
+
+async def main:
+  for s in shapes([3, 4, 5, 7]):
+    puts s
+  puts shapes([1, 0 - 1, 6]).to_list
+  puts doubles([1, 2, 3]).to_list
+  puts nothing(5).to_list
+  for x in nothing(7):
+    puts x
+  puts "after"

@@ -1,0 +1,7 @@
+error: `g` cannot be copied, and the task takes it, so it cannot be used after the `spawn:`
+  --> corpus/m86/b13_task_takes_async_gen.lume:17:7
+   |
+17 |   t = spawn: g.to_list
+   |       ^
+  help: use `g` only inside the task, or keep what you need from it before
+exit: 1

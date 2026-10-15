@@ -1,0 +1,20 @@
+# Probes: an async generator (with an argument) called from a plain `def`
+# helper that an async `main` calls: refused at the call.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `nums()` is an `async` generator, which runs as a task, so it is called from async code
+#   --> corpus/m86/b09_gen_in_plain_def.lume:17:3
+#    |
+# 17 |   nums(3).to_list
+#    |   ^
+#   help: call it in an `async def` or a `spawn:` body
+
+async def nums(n: Int) -> Iterator[Int]:
+  for i in 1..n:
+    yield i
+
+def first_three -> [Int]:
+  nums(3).to_list
+
+async def main:
+  puts first_three()

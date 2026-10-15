@@ -1,0 +1,24 @@
+# Probes: a static `async def self.` async generator in a struct: is it a
+# "method" (refused) or a function of the type (allowed)? Predicted refused,
+# with the async generator method message.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `upto` is an `async` generator method, which cannot be written yet
+#   --> corpus/m86/b07_static_async_gen.lume:16:3
+#    |
+# 16 |   async def self.upto(n: Int) -> Iterator[Int]:
+#    |   ^
+#   help: write it as an `async def` function that takes the value
+
+struct Counter:
+  start: Int
+
+  async def self.upto(n: Int) -> Iterator[Int]:
+    var k = 1
+    while k <= n:
+      await Time.sleep(1)
+      yield k
+      k += 1
+
+async def main:
+  puts Counter.upto(3).to_list

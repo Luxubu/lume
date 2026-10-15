@@ -11,6 +11,8 @@
   are walked with `for` in async code.
 - **Fixed**: a task that used a generator, a stream or another task copied
   it, which cannot be done; the task now takes it.
+- **Fixed**: an async generator that takes an `Iterator` reached rustc;
+  `yield Error(..)` into an `Iterator[T or Error]` was refused.
 - **Fixed**: two programs with the same file name, built at the same time,
   could run each other's binary; a generator from another module lost the
   type of its items.

@@ -1,0 +1,7 @@
+error: `yield` inside `spawn:` hands nothing out: the task runs apart from the generator
+  --> corpus/m86/b15_yield_in_spawn_async.lume:17:7
+   |
+17 |       yield x * x
+   |       ^
+  help: work the item out in the generator itself; to wait for one, make the generator an `async def`, where `yield await work()` waits for it
+exit: 1

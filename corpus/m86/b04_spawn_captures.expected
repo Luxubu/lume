@@ -1,0 +1,10 @@
+6 box[7] ann 1
+4
+201
+[1, 2, 3, 4]
+Box(label: "crate", items: [7])
+ann!
+ABC
+["P", "P"]
+["Q", "Q"]
+exit: 0

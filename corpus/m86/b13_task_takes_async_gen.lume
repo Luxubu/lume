@@ -1,0 +1,20 @@
+# Probes: a one-line `spawn:` that uses an async generator takes it; walking
+# it after the `spawn:` is refused.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `g` cannot be copied, and the task takes it, so it cannot be used after the `spawn:`
+#   --> corpus/m86/b13_task_takes_async_gen.lume:17:7
+#    |
+# 17 |   t = spawn: g.to_list
+#    |       ^
+#   help: use `g` only inside the task, or keep what you need from it before
+
+async def nums -> Iterator[Int]:
+  yield 1
+
+async def main:
+  g = nums()
+  t = spawn: g.to_list
+  puts await t
+  for x in g:
+    puts x

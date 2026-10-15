@@ -1,0 +1,11 @@
+write   ok
+sort    ok: apple | fig | pear
+list    ok: fruit.txt | sorted.txt
+echo    ok: hello from a
+fail    exit 3: oops
+missing not started: cannot run `no-such-program-a`: No such file or directory (os error 2)
+nowhere not started: cannot run `ls` in `/tmp/lume-review-a/nope`: no such folder
+{"write": 0, "sort": 0, "list": 0, "echo": 0, "fail": 3, "missing": -1, "nowhere": -1}
+["fail", "missing", "nowhere"]
+["apple", "fig", "pear"]
+exit: 0

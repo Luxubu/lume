@@ -1,0 +1,75 @@
+# Probes: `break` out of an endless async generator; `next` on a `var` up
+# to and past the end (None, and None again); two generators made first and
+# walked one after the other; `.to_list` of a finite one; `next` then `for`
+# carrying on; pairs walked with `for a, b in` and taken by `next`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 10
+# 11
+# 12
+# Some("x")
+# Some("y")
+# None
+# None
+# a
+# b
+# c
+# d
+# ["p", "q"]
+# Some(1)
+# 2
+# 3
+# ann 3
+# bo 102
+# Some(("cyd", 3))
+# None
+# [("dee", 3), ("e", 101)]
+
+async def count_up(start: Int) -> Iterator[Int]:
+  var n = start
+  while true:
+    await Time.sleep(1)
+    yield n
+    n += 1
+
+async def two(a: Str, b: Str) -> Iterator[Str]:
+  yield a
+  await Time.sleep(1)
+  yield b
+
+async def score(name: Str) -> Int:
+  await Time.sleep(1)
+  name.len
+
+async def scored(names: [Str]) -> Iterator[(Str, Int)]:
+  for i, n in names.enumerate:
+    s = await score(n)
+    yield (n, i * 100 + s)
+
+async def main:
+  for n in count_up(10):
+    break if n > 12
+    puts n
+  var g = two("x", "y")
+  puts g.next
+  puts g.next
+  puts g.next
+  puts g.next
+  first = two("a", "b")
+  second = two("c", "d")
+  for s in first:
+    puts s
+  for s in second:
+    puts s
+  puts two("p", "q").to_list
+  var h = count_up(1)
+  puts h.next
+  for n in h:
+    puts n
+    break if n == 3
+  for name, s in scored(["ann", "bo"]):
+    puts "#{name} #{s}"
+  var p = scored(["cyd"])
+  puts p.next
+  puts p.next
+  puts scored(["dee", "e"]).to_list

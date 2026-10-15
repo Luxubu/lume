@@ -297,6 +297,9 @@ where a list is wanted, it gives its items. Where it differs:
   `[S: Iterator[Int]]` argument, which are copied.
 - **It has its own copy of its arguments,** taken at the call, since it runs
   after the call has returned. A `var` parameter is refused.
+- **Items that may fail**: in an `Iterator[T or Error]`, `yield Error("..")`
+  is the failed item and `yield value` the good one, as a function giving
+  `T or Error` reads them.
 - **`return` alone ends it.** Its items come only from `yield`. Once it has
   ended, `next` gives `None` every time it is asked again.
 - **A `var` holding one carries on where it stopped**: after `g.next`, a
@@ -365,6 +368,8 @@ async def main:
 - **Letting go ends it.** After a `break`, or once nothing holds it, the
   body stops at its next `yield`, so an endless one is fine.
 - **It moves like a generator**, and a task that uses one takes it.
+- **A function of a type may be one** (`async def self.upto(n: Int)`); a
+  method of a value cannot be yet.
 - **Not yet:** chain methods over it (`map`, `filter`, `take`) — keep its
   items with `.to_list` and chain over the list — and an async generator
   method.

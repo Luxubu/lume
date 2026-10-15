@@ -1,0 +1,108 @@
+# c05_log_tail: a log tailer. Two writer tasks append lines to two files under
+# /tmp/lume-review-c/tail by running `sh -c` once per line; two reader tasks
+# each walk an async generator that polls its file, yields each complete new
+# line once, and ends at `END`. Whatever the timing, each reader sees its
+# file's lines in order, so the summaries are fixed. Probes: an async
+# generator that reads files and returns from inside a `for` in a `while`,
+# a task per generator started in a loop, a `var self` method with a list
+# pattern and `..rest`, `await t?` in a `main -> () or Error`, a raw `"""`
+# shell script, and a non-zero exit code coming back as a value.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# wrote 7 + 4 lines
+# app.log: INFO 3, WARN 1, ERROR 2
+#   error: db timeout
+#   error: cache miss storm
+# db.log: INFO 2, WARN 1
+# app.log has 7 lines, 2 errors (grep exit 0)
+# db.log has 4 lines, 0 errors (grep exit 1)
+# ["app.log", "db.log"]
+
+DIR = "/tmp/lume-review-c/tail"
+
+# $1 is the line, $2 the file
+APPEND = r"""
+  printf '%s\n' "$1" >> "$2"
+  """
+
+APP_LINES = ["INFO start", "WARN disk 91%", "ERROR db timeout", "INFO retry ok", "ERROR cache miss storm", "INFO done", "END"]
+DB_LINES = ["INFO open", "INFO query 12ms", "WARN slow query 900ms", "END"]
+
+struct Summary:
+  file: Str
+  counts: {Str: Int}
+  errors: [Str]
+
+  def add(var self, line: Str):
+    match line.split:
+      [level, ..rest] ->
+        counts[level] = counts[level].or(0) + 1
+        if level == "ERROR":
+          errors.push(rest.join(" "))
+      [] -> ()
+
+  def report -> Str:
+    parts = counts.map { |k, v| "#{k} #{v}" }.join(", ")
+    "#{file}: #{parts}"
+
+async def writer(path: Str, lines: [Str]) -> Int or Error:
+  for l in lines:
+    await Time.sleep(3)
+    (code, _, err) = Process.run("sh", ["-c", APPEND, "sh", l, path])?
+    if code != 0:
+      return Error("append to #{path} failed: #{err.trim}")
+  lines.len
+
+# every complete line the file gains, once each, until a line `END`
+async def tail(path: Str, polls: Int) -> Iterator[Str]:
+  var seen = 0
+  var left = polls
+  while left > 0:
+    left -= 1
+    text = File.read(path).or("")
+    var complete = text.lines.to_list
+    if not text.ends_with?("\n"):
+      _ = complete.pop
+    if complete.len > seen:
+      for line in complete.skip(seen):
+        if line == "END":
+          return
+        yield line
+      seen = complete.len
+    await Time.sleep(2)
+
+async def main -> () or Error:
+  _ = Dir.remove(DIR)
+  Dir.make(DIR)?
+  app = Path.join(DIR, "app.log")
+  db = Path.join(DIR, "db.log")
+  File.write(app, "")?
+  File.write(db, "")?
+
+  var readers: [Task[Summary]] = []
+  for path in [app, db]:
+    lines = tail(path, 5000)
+    t = spawn:
+      var sm = Summary(Path.base(path), {}, [])
+      for line in lines:
+        sm.add(line)
+      sm
+    readers.push(t)
+
+  w1 = spawn: await writer(app, APP_LINES)
+  w2 = spawn: await writer(db, DB_LINES)
+  n1 = await w1?
+  n2 = await w2?
+  puts "wrote #{n1} + #{n2} lines"
+
+  for sm in await readers:
+    puts sm.report
+    for e in sm.errors:
+      puts "  error: #{e}"
+
+  for path in [app, db]:
+    total = File.read(path)?.lines.len
+    (code, out, _) = Process.run("grep", ["-c", "ERROR", path])?
+    puts "#{Path.base(path)} has #{total} lines, #{out.trim} errors (grep exit #{code})"
+  (_, listing, _) = Process.run_in(DIR, "ls", [])?
+  puts listing.lines.to_list

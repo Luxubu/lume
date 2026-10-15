@@ -1,0 +1,9 @@
+sales 3, refunds 1
+  apple: 95
+  pear: 80
+Summary(sales: 3, refunds: 1, net: {"apple": 95, "pear": 80})
+bad: oops: wanted 3 fields, got 1
+bad: sale fig x: `x` is not an integer
+[Sale(item: "fig", cents: 300), Refund(item: "fig", cents: 50)]
+[("apple", 120), ("pear", 80), ("apple", 95)]
+exit: 0

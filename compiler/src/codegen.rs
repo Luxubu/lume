@@ -5642,7 +5642,7 @@ impl Gen {
         self.check_assign(a, t, &format!("`{}` takes `{}: {}`", callee, pname, type_name(t)))?;
         if let Type::Gen(_) = t {
             // unknown callees count as generators: working a chain out first is always safe
-            self.arg_for_gen = self.fns.get(&self.canon(callee)).map(|s| matches!(s.ret, Type::Gen(_))).unwrap_or(true);
+            self.arg_for_gen = self.fns.get(&self.canon(callee)).map(|s| matches!(s.ret, Type::Gen(_) | Type::AsyncGen(_))).unwrap_or(true);
             let r = self.seq_arg(a);
             self.arg_for_gen = false;
             return r;
@@ -5816,7 +5816,7 @@ impl Gen {
         if block_yields(body) {
             let at = first_yield(body).unwrap_or((e.line, e.col));
             return Err(LumeError::new(at.0, at.1, "`yield` inside `spawn:` hands nothing out: the task runs apart from the generator")
-                .with_help("work the item out in the generator itself; a generator cannot be `async`, so it cannot wait for a task"));
+                .with_help("work the item out in the generator itself; to wait for one, make the generator an `async def`, where `yield await work()` waits for it"));
         }
         if self.current_type.is_some() && (block_mentions_self(body) || self.field_names().iter().any(|f| body.stmts.iter().any(|st| stmt_mentions(st, f)))) {
             return Err(LumeError::new(e.line, e.col, "a `spawn:` block inside a method cannot use `self` or its fields")
@@ -6906,7 +6906,10 @@ impl Gen {
                     return Err(LumeError::new(p.line, p.col, format!("`{}` is taken by move, so it is already the function's own: `var` would change nothing the caller sees", p.name))
                         .with_help("drop `var`; `next` works on it as it is"));
                 }
-                parts.push(format!("mut {}: impl Iterator<Item = {}> + Send", rust_name(&p.name), self.rt(&item)));
+                // an async generator runs as a task, which outlives the call:
+                // what it is given must not borrow
+                let lasting = if matches!(sig.ret, Type::AsyncGen(_)) { " + 'static" } else { "" };
+                parts.push(format!("mut {}: impl Iterator<Item = {}> + Send{}", rust_name(&p.name), self.rt(&item), lasting));
                 continue;
             }
             if self.is_interface(&pty) && self.in_trait_impl && !p.mutable {
@@ -8253,8 +8256,20 @@ impl Gen {
                     return Err(LumeError::new(*line, *col, "`yield` inside a block hands nothing out: the block runs inside a call, not in the generator")
                         .with_help("loop with `for` instead of a block method, so the `yield` is the generator's own"));
                 }
-                self.check_assign(value, &item, &format!("{} gives `Iterator[{}]`", self.who(), type_name(&item)))?;
-                let v = self.expr_owned_as(value, &item)?;
+                // items that are `T or E`: a bare error is the item's `Err`,
+                // and a plain value its `Ok`, as for a function's result
+                let vt = self.ty_of(value).materialized();
+                let v = match &item {
+                    Type::Result(ok, err) if !matches!(vt, Type::Result(..)) && vt != Type::Unknown && (vt == **err || self.assignable(&vt, ok)) => {
+                        let wrap = if vt == **err && vt != **ok { "Err" } else { "Ok" };
+                        let inner = if wrap == "Err" { (**err).clone() } else { (**ok).clone() };
+                        format!("{}({})", wrap, self.expr_owned_as(value, &inner)?)
+                    }
+                    _ => {
+                        self.check_assign(value, &item, &format!("{} gives `Iterator[{}]`", self.who(), type_name(&item)))?;
+                        self.expr_owned_as(value, &item)?
+                    }
+                };
                 if self.gen_async {
                     // nobody walks it any more: the body ends here
                     self.line(&format!("if !lume_co.put({}).await {{ return; }}", v));

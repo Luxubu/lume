@@ -1,0 +1,18 @@
+# Probes: a `spawn:` that awaits another task takes that task; awaiting the
+# inner task afterwards as well is refused.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `inner` cannot be copied, and the task takes it, so it cannot be used after the `spawn:`
+#   --> corpus/m86/b14_task_takes_task.lume:14:11
+#    |
+# 14 |   outer = spawn:
+#    |           ^
+#   help: use `inner` only inside the task, or keep what you need from it before
+
+async def main:
+  inner = spawn: 21
+  outer = spawn:
+    k = await inner
+    k * 2
+  puts await outer
+  puts await inner

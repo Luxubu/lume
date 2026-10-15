@@ -1,0 +1,7 @@
+error: `nums(...)` is an `async` generator, which runs as a task, so it is called from async code
+  --> corpus/m86/b09_gen_in_plain_def.lume:17:3
+   |
+17 |   nums(3).to_list
+   |   ^
+  help: call it in an `async def` or a `spawn:` body
+exit: 1

@@ -1,0 +1,107 @@
+# c02_crawler: a breadth-first crawler over a fake site. `fetch` is an async
+# function that looks a page up in a constant map after a sleep; `crawl` is
+# an async generator that keeps a queue and a set of pages seen, and yields
+# one `Visit` per page, broken links included. A plain generator pulls the
+# `[[...]]` links out of a page's text. Probes: a plain generator called
+# inside an async generator, `await` inside a `match` subject, `next` by hand
+# on a `var` async generator before a `for` carries on from it, `break` out
+# of one, `.to_list` on one, and a task that takes one and walks it.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# start at / (depth 0, 2 links)
+# depth 1: /about /blog
+# depth 2: /team /blog/1 /blog/2
+# depth 3: /team/ann
+# broken: ["/missing at depth 3: 404 /missing"]
+# stopped after 2
+# [Page(depth: 0, path: "/team", out: 1), Page(depth: 1, path: "/team/ann", out: 0)]
+# 4 pages, 7 links
+# 8 distinct links seen on the site
+
+SITE = {
+  "/": "Home. Read [[/about]] then [[/blog]].",
+  "/about": "About us. Back to [[/]]. Team at [[/team]].",
+  "/blog": "Posts: [[/blog/1]] [[/blog/2]] [[/about]]",
+  "/blog/1": "First post. See [[/missing]].",
+  "/blog/2": "Second post. Up: [[/blog]].",
+  "/team": "Ann, Bo. [[/team/ann]]",
+  "/team/ann": "Ann's page.",
+}
+
+enum Visit:
+  Page(depth: Int, path: Str, out: Int)
+  Broken(depth: Int, path: Str, why: Str)
+
+# every `[[target]]` in a page, in the order they appear
+def links(body: Str) -> Iterator[Str]:
+  for piece in body.split("[[").skip(1):
+    match piece.index_of("]]"):
+      Some(stop) ->
+        yield piece.slice(0, stop)
+      None -> ()
+
+async def fetch(path: Str) -> Str or Error:
+  await Time.sleep(1)
+  SITE[path].or_error("404 #{path}")
+
+async def crawl(start: Str, max_depth: Int) -> Iterator[Visit]:
+  var seen: {Str} = {start}
+  var queue: [(Str, Int)] = [(start, 0)]
+  while not queue.empty?:
+    (path, depth) = queue.remove_at(0)
+    match await fetch(path):
+      Ok(body) ->
+        found = links(body).to_list
+        for l in found:
+          if depth < max_depth and seen.add(l):
+            queue.push((l, depth + 1))
+        yield Page(depth, path, found.len)
+      Error(e) ->
+        yield Broken(depth, path, e.message)
+
+async def main:
+  var walk = crawl("/", 3)
+  match walk.next:
+    Some(Page(d, p, n)) -> puts "start at #{p} (depth #{d}, #{n} links)"
+    Some(Broken(_, p, why)) -> puts "start broken: #{p} #{why}"
+    None -> puts "nothing at all"
+
+  var by_depth: {Int: [Str]} = {}
+  var broken: [Str] = []
+  for v in walk:
+    match v:
+      Page(d, p, _) -> by_depth[d].push(p)
+      Broken(d, p, why) -> broken.push("#{p} at depth #{d}: #{why}")
+  for d, ps in by_depth:
+    puts "depth #{d}: #{ps.join(" ")}"
+  puts "broken: #{broken}"
+
+  # letting go of one part way through
+  var n = 0
+  for v in crawl("/", 3):
+    n += 1
+    break if n == 2
+  puts "stopped after #{n}"
+
+  # all of a small one at once
+  puts crawl("/team", 5).to_list
+
+  # a task takes a crawl and walks it
+  blog = crawl("/blog", 1)
+  counter = spawn:
+    var pages = 0
+    var total = 0
+    for v in blog:
+      match v:
+        Page(_, _, k) ->
+          pages += 1
+          total += k
+        Broken(..) -> ()
+    "#{pages} pages, #{total} links"
+  puts await counter
+
+  var every: {Str} = {}
+  for _, body in SITE:
+    for l in links(body):
+      every.add(l)
+  puts "#{every.len} distinct links seen on the site"

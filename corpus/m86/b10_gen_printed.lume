@@ -1,0 +1,16 @@
+# Probes: an async generator kept in a local and then printed: refused.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: the items of an async sequence arrive later, so it is not a value to print or keep as it is
+#   --> corpus/m86/b10_gen_printed.lume:16:8
+#    |
+# 16 |   puts g
+#    |        ^
+#   help: walk it with `for` in async code, or keep its items with `.to_list`
+
+async def nums -> Iterator[Int]:
+  yield 1
+
+async def main:
+  g = nums()
+  puts g

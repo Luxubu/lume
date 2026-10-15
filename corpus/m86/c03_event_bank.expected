@@ -1,0 +1,12 @@
+6 applied, 5 refused
+  refused: B2 has 12.00, cannot take 20.00
+  refused: no account C3
+  refused: line 8: unknown verb `wire`
+  refused: line 9: `x` is not an integer
+  refused: B2 is closed
+A1 ana: 35.00
+B2 bo: 27.00 (closed)
+{"A1": 5000, "B2": 1250, "C3": 100}
+2 unreadable lines
+total held: 62.00
+exit: 0

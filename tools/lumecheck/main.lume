@@ -178,7 +178,7 @@ def verdict_of(lume: Str, s: suite.Step, update: Bool, scratch: Str) -> Verdict:
 
 # Build output left in examples/ and corpus/ by an earlier run.
 def clean_builds -> () or Error:
-  _ = Process.run("find", ["examples", "corpus", "-name", ".lume", "-type", "d", "-prune", "-exec", "rm", "-rf", "{}", "+"])?
+  _ = Process.run("find", ["examples", "corpus", "packages", "-name", ".lume", "-type", "d", "-prune", "-exec", "rm", "-rf", "{}", "+"])?
   ()
 
 # Every line a test checks: the expected outputs, and the `#!`, `error:`

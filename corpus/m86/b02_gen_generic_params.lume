@@ -1,0 +1,43 @@
+# Probes: a generic async generator used at three types; one that takes a
+# list (the caller's list is unchanged); one that takes `xs: Iterator[Int]`
+# and is handed a plain generator, a list and a range.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ["ab", "ab", "ab"]
+# [7, 7]
+# true
+# [2, 3, 4]
+# [1, 2, 3]
+# ["e0", "e2", "e4", "e6"]
+# ["l5", "l6"]
+# ["r1", "r2", "r3"]
+
+async def echo_n[T](x: T, times: Int) -> Iterator[T]:
+  for i in 0...times:
+    await Time.sleep(1)
+    yield x
+
+async def from_list(xs: [Int]) -> Iterator[Int]:
+  for x in xs:
+    yield x + 1
+
+def evens(limit: Int) -> Iterator[Int]:
+  for n in 0..limit:
+    yield n if n % 2 == 0
+
+async def labelled(xs: Iterator[Int], tag: Str) -> Iterator[Str]:
+  for x in xs:
+    await Time.sleep(1)
+    yield "#{tag}#{x}"
+
+async def main:
+  puts echo_n("ab", 3).to_list
+  puts echo_n(7, 2).to_list
+  for w in echo_n(true, 1):
+    puts w
+  nums = [1, 2, 3]
+  puts from_list(nums).to_list
+  puts nums
+  puts labelled(evens(6), "e").to_list
+  puts labelled([5, 6], "l").to_list
+  puts labelled(1..3, "r").to_list

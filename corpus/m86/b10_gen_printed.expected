@@ -1,0 +1,7 @@
+error: the items of an async sequence arrive later, so it is not a value to print or keep as it is
+  --> corpus/m86/b10_gen_printed.lume:16:8
+   |
+16 |   puts g
+   |        ^
+  help: walk it with `for` in async code, or keep its items with `.to_list`
+exit: 1

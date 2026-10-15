@@ -1,0 +1,20 @@
+# Probes: an async generator walked with `for`, then used again with
+# `.to_list`: refused, as a plain generator used twice is.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `g` is a generator, and it is used up here, so it cannot be used after
+#   --> corpus/m86/b08_gen_used_after_for.lume:18:12
+#    |
+# 18 |   for x in g:
+#    |            ^
+#   help: a generator hands out each item once: to walk the items twice, keep them with `.to_list` first
+
+async def two -> Iterator[Int]:
+  yield 1
+  yield 2
+
+async def main:
+  g = two()
+  for x in g:
+    puts x
+  puts g.to_list

@@ -1,0 +1,33 @@
+warning: `rules` holds values of different types behind `Rule`, so calls on its items go through a pointer
+  --> corpus/m86/c04_chat_rooms.lume:97:3
+   |
+97 |   rules: [Rule] = [BanWords(words: {"spam", "cheap"}), Shouting(limit: 5), TooLong(most: 24)]
+   |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+warning: `flagged` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/m86/c04_chat_rooms.lume:98:3
+   |
+98 |   shared var flagged: [Str] = []
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+warning: `seen` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/m86/c04_chat_rooms.lume:99:3
+   |
+99 |   shared var seen = 0
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+## general: 2 kept, 2 dropped
+ann> hello all
+cy> hi ann
+## dev: 2 kept, 1 dropped
+dee> the build is green
+dee> NOT ME
+## random: 1 kept, 1 dropped
+gus> ok
+9 messages read
+dropped:
+  dev/eve: length: too long (41)
+  general/ann: ban: said spam
+  general/bo: ban: said cheap
+  random/flo: shouting: 10 capitals
+exit: 0

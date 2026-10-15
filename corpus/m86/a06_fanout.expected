@@ -1,0 +1,20 @@
+warning: `fetched` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/m86/a06_fanout.lume:52:3
+   |
+52 |   shared var fetched = 0
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+news (3)
+  news/1: rain
+  news/2: vote
+  news/3: strike
+sport (2)
+  sport/1: goal
+  sport/2: draw
+tech (3)
+  tech/1: chip
+  tech/2: patch
+  tech/3: leak
+fetched 8
+[["news/1: rain"], ["sport/1: goal"], ["tech/1: chip"]]
+exit: 0

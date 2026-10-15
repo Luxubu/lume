@@ -1,0 +1,20 @@
+round 1: web up, db up, queue up, cache missing
+  web: new -> healthy
+  db: new -> healthy
+  queue: new -> healthy
+  cache: new -> gone
+round 2: web up, db down(1), queue down(1), cache missing
+  db: healthy -> failing since round 2 (1x)
+  queue: healthy -> failing since round 2 (1x)
+round 3: web up, db up, queue down(1), cache missing
+  db: failing since round 2 (1x) -> healthy
+  queue: failing since round 2 (1x) -> failing since round 2 (2x)
+after 3 rounds:
+  web: healthy
+  db: healthy
+  queue: failing since round 2 (2x)
+  cache: gone
+ever failed: {"db", "queue"}
+cache: cannot run `no-such-cache-probe`: No such file or directory (os error 2)
+web alone: [1, 2]
+exit: 0

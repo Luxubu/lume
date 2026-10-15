@@ -1,0 +1,6 @@
+0 ab-ab
+0 cd-cd
+0 ef-ef
+2/out/err
+cannot run `echo` in `/tmp/lume-review-b/nowhere`: no such folder
+exit: 0

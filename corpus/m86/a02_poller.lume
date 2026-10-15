@@ -1,0 +1,82 @@
+# Probes: a poller written as an async generator. It awaits a status check
+# (an `async def` that sleeps), yields each reading as an enum value, and
+# ends itself with a bare `return` once the reading is final. The caller
+# walks it with `for` and `match`, keeps the last reading in a `var`, takes
+# items by hand with `.next` on a `var` (including after the end), and
+# builds a map from several polls.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# build 30%
+# build 60%
+# build 90%
+# done: build ok after 4 checks
+# [Pending(pct: 50)]
+# [Pending(pct: 50), Done(result: "lint ok after 2 checks")]
+# Some(Failed(reason: "unknown job deploy"))
+# None
+# after 2 checks: Pending(pct: 60)
+# lint: done
+# build: done
+# deploy: unknown job deploy
+
+enum Status:
+  Pending(pct: Int)
+  Done(result: Str)
+  Failed(reason: Str)
+
+  def final? -> Bool:
+    match self:
+      Pending(_) -> false
+      _ -> true
+
+STEP = {"build": 30, "lint": 50}
+
+# stands for asking a build server how far a job has got
+async def check(job: Str, tick: Int) -> Status:
+  await Time.sleep(1)
+  match STEP[job]:
+    None -> Failed("unknown job #{job}")
+    Some(step) ->
+      pct = step * tick
+      if pct >= 100: Done("#{job} ok after #{tick} checks") else: Pending(pct)
+
+async def poll(job: Str, limit: Int) -> Iterator[Status]:
+  var tick = 0
+  while tick < limit:
+    tick += 1
+    s = await check(job, tick)
+    stop = s.final?
+    yield s
+    if stop:
+      return
+
+async def main:
+  for s in poll("build", 10):
+    match s:
+      Pending(p) -> puts "build #{p}%"
+      Done(r) -> puts "done: #{r}"
+      Failed(why) -> puts "failed: #{why}"
+
+  puts poll("lint", 1).to_list
+  puts poll("lint", 5).to_list
+
+  var g = poll("deploy", 3)
+  puts g.next
+  puts g.next
+
+  var last: Status = Pending(0)
+  var seen = 0
+  for s in poll("build", 2):
+    seen += 1
+    last = s
+  puts "after #{seen} checks: #{last}"
+
+  var report: {Str: Str} = {}
+  for job in ["lint", "build", "deploy"]:
+    for s in poll(job, 10):
+      report[job] = match s:
+        Pending(p) -> "#{p}%"
+        Done(_) -> "done"
+        Failed(why) -> why
+  for job, state in report:
+    puts "#{job}: #{state}"

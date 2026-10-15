@@ -1,0 +1,7 @@
+error: `g` cannot be copied, and the task takes it, so it cannot be used after the `spawn:`
+  --> corpus/m86/a08_shared_feed.lume:21:7
+   |
+21 |   t = spawn:
+   |       ^
+  help: use `g` only inside the task, or keep what you need from it before
+exit: 1

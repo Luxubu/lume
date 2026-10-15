@@ -1,0 +1,28 @@
+# Probes: a fan-out mistake. One async generator is handed to a task that
+# sums it, and then `main` walks the same generator again to print it. The
+# task takes the generator, so the second walk should be refused, with the
+# error a plain generator gets.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `g` cannot be copied, and the task takes it, so it cannot be used after the `spawn:`
+#   --> corpus/m86/a08_shared_feed.lume:21:7
+#    |
+# 21 |   t = spawn:
+#    |       ^
+#   help: use `g` only inside the task, or keep what you need from it before
+
+async def numbers(n: Int) -> Iterator[Int]:
+  for i in 1..n:
+    await Time.sleep(1)
+    yield i
+
+async def main:
+  g = numbers(3)
+  t = spawn:
+    var sum = 0
+    for x in g:
+      sum += x
+    sum
+  puts await t
+  for x in g:
+    puts x

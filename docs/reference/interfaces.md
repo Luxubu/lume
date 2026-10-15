@@ -322,6 +322,25 @@ def main:
 #! the items of a list must all be the same type
 ```
 
+**Declaring a binding that holds interface values gives a warning**, once,
+where it is declared: a `[Shape]`, a `Shape?`, a map whose values are
+`Shape`, or a tuple holding one. As in Rust, each item is a `Box<dyn Shape>`,
+and a call on it goes through a pointer. Like every warning it goes to
+standard error, and the program still runs:
+
+```
+warning: `mixed` holds values of different types behind `Shape`, so calls on its items go through a pointer
+  --> scene.lume:29:3
+   |
+29 |   mixed: [Shape] = [Circle(1.0), Sq(5.0)]
+   |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+```
+
+That is the first program of this section, run as `scene.lume`. A parameter,
+a field or a return type of an interface type gives no warning; only a
+binding does.
+
 ## An interface's own methods may use interfaces
 
 **An interface method may take an interface value, give one back, or give a

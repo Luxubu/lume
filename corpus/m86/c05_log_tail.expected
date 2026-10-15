@@ -1,0 +1,9 @@
+wrote 7 + 4 lines
+app.log: INFO 3, WARN 1, ERROR 2
+  error: db timeout
+  error: cache miss storm
+db.log: INFO 2, WARN 1
+app.log has 7 lines, 2 errors (grep exit 0)
+db.log has 4 lines, 0 errors (grep exit 1)
+["app.log", "db.log"]
+exit: 0

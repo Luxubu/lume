@@ -1,0 +1,27 @@
+# Probes: `Process.run` in one-line `spawn:` bodies made in a block (no
+# `await` in them), results in the order started; a task body that takes a
+# `Process.run` result apart with `?` and so gives `Str or Error`, awaited
+# with `await t?`; `Process.run_in` on a missing folder inside a task.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 0 ab-ab
+# 0 cd-cd
+# 0 ef-ef
+# 2/out/err
+# cannot run `echo` in `/tmp/lume-review-b/nowhere`: no such folder
+
+async def main -> () or Error:
+  words = ["ab", "cd", "ef"]
+  tasks = words.map { |w| spawn: Process.run("printf", ["%s-%s", w, w]) }.to_list
+  for r in await tasks:
+    (code, out, _) = r?
+    puts "#{code} #{out}"
+  t = spawn:
+    (c, o, e) = Process.run("sh", ["-c", "echo out; echo err >&2; exit 2"])?
+    "#{c}/#{o.trim}/#{e.trim}"
+  puts await t?
+  bad = spawn: Process.run_in("/tmp/lume-review-b/nowhere", "echo", ["x"])
+  match await bad:
+    Ok(_) -> puts "ran"
+    Error(e) -> puts e.message
+  ()

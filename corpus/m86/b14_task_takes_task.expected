@@ -1,0 +1,7 @@
+error: `inner` cannot be copied, and the task takes it, so it cannot be used after the `spawn:`
+  --> corpus/m86/b14_task_takes_task.lume:14:11
+   |
+14 |   outer = spawn:
+   |           ^
+  help: use `inner` only inside the task, or keep what you need from it before
+exit: 1

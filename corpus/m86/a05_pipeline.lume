@@ -1,0 +1,90 @@
+# Probes: a pipeline where tasks consume async generators. A generator turns
+# raw lines into enum events, one per await; one task is handed a generator
+# made outside it (and so takes it), another starts its own inside the
+# task, a third keeps all the items with `.to_list`. A second async
+# generator walks the first with `for` and yields only the sales, from a
+# `match` arm. The tasks give back a struct, a list and a list of events,
+# awaited in a fixed order.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# sales 3, refunds 1
+#   apple: 95
+#   pear: 80
+# Summary(sales: 3, refunds: 1, net: {"apple": 95, "pear": 80})
+# bad: oops: wanted 3 fields, got 1
+# bad: sale fig x: `x` is not an integer
+# [Sale(item: "fig", cents: 300), Refund(item: "fig", cents: 50)]
+# [("apple", 120), ("pear", 80), ("apple", 95)]
+
+enum Event:
+  Sale(item: Str, cents: Int)
+  Refund(item: Str, cents: Int)
+  Bad(line: Str, why: Str)
+
+struct Summary:
+  sales: Int
+  refunds: Int
+  net: {Str: Int}
+
+def parse(line: Str) -> Event:
+  parts = line.split(" ").to_list
+  if parts.len != 3:
+    return Bad(line, "wanted 3 fields, got #{parts.len}")
+  match parts.at(2).to_int:
+    Error(e) -> Bad(line, e.message)
+    Ok(cents) ->
+      match parts.at(0):
+        "sale" -> Sale(parts.at(1), cents)
+        "refund" -> Refund(parts.at(1), cents)
+        other -> Bad(line, "unknown kind #{other}")
+
+async def events(batch: [Str]) -> Iterator[Event]:
+  for line in batch:
+    await Time.sleep(1)
+    yield parse(line)
+
+async def sales_only(batch: [Str]) -> Iterator[(Str, Int)]:
+  for ev in events(batch):
+    match ev:
+      Sale(item, c) -> yield (item, c)
+      _ -> ()
+
+async def main:
+  day1 = ["sale apple 120", "sale pear 80", "refund apple 120", "sale apple 95", "oops", "sale fig x"]
+  day2 = ["sale fig 300", "refund fig 50"]
+
+  feed = events(day1)
+  totals = spawn:
+    var net: {Str: Int} = {}
+    var sales = 0
+    var refunds = 0
+    for ev in feed:
+      match ev:
+        Sale(item, c) ->
+          sales += 1
+          net[item] = net[item].or(0) + c
+        Refund(item, c) ->
+          refunds += 1
+          net[item] = net[item].or(0) - c
+        Bad(_, _) -> ()
+    Summary(sales: sales, refunds: refunds, net: net)
+
+  rejects = spawn:
+    var bad: [Str] = []
+    for ev in events(day1):
+      match ev:
+        Bad(line, why) -> bad.push("#{line}: #{why}")
+        _ -> ()
+    bad
+
+  second = spawn: events(day2).to_list
+
+  s = await totals
+  puts "sales #{s.sales}, refunds #{s.refunds}"
+  for item, cents in s.net:
+    puts "  #{item}: #{cents}"
+  puts s
+  for b in await rejects:
+    puts "bad: #{b}"
+  puts await second
+  puts sales_only(day1).to_list

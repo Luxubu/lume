@@ -1,0 +1,141 @@
+# c03_event_bank: an event-sourced bank. The events arrive one at a time from
+# an async generator that reads a log and parses each line (a list pattern
+# over `split`, `?` inside the parser); a line that does not parse arrives as
+# a `Bad` event rather than ending the stream. A `Bank` struct applies each
+# event through a `var self` method that gives `() or Error`. A second
+# stream over the same log is taken by a task, which tallies the deposits
+# into a map and hands back a tuple.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 6 applied, 5 refused
+#   refused: B2 has 12.00, cannot take 20.00
+#   refused: no account C3
+#   refused: line 8: unknown verb `wire`
+#   refused: line 9: `x` is not an integer
+#   refused: B2 is closed
+# A1 ana: 35.00
+# B2 bo: 27.00 (closed)
+# {"A1": 5000, "B2": 1250, "C3": 100}
+# 2 unreadable lines
+# total held: 62.00
+
+LOG = """
+  open A1 ana
+  open B2 bo
+  deposit A1 5000
+  deposit B2 1200
+  withdraw B2 2000
+  transfer A1 B2 1500
+  deposit C3 100
+  wire A1 9
+  withdraw A1 x
+  close B2
+  deposit B2 50
+  """
+
+enum Event:
+  Open(acct: Str, owner: Str)
+  Deposit(acct: Str, cents: Int)
+  Withdraw(acct: Str, cents: Int)
+  Transfer(from: Str, to: Str, cents: Int)
+  Close(acct: Str)
+  Bad(line: Int, why: Str)
+
+def money(cents: Int) -> Str = (cents.to_float / 100.0).decimals(2)
+
+def amount(s: Str) -> Int or Error:
+  n = s.to_int?
+  if n <= 0:
+    return Error("amount must be positive, got #{n}")
+  n
+
+def parse(line: Str) -> Event or Error:
+  match line.split:
+    ["open", acct, owner] -> Open(acct, owner)
+    ["deposit", acct, c] -> Deposit(acct, amount(c)?)
+    ["withdraw", acct, c] -> Withdraw(acct, amount(c)?)
+    ["transfer", a, b, c] -> Transfer(a, b, amount(c)?)
+    ["close", acct] -> Close(acct)
+    [verb, ..] -> Error("unknown verb `#{verb}`")
+    [] -> Error("blank line")
+
+async def events(log: Str) -> Iterator[Event]:
+  for i, line in log.lines.enumerate:
+    await Time.sleep(1)
+    match parse(line):
+      Ok(e) ->
+        yield e
+      Error(err) ->
+        yield Bad(i + 1, err.message)
+
+struct Bank:
+  owners: {Str: Str}
+  balances: {Str: Int}
+  closed: {Str}
+
+  def check(a: Str) -> () or Error:
+    if not owners.contains?(a):
+      return Error("no account #{a}")
+    if closed.contains?(a):
+      return Error("#{a} is closed")
+
+  def apply(var self, e: Event) -> () or Error:
+    match e:
+      Open(a, who) ->
+        if owners.contains?(a):
+          return Error("#{a} is already open")
+        owners[a] = who
+        balances[a] = 0
+      Deposit(a, c) ->
+        check(a)?
+        balances[a] = balances[a].or(0) + c
+      Withdraw(a, c) ->
+        check(a)?
+        have = balances[a].or(0)
+        if have < c:
+          return Error("#{a} has #{money(have)}, cannot take #{money(c)}")
+        balances[a] = have - c
+      Transfer(from, to, c) ->
+        check(from)?
+        check(to)?
+        have = balances[from].or(0)
+        if have < c:
+          return Error("#{from} has #{money(have)}, cannot send #{money(c)}")
+        balances[from] = have - c
+        balances[to] = balances[to].or(0) + c
+      Close(a) ->
+        check(a)?
+        _ = closed.add(a)
+      Bad(n, why) ->
+        return Error("line #{n}: #{why}")
+
+async def main:
+  var bank = Bank(owners: {}, balances: {}, closed: {})
+  var applied = 0
+  var refused: [Str] = []
+  for e in events(LOG):
+    match bank.apply(e):
+      Ok(_) -> applied += 1
+      Error(err) -> refused.push(err.message)
+
+  puts "#{applied} applied, #{refused.len} refused"
+  for r in refused:
+    puts "  refused: #{r}"
+  for a, c in bank.balances:
+    state = if bank.closed.contains?(a): " (closed)" else: ""
+    puts "#{a} #{bank.owners[a].or("?")}: #{money(c)}#{state}"
+
+  stream = events(LOG)
+  tally = spawn:
+    var deposits: {Str: Int} = {}
+    var bad = 0
+    for e in stream:
+      match e:
+        Deposit(a, c) -> deposits[a] = deposits[a].or(0) + c
+        Bad(..) -> bad += 1
+        _ -> ()
+    (deposits, bad)
+  (totals, unreadable) = await tally
+  puts totals
+  puts "#{unreadable} unreadable lines"
+  puts "total held: #{money(bank.balances.values.sum)}"

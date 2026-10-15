@@ -1,0 +1,10 @@
+start at / (depth 0, 2 links)
+depth 1: /about /blog
+depth 2: /team /blog/1 /blog/2
+depth 3: /team/ann
+broken: ["/missing at depth 3: 404 /missing"]
+stopped after 2
+[Page(depth: 0, path: "/team", out: 1), Page(depth: 1, path: "/team/ann", out: 0)]
+4 pages, 7 links
+8 distinct links seen on the site
+exit: 0

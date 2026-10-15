@@ -3,4 +3,4 @@ error: `yield` inside `spawn:` hands nothing out: the task runs apart from the g
   |
 6 |       yield x * x
   |       ^
-  help: work the item out in the generator itself; a generator cannot be `async`, so it cannot wait for a task
+  help: work the item out in the generator itself; to wait for one, make the generator an `async def`, where `yield await work()` waits for it

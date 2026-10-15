@@ -1,0 +1,10 @@
+a.txt: 2 lines, first [alpha]
+b.md: 3 lines, first [# title]
+c.txt: 0 lines, first []
+skipped: cat sub: exit 1
+total 5
+{"txt": ["a.txt", "c.txt"], "md": ["b.md"]}
+ls 0: a.txt,b.md,c.txt,sub
+1
+Some(Error("cannot list `/tmp/lume-review-a/none`: No such file or directory (os error 2)"))
+exit: 0

@@ -1,0 +1,65 @@
+# Probes: an async generator that yields `Note or Error`, one per file in a
+# folder: it lists the folder with `Dir.list`, reads each file by running
+# `cat` there with `Process.run_in`, and yields `Ok(note)` or an `Error`
+# (a sub-folder makes `cat` exit 1; a missing folder makes `Dir.list`
+# fail). The program writes its own files under /tmp/lume-review-a/notes,
+# tallies them into a map keyed by extension, and checks with `ls`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# a.txt: 2 lines, first [alpha]
+# b.md: 3 lines, first [# title]
+# c.txt: 0 lines, first []
+# skipped: cat sub: exit 1
+# total 5
+# {"txt": ["a.txt", "c.txt"], "md": ["b.md"]}
+# ls 0: a.txt,b.md,c.txt,sub
+# 1
+# Some(Error("cannot list `/tmp/lume-review-a/none`: No such file or directory (os error 2)"))
+
+ROOT = "/tmp/lume-review-a/notes"
+
+struct Note:
+  name: Str
+  lines: Int
+  first: Str
+
+async def notes(dir: Str) -> Iterator[Note or Error]:
+  match Dir.list(dir):
+    Error(e) -> yield Error(e.message)
+    Ok(names) ->
+      for name in names:
+        await Time.sleep(1)
+        match Process.run_in(dir, "cat", [name]):
+          Error(e) -> yield Error(e.message)
+          Ok((code, out, _)) ->
+            if code != 0:
+              yield Error("cat #{name}: exit #{code}")
+            else:
+              ls = out.lines.to_list
+              yield Ok(Note(name: name, lines: ls.len, first: ls.first.or("")))
+
+async def main -> () or Error:
+  _ = Dir.remove(ROOT)
+  Dir.make(Path.join(ROOT, "sub"))?
+  File.write(Path.join(ROOT, "a.txt"), "alpha\nbeta\n")?
+  File.write(Path.join(ROOT, "b.md"), "# title\nbody\nmore\n")?
+  File.write(Path.join(ROOT, "c.txt"), "")?
+
+  var total = 0
+  var by_ext: {Str: [Str]} = {}
+  for r in notes(ROOT):
+    match r:
+      Ok(n) ->
+        total += n.lines
+        by_ext[Path.ext(n.name)].push(n.name)
+        puts "#{n.name}: #{n.lines} lines, first [#{n.first}]"
+      Error(e) -> puts "skipped: #{e.message}"
+  puts "total #{total}"
+  puts by_ext
+
+  (code, out, _) = Process.run_in(ROOT, "ls", [])?
+  puts "ls #{code}: #{out.lines.join(",")}"
+
+  missing = notes("/tmp/lume-review-a/none").to_list
+  puts missing.len
+  puts missing.first

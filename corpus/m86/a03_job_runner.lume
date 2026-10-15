@@ -1,0 +1,75 @@
+# Probes: a small job runner on `Process.run` and `Process.run_in`. Jobs
+# are structs; each run becomes an enum value from a `match` on
+# `Ok((code, out, err))` / `Error(e)`. It writes its own files under
+# /tmp/lume-review-a/jobs with `sh -c` and `printf`, lists them with `ls`,
+# reads one back with `File.read`, and covers a non-zero exit, a program
+# that does not exist, and a folder that does not exist.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# write   ok
+# sort    ok: apple | fig | pear
+# list    ok: fruit.txt | sorted.txt
+# echo    ok: hello from a
+# fail    exit 3: oops
+# missing not started: cannot run `no-such-program-a`: No such file or directory (os error 2)
+# nowhere not started: cannot run `ls` in `/tmp/lume-review-a/nope`: no such folder
+# {"write": 0, "sort": 0, "list": 0, "echo": 0, "fail": 3, "missing": -1, "nowhere": -1}
+# ["fail", "missing", "nowhere"]
+# ["apple", "fig", "pear"]
+
+ROOT = "/tmp/lume-review-a/jobs"
+
+struct Job:
+  name: Str
+  dir: Str
+  program: Str
+  args: [Str]
+
+enum Outcome:
+  Passed(out: Str)
+  Exited(code: Int, err: Str)
+  NotStarted(why: Str)
+
+  def exit_code -> Int:
+    match self:
+      Passed(_) -> 0
+      Exited(c, _) -> c
+      NotStarted(_) -> -1
+
+  def describe -> Str:
+    match self:
+      Passed(out) -> if out.empty?: "ok" else: "ok: #{out.lines.join(" | ")}"
+      Exited(c, err) -> "exit #{c}: #{err}"
+      NotStarted(why) -> "not started: #{why}"
+
+def run(job: Job) -> Outcome:
+  result = if job.dir == "": Process.run(job.program, job.args) else: Process.run_in(job.dir, job.program, job.args)
+  match result:
+    Ok((code, out, err)) ->
+      if code == 0: Passed(out.trim) else: Exited(code, err.trim)
+    Error(e) -> NotStarted(e.message)
+
+def main -> () or Error:
+  _ = Dir.remove(ROOT)
+  Dir.make(ROOT)?
+
+  jobs = [
+    Job("write", ROOT, "sh", ["-c", r"printf 'pear\nfig\napple\n' > fruit.txt"]),
+    Job("sort", ROOT, "sh", ["-c", "sort fruit.txt > sorted.txt && cat sorted.txt"]),
+    Job("list", ROOT, "ls", []),
+    Job("echo", "", "echo", ["hello", "from", "a"]),
+    Job("fail", ROOT, "sh", ["-c", "echo oops >&2; exit 3"]),
+    Job("missing", "", "no-such-program-a", []),
+    Job("nowhere", "/tmp/lume-review-a/nope", "ls", []),
+  ]
+
+  var codes: {Str: Int} = {}
+  for job in jobs:
+    outcome = run(job)
+    puts "#{job.name.pad_right(8)}#{outcome.describe}"
+    codes[job.name] = outcome.exit_code
+  puts codes
+  puts codes.filter { |k, v| v != 0 }.keys
+
+  text = File.read(Path.join(ROOT, "sorted.txt"))?
+  puts text.lines.to_list

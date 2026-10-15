@@ -1,0 +1,86 @@
+# c01_build_steps: a small build orchestrator. Each step is an `sh -c`
+# script run with `Process.run_in` in a folder the program makes under
+# /tmp/lume-review-c/build, and the results stream out of an async generator
+# one at a time. The generator stops itself (`return`) after the first
+# failing step, so the step after it never runs. Probes: an async generator
+# that yields enum values and calls `Process.run_in`, a missing folder as an
+# `Error`, a non-zero exit as a plain result, `Ok((0, out, _))` patterns,
+# Dir/File/Path, a map of problems and set `diff`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ok    gen: wrote 4 lines
+# ok    sort: alpha | beta | gamma
+# skip  docs: no folder
+# ok    count: 3
+# FAIL  check (exit 2)
+# 3 passed: gen, sort, count
+# docs -> no folder
+# check -> exit 2: no delta
+# not reached: pack
+# ["out", "src"]
+# ["alpha", "beta", "gamma"]
+# false
+
+ROOT = "/tmp/lume-review-c/build"
+
+struct Step:
+  name: Str
+  folder: Str
+  script: Str
+
+enum Outcome:
+  Passed(step: Str, out: Str)
+  Failed(step: Str, code: Int, err: Str)
+  NoFolder(step: Str)
+
+async def run_steps(steps: [Step]) -> Iterator[Outcome]:
+  for st in steps:
+    dir = Path.join(ROOT, st.folder)
+    await Time.sleep(1)
+    match Process.run_in(dir, "sh", ["-c", st.script]):
+      Ok((0, out, _)) ->
+        yield Passed(st.name, out.trim)
+      Ok((code, _, err)) ->
+        yield Failed(st.name, code, err.trim)
+        return
+      Error(_) ->
+        yield NoFolder(st.name)
+
+async def main -> () or Error:
+  _ = Dir.remove(ROOT)
+  Dir.make(Path.join(ROOT, "src"))?
+  Dir.make(Path.join(ROOT, "out"))?
+
+  steps = [
+    Step("gen", "src", r"printf 'alpha\nbeta\ngamma\nbeta\n' > words.txt; echo wrote 4 lines"),
+    Step("sort", "src", "sort -u words.txt > ../out/uniq.txt; cat ../out/uniq.txt"),
+    Step("docs", "docs", "echo should not start"),
+    Step("count", "out", "wc -l < uniq.txt"),
+    Step("check", "out", "grep -q delta uniq.txt || { echo 'no delta' >&2; exit 2; }"),
+    Step("pack", "out", "touch never.txt; echo packed"),
+  ]
+
+  var passed: [Str] = []
+  var problems: {Str: Str} = {}
+  for o in run_steps(steps):
+    match o:
+      Passed(name, out) ->
+        passed.push(name)
+        puts "ok    #{name}: #{out.lines.join(" | ")}"
+      Failed(name, code, err) ->
+        problems[name] = "exit #{code}: #{err}"
+        puts "FAIL  #{name} (exit #{code})"
+      NoFolder(name) ->
+        problems[name] = "no folder"
+        puts "skip  #{name}: no folder"
+
+  puts "#{passed.len} passed: #{passed.join(", ")}"
+  for name, why in problems:
+    puts "#{name} -> #{why}"
+  reached = (passed + problems.keys).to_set
+  never = steps.map(_.name).to_set.diff(reached)
+  puts "not reached: #{never.sort.join(", ")}"
+
+  puts Dir.list(ROOT)?
+  puts File.read(Path.join(ROOT, "out/uniq.txt"))?.lines.to_list
+  puts File.exists?(Path.join(ROOT, "out/never.txt"))

@@ -1,0 +1,39 @@
+# Probes: `Process.run_in` in a folder the program made: exit code, standard
+# output and standard error; `sh -c` with `>&2` and a non-zero exit; a
+# relative folder (the program is run from the repository root); a program
+# that runs and fails (not an Error); a folder that does not exist (an Error,
+# and its message).
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 0 one.txt,two.txt []
+# 5
+# first
+# second
+# 0 BRIEF.md
+# true
+# 0
+# false
+# cannot run `ls` in `/tmp/lume-review-b/no-such-folder`: no such folder
+
+def main -> () or Error:
+  dir = "/tmp/lume-review-b/m86"
+  Dir.make(dir)?
+  File.write(Path.join(dir, "one.txt"), "first\n")?
+  File.write(Path.join(dir, "two.txt"), "second\n")?
+  (code, out, err) = Process.run_in(dir, "ls", [])?
+  puts "#{code} #{out.lines.join(",")} [#{err}]"
+  (c2, o2, e2) = Process.run_in(dir, "sh", ["-c", "cat one.txt; cat two.txt >&2; exit 5"])?
+  puts c2
+  puts o2.trim
+  puts e2.trim
+  (c3, o3, _) = Process.run_in("corpus/m86", "ls", ["BRIEF.md"])?
+  puts "#{c3} #{o3.trim}"
+  (c4, o4, e4) = Process.run_in(dir, "ls", ["missing.txt"])?
+  puts c4 != 0
+  puts o4.len
+  puts e4.empty?
+  match Process.run_in("/tmp/lume-review-b/no-such-folder", "ls", []):
+    Ok(_) -> puts "ran"
+    Error(e) -> puts e.message
+  Dir.remove("/tmp/lume-review-b")?
+  ()

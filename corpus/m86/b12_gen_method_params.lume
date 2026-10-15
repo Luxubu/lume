@@ -1,0 +1,22 @@
+# Probes: an async generator method that takes a parameter and reads a
+# field: refused.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `fetch_all` is an `async` generator method, which cannot be written yet
+#   --> corpus/m86/b12_gen_method_params.lume:15:3
+#    |
+# 15 |   async def fetch_all(prefix: Str) -> Iterator[Str]:
+#    |   ^
+#   help: write it as an `async def` function that takes the value
+
+struct Feed:
+  urls: [Str]
+
+  async def fetch_all(prefix: Str) -> Iterator[Str]:
+    for u in urls:
+      await Time.sleep(1)
+      yield prefix + u
+
+async def main:
+  for s in Feed(urls: ["a", "b"]).fetch_all("x/"):
+    puts s

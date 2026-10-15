@@ -1,0 +1,132 @@
+# c06_health_rounds: a health monitor. An async generator runs rounds of
+# probes; inside each round it starts one `spawn:` per probe (each runs a
+# program with `Process.run`, so the task awaits nothing) and yields the
+# round once all of them are back. `main` walks it by hand with `g.next` in
+# a `while`, and moves each service through a state machine written as a
+# `match` on a tuple of an optional state and a health. One probe names a
+# program that does not exist, so its `Error` message is printed. Probes:
+# `spawn:` inside an async generator, `await` on a list of tasks there,
+# `next` until `None`, `zip`, nested patterns, enum equality, a set, and an
+# async generator's `.to_list` inside a task.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# round 1: web up, db up, queue up, cache missing
+#   web: new -> healthy
+#   db: new -> healthy
+#   queue: new -> healthy
+#   cache: new -> gone
+# round 2: web up, db down(1), queue down(1), cache missing
+#   db: healthy -> failing since round 2 (1x)
+#   queue: healthy -> failing since round 2 (1x)
+# round 3: web up, db up, queue down(1), cache missing
+#   db: failing since round 2 (1x) -> healthy
+#   queue: failing since round 2 (1x) -> failing since round 2 (2x)
+# after 3 rounds:
+#   web: healthy
+#   db: healthy
+#   queue: failing since round 2 (2x)
+#   cache: gone
+# ever failed: {"db", "queue"}
+# cache: cannot run `no-such-cache-probe`: No such file or directory (os error 2)
+# web alone: [1, 2]
+
+struct Probe:
+  name: Str
+  program: Str
+  script: Str
+
+enum Health:
+  Up
+  Down(code: Int)
+  Missing(why: Str)
+
+  def label -> Str:
+    match self:
+      Up -> "up"
+      Down(c) -> "down(#{c})"
+      Missing(_) -> "missing"
+
+enum State:
+  Healthy
+  Failing(since: Int, times: Int)
+  Gone(why: Str)
+
+  def label -> Str:
+    match self:
+      Healthy -> "healthy"
+      Failing(s, k) -> "failing since round #{s} (#{k}x)"
+      Gone(_) -> "gone"
+
+struct Round:
+  n: Int
+  results: [Health]
+
+PROBES = [
+  Probe("web", "sh", "exit 0"),
+  Probe("db", "sh", "test $1 -ne 2"),
+  Probe("queue", "sh", "test $1 -lt 2"),
+  Probe("cache", "no-such-cache-probe", ""),
+]
+
+# $1 of the script is the round number
+def check(p: Probe, n: Int) -> Health:
+  match Process.run(p.program, ["-c", p.script, "sh", n.to_s]):
+    Ok((0, _, _)) -> Up
+    Ok((code, _, _)) -> Down(code)
+    Error(e) -> Missing(e.message)
+
+async def rounds(probes: [Probe], count: Int) -> Iterator[Round]:
+  for n in 1..count:
+    var tasks: [Task[Health]] = []
+    for p in probes:
+      t = spawn: check(p, n)
+      tasks.push(t)
+    got = await tasks
+    yield Round(n, got)
+    await Time.sleep(1)
+
+def step(old: State?, h: Health, n: Int) -> State:
+  match (old, h):
+    (_, Up) -> Healthy
+    (Some(Failing(s, k)), Down(_)) -> Failing(s, k + 1)
+    (_, Down(_)) -> Failing(n, 1)
+    (_, Missing(why)) -> Gone(why)
+
+async def main:
+  names = PROBES.map(_.name).to_list
+  var status: {Str: State} = {}
+  var ever_failed: {Str} = {}
+  var g = rounds(PROBES, 3)
+  while true:
+    match g.next:
+      None -> break
+      Some(r) ->
+        line = names.zip(r.results).map { |nm, h| nm + " " + h.label }.join(", ")
+        puts "round #{r.n}: #{line}"
+        for name, h in names.zip(r.results):
+          old = status[name]
+          now = step(old, h, r.n)
+          changed = match old:
+            Some(o) -> o != now
+            None -> true
+          if changed:
+            puts "  #{name}: #{old.map(_.label).or("new")} -> #{now.label}"
+          match now:
+            Failing(..) -> _ = ever_failed.add(name)
+            _ -> ()
+          status[name] = now
+
+  puts "after 3 rounds:"
+  for name, s in status:
+    puts "  #{name}: #{s.label}"
+  puts "ever failed: #{ever_failed}"
+  for name, s in status:
+    match s:
+      Gone(why) -> puts "#{name}: #{why}"
+      _ -> ()
+
+  solo = spawn:
+    rs = rounds([PROBES.at(0)], 2).to_list
+    rs.map { |r| r.n }.to_list
+  ns = await solo
+  puts "web alone: #{ns}"

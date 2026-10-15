@@ -1,0 +1,123 @@
+# c04_chat_rooms: one task per chat room walks that room's async generator,
+# checks each message against `[Rule]` interface values copied into the task,
+# and records drops in `shared var`s (sorted before printing).
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ## general: 2 kept, 2 dropped
+# ann> hello all
+# cy> hi ann
+# ## dev: 2 kept, 1 dropped
+# dee> the build is green
+# dee> NOT ME
+# ## random: 1 kept, 1 dropped
+# gus> ok
+# 9 messages read
+# dropped:
+#   dev/eve: length: too long (41)
+#   general/ann: ban: said spam
+#   general/bo: ban: said cheap
+#   random/flo: shouting: 10 capitals
+# EXPECTED STDERR:
+# warning: `flagged` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+#   --> corpus/m86/c04_chat_rooms.lume:98:3
+#    |
+# 98 |   shared var flagged: [Str] = []
+#    |   ^
+#   help: fine for a store or a counter; keep the work done while it is locked short
+# warning: `seen` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+#   --> corpus/m86/c04_chat_rooms.lume:99:3
+#    |
+# 99 |   shared var seen = 0
+#    |   ^
+#   help: fine for a store or a counter; keep the work done while it is locked short
+
+ROOMS = {
+  "general": ["ann: hello all", "bo: BUY CHEAP WATCHES NOW", "cy: hi ann", "ann: spam is bad"],
+  "dev": ["dee: the build is green", "eve: who broke the build again and again today", "dee: NOT ME"],
+  "random": ["flo: WHY SO QUIET", "gus: ok"],
+}
+
+struct Message:
+  room: Str
+  who: Str
+  text: Str
+
+interface Rule:
+  def name -> Str
+  def check(text: Str) -> Str?
+struct BanWords:
+  words: {Str}
+  def name -> Str = "ban"
+  def check(text: Str) -> Str?:
+    for w in text.downcase.split:
+      if words.contains?(w):
+        return "said #{w}"
+    None
+
+struct Shouting:
+  limit: Int
+  def name -> Str = "shouting"
+  def check(text: Str) -> Str?:
+    caps = text.chars.count { |c| c.upper? }
+    if caps > limit:
+      return "#{caps} capitals"
+    None
+
+struct TooLong:
+  most: Int
+  def name -> Str = "length"
+  def check(text: Str) -> Str?:
+    if text.len > most:
+      return "too long (#{text.len})"
+    None
+
+struct RoomLog:
+  room: Str
+  kept: [Str]
+  dropped: Int
+
+def verdict(rules: [Rule], text: Str) -> Str?:
+  for r in rules:
+    match r.check(text):
+      Some(why) -> return "#{r.name}: #{why}"
+      None -> ()
+  None
+
+def split_line(room: Str, line: Str) -> Message:
+  match line.index_of(": "):
+    Some(i) -> Message(room, line.slice(0, i), line.slice(i + 2, line.len))
+    None -> Message(room, "?", line)
+
+async def feed(room: Str, script: [Str]) -> Iterator[Message]:
+  for line in script:
+    await Time.sleep(2)
+    yield split_line(room, line)
+
+async def main:
+  rules: [Rule] = [BanWords(words: {"spam", "cheap"}), Shouting(limit: 5), TooLong(most: 24)]
+  shared var flagged: [Str] = []
+  shared var seen = 0
+
+  var tasks: [Task[RoomLog]] = []
+  for room, script in ROOMS:
+    t = spawn:
+      var kept: [Str] = []
+      var dropped = 0
+      for m in feed(room, script):
+        seen += 1
+        match verdict(rules, m.text):
+          Some(why) ->
+            dropped += 1
+            flagged.push("#{m.room}/#{m.who}: #{why}")
+          None -> kept.push("#{m.who}> #{m.text}")
+      RoomLog(room, kept, dropped)
+    tasks.push(t)
+
+  for log in await tasks:
+    puts "## #{log.room}: #{log.kept.len} kept, #{log.dropped} dropped"
+    for line in log.kept:
+      puts line
+  puts "#{seen} messages read"
+  puts "dropped:"
+  for f in flagged.sort:
+    puts "  #{f}"
