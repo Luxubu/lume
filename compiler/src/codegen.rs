@@ -1133,6 +1133,11 @@ pub struct Gen {
     /// Where a generator default's body began in `out`, and the indent to
     /// return to, while it is written.
     gen_body_mark: Option<(usize, usize)>,
+    /// A generator method in an `extend`: its body cannot sit in the trait's
+    /// impl, so it goes to a private trait of its own, written after it —
+    /// these are that trait's methods, and its number.
+    ext_gen_heads: Vec<String>,
+    ext_gen_id: usize,
     /// Emitting an interface's default bodies, inside the trait itself.
     in_trait_decl: bool,
     /// The method being emitted can be called only on a known type (it is
@@ -1301,6 +1306,8 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, module_id: &str
         move_lambdas: false,
         trait_extra: String::new(),
         gen_body_mark: None,
+        ext_gen_heads: Vec::new(),
+        ext_gen_id: 0,
         in_trait_decl: false,
         current_static_only: false,
         this_file: file.to_string(),
@@ -1718,7 +1725,8 @@ impl Gen {
             // stream: there is nothing to await at the call
             is_async: f.is_async && !(block_yields(&f.body) && f.ret.as_ref().map(|t| matches!(self.ct(t), Type::App(n, ref a) if a.len() == 1 && is_iterator_name(&n))).unwrap_or(false)),
             generics: self.norm_generics(&f.generics),
-            kept_params: f.params.iter().map(|p| matches!(p.ty, Type::Fn(..)) && keeps_name(&f.body, &p.name, self)).collect(),
+            // a generator runs after the call, so it keeps every block it is given
+            kept_params: f.params.iter().map(|p| matches!(p.ty, Type::Fn(..)) && (block_yields(&f.body) || keeps_name(&f.body, &p.name, self))).collect(),
             dyn_blocks: f.params.iter().any(|p| matches!(p.ty, Type::Fn(..))) && calls_self_with_block(&f.body, &f.name),
         }
     }
@@ -4101,7 +4109,7 @@ impl Gen {
                     _ => vec![],
                 };
                 for (f, owner) in fs {
-                    let k: Vec<bool> = f.params.iter().map(|p| matches!(p.ty, Type::Fn(..)) && keeps_name(&f.body, &p.name, self)).collect();
+                    let k: Vec<bool> = f.params.iter().map(|p| matches!(p.ty, Type::Fn(..)) && (block_yields(&f.body) || keeps_name(&f.body, &p.name, self))).collect();
                     // every copy of the signature: the function table, and the
                     // type's own, which is what travels with an import
                     let mut sigs: Vec<&mut Sig> = Vec::new();
@@ -6608,6 +6616,7 @@ impl Gen {
                 let pair = (global(tkey, self), global(iname, self));
                 self.emitted_impls.insert(pair);
                 for target in targets {
+                    self.ext_gen_id += 1;
                     self.line(&format!("impl{} {} for {} {{", impl_gen, iface_rust, target));
                     self.indent += 1;
                     // how this type makes the copy a pointer-to-interface needs
@@ -6652,6 +6661,21 @@ impl Gen {
                     }
                     self.indent -= 1;
                     self.line("}");
+                    let heads = std::mem::take(&mut self.ext_gen_heads);
+                    let extra = std::mem::take(&mut self.trait_extra);
+                    if !heads.is_empty() {
+                        // the generator methods' bodies, on the same type
+                        let names = if egens.is_empty() { String::new() } else { format!("<{}>", egens.iter().map(|g| g.name.clone()).collect::<Vec<_>>().join(", ")) };
+                        let tname = format!("LumeGenExt{}", self.ext_gen_id);
+                        self.line(&format!("trait {}{} {{", tname, names));
+                        for h in &heads {
+                            self.line(&format!("    {};", h));
+                        }
+                        self.line("}");
+                        self.line(&format!("impl{} {}{} for {} {{", impl_gen, tname, names, target));
+                        self.out.push_str(&extra);
+                        self.line("}");
+                    }
                 }
             }
         }
@@ -6910,9 +6934,6 @@ impl Gen {
         }
         if gen_item.is_some() {
             let refuse = |why: &str, help: &str| Err(LumeError::new(f.line, f.col, why.to_string()).with_help(help.to_string()));
-            if owner.is_some() && self.in_trait_impl && !self.in_trait_decl {
-                return refuse(&format!("`{}` is in an `extend`, and a method there cannot be a generator yet", f.name), "write the generator as a default in the interface, or as a method of the struct or enum itself");
-            }
             if owner.is_some() && f.self_kind == SelfKind::Mutate {
                 return refuse(&format!("`{}` is a generator, which walks its own copy of the value, so `var self` would change nothing", f.name), "drop `var`; to move a value along by hand, give it `def next(var self) -> T?`");
             }
@@ -6923,10 +6944,7 @@ impl Gen {
                 return Err(LumeError::new(p.line, p.col, format!("a generator takes a copy of what it is given, so `var {}` would change nothing the caller sees", p.name))
                     .with_help(format!("drop `var`; to change `{}` inside, bind it to a `var` of another name there", p.name)));
             }
-            if let Some(p) = f.params.iter().find(|p| matches!(p.ty, Type::Fn(..)) || (self.is_interface(&self.ct(&p.ty)) && !matches!(param_type(self.ct(&p.ty)), Type::Gen(_)))) {
-                return Err(LumeError::new(p.line, p.col, format!("a generator cannot take `{}` yet: it keeps what it is given, and a block or an interface value cannot be kept that way", p.name))
-                    .with_help("pass the values the generator needs instead"));
-            }
+
         }
         // `-> () or E`: the body ends with statements, and finishes with Ok(()).
         let unit_result = matches!(&sig.ret, Type::Result(t, _) if **t == Type::Unit);
@@ -7103,6 +7121,9 @@ impl Gen {
                 }
                 if pty == Type::Str {
                     self.line(&format!("let {} = {}.to_string();", rust_name(&p.name), rust_name(&p.name)));
+                } else if self.is_interface(&pty) {
+                    // the copy every interface value can make of itself
+                    self.line(&format!("let {} = {}.lume_box();", rust_name(&p.name), rust_name(&p.name)));
                 } else if !pty.is_copy() {
                     self.line(&format!("let {} = {}.clone();", rust_name(&p.name), rust_name(&p.name)));
                 }
@@ -7117,22 +7138,27 @@ impl Gen {
                 // which every type that fits has, and the body is a method of
                 // `dyn Trait`, written after the trait
                 let in_decl = self.in_trait_decl;
-                self.line(if in_decl { "let lume_this = self.lume_box();" } else { "let lume_this = self.clone();" });
+                // in an `extend`, the body is a method of a private trait for
+                // the same type, written after the impl
+                let in_ext = self.in_trait_impl && !in_decl;
+                let gname = if in_ext { format!("lume_gen{}_{}", self.ext_gen_id, rust_name(&f.name)) } else { format!("lume_gen_{}", rust_name(&f.name)) };
+                let of_str = owner.and_then(|o| self.ext_targets.get(o)) == Some(&Type::Str);
+                self.line(if in_decl { "let lume_this = self.lume_box();" } else if of_str { "let lume_this = self.to_string();" } else { "let lume_this = self.clone();" });
                 let mut call_args = vec!["lume_co".to_string()];
                 call_args.extend(names.iter().cloned());
                 if async_gen {
                     // an `async` one: the copy goes to the task its body runs as
                     self.uses_async = true;
                     self.line(&format!("let (lume_co, lume_rx) = lume_stream::<{}>();", item_rt));
-                    self.line(&format!("tokio::spawn(async move {{ lume_this.lume_gen_{}({}).await }});", rust_name(&f.name), call_args.join(", ")));
+                    self.line(&format!("tokio::spawn(async move {{ lume_this.{}({}).await }});", gname, call_args.join(", ")));
                     self.line("lume_rx");
                 } else {
-                    let made = format!("LumeGen::new(move |lume_co: LumeYield<{}>| async move {{ lume_this.lume_gen_{}({}).await }})", item_rt, rust_name(&f.name), call_args.join(", "));
-                    self.line(&if in_decl { format!("::std::boxed::Box::new({})", made) } else { made });
+                    let made = format!("LumeGen::new(move |lume_co: LumeYield<{}>| async move {{ lume_this.{}({}).await }})", item_rt, gname, call_args.join(", "));
+                    self.line(&if in_decl || in_ext { format!("::std::boxed::Box::new({})", made) } else { made });
                 }
                 self.indent -= 1;
                 self.line("}");
-                if in_decl {
+                if in_decl || in_ext {
                     self.gen_body_mark = Some((self.out.len(), self.indent));
                     self.indent = 1;
                 }
@@ -7145,7 +7171,15 @@ impl Gen {
                         _ => format!("{}: {}", rust_name(&p.name), self.rt(&pty)),
                     });
                 }
-                self.line(&format!("async fn lume_gen_{}{}({}) {{", rust_name(&f.name), gen, owned.join(", ")));
+                // only its own type parameters: an interface value or a block
+                // it was given arrives boxed, not as a parameter of its own
+                let own: Vec<String> = f.generics.iter().map(|p| self.rust_bounds(p)).collect();
+                let own = if own.is_empty() { String::new() } else { format!("<{}>", own.join(", ")) };
+                let head = format!("async fn {}{}({})", gname, own, owned.join(", "));
+                if in_ext {
+                    self.ext_gen_heads.push(head.clone());
+                }
+                self.line(&format!("{} {{", head));
                 self.indent += 1;
             } else if async_gen {
                 // the body runs as a task; the caller gets the stream at once
@@ -8257,6 +8291,8 @@ impl Gen {
                                 return Err(self.unknown_name(n, *line, *col));
                             }
                         }
+                        // what is wrong with the left side says more
+                        self.expr(recv)?;
                         return Err(LumeError::new(*line, *col, format!("cannot tell what `.{}` belongs to here", field)));
                     }
                     other => return Err(LumeError::new(*line, *col, format!("`{}` values have no fields to assign", type_name(other)))),
@@ -8440,6 +8476,14 @@ impl Gen {
                 self.line("}");
             }
             Stmt::For { vars, mutable, iter, filter, body, line, col } => {
+                // inside an `extend` on a built-in, a bare `split(" ")` is
+                // `self.split(" ")`, and is walked as that would be
+                if let ExprKind::Call { name, args } = &iter.kind {
+                    if self.lookup(name).is_none() && !self.fns.contains_key(&self.canon(name)) && self.bare_method(name).is_none() && self.self_has_builtin(name) {
+                        let st = Stmt::For { vars: vars.clone(), mutable: *mutable, iter: self.self_call(name, args, iter), filter: filter.clone(), body: body.clone(), line: *line, col: *col };
+                        return self.stmt_inner(&st, is_tail);
+                    }
+                }
                 // a lazy sequence of your own: `def next(var self) -> T?`
                 if !matches!(&iter.kind, ExprKind::Method { name, .. } if name == "lume_seq") && self.next_item(iter).is_some() {
                     if *mutable {

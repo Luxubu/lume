@@ -12,10 +12,13 @@
 - **Chains over async generators**: `map`, `filter`, `reject`,
   `take_while`, `take`, `skip` and `enumerate`, lazy as Rust's `StreamExt`;
   and a method may be an async generator.
+- **Generators** may be methods in an `extend`, and may take a block or an
+  interface value, which they keep.
 - **`await tasks.next_done`**: whichever task in a `var` list finishes
   first, taken out of the list, as tokio's `JoinSet::join_next`.
 - **`tests/run.sh`** tells each failure as soon as it is known, is 19%
   faster, and takes `-x` (stop at the first failure) and `-v`.
+- **Fixed**: `for w in split(" ")` inside an `extend Str` reached rustc.
 - **Fixed**: a `filter` (or `reject`, `count`, `find`, ...) block that did not
   give a `Bool` reached rustc.
 - **Fixed**: a task that used a generator, a stream or another task copied

@@ -1,8 +1,14 @@
-# A generator keeps what it is given until it is walked, and a block is only lent for the call.
+# A generator keeps the block it is given and runs it later, so the names
+# the block uses are copied in, and changing one inside is refused.
 
-def mapped(xs: [Int], f: (Int) -> Int) -> Iterator[Int]:
+def keep(xs: [Int], ok: (Int) -> Bool) -> Iterator[Int]:
   for x in xs:
-    yield f(x)
+    yield x if ok(x)
 
 def main:
-  puts mapped([1, 2]) { |x| x * 2 }.to_list
+  var seen = 0
+  for x in keep([1, 2]) do |x|
+    seen += 1
+    x > 1
+  :
+    puts x

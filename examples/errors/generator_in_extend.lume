@@ -1,11 +1,14 @@
-# An `extend` method cannot be a generator yet; an interface default can, and so can a method of the type itself.
+# An interface cannot ask for an async generator yet, so an `extend` cannot give one.
 
-interface Halves:
-  def halves -> Iterator[Int]
+interface Feed:
+  async def posts -> Iterator[Str]
 
-extend [T] with Halves:
-  def halves -> Iterator[Int]:
-    yield self.len / 2
+struct Blog:
+  name: Str
 
-def main:
-  puts [1, 2, 3, 4].halves.to_list
+extend Blog with Feed:
+  async def posts -> Iterator[Str]:
+    yield name
+
+async def main:
+  puts Blog(name: "b").posts.to_list

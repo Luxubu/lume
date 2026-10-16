@@ -17,6 +17,7 @@ tried; this is why there is no `examples/errors/*.lume` for it.
 - `codegen.rs`: a sequence is wanted here, and this is {} — a guard: an argument for a parameter `Iterator[T]` is checked to be a sequence before it is written, so nothing else reaches it.
 - `codegen.rs`: `{}` hands out items that arrive later, so a `for` over it waits for each: it goes in async code — a guard: an async sequence can only be made in async code ("is an `async` generator, which runs as a task" comes first), and no parameter type carries one into a plain `def`.
 - `codegen.rs`: `.{}` waits for items that arrive later, so it goes in async code — the same guard, for `.next` and `.to_list`.
+- `codegen.rs`: cannot tell what `.{}` belongs to here — a guard (milestone 89): the left side of `a.b = v` is compiled first, and whatever leaves its type unknown (an unknown function, a missing field) gives its own message.
 - `codegen.rs`: `return` inside a block ends this item's block, not the function — a warning, not an error: `lume check` succeeds, and when the same file also has an error only the error is printed.
 
 ## Need a crate or packages

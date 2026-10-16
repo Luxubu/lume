@@ -1,7 +1,15 @@
-error: a generator cannot take `q` yet: it keeps what it is given, and a block or an interface value cannot be kept that way
-  --> corpus/m78/c06_catalogue_fail.lume:51:16
+warning: `queries` holds values of different types behind `Query`, so calls on its items go through a pointer
+  --> corpus/m78/c06_catalogue_fail.lume:77:3
    |
-51 |   def matching(q: Query) -> Iterator[Book]:
-   |                ^
-  help: pass the values the generator needs instead
-exit: 1
+77 |   queries: [Query] = [ByAuthor(name: "Austen"), Tagged(tag: "sea")]
+   |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+1815 Emma       Austen
+1817 Persuasion Austen
+1961 Solaris    Lem
+1965 Dune       Herbert
+["Emma", "Persuasion"]
+by Austen: Emma, Persuasion (2)
+tagged sea: Persuasion, Solaris (2)
+{1900: 2, 1800: 2}
+exit: 0

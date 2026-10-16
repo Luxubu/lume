@@ -394,8 +394,20 @@ def main:
 
 A generator default walks a copy of the value, taken through the same
 `lume_box` that copies any value held as the interface. A method in an
-`extend` cannot be a generator yet: write it as a default in the interface,
-or on the type itself.
+`extend` may be a generator too, on a type of yours or a built-in one:
+
+```lume
+interface Spread:
+  def spread -> Iterator[Str]
+
+extend Str with Spread:
+  def spread -> Iterator[Str]:
+    for w in split(" "):
+      yield w.upcase
+
+def main:
+  puts "to be".spread.to_list    #=> ["TO", "BE"]
+```
 
 ## Methods that take a block, have type parameters, or are `async`
 

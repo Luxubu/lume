@@ -68,6 +68,33 @@ struct Team:
     for i, m in members.enumerate:
       yield "#{prefix}#{i + 1} #{m} (#{name})"
 
+# a block it is given is kept: the names the block uses are copied in
+def keep_if(xs: [Int], ok: (Int) -> Bool) -> Iterator[Int]:
+  for x in xs:
+    yield x if ok(x)
+
+interface Sized:
+  def size -> Int
+
+struct Crate:
+  holds: Int
+
+  def size -> Int = holds
+
+# an interface value it is given is copied through `lume_box`
+def loads(c: Sized, trips: Int) -> Iterator[Int]:
+  for t in 1..trips:
+    yield c.size * t
+
+interface Halves:
+  def halves -> Iterator[Int]
+
+# a generator in an `extend`, here of a built-in type
+extend [Int] with Halves:
+  def halves -> Iterator[Int]:
+    for x in self:
+      yield x / 2
+
 def main:
   for x in countdown(3):
     puts x
@@ -121,3 +148,10 @@ def main:
   # an endless chain into a generator stays lazy; its block copies `step`
   step = 5
   puts evens(naturals().map { |n| n * step }).take(3).to_list
+
+  # a generator that keeps a block, one that keeps an interface value, and
+  # one in an `extend`
+  most = 4
+  puts keep_if([3, 8, 1, 5], { |x| x < most }).to_list
+  puts loads(Crate(holds: 6), 3).to_list
+  puts [10, 4].halves.to_list

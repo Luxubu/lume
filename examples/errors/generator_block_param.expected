@@ -1,6 +1,6 @@
-error: a generator cannot take `f` yet: it keeps what it is given, and a block or an interface value cannot be kept that way
-  --> examples/errors/generator_block_param.lume:3:23
-  |
-3 | def mapped(xs: [Int], f: (Int) -> Int) -> Iterator[Int]:
-  |                       ^
-  help: pass the values the generator needs instead
+error: `seen` was copied into this block when the block was made, so changing it here would not be seen outside
+  --> examples/errors/generator_block_param.lume:11:5
+   |
+11 |     seen += 1
+   |     ^
+  help: declare it `shared var seen` before the block if the block is meant to change it, or have the block give back the new value

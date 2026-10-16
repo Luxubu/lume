@@ -1,0 +1,8 @@
+# Assigning through a field that does not exist names the missing field.
+
+struct Point:
+  x: Int
+
+def main:
+  var p = Point(x: 1)
+  p.pos.x = 2

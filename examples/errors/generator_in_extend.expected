@@ -1,6 +1,5 @@
-error: `halves` is in an `extend`, and a method there cannot be a generator yet
-  --> examples/errors/generator_in_extend.lume:7:3
+error: `Blog` is used as a `Feed`, but its `posts` is `-> async Iterator[Str]` and `Feed` needs `-> Iterator[Str]`
+  --> examples/errors/generator_in_extend.lume:9:1
   |
-7 |   def halves -> Iterator[Int]:
-  |   ^
-  help: write the generator as a default in the interface, or as a method of the struct or enum itself
+9 | extend Blog with Feed:
+  | ^

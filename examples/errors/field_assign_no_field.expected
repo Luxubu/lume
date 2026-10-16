@@ -1,0 +1,6 @@
+error: `Point` has no field or method named `pos`
+  --> examples/errors/field_assign_no_field.lume:8:4
+  |
+8 |   p.pos.x = 2
+  |    ^
+  help: `Point` has fields x

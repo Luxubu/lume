@@ -296,7 +296,10 @@ where a list is wanted, it gives its items. Where it differs:
   list, a tuple or a field, and not as an `Iterator[Int]` value or a
   `[S: Iterator[Int]]` argument, which are copied.
 - **It has its own copy of its arguments,** taken at the call, since it runs
-  after the call has returned. A `var` parameter is refused.
+  after the call has returned. A `var` parameter is refused. A block it is
+  given is kept, as Rust's `move` closure is: the names the block uses are
+  copied in at the call. An interface value is copied through `lume_box`,
+  as a list of interface values copies its items.
 - **Items that may fail**: in an `Iterator[T or Error]`, `yield Error("..")`
   is the failed item and `yield value` the good one, as a function giving
   `T or Error` reads them.
@@ -332,8 +335,9 @@ def main:
   interface's other methods; see
   [Interfaces](interfaces.md#an-interfaces-own-methods-may-use-interfaces).
 - **`async def` with `yield`** is an async generator; see below.
-- **Not yet:** a generator in an `extend`, an `async` one in an interface,
-  and a generator that takes a block or an interface value.
+- **In an `extend`** a method may be one, on a built-in type too; see
+  [Interfaces](interfaces.md#an-interfaces-own-methods-may-use-interfaces).
+- **Not yet:** an `async` generator in an interface.
 - **Speed:** `bench/b7_generators.lume` is `b6` as a generator; it runs at
   about 1.3 times the hand-written Rust iterator.
 - **More:** `examples/generators.lume` shows each of these.
@@ -367,7 +371,8 @@ async def main:
   calling one, which starts its task.
 - **Letting go ends it.** After a `break`, or once nothing holds it, the
   body stops at its next `yield`, so an endless one is fine.
-- **It moves like a generator**, and a task that uses one takes it.
+- **It moves like a generator**, and a task that uses one takes it. It
+  keeps a block or an interface value it is given, as a generator does.
 - **A method may be one**, as may a function of a type
   (`async def self.upto(n: Int)`). Its task walks a copy of the value, as a
   generator method does.
