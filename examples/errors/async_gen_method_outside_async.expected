@@ -1,0 +1,6 @@
+error: `Feed(...).items` is an `async` generator, which runs as a task, so it is called from async code
+  --> examples/errors/async_gen_method_outside_async.lume:10:26
+   |
+10 |   for x in Feed(url: "x").items.to_list:
+   |                          ^
+  help: call it in an `async def` or a `spawn:` body

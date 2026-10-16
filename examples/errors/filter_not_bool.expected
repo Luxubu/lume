@@ -1,0 +1,6 @@
+error: the block of `filter` gives back an `Int`, but it must give a `Bool`
+  --> examples/errors/filter_not_bool.lume:4:25
+  |
+4 |   puts [1, 2, 3].filter { |n| n * 2 }.to_list
+  |                         ^
+  help: it says yes or no to each item, as in `.filter { |x| x > 0 }`

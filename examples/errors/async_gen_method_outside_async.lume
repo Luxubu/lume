@@ -1,0 +1,11 @@
+# An async generator method starts a task, so it is called from async code.
+
+struct Feed:
+  url: Str
+
+  async def items -> Iterator[Str]:
+    yield url
+
+def main:
+  for x in Feed(url: "x").items.to_list:
+    puts x

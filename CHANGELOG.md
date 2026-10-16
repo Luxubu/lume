@@ -9,6 +9,11 @@
 - **`Process.run_in(dir, program, args)`** runs a program in a folder.
 - **Async generators**: an `async def` with `yield` may `await`; its items
   are walked with `for` in async code.
+- **Chains over async generators**: `map`, `filter`, `reject`,
+  `take_while`, `take`, `skip` and `enumerate`, lazy as Rust's `StreamExt`;
+  and a method may be an async generator.
+- **Fixed**: a `filter` (or `reject`, `count`, `find`, ...) block that did not
+  give a `Bool` reached rustc.
 - **Fixed**: a task that used a generator, a stream or another task copied
   it, which cannot be done; the task now takes it.
 - **Fixed**: an async generator that takes an `Iterator` reached rustc;

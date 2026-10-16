@@ -1,7 +1,3 @@
-error: `fetch_all` is an `async` generator method, which cannot be written yet
-  --> corpus/m86/b12_gen_method_params.lume:15:3
-   |
-15 |   async def fetch_all(prefix: Str) -> Iterator[Str]:
-   |   ^
-  help: write it as an `async def` function that takes the value
-exit: 1
+x/a
+x/b
+exit: 0

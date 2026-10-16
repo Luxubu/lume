@@ -1,10 +1,15 @@
-# A method cannot be an async generator yet.
+# An interface cannot give an async generator yet; each type's own method can.
 
-struct Feed:
-  url: Str
+interface Feed:
+  def url -> Str
 
   async def items -> Iterator[Str]:
     yield url
 
+struct Page:
+  address: Str
+
+  def url -> Str = address
+
 async def main:
-  puts Feed(url: "x").items.to_list
+  puts Page(address: "x").items.to_list

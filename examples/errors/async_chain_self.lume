@@ -1,0 +1,15 @@
+# A chain over an async sequence runs its block as items arrive, after the
+# line it is on, so the block cannot use `self`.
+
+async def nums -> Iterator[Int]:
+  yield 1
+  yield 5
+
+struct Limit:
+  most: Int
+
+  async def under -> [Int]:
+    nums().filter { |n| n < most }.to_list
+
+async def main:
+  puts await Limit(most: 3).under

@@ -1,0 +1,6 @@
+error: the block of `filter` runs as items arrive, after this line, so it cannot use `self` or its fields
+  --> examples/errors/async_chain_self.lume:12:19
+   |
+12 |     nums().filter { |n| n < most }.to_list
+   |                   ^
+  help: bind what it needs to a name before the chain, and use that

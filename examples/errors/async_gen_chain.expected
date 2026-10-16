@@ -1,6 +1,6 @@
-error: `async Iterator[Int]` values cannot take a block; only lists and ranges can
-  --> examples/errors/async_gen_chain.lume:7:14
+error: an `async Iterator[Int]` has no `count` yet
+  --> examples/errors/async_gen_chain.lume:9:14
   |
-7 |   puts nums().map { |x| x * 2 }.to_list
+9 |   puts nums().count { |x| x > 1 }
   |              ^
-  help: walk it with `for` in async code, or keep its items with `.to_list` and chain over the list
+  help: its chains are `map`, `filter`, `reject`, `take_while`, `take`, `skip` and `enumerate`; for the rest, keep its items with `.to_list` and chain over the list

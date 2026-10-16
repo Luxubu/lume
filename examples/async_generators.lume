@@ -14,6 +14,16 @@ async def scores(names: [Str]) -> Iterator[(Str, Int)]:
   for n in names:
     yield (n, await fetch_score(n))
 
+# a method may be one: the task its body runs as walks a copy of the value
+struct Station:
+  name: Str
+  every: Int
+
+  async def readings(count: Int) -> Iterator[Int]:
+    for i in 1..count:
+      await Time.sleep(every)
+      yield i * name.len
+
 # never ends: whoever walks it decides when to stop
 async def ticks(label: Str) -> Iterator[Str]:
   var n = 0
@@ -44,3 +54,12 @@ async def main:
       sum += v
     sum
   puts await total
+
+  # chains hand items on as they arrive, as Rust's `StreamExt` does; their
+  # blocks copy in the names they use
+  most = 30
+  puts scores(["al", "bea", "cass", "dmitri"]).filter { |p| p.1 < most }.map { |p| p.0 }.to_list
+  puts ticks("t").skip(2).take(2).to_list
+  puts Station(name: "ab", every: 1).readings(5).take_while { |r| r < 8 }.enumerate.to_list
+  for r in Station(name: "xyz", every: 1).readings(3).reject { |r| r == 6 }:
+    puts r

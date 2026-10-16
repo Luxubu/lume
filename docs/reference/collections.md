@@ -332,8 +332,8 @@ def main:
   interface's other methods; see
   [Interfaces](interfaces.md#an-interfaces-own-methods-may-use-interfaces).
 - **`async def` with `yield`** is an async generator; see below.
-- **Not yet:** an `async` generator method, a generator in an `extend`, and
-  a generator that takes a block or an interface value.
+- **Not yet:** a generator in an `extend`, an `async` one in an interface,
+  and a generator that takes a block or an interface value.
 - **Speed:** `bench/b7_generators.lume` is `b6` as a generator; it runs at
   about 1.3 times the hand-written Rust iterator.
 - **More:** `examples/generators.lume` shows each of these.
@@ -368,12 +368,70 @@ async def main:
 - **Letting go ends it.** After a `break`, or once nothing holds it, the
   body stops at its next `yield`, so an endless one is fine.
 - **It moves like a generator**, and a task that uses one takes it.
-- **A function of a type may be one** (`async def self.upto(n: Int)`); a
-  method of a value cannot be yet.
-- **Not yet:** chain methods over it (`map`, `filter`, `take`) — keep its
-  items with `.to_list` and chain over the list — and an async generator
-  method.
+- **A method may be one**, as may a function of a type
+  (`async def self.upto(n: Int)`). Its task walks a copy of the value, as a
+  generator method does.
+- **Not yet:** an async generator in an interface, and the methods that
+  wait for every item, like `count` or `fold` — keep the items with
+  `.to_list` and use the list's.
 - **More:** `examples/async_generators.lume` shows each of these.
+
+#### Chains over an async sequence
+
+**`map`, `filter`, `reject`, `take_while`, `take`, `skip` and `enumerate`
+give an async sequence too**, as Rust's `StreamExt` does. Each asks the one
+before it for an item only when it is asked for one, so nothing runs ahead,
+and one that has its last item lets go of its source at once — so a chain
+over an endless sequence ends:
+
+```lume
+async def naturals -> Iterator[Int]:
+  var n = 0
+  while true:
+    yield n
+    n += 1
+
+struct Feed:
+  name: Str
+
+  async def posts(count: Int) -> Iterator[Str]:
+    for i in 1..count:
+      await Time.sleep(1)
+      yield "#{name} #{i}"
+
+async def main:
+  puts naturals().filter { |n| n % 3 == 0 }.map { |n| n * n }.take(3).to_list
+  #=> [0, 9, 36]
+  for i, p in Feed(name: "news").posts(5).skip(1).take(2).enumerate:
+    puts "#{i}: #{p}"    #=> 0: news 2
+                         #=> 1: news 3
+```
+
+**A chain's block runs when an item arrives, after the line it is on**, so
+it is Rust's `move` closure: the names it uses are copied in when the chain
+is made, as a [kept block](functions-and-blocks.md#blocks-as-values)'s are, and changing one
+inside is refused. For the same reason it cannot use `self` or a field;
+bind what it needs to a name before the chain:
+
+```lume-bad
+async def naturals -> Iterator[Int]:
+  var n = 0
+  while true:
+    yield n
+    n += 1
+
+struct Limit:
+  most: Int
+
+  async def under -> [Int]:
+    naturals().take_while { |n| n < most }.to_list
+
+async def main:
+  puts await Limit(most: 3).under
+#! the block of `take_while` runs as items arrive, after this line, so it cannot use `self` or its fields
+```
+
+A chain moves the sequence it is made from, as `for` does.
 
 ### Taking a sequence: `xs: Iterator[T]`
 

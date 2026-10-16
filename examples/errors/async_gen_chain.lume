@@ -1,7 +1,9 @@
-# The items of an async sequence arrive later: there are no chains over them yet.
+# An async sequence has the chains that hand on items; the ones that wait for
+# all of them, like `count`, not yet.
 
 async def nums -> Iterator[Int]:
   yield 1
+  yield 2
 
 async def main:
-  puts nums().map { |x| x * 2 }.to_list
+  puts nums().count { |x| x > 1 }

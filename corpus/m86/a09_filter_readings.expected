@@ -1,7 +1,2 @@
-error: `async Iterator[Int]` values cannot take a block; only lists and ranges can
-  --> corpus/m86/a09_filter_readings.lume:20:20
-   |
-20 |   high = readings().filter { |r| r > 50 }.to_list
-   |                    ^
-  help: walk it with `for` in async code, or keep its items with `.to_list` and chain over the list
-exit: 1
+[70, 90]
+exit: 0

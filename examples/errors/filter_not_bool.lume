@@ -1,0 +1,4 @@
+# The block of `filter` says yes or no.
+
+def main:
+  puts [1, 2, 3].filter { |n| n * 2 }.to_list
