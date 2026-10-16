@@ -5,7 +5,7 @@
 #   tests/lumecheck.sh docs [-v] [-j N]
 #   tests/lumecheck.sh coverage [--check N]
 #   tests/lumecheck.sh keywords
-#   tests/lumecheck.sh suite [--update] [-j N]   (what tests/run.sh runs)
+#   tests/lumecheck.sh suite [--update] [-j N] [-x] [-v]   (what tests/run.sh runs)
 #
 # The build is cached, so only the first run after a change compiles.
 set -u

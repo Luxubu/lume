@@ -1,0 +1,10 @@
+# `next_done` waits for whichever task finishes first, so it is awaited.
+
+async def nap(ms: Int) -> Int:
+  await Time.sleep(ms)
+  ms
+
+async def main:
+  var tasks = [spawn: await nap(1)]
+  first = tasks.next_done
+  puts first

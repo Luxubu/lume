@@ -149,6 +149,53 @@ A task that is never awaited still runs, but nothing waits for it: when
 `main` ends, the program ends, and an unfinished task is cut off without a
 word. Await every task whose work matters.
 
+### Whichever finishes first: `next_done`
+
+**`await tasks.next_done` waits for whichever task in a `var` list finishes
+first, takes it out of the list, and gives its result**, as tokio's
+`JoinSet::join_next` does; `None` once the list is empty. The others keep
+running, and keep their order:
+
+```lume
+async def fetch(id: Int, ms: Int) -> Str:
+  await Time.sleep(ms)
+  "item #{id}"
+
+async def main:
+  var tasks = [spawn: await fetch(1, 60), spawn: await fetch(2, 30), spawn: await fetch(3, 1)]
+  puts await tasks.next_done    #=> Some("item 3")
+  puts tasks.len                #=> 2
+  puts await tasks              #=> ["item 1", "item 2"]
+```
+
+With it, a fixed number of tasks can work through a long list, a new one
+starting each time one finishes, so a slow one holds back no other — Rust's
+`buffer_unordered(n)`. As an async generator, the results come out as they
+are ready:
+
+```lume
+async def work(n: Int) -> Int:
+  await Time.sleep(n * 10)
+  n
+
+async def results(ns: [Int], at_once: Int) -> Iterator[Int]:
+  var running: [Task[Int]] = []
+  var started = 0
+  while started < ns.len or not running.empty?:
+    while started < ns.len and running.len < at_once:
+      n = ns.at(started)
+      running.push(spawn: await work(n))
+      started += 1
+    match await running.next_done:
+      Some(r) -> yield r
+      None -> return
+
+async def main:
+  puts results([5, 1, 1, 1], 2).to_list    #=> [1, 1, 1, 5]
+```
+
+`tools/lumecheck/main.lume` runs the test suite this way.
+
 ## A task that waits without `await`
 
 **A `spawn:` body with no `await` in it runs on a thread pool of its own**,

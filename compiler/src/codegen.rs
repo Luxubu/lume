@@ -5734,6 +5734,7 @@ impl Gen {
         if let Type::Future(_) = t {
             let what = match &e.kind {
                 ExprKind::Call { name, .. } => format!("`{}` is an `async def`", name),
+                ExprKind::Method { name, .. } if name == "next_done" => "`next_done` waits for the first task to finish".to_string(),
                 ExprKind::Method { name, .. } => format!("`{}` is an `async def`", name),
                 _ => "this is an async value".to_string(),
             };
@@ -12234,7 +12235,7 @@ impl Gen {
                         want_types = want;
                     }
                 }
-                if matches!(name.as_str(), "push" | "pop" | "insert" | "remove_at" | "add") || (name == "remove" && matches!(rt, Type::Map(..) | Type::Set(_))) || (name == "next" && matches!(rt, Type::Gen(_) | Type::AsyncGen(_))) {
+                if matches!(name.as_str(), "push" | "pop" | "insert" | "remove_at" | "add" | "next_done") || (name == "remove" && matches!(rt, Type::Map(..) | Type::Set(_))) || (name == "next" && matches!(rt, Type::Gen(_) | Type::AsyncGen(_))) {
                     self.check_receiver_mutable(recv, name, e.line, e.col)?;
                 }
                 let mut parts = Vec::new();
@@ -12405,6 +12406,12 @@ impl Gen {
                 } else {
                     format!("{{ let mut lume_s = {}; let mut lume_v = Vec::new(); while let Some(x) = lume_s.next().await {{ lume_v.push(x); }} lume_v }}", recv)
                 }
+            }
+            // tokio's `JoinSet::join_next`: whichever task is done first,
+            // taken out of the list; the others keep their order
+            "next_done" => {
+                need(0)?;
+                format!("{{ let lume_ts = &mut {}; std::future::poll_fn(move |lume_cx| {{ if lume_ts.is_empty() {{ return std::task::Poll::Ready(None); }} for lume_i in 0..lume_ts.len() {{ if let std::task::Poll::Ready(lume_r) = std::future::Future::poll(std::pin::Pin::new(&mut lume_ts[lume_i]), lume_cx) {{ lume_ts.remove(lume_i); return std::task::Poll::Ready(Some(lume_r.unwrap())); }} }} std::task::Poll::Pending }}) }}", recv)
             }
             "take" | "skip" if matches!(rt, Type::AsyncGen(_)) => { need(1)?; format!("({}).lume_{}({})", recv, name, args[0]) }
             "enumerate" if matches!(rt, Type::AsyncGen(_)) => { need(0)?; format!("({}).lume_enumerate()", recv) }
@@ -12881,6 +12888,14 @@ impl Gen {
 /// Which built-in methods a receiver type has. The one source for
 /// acceptance and for the "`Str` has: ..." help.
 fn builtins_for(recv: &Type) -> Vec<&'static str> {
+    // a list of tasks also gives up whichever is done first
+    if let Type::List(i) = recv {
+        if matches!(**i, Type::Task(_)) {
+            let mut v = builtins_for(&Type::List(Box::new(Type::Unknown)));
+            v.push("next_done");
+            return v;
+        }
+    }
     let common = ["to_s", "to_str"];
     let mut v: Vec<&str> = match recv {
         Type::Str => vec![
@@ -13335,6 +13350,11 @@ fn builtin_namespace_type(ns: &str, name: &str) -> Option<Type> {
 
 /// Result type of a built-in method on a value of type `recv`.
 fn builtin_method_type(recv: &Type, name: &str) -> Type {
+    if let (Type::List(i), "next_done") = (recv, name) {
+        if let Type::Task(t) = &**i {
+            return Type::Future(Box::new(Type::Option(t.clone())));
+        }
+    }
     if let (Type::Gen(item) | Type::AsyncGen(item), "next") = (recv, name) {
         return Type::Option(item.clone());
     }

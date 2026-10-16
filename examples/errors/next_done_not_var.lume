@@ -1,0 +1,9 @@
+# `next_done` takes the finished task out of the list, so the list is a `var`.
+
+async def nap(ms: Int) -> Int:
+  await Time.sleep(ms)
+  ms
+
+async def main:
+  tasks = [spawn: await nap(1)]
+  puts await tasks.next_done

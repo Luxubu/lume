@@ -1,0 +1,6 @@
+error: `next_done` waits for the first task to finish: its result arrives later
+  --> examples/errors/next_done_not_awaited.lume:9:16
+  |
+9 |   first = tasks.next_done
+  |                ^
+  help: write `await` in front of the call to wait for it, or `spawn:` to run it alongside other work

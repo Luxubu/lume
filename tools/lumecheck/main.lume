@@ -4,7 +4,9 @@
 #   lumecheck docs [-v] [-j N]     run every example in docs/ against what it claims
 #   lumecheck coverage [--check N] which compiler messages some test shows
 #   lumecheck keywords             every keyword is in the VS Code grammar
-#   lumecheck suite [--update] [-j N]  the whole test suite
+#   lumecheck suite [--update] [-j N] [-x] [-v]
+#                                  the whole test suite; -x stops at the
+#                                  first failure, -v names each pass
 #
 # Run it from the root of the repository.
 
@@ -39,6 +41,22 @@ def examples(scratch: Str) -> [(Int, Str, fences.Block)] or Error:
         _ -> out.push((out.len, "#{path}:#{b.line}", b))
   Ok(out)
 
+# Each example's outcome as soon as it is known, with its place among the
+# examples; up to `at_once` run at a time, a new one starting as each
+# finishes.
+async def block_outcomes(lume: Str, all: [(Int, Str, fences.Block)], scratch: Str, at_once: Int) -> Iterator[(Int, Outcome)]:
+  var running: [Task[(Int, Outcome)]] = []
+  var started = 0
+  while started < all.len or not running.empty?:
+    while started < all.len and running.len < at_once:
+      (i, at, b) = all.at(started)
+      dir = Path.join(scratch, "#{i}")
+      running.push(spawn: (i, runner.check_block(lume, dir, at, b)))
+      started += 1
+    match await running.next_done:
+      Some(done) -> yield done
+      None -> return
+
 async def docs(args: [Str]) -> Int or Error:
   lume = Path.join(Env.get("PWD").or("."), "compiler/target/release/lume")
   if not File.exists?(lume):
@@ -48,13 +66,8 @@ async def docs(args: [Str]) -> Int or Error:
   workers = flag(args, "-j", 8).max(1)
   scratch = Path.join(Env.get("TMPDIR").or("/tmp"), "lumecheck-#{Time.now_ms}")
   all = examples(scratch)?
-  # each worker takes every `workers`-th example, so the order they finish
-  # in does not matter: the outcomes are put back in the docs' order
-  var tasks: [Task[[(Int, Outcome)]]] = []
-  for w in 0...workers:
-    mine = all.filter { |i, at, b| i % workers == w }.to_list
-    tasks.push(spawn: mine.map { |i, at, b| (i, runner.check_block(lume, Path.join(scratch, "#{i}"), at, b)) }.to_list)
-  var outcomes = (await tasks).flatten.sort_by { |i, o| i }.map { |i, o| o }.to_list
+  # they finish in any order; the outcomes are put back in the docs' order
+  var outcomes = block_outcomes(lume, all, scratch, workers).to_list.sort_by { |i, o| i }.map { |i, o| o }.to_list
   # the multi-file examples: a folder under docs/ with main.lume and main.expected
   root = Env.get("PWD").or(".")
   for path in docs_files_all()?:
@@ -117,25 +130,34 @@ async def run_suite(args: [Str]) -> Int or Error:
   clean_builds()?
   checks = plan.checks()?
   scratch = Path.join(Env.get("TMPDIR").or("/tmp"), "lumesuite-#{Time.now_ms}")
+  fail_fast = args.contains?("-x")
+  verbose = args.contains?("-v")
   numbered = checks.enumerate.to_list
   (timed, rest) = numbered.partition { |i, c| c.steps.any? { |s| plan.TIMED.contains?(s.name) } }
-  var tasks: [Task[[(Int, [Verdict])]]] = []
-  for w in 0...workers:
-    mine = rest.filter { |i, c| i % workers == w }.to_list
-    tasks.push(spawn: mine.map { |i, c| (i, run_check(lume, c, update, Path.join(scratch, "#{i}"))) }.to_list)
-  var done = (await tasks).flatten
-  # the checks that measure time, one at a time on a quiet machine
-  for i, c in timed:
-    done.push((i, run_check(lume, c, update, Path.join(scratch, "#{i}"))))
-  results = done.sort_by { |i, vs| i }.flat_map { |i, vs| vs }.to_list
   var pass = 0
-  var failed: [Str] = []
-  for v in results:
-    match v.failure:
-      None -> pass += 1 if not v.skipped
-      Some(why) ->
-        puts "FAIL #{v.name}#{why}"
-        failed.push(v.name)
+  # what failed, with its place in the plan, to be listed in that order
+  var failures: [(Int, Str)] = []
+  # each failure is told as soon as it is known; the checks that measure
+  # time run last, one at a time on a quiet machine
+  for group, at_once in [(rest, workers), (timed, 1)]:
+    for i, vs in verdicts(lume, group, update, scratch, at_once):
+      for v in vs:
+        match v.failure:
+          None ->
+            pass += 1 if not v.skipped
+            puts "ok   #{v.name}" if verbose and not v.skipped
+          Some(why) ->
+            puts "FAIL #{v.name}#{why}"
+            failures.push((i, v.name))
+      # letting go of the sequence ends it: no more checks are started
+      break if fail_fast and not failures.empty?
+    break if fail_fast and not failures.empty?
+  var failed = failures.sort_by { |i, n| i }.map { |i, n| n }.to_list
+  if fail_fast and not failed.empty?:
+    clean_builds()?
+    Dir.remove(scratch)? if Dir.exists?(scratch)
+    puts "stopped at the first failure"
+    return Ok(1)
   # every error message the compiler gives is shown by some test; the
   # number shown may grow and never shrink
   (covered, total, missing) = coverage_counts()?
@@ -166,6 +188,23 @@ async def run_suite(args: [Str]) -> Int or Error:
   for n in failed:
     puts "  #{n}"
   Ok(if failed.empty?: 0 else: 1)
+
+# Each check's verdicts, as soon as it is done, with its place in the plan.
+# Up to `at_once` checks run at a time, each on a task of its own, and a
+# new one starts as each finishes, as Rust's `buffer_unordered(n)` runs
+# futures: a slow check holds back no other.
+async def verdicts(lume: Str, checks: [(Int, Check)], update: Bool, scratch: Str, at_once: Int) -> Iterator[(Int, [Verdict])]:
+  var running: [Task[(Int, [Verdict])]] = []
+  var started = 0
+  while started < checks.len or not running.empty?:
+    while started < checks.len and running.len < at_once:
+      (i, c) = checks.at(started)
+      dir = Path.join(scratch, "#{i}")
+      running.push(spawn: (i, run_check(lume, c, update, dir)))
+      started += 1
+    match await running.next_done:
+      Some(done) -> yield done
+      None -> return
 
 # The steps of one check, in order; a step that could not be run at all
 # fails with why.
@@ -219,7 +258,7 @@ async def main -> () or Error:
     "coverage" -> coverage_check(args)?
     "keywords" -> keywords_check()?
     _ ->
-      warn "usage: lumecheck docs [-v] [-j N] | coverage [--check N] | keywords | suite [--update] [-j N]"
+      warn "usage: lumecheck docs [-v] [-j N] | coverage [--check N] | keywords | suite [--update] [-j N] [-x] [-v]"
       2
   Env.exit(code) if code != 0
   ()

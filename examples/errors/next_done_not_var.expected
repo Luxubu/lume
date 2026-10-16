@@ -1,0 +1,6 @@
+error: `tasks` is immutable, but `next_done` changes it
+  --> examples/errors/next_done_not_var.lume:9:19
+  |
+9 |   puts await tasks.next_done
+  |                   ^
+  help: declare it with `var tasks = ...` on line 8

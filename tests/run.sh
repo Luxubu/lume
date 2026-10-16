@@ -4,9 +4,12 @@
 #   tests/run.sh            run every check; each is compared with its .expected
 #   tests/run.sh --update   regenerate the .expected files from current output
 #   tests/run.sh -j 4       run four checks at a time (eight by default)
+#   tests/run.sh -x         stop at the first failure
+#   tests/run.sh -v         name every check that passes, as it passes
 #
 # The suite itself is written in Lume: tools/lumecheck/plan.lume lists every
-# check, and tools/lumecheck/suite.lume runs them, on several tasks at once.
+# check, and tools/lumecheck/suite.lume runs them, on several tasks at once;
+# each failure is told as soon as it is known.
 # What it checks:
 #
 # examples/*.lume         must compile and run; output is compared
