@@ -1,0 +1,60 @@
+# Probes async generator methods: struct (walks a copy taken at the call), enum
+# (`match self`, bare `return`), generic type, and inside `spawn:` bodies.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# A: x
+# A: y
+# ["B: x"]
+# []
+# [11, 21, 31]
+# ["p", "q", "p", "q"]
+# 18
+
+struct Shelf:
+  label: Str
+  books: [Str]
+
+  async def titles -> Iterator[Str]:
+    for b in books:
+      await Time.sleep(1)
+      yield "#{label}: #{b}"
+
+enum Signal:
+  Off
+  Pulse(times: Int)
+
+  async def beats -> Iterator[Int]:
+    match self:
+      Off -> return
+      Pulse(n) ->
+        for i in 1..n:
+          await Time.sleep(1)
+          yield i * 10
+
+struct Ring[T]:
+  xs: [T]
+
+  async def twice -> Iterator[T]:
+    for x in xs:
+      yield x
+    for x in xs:
+      yield x
+
+async def main:
+  var s = Shelf(label: "A", books: ["x", "y"])
+  g = s.titles
+  s.label = "B"
+  for line in g:
+    puts line
+  puts s.titles.take(1).to_list
+  quiet: Signal = Off
+  puts quiet.beats.to_list
+  puts Pulse(times: 3).beats.map { |b| b + 1 }.to_list
+  t = spawn: Ring(xs: ["p", "q"]).twice.to_list
+  puts await t
+  u = spawn:
+    var n = 0
+    for x in Ring(xs: [4, 5]).twice:
+      n += x
+    n
+  puts await u

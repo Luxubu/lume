@@ -1,0 +1,16 @@
+warning: `ws` holds values of different types behind `Walk`, so calls on its items go through a pointer
+  --> corpus/m90/b07_extend_iface.lume:51:3
+   |
+51 |   ws: [Walk] = [Path(stops: ["z"]), "m n", [7]]
+   |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+to a,to b
+P,Q
+<3>,<4>
+["to z"]
+["M", "N"]
+["<7>"]
+["to z", "M", "<7>"]
+["M"]
+none
+exit: 0

@@ -1,0 +1,57 @@
+# Probes what a chain's block takes in: text and a list (copied, still usable
+# after), a `var` changed after the chain is made (the block keeps the old
+# value), a `shared var` the block changes, a `shared var` it reads (seen as
+# it is when the item arrives), and a chain moved into a `spawn:`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ["n2", "n4", "n5"]
+# 3
+# ["a1", "a2"]
+# b
+# [2, 4, 6]
+# 3
+# [11, 12]
+# EXPECTED STDERR:
+# warning: `seen` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+#   --> corpus/m90/b03_chain_captures.lume:48:3
+#    |
+# 48 |   shared var seen = 0
+#    |   ^
+#   help: fine for a store or a counter; keep the work done while it is locked short
+# warning: `bump` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+#   --> corpus/m90/b03_chain_captures.lume:54:3
+#    |
+# 54 |   shared var bump = 0
+#    |   ^
+#   help: fine for a store or a counter; keep the work done while it is locked short
+
+async def nums -> Iterator[Int]:
+  for n in 1..5:
+    yield n
+
+async def main:
+  prefix = "n"
+  allowed = [2, 4, 5]
+  c = nums().filter { |n| allowed.contains?(n) }.map { |n| "#{prefix}#{n}" }
+  t = spawn:
+    var out: [Str] = []
+    for s in c:
+      out.push(s)
+    out
+  puts await t
+  puts allowed.len
+  var tag = "a"
+  d = nums().take(2).map { |n| "#{tag}#{n}" }
+  tag = "b"
+  puts d.to_list
+  puts tag
+  shared var seen = 0
+  doubled = nums().take(3).map do |n|
+    seen += 1
+    n * 2
+  puts doubled.to_list
+  puts seen
+  shared var bump = 0
+  e = nums().take(2).map { |n| n + bump }
+  bump = 10
+  puts e.to_list

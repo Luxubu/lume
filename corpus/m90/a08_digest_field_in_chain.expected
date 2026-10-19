@@ -1,0 +1,7 @@
+error: the block of `reject` runs as items arrive, after this line, so it cannot use `self` or its fields
+  --> corpus/m90/a08_digest_field_in_chain.lume:28:22
+   |
+28 |     stories().reject { |s| s.score < min_score }.map { |s| s.title }.take(most).to_list
+   |                      ^
+  help: bind what it needs to a name before the chain, and use that
+exit: 1

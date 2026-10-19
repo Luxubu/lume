@@ -1,0 +1,123 @@
+# c06_index: a word index over files. A pool of two tasks reads files
+# under /tmp/lume-review-c/c06 (an async generator using `await
+# running.next_done`, giving `Doc or Error` items); the index and the counts
+# are a map of lists and a map of numbers; generators in `extend`s of a
+# map and a set (built-in types) list them; an async generator keeps the
+# block a query is given, and a chain filters and shapes what it finds.
+# Problems go to standard error with `warn`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# loaded: ["a.txt", "b.txt", "c.txt"]
+# {"red": ["a.txt", "c.txt"], "green": ["a.txt", "b.txt"], "blue": ["a.txt", "c.txt"], "yellow": ["b.txt"]}
+# red 4
+# green 3
+# blue 2
+# yellow 1
+# [("red", 4), ("green", 3)]
+# 1. blue
+# 2. green
+# 3. red
+# 4. yellow
+# ["red: c.txt", "yellow: b.txt", "blue: c.txt"]
+# most in a and b: 3 green
+# EXPECTED STDERR:
+# problem: cannot read `/tmp/lume-review-c/c06/d.txt`: No such file or directory (os error 2)
+# problem: e.txt is empty
+
+struct Doc:
+  name: Str
+  words: [Str]
+
+def load(path: Str) -> Doc or Error:
+  text = File.read(path)?
+  words = text.split.to_list
+  if words.empty?:
+    return Error("#{Path.base(path)} is empty")
+  Doc(Path.base(path), words)
+
+# two files are read at a time; each comes out as soon as it is read
+async def loads(paths: [Str], at_once: Int) -> Iterator[Doc or Error]:
+  var running: [Task[Doc or Error]] = []
+  var i = 0
+  while i < paths.len or not running.empty?:
+    while i < paths.len and running.len < at_once:
+      p = paths.at(i)
+      running.push(spawn: load(p))
+      i += 1
+    match await running.next_done:
+      Some(r) ->
+        match r:
+          Ok(d) -> yield d
+          Error(e) -> yield Error(e.message)
+      None -> return
+
+interface Ranked:
+  def ranked -> Iterator[(Str, Int)]
+
+extend {Str: Int} with Ranked:
+  def ranked -> Iterator[(Str, Int)]:
+    for w, n in self.sort_by { |k, v| 0 - v }:
+      yield (w, n)
+
+interface Listing:
+  def listing -> Iterator[Str]
+
+extend {Str} with Listing:
+  def listing -> Iterator[Str]:
+    for i, w in self.sort.enumerate:
+      yield "#{i + 1}. #{w}"
+
+# the block a query is given is kept by the async generator
+async def search(index: {Str: [Str]}, terms: [Str], keep: (Str) -> Bool) -> Iterator[(Str, [Str])]:
+  for t in terms:
+    await Time.sleep(1)
+    yield (t, index[t].or([]).filter(keep).to_list)
+
+async def main -> () or Error:
+  dir = "/tmp/lume-review-c/c06"
+  Dir.make(dir)?
+  File.write(Path.join(dir, "a.txt"), "red green blue\n")?
+  File.write(Path.join(dir, "b.txt"), "green green yellow\n")?
+  File.write(Path.join(dir, "c.txt"), "blue red red red\n")?
+  File.write(Path.join(dir, "e.txt"), "\n")?
+  paths = ["a.txt", "b.txt", "c.txt", "d.txt", "e.txt"].map { |f| Path.join(dir, f) }.to_list
+
+  var docs: [Doc] = []
+  var problems: [Str] = []
+  for r in loads(paths, 2):
+    match r:
+      Ok(d) -> docs.push(d)
+      Error(e) -> problems.push(e.message)
+  docs = docs.sort_by { |d| d.name }
+  for p in problems.sort:
+    warn "problem: #{p}"
+  names = docs.map { |d| d.name }.to_list
+  puts "loaded: #{names}"
+
+  var index: {Str: [Str]} = {}
+  var counts: {Str: Int} = {}
+  for d in docs:
+    for w in d.words.to_set:
+      index[w].push(d.name)
+    for w in d.words:
+      counts[w] = counts[w].or(0) + 1
+  puts index
+
+  for w, n in counts.ranked:
+    puts "#{w} #{n}"
+  puts counts.ranked.take(2).to_list
+
+  vocab = docs.flat_map { |d| d.words }.to_set
+  for line in vocab.listing:
+    puts line
+
+  exclude = "a.txt"
+  terms = ["red", "yellow", "purple", "blue"]
+  found = search(index, terms, { |f| f != exclude }).filter { |p| not p.1.empty? }.map { |p| "#{p.0}: #{p.1.join(",")}" }.to_list
+  puts found
+
+  # an outside program agrees on the most common word of two files
+  (_, out, _) = Process.run_in(dir, "sh", ["-c", r"cat a.txt b.txt | tr ' ' '\n' | sort | uniq -c | sort -rn | head -n 1"])?
+  parts = out.trim.split
+  puts "most in a and b: #{parts.at(0)} #{parts.at(1)}"
+  Dir.remove(dir)?

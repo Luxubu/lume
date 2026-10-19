@@ -1,0 +1,63 @@
+# a07_sensor_chains: an endless async generator of sensor readings, ended by
+# chains (take, take_while, skip after map, reject then enumerate); a chain
+# bound to a name whose block copied a `var` that changes afterwards; a
+# `break` out of a `for` over it; and an async generator that walks a chain
+# over another one in its own body.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# [10, 23, 14, 1, 10, 23]
+# [23, 14, 23]
+# ["even 0", "odd 3", "even 24"]
+# 0: 23
+# 1: 14
+# 2: 23
+# 3: 14
+# [24, 21]
+# 47
+# ["high", "mid", "high"]
+# [10, 33, 37, 15]
+# [33, 37, 15]
+
+# never ends; each reading follows from the one before
+async def readings(seed: Int) -> Iterator[Int]:
+  var x = seed
+  while true:
+    await Time.sleep(1)
+    x = (x * 7 + 3) % 50
+    yield x
+
+def grade(n: Int) -> Str = if n >= 40: "high" else: "mid"
+
+# each reading added to the one before it
+async def running_pairs(seed: Int, n: Int) -> Iterator[Int]:
+  var prev = 0
+  for r in readings(seed).take(n):
+    yield prev + r
+    prev = r
+
+async def main:
+  puts readings(1).take(6).to_list
+
+  var threshold = 12
+  high = readings(1).filter { |r| r > threshold }
+  threshold = 100
+  puts high.take(3).to_list
+
+  labelled = readings(3).map { |r| if r % 2 == 0: "even #{r}" else: "odd #{r}" }.skip(2).take(3).to_list
+  puts labelled
+
+  for i, r in readings(1).reject { |r| r < 12 }.take(4).enumerate:
+    puts "#{i}: #{r}"
+
+  puts readings(3).take_while { |r| r != 0 }.to_list
+
+  var total = 0
+  for r in readings(1):
+    total += r
+    break if total > 40
+  puts total
+
+  puts readings(1).map { |r| r * 2 }.filter { |r| r > 25 }.map { |r| grade(r) }.take(3).to_list
+
+  puts running_pairs(1, 4).to_list
+  puts running_pairs(1, 4).skip(1).to_list

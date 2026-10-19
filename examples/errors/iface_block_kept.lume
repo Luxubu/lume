@@ -1,0 +1,18 @@
+# A block given to an interface method is lent for the call, so a method
+# that keeps it, in a field here, cannot be what the interface asks for.
+
+struct Rule:
+  check: (Int) -> Bool
+
+interface Maker:
+  def make(f: (Int) -> Bool) -> Rule
+
+struct Shop:
+  name: Str
+
+  def make(f: (Int) -> Bool) -> Rule = Rule(check: f)
+
+def main:
+  m: Maker = Shop(name: "s")
+  r = m.make { |x| x > 1 }
+  puts r.check(3)

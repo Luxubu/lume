@@ -1,0 +1,15 @@
+0=birch
+1=cedar
+2=dogwood
+2:cedar
+3:dogwood
+Some("ASH")
+Some("BIRCH")
+CEDAR
+DOGWOOD
+Some((0, "ash"))
+[(1, "birch"), (2, "cedar"), (3, "dogwood")]
+Some("ash")
+None
+None
+exit: 0

@@ -1708,6 +1708,7 @@ impl Gen {
     }
 
     fn sig_of(&self, f: &FnDef) -> Sig {
+        let gives_sequence = f.ret.as_ref().map(|t| matches!(self.ct(t), Type::App(n, ref a) if a.len() == 1 && is_iterator_name(&n))).unwrap_or(false);
         Sig {
             params: f.params.iter().map(|p| (p.name.clone(), param_type(Self::as_vars(&self.ct(&p.ty), &f.generics)))).collect(),
             var_params: f.params.iter().map(|p| p.mutable).collect(),
@@ -1725,8 +1726,11 @@ impl Gen {
             // stream: there is nothing to await at the call
             is_async: f.is_async && !(block_yields(&f.body) && f.ret.as_ref().map(|t| matches!(self.ct(t), Type::App(n, ref a) if a.len() == 1 && is_iterator_name(&n))).unwrap_or(false)),
             generics: self.norm_generics(&f.generics),
-            // a generator runs after the call, so it keeps every block it is given
-            kept_params: f.params.iter().map(|p| matches!(p.ty, Type::Fn(..)) && (block_yields(&f.body) || keeps_name(&f.body, &p.name, self))).collect(),
+            // a generator runs after the call, so it keeps every block it is
+            // given; so does an interface's method that gives a sequence, as
+            // a trait method handing back a lazy iterator takes its closure
+            // owned, whatever each type writes for it
+            kept_params: f.params.iter().map(|p| matches!(p.ty, Type::Fn(..)) && (block_yields(&f.body) || (f.body.stmts.is_empty() && gives_sequence) || keeps_name(&f.body, &p.name, self))).collect(),
             dyn_blocks: f.params.iter().any(|p| matches!(p.ty, Type::Fn(..))) && calls_self_with_block(&f.body, &f.name),
         }
     }
@@ -6426,7 +6430,12 @@ impl Gen {
             // FnMut`, as Rust does for a trait that must stay usable as a
             // value; a generic here would make it one only generics can use
             if let Type::Fn(ins, out) = t {
-                parts.push(format!("{}: &mut dyn {}", rust_name(n), self.rust_fn_bound(ins, out)));
+                if sg.kept_params.get(i).copied().unwrap_or(false) {
+                    // one the method keeps arrives as a kept block
+                    parts.push(format!("{}: {}", rust_name(n), self.rt(t)));
+                } else {
+                    parts.push(format!("{}: &mut dyn {}", rust_name(n), self.rust_fn_bound(ins, out)));
+                }
                 continue;
             }
             // an interface value is lent as `&dyn`, which takes a value of any
@@ -6637,6 +6646,41 @@ impl Gen {
                                 if lent && t.is_copy() { format!("*{}", rust_name(n)) } else { rust_name(n) }
                             })
                             .collect();
+                        // the trait lends a block for the call; a method that
+                        // keeps one cannot be what the trait asks for
+                        let own = bodies.iter().find(|b| b.name == *mname).map(|b| (self.sig_of(b), b.line, b.col, block_yields(&b.body)))
+                            .or_else(|| inherent.get(mname).map(|m| (m.clone(), 0, 0, matches!(m.ret, Type::Gen(_)))));
+                        if let Some((osig, l, c, is_gen)) = own {
+                            if let Some(i) = sg0.params.iter().enumerate().position(|(i, (_, pt))| matches!(pt, Type::Fn(..)) && !osig.kept_params.get(i).copied().unwrap_or(false) && sg0.kept_params.get(i).copied().unwrap_or(false)) {
+                                let (l, c) = if l == 0 {
+                                    program.iter().find_map(|it| match it {
+                                        Item::Struct(st) if st.name == *tkey => st.methods.iter().find(|m| m.name == *mname).map(|m| (m.line, m.col)),
+                                        Item::Enum(en) if en.name == *tkey => en.methods.iter().find(|m| m.name == *mname).map(|m| (m.line, m.col)),
+                                        _ => None,
+                                    }).unwrap_or((1, 1))
+                                } else { (l, c) };
+                                let pname = &sg0.params[i].0;
+                                return Err(LumeError::new(l, c, format!("`{}` asks for a `{}` that keeps the block `{}` it is given, since it gives a sequence, but this `{}` only uses it during the call", type_name(&Type::Named(iname.clone())).trim_start_matches("lume."), mname, pname, mname))
+                                    .with_help(format!("write `{}` as a generator, with `yield`, so it keeps the block until it is walked", mname)));
+                            }
+                            if let Some(i) = sg0.params.iter().enumerate().position(|(i, (_, pt))| matches!(pt, Type::Fn(..)) && osig.kept_params.get(i).copied().unwrap_or(false) && !sg0.kept_params.get(i).copied().unwrap_or(false)) {
+                                let (l, c) = if l == 0 {
+                                    program.iter().find_map(|it| match it {
+                                        Item::Struct(st) if st.name == *tkey => st.methods.iter().find(|m| m.name == *mname).map(|m| (m.line, m.col)),
+                                        Item::Enum(en) if en.name == *tkey => en.methods.iter().find(|m| m.name == *mname).map(|m| (m.line, m.col)),
+                                        _ => None,
+                                    }).unwrap_or((1, 1))
+                                } else { (l, c) };
+                                let pname = &sg0.params[i].0;
+                                let why = if is_gen { format!("`{}` is a generator, so it keeps the block `{}` it is given", mname, pname) } else { format!("`{}` keeps the block `{}` it is given", mname, pname) };
+                                return Err(LumeError::new(l, c, format!("{}, but `{}` lends its `{}` a block only for the call", why, type_name(&Type::Named(iname.clone())).trim_start_matches("lume."), mname))
+                                    .with_help(if is_gen {
+                                        format!("give the items as a list, `-> [{}]`, which the block can make while it is lent", match &sg.ret { Type::Gen(t) => type_name(t), _ => "T".to_string() })
+                                    } else {
+                                        "a block given to an interface method is lent for the call; have the caller make what holds the block, and pass that instead".to_string()
+                                    }));
+                            }
+                        }
                         if let Some(body) = bodies.iter().find(|b| b.name == *mname) {
                             if target == "String" {
                                 // delegate to the str impl
@@ -8558,6 +8602,9 @@ impl Gen {
                 let chars_of = if vars.len() == 1 && !*mutable { self.chars_source(iter) } else { None };
                 let walks_stream = matches!(it_ty, Type::AsyncGen(_));
                 if walks_stream && !self.in_async {
+                    // calling one outside async code says so first, as a
+                    // function would
+                    self.expr(iter)?;
                     return Err(LumeError::new(iter.line, iter.col, format!("`{}` hands out items that arrive later, so a `for` over it waits for each: it goes in async code", describe_value(iter)))
                         .with_help("loop over it in an `async def` or a `spawn:` body"));
                 }
@@ -9774,8 +9821,18 @@ impl Gen {
             // names it uses, as a kept block does
             let item = (**item).clone();
             let out = if name == "map" { self.lambda_body_type(params, &item, false, None, body).materialized() } else { Type::Bool };
+            // one name for each part of a tuple, as a list's chain takes
+            // them: the block takes the tuple and takes it apart first
+            let (params, body) = match &item {
+                Type::Tuple(ts) if params.len() >= 2 && ts.len() == params.len() => {
+                    let mut stmts = vec![Stmt::Destructure { names: params.clone(), value: Expr::new(ExprKind::Ident("lume_item".into()), lam.line, lam.col), line: lam.line, col: lam.col }];
+                    stmts.extend(body.stmts.iter().cloned());
+                    (vec!["lume_item".to_string()], Block { stmts })
+                }
+                _ => (params.clone(), body.clone()),
+            };
             let saved_chain = self.chain_block.replace(name.to_string());
-            let made = self.kept_closure(params, body, &[item], &out, lam);
+            let made = self.kept_closure(&params, &body, &[item], &out, lam);
             self.chain_block = saved_chain;
             let (prelude, f) = made?;
             let r = self.give_away(recv)?;
@@ -12149,6 +12206,10 @@ impl Gen {
                         let mut parts = Vec::new();
                         for (i, (a, (pname, t))) in bound.iter().zip(&m.params).enumerate() {
                             let d = decl.get(i).unwrap_or(t);
+                            if m.kept_params.get(i).copied().unwrap_or(false) {
+                                parts.push(self.kept_arg(a, t, &format!("{}.{}", tname, name))?);
+                                continue;
+                            }
                             let v = self.expr_arg_named_as(a, t, d, &format!("{}.{}", tname, name), pname)?;
                             parts.push(Self::trait_arg(v, t));
                         }
@@ -12161,7 +12222,11 @@ impl Gen {
                             let m = self.instantiate(&m, args, &format!("`{}`", callee), e.line, e.col)?;
                             let bound = self.bind_args(&format!("`{}`", callee), &m.params, args, e.line, e.col)?;
                             let mut parts = Vec::new();
-                            for (a, (pname, t)) in bound.iter().zip(&m.params) {
+                            for (i, (a, (pname, t))) in bound.iter().zip(&m.params).enumerate() {
+                                if m.kept_params.get(i).copied().unwrap_or(false) {
+                                    parts.push(self.kept_arg(a, t, &callee)?);
+                                    continue;
+                                }
                                 let v = self.expr_arg_named_as(a, t, t, &callee, pname)?;
                                 parts.push(Self::trait_arg(v, t));
                             }
@@ -12185,6 +12250,10 @@ impl Gen {
                         let decl = self.iface_decl_params(&rt, name);
                         for (i, (a, (pname, t))) in bound.iter().zip(&m.params).enumerate() {
                             let d = decl.get(i).unwrap_or(t);
+                            if m.kept_params.get(i).copied().unwrap_or(false) {
+                                parts.push(self.kept_arg(a, t, &callee)?);
+                                continue;
+                            }
                             let v = self.expr_arg_named_as(a, t, d, &callee, pname)?;
                             parts.push(Self::trait_arg(v, t));
                         }
@@ -12197,6 +12266,10 @@ impl Gen {
                         let mut parts = Vec::new();
                         for (i, (a, (pname, t))) in bound.iter().zip(&m.params).enumerate() {
                             let d = decl.get(i).unwrap_or(t);
+                            if m.kept_params.get(i).copied().unwrap_or(false) {
+                                parts.push(self.kept_arg(a, t, &format!("{}.{}", type_name(&rt), name))?);
+                                continue;
+                            }
                             let v = self.expr_arg_named_as(a, t, d, &format!("{}.{}", type_name(&rt), name), pname)?;
                             parts.push(Self::trait_arg(v, t));
                         }
@@ -12249,6 +12322,12 @@ impl Gen {
                         return Err(LumeError::new(e.line, e.col, format!("a tuple has no method `{}`", name))
                             .with_help("a tuple's parts are `.0`, `.1` and so on; for a list of items, use `[...]`"));
                     }
+                }
+                // a list's method an async sequence does not have yet: said
+                // as a block-taking one says it
+                if matches!(rt, Type::AsyncGen(_)) && !builtin_applies(&rt, name) && builtins_for(&Type::List(Box::new(Type::Unknown))).contains(&name.as_str()) {
+                    return Err(LumeError::new(e.line, e.col, format!("{} has no `{}` yet", a_type(&rt), name))
+                        .with_help("its chains are `map`, `filter`, `reject`, `take_while`, `take`, `skip` and `enumerate`; for the rest, keep its items with `.to_list` and chain over the list"));
                 }
                 if rt != Type::Unknown && !builtin_applies(&rt, name) {
                     let err = LumeError::new(e.line, e.col, format!("`{}` values have no method `{}`", type_name(&rt), name));

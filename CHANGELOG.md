@@ -18,6 +18,9 @@
   first, taken out of the list, as tokio's `JoinSet::join_next`.
 - **`tests/run.sh`** tells each failure as soon as it is known, is 19%
   faster, and takes `-x` (stop at the first failure) and `-v`.
+- **An interface method that gives a sequence keeps its block**, so a
+  generator can implement it; a method that only lends the block, or keeps
+  one an interface lends, is refused instead of reaching rustc.
 - **Fixed**: `for w in split(" ")` inside an `extend Str` reached rustc.
 - **Fixed**: a `filter` (or `reject`, `count`, `find`, ...) block that did not
   give a `Bool` reached rustc.

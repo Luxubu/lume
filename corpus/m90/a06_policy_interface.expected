@@ -1,0 +1,15 @@
+warning: `policies` holds values of different types behind `Policy`, so calls on its items go through a pointer
+  --> corpus/m90/a06_policy_interface.lume:62:3
+   |
+62 |   policies: [Policy] = [UpTo(most: 3), Never(why: "read-only")]
+   |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+up to 3: [50, 100]
+policy: []
+[10]
+job 6 took 1
+job 2 took 3
+job 1 took 3
+[1, 1]
+["job 1", "job 2", "job 3"]
+exit: 0

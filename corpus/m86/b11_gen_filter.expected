@@ -1,7 +1,7 @@
-error: `async Iterator[Int]` values have no method `len`
+error: an `async Iterator[Int]` has no `len` yet
   --> corpus/m86/b11_gen_filter.lume:18:33
    |
 18 |   total = g.filter { |x| x > 1 }.len
    |                                 ^
-  help: `async Iterator[Int]` has: next, to_list, map, filter, reject, take_while, take, skip, enumerate
+  help: its chains are `map`, `filter`, `reject`, `take_while`, `take`, `skip` and `enumerate`; for the rest, keep its items with `.to_list` and chain over the list
 exit: 1

@@ -1,0 +1,20 @@
+warning: `seen` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/m90/b03_chain_captures.lume:48:3
+   |
+48 |   shared var seen = 0
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+warning: `bump` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/m90/b03_chain_captures.lume:54:3
+   |
+54 |   shared var bump = 0
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+["n2", "n4", "n5"]
+3
+["a1", "a2"]
+b
+[2, 4, 6]
+3
+[11, 12]
+exit: 0

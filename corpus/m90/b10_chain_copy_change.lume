@@ -1,0 +1,22 @@
+# Probes a chain's block changing a `var` it copied in: refused, as a kept
+# block's change is.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `total` was copied into this block when the block was made, so changing it here would not be seen outside
+#   --> corpus/m90/b10_chain_copy_change.lume:19:5
+#    |
+# 19 |     total += n
+#    |     ^
+#   help: declare it `shared var total` before the block if the block is meant to change it, or have the block give back the new value
+
+async def nums -> Iterator[Int]:
+  yield 1
+  yield 2
+
+async def main:
+  var total = 0
+  doubled = nums().map do |n|
+    total += n
+    n * 2
+  puts doubled.to_list
+  puts total

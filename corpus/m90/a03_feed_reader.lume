@@ -1,0 +1,77 @@
+# a03_feed_reader: async generator methods on a struct and on an enum (a
+# `match self` whose arms yield); another method of the type walking one,
+# and chaining over one after binding a field to a name; and the copy of the
+# value a method's task walks, taken at the call.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# tech 1: 120 words
+# tech 2: 40 words
+# ["tech/1", "tech/3", "tech/5"]
+# [40, 300, 90, 250]
+# 800
+# old 1
+# old 2
+# new
+# 0 a.org item 1
+# 1 a.org item 2
+# 0 work: 7 unread
+# 0 b.net item 1
+
+struct Post:
+  feed: Str
+  n: Int
+  words: Int
+
+struct Feed:
+  name: Str
+  sizes: [Int]
+
+  async def posts -> Iterator[Post]:
+    for i, w in sizes.enumerate:
+      await Time.sleep(1)
+      yield Post(feed: name, n: i + 1, words: w)
+
+  # a chain's block cannot use a field, so the field is bound to a name first
+  async def long_ones(min: Int) -> [Str]:
+    tag = name
+    posts.filter { |p| p.words >= min }.map { |p| "#{tag}/#{p.n}" }.to_list
+
+  async def total_words -> Int:
+    var t = 0
+    for p in posts:
+      t += p.words
+    t
+
+enum Source:
+  Rss(url: Str, count: Int)
+  Mail(box: Str, unread: Int)
+
+  async def headlines -> Iterator[Str]:
+    match self:
+      Rss(site, n) ->
+        for i in 1..n:
+          await Time.sleep(1)
+          yield "#{site} item #{i}"
+      Mail(folder, waiting) ->
+        yield "#{folder}: #{waiting} unread"
+
+async def main:
+  f = Feed(name: "tech", sizes: [120, 40, 300, 90, 250])
+  for p in f.posts.take(2):
+    puts "#{p.feed} #{p.n}: #{p.words} words"
+  puts await f.long_ones(100)
+  puts f.posts.map { |p| p.words }.take_while { |w| w > 30 }.skip(1).to_list
+  puts await f.total_words
+
+  # the method's task walks the value as it was at the call
+  var g = Feed(name: "old", sizes: [5, 6])
+  stream = g.posts
+  g.name = "new"
+  for p in stream:
+    puts "#{p.feed} #{p.n}"
+  puts g.name
+
+  sources = [Rss(url: "a.org", count: 3), Mail(box: "work", unread: 7), Rss(url: "b.net", count: 1)]
+  for s in sources:
+    for i, h in s.headlines.take(2).enumerate:
+      puts "#{i} #{h}"

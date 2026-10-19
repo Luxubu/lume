@@ -1,0 +1,129 @@
+# c04_textkit: a text tool built on generators in `extend`s. `Str`, `[Str]`
+# and `Int` (built-in types) and `Doc` (a struct of ours) are given
+# generator methods; one generator in an `extend Str` takes a block, which
+# it keeps; an interface default is a generator with an argument. Word
+# counts go in a map, a file under /tmp/lume-review-c/c04 is read back, and
+# `tr` is run through `Process.run` to give the tool upper-case text.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 13
+# {"the": 3, "cat": 3, "sat": 2, "a": 2, "hat": 1, "yes": 1, "end": 1}
+# the 3
+# cat 3
+# sat 2
+# {"the", "cat", "sat", "hat", "yes", "end"}
+# ["hello", "world", "hello"]
+# 0=one 1=two 2=three
+# ["1", "22", "333"]
+# ["llo", "o", "l"]
+# ["ueue"]
+# q
+# [1, 4, 0, 9]
+# 10
+# [0]
+# ["the", "cat", "sat", "a", "hat", "yes", "end"]
+# 0 11
+# A CAT, A HAT!
+# ["THE", "CAT"]
+
+interface Tokens:
+  def tokens -> Iterator[Str]
+
+  # a default that is a generator, with an argument of its own
+  def longer_than(n: Int) -> Iterator[Str]:
+    for t in tokens:
+      yield t if t.len > n
+
+# words, lowered, with everything but letters dropped
+extend Str with Tokens:
+  def tokens -> Iterator[Str]:
+    for w in self.split:
+      word = w.chars.filter { |c| c.alpha? }.join("")
+      yield word.downcase if not word.empty?
+
+extend [Str] with Tokens:
+  def tokens -> Iterator[Str]:
+    for line in self:
+      for t in line.tokens:
+        yield t
+
+struct Doc:
+  title: Str
+  body: [Str]
+
+extend Doc with Tokens:
+  def tokens -> Iterator[Str]:
+    for t in title.tokens:
+      yield t
+    for t in body.tokens:
+      yield t
+
+interface Scan:
+  def runs(keep: (Char) -> Bool) -> Iterator[Str]
+
+# the longest stretches of characters the block keeps
+extend Str with Scan:
+  def runs(keep: (Char) -> Bool) -> Iterator[Str]:
+    var run = ""
+    for c in self.chars:
+      if keep(c):
+        run = run + c
+      elif not run.empty?:
+        yield run
+        run = ""
+    yield run if not run.empty?
+
+interface Digits:
+  def digits -> Iterator[Int]
+
+# the digits, lowest first
+extend Int with Digits:
+  def digits -> Iterator[Int]:
+    var n = self.abs
+    yield 0 if n == 0
+    while n > 0:
+      yield n % 10
+      n = n / 10
+
+def main -> () or Error:
+  doc = Doc(title: "The Cat", body: ["The cat sat.", "A cat, a hat!", "Sat? Yes: the end."])
+  puts doc.tokens.len
+
+  var freq: {Str: Int} = {}
+  for t in doc.tokens:
+    freq[t] = freq[t].or(0) + 1
+  puts freq
+  for w, n in freq.sort_by { |k, c| 0 - c }.take(3):
+    puts "#{w.pad_right(4)}#{n}"
+
+  puts doc.longer_than(2).to_set
+  puts "Hello, World! Hello?".tokens.to_list
+  puts ["one two", "three"].tokens.enumerate.map { |i, t| "#{i}=#{t}" }.join(" ")
+
+  puts "a1 b22 c333".runs { |c| c.digit? }.to_list
+  allowed = "lo"
+  puts "hello world".runs { |c| allowed.contains?(c) }.to_list
+
+  # the block is kept: it copied `vowels` at the call
+  var vowels = "aeiou"
+  g = "queue".runs { |c| vowels.contains?(c) }
+  vowels = "q"
+  puts g.to_list
+  puts vowels
+
+  puts 9041.digits.to_list
+  puts 2026.digits.sum
+  puts 0.digits.to_list
+
+  dir = "/tmp/lume-review-c/c04"
+  Dir.make(dir)?
+  path = Path.join(dir, "doc.txt")
+  File.write(path, doc.body.join("\n") + "\n")?
+  back = File.read(path)?.lines.to_list
+  puts back.tokens.uniq
+
+  (code, out, _) = Process.run("sh", ["-c", "tr a-z A-Z < #{path}"])?
+  puts "#{code} #{out.tokens.len}"
+  puts out.lines.to_list.at(1)
+  puts out.trim.runs { |c| c.upper? }.take(2).to_list
+  Dir.remove(dir)?

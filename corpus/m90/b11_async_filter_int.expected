@@ -1,0 +1,7 @@
+error: the block of `filter` gives back an `Int`, but it must give a `Bool`
+  --> corpus/m90/b11_async_filter_int.lume:16:22
+   |
+16 |   puts nums().filter { |n| n * 2 }.to_list
+   |                      ^
+  help: it says yes or no to each item, as in `.filter { |x| x > 0 }`
+exit: 1

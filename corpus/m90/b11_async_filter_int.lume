@@ -1,0 +1,16 @@
+# Probes a `filter` block on an async chain that gives an `Int`, not a `Bool`.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: the block of `filter` gives back an `Int`, but it must give a `Bool`
+#   --> corpus/m90/b11_async_filter_int.lume:16:22
+#    |
+# 16 |   puts nums().filter { |n| n * 2 }.to_list
+#    |                      ^
+#   help: it says yes or no to each item, as in `.filter { |x| x > 0 }`
+
+async def nums -> Iterator[Int]:
+  yield 1
+  yield 2
+
+async def main:
+  puts nums().filter { |n| n * 2 }.to_list

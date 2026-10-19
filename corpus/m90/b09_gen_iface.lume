@@ -1,0 +1,60 @@
+# Probes generators keeping an interface value: struct, enum (both variants),
+# `Str` via `extend`, an item of a `[Sized]`, async, a `var` replaced after.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# [2, 4, 6]
+# [30, 60]
+# [1]
+# [4, 8]
+# [6, 7]
+# [1, 2]
+# [4, 8]
+# [3]
+# EXPECTED STDERR:
+# warning: `held` holds values of different types behind `Sized`, so calls on its items go through a pointer
+#   --> corpus/m90/b09_gen_iface.lume:58:3
+#    |
+# 58 |   held: [Sized] = [Bin(n: 4), "xy"]
+#    |   ^
+#   help: fine for most code; use a single concrete type or an enum if this is a hot loop
+
+interface Sized:
+  def size -> Int
+
+struct Bin:
+  n: Int
+  def size -> Int = n
+
+enum Pack:
+  Small
+  Big(k: Int)
+  def size -> Int:
+    match self:
+      Small -> 1
+      Big(k) -> k * 10
+
+extend Str with Sized:
+  def size -> Int = self.len
+
+def loads(c: Sized, trips: Int) -> Iterator[Int]:
+  for t in 1..trips:
+    yield c.size * t
+
+async def slow_loads(c: Sized, trips: Int) -> Iterator[Int]:
+  for t in 1..trips:
+    await Time.sleep(1)
+    yield c.size + t
+
+async def main:
+  puts loads(Bin(n: 2), 3).to_list
+  puts loads(Big(k: 3), 2).to_list
+  puts loads(Small, 1).to_list
+  puts loads("abcd", 2).to_list
+  puts slow_loads(Bin(n: 5), 2).to_list
+  var b = Bin(n: 1)
+  g = loads(b, 2)
+  b = Bin(n: 50)
+  puts g.to_list
+  held: [Sized] = [Bin(n: 4), "xy"]
+  puts loads(held.at(0), 2).to_list
+  puts slow_loads(held.at(1), 1).to_list

@@ -1,0 +1,7 @@
+error: `s.titles` is an `async` generator, which runs as a task, so it is called from async code
+  --> corpus/m90/b14_method_plain_def.lume:21:13
+   |
+21 |   for t in s.titles:
+   |             ^
+  help: call it in an `async def` or a `spawn:` body
+exit: 1

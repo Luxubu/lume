@@ -1,0 +1,6 @@
+error: `Scan` asks for a `picks` that keeps the block `keep` it is given, since it gives a sequence, but this `picks` only uses it during the call
+  --> examples/errors/iface_seq_lends_block.lume:10:3
+   |
+10 |   def picks(keep: (Int) -> Bool) -> Iterator[Int] = xs.filter { |x| keep(x) }
+   |   ^
+  help: write `picks` as a generator, with `yield`, so it keeps the block until it is walked

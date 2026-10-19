@@ -1,0 +1,128 @@
+# c02_logpipe: a log pipeline of async chains. A struct's async generator
+# methods read a log written under /tmp/lume-review-c/c02 and hand on its
+# entries one at a time; `filter`, `map`, `take_while`, `skip`, `take`,
+# `enumerate` and `reject` are chained over them, with blocks that copy in
+# locals bound before the chain. An enum has an async generator method of
+# its own. Parse failures are `Entry or Error`, passed up with `?`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ["105 disk 81%", "112 db timeout", "120 disk 92%", "121 db timeout"]
+# ["boot ok", "disk 81%", "user ada", "db timeout"]
+# 0: Info user ada
+# 1: Crit db timeout
+# 2: Warn disk 92%
+# line 4: line `oops`: too short
+# line 6: `xx` is not an integer
+# {"Info": 3, "Warn": 2, "Crit": 2}
+# {"db timeout"}
+# [Warn, Crit]
+# quiet after 110: [112, 120, 121]
+# grep: 0 2
+# report gone: true
+
+enum Level:
+  Info
+  Warn
+  Crit
+
+  def rank -> Int:
+    match self:
+      Info -> 1
+      Warn -> 2
+      Crit -> 3
+
+  # an enum's async generator method: this level and the ones above it
+  async def and_above -> Iterator[Level]:
+    for l in [Info, Warn, Crit]:
+      await Time.sleep(1)
+      yield l if l.rank >= rank
+
+struct Entry:
+  at: Int
+  level: Level
+  msg: Str
+
+def parse(line: Str) -> Entry or Error:
+  parts = line.split(" ")
+  if parts.len < 3:
+    return Error("line `#{line}`: too short")
+  at = parts.at(0).to_int?
+  tag = parts.at(1)
+  if not ["INFO", "WARN", "ERROR"].contains?(tag):
+    return Error("line `#{line}`: no level `#{tag}`")
+  level = match tag:
+    "INFO" -> Info
+    "WARN" -> Warn
+    _ -> Crit
+  Entry(at, level, parts.skip(2).join(" "))
+
+struct LogFile:
+  path: Str
+  text: Str
+
+  # entries arrive one at a time, as from a file being followed
+  async def entries -> Iterator[Entry]:
+    for line in text.lines:
+      await Time.sleep(1)
+      match parse(line):
+        Ok(e) -> yield e
+        Error(_) -> ()
+
+  async def problems -> Iterator[Str]:
+    for i, line in text.lines.enumerate:
+      match parse(line):
+        Ok(_) -> ()
+        Error(e) -> yield "line #{i + 1}: #{e.message}"
+
+async def main -> () or Error:
+  dir = "/tmp/lume-review-c/c02"
+  Dir.make(dir)?
+  path = Path.join(dir, "app.log")
+  raw = """
+    100 INFO boot ok
+    105 WARN disk 81%
+    107 INFO user ada
+    oops
+    112 ERROR db timeout
+    xx WARN late
+    120 WARN disk 92%
+    121 ERROR db timeout
+    130 INFO shutdown
+    """
+  File.write(path, raw + "\n")?
+  log = LogFile(path: path, text: File.read(path)?)
+
+  floor = Warn.rank
+  loud = log.entries.filter { |e| e.level.rank >= floor }.map { |e| "#{e.at} #{e.msg}" }.to_list
+  puts loud
+
+  cutoff = 115
+  puts log.entries.take_while { |e| e.at < cutoff }.map { |e| e.msg }.to_list
+
+  for i, e in log.entries.skip(2).take(3).enumerate:
+    puts "#{i}: #{e.level} #{e.msg}"
+
+  for p in log.problems:
+    puts p
+
+  var counts: {Str: Int} = {}
+  for e in log.entries:
+    key = "#{e.level}"
+    counts[key] = counts[key].or(0) + 1
+  puts counts
+
+  puts log.entries.filter { |e| e.level == Crit }.map { |e| e.msg }.to_list.to_set
+  puts Warn.and_above.to_list
+
+  since = 110
+  quiet = log.entries.reject { |e| e.level == Info }.filter { |e| e.at > since }.map { |e| e.at }.to_list
+  puts "quiet after #{since}: #{quiet}"
+
+  # the loud lines go to a report, and an outside program counts them
+  report = Path.join(dir, "report.txt")
+  File.write(report, loud.join("\n") + "\n")?
+  (code, out, _) = Process.run("grep", ["-c", "disk", report])?
+  puts "grep: #{code} #{out.trim}"
+  File.remove(report)?
+  puts "report gone: #{not File.exists?(report)}"
+  Dir.remove(dir)?

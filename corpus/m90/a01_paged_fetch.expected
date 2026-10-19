@@ -1,0 +1,11 @@
+["post 2", "post 4", "post 6", "post 8"]
+[Item(id: 4, page: 2, title: "post 4"), Item(id: 5, page: 2, title: "post 5"), Item(id: 7, page: 3, title: "post 7")]
+0. post 8 (page 3)
+1. post 9 (page 3)
+[1, 2, 3]
+9 items on 3 pages
+Some(Item(id: 7, page: 3, title: "post 7"))
+8
+9
+[]
+exit: 0

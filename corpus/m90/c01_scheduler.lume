@@ -1,0 +1,121 @@
+# c01_scheduler: a job scheduler with a bounded worker pool. An async
+# generator keeps at most `at_once` tasks running and hands each result on
+# as `await running.next_done` gives it; chains (`reject`, `map`, `take`,
+# `enumerate`) run over that async sequence; a struct's async generator
+# method walks another async generator. Jobs are an enum taken apart with
+# `match`; shell jobs go through `Process.run` from inside a task.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 1. greet  exit 0: hello
+# 2. math   collatz(27) = 111
+# 3. broken exit 4
+# 4. count  exit 0: c b a
+# 5. small  collatz(6) = 8
+# 6. rest   slept
+# {"ok": 5, "failed": 1}
+# failed: ["broken"]
+# in order: [1, 2]
+# 0: naps/2 ok
+# 1: naps/3 ok
+# 2: naps/1 ok
+# total steps: 119
+
+enum Kind:
+  Shell(cmd: Str)
+  Compute(n: Int)
+  Nap(ms: Int)
+
+struct Job:
+  id: Int
+  name: Str
+  kind: Kind
+
+struct Outcome:
+  id: Int
+  name: Str
+  ok: Bool
+  detail: Str
+
+def collatz(n: Int) -> Int:
+  var steps = 0
+  var k = n
+  while k != 1:
+    k = if k % 2 == 0: k / 2 else: 3 * k + 1
+    steps += 1
+  steps
+
+def shell(j: Job, cmd: Str) -> Outcome:
+  match Process.run("sh", ["-c", cmd]):
+    Ok(r) ->
+      (code, out, _) = r
+      detail = if out.trim.empty?: "exit #{code}" else: "exit #{code}: #{out.trim}"
+      Outcome(j.id, j.name, code == 0, detail)
+    Error(e) -> Outcome(j.id, j.name, false, e.message)
+
+async def run_job(j: Job) -> Outcome:
+  match j.kind:
+    Shell(cmd) -> shell(j, cmd)
+    Compute(n) -> Outcome(j.id, j.name, true, "collatz(#{n}) = #{collatz(n)}")
+    Nap(ms) ->
+      await Time.sleep(ms)
+      Outcome(j.id, j.name, true, "slept")
+
+# at most `at_once` jobs run; a result comes out as soon as its job is done
+async def pool(jobs: [Job], at_once: Int) -> Iterator[Outcome]:
+  var running: [Task[Outcome]] = []
+  var started = 0
+  while started < jobs.len or not running.empty?:
+    while started < jobs.len and running.len < at_once:
+      j = jobs.at(started)
+      running.push(spawn: await run_job(j))
+      started += 1
+    match await running.next_done:
+      Some(o) -> yield o
+      None -> return
+
+struct Queue:
+  name: Str
+  jobs: [Job]
+
+  # an async generator method walking another async generator
+  async def drain(at_once: Int) -> Iterator[Str]:
+    for o in pool(jobs, at_once):
+      mark = if o.ok: "ok" else: "FAIL"
+      yield "#{name}/#{o.id} #{mark}"
+
+async def main:
+  jobs = [
+    Job(1, "greet", Shell("echo hello")),
+    Job(2, "math", Compute(27)),
+    Job(3, "broken", Shell("echo oops >&2; exit 4")),
+    Job(4, "count", Shell(r"printf 'a\nb\nc\n' | sort -r | tr '\n' ' '")),
+    Job(5, "small", Compute(6)),
+    Job(6, "rest", Nap(5)),
+  ]
+
+  # every result, put back in the order the jobs were given
+  all = pool(jobs, 3).to_list.sort_by { |o| o.id }
+  for o in all:
+    puts "#{o.id}. #{o.name.pad_right(7)}#{o.detail}"
+
+  var tally: {Str: Int} = {}
+  for o in all:
+    key = if o.ok: "ok" else: "failed"
+    tally[key] = tally[key].or(0) + 1
+  puts tally
+
+  # a chain over the pool: only one job fails, so what comes out is certain
+  failed = pool(jobs, 2).reject { |o| o.ok }.map { |o| o.name }.to_list
+  puts "failed: #{failed}"
+
+  # one at a time, results come in job order; `take` lets go after two
+  firsts = pool(jobs, 1).map { |o| o.id }.take(2).to_list
+  puts "in order: #{firsts}"
+
+  # 250 ms against 1 ms: the long nap is certain to finish last
+  naps = [Job(1, "long", Nap(250)), Job(2, "a", Nap(1)), Job(3, "b", Nap(1))]
+  for i, line in Queue(name: "naps", jobs: naps).drain(2).enumerate:
+    puts "#{i}: #{line}"
+
+  steps = all.filter { |o| o.detail.starts_with?("collatz") }.map { |o| o.detail.split(" = ").at(1).to_int.or(0) }.sum
+  puts "total steps: #{steps}"

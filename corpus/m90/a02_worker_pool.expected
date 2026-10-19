@@ -1,0 +1,14 @@
+3
+Some("fast done")
+2
+medium done
+slow done
+None
+0
+Some("b done")
+["a done", "c done"]
+about done, blog done, home done
+[4, 16, 36]
+[50, 65, 82]
+6
+exit: 0

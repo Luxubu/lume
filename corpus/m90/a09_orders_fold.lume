@@ -1,0 +1,48 @@
+# a09_orders_fold: a day's orders arrive from an async generator; the filter
+# and map chain over it is fine, but `fold` waits for every item, which an
+# async sequence does not have yet. The fix the help names is `.to_list`
+# first, then the list's `fold`.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: an `async Iterator[Order]` has no `fold` yet
+#   --> corpus/m90/a09_orders_fold.lume:43:22
+#    |
+# 43 |   revenue = orders(1).fold(0) { |total, o| total + o.cents }
+#    |                      ^
+#   help: its chains are `map`, `filter`, `reject`, `take_while`, `take`, `skip` and `enumerate`; for the rest, keep its items with `.to_list` and chain over the list
+
+struct Order:
+  id: Int
+  cents: Int
+
+# stands for a feed of orders: what comes back depends only on the day
+async def orders(day: Int) -> Iterator[Order]:
+  for i in 1..4:
+    await Time.sleep(1)
+    yield Order(id: day * 100 + i, cents: i * 250)
+
+# the way the help says: keep the items, then fold the list
+async def day_total(day: Int) -> Int:
+  every = orders(day).to_list
+  every.fold(0) { |total, o| total + o.cents }
+
+async def busiest(days: [Int]) -> Int:
+  var best_day = 0
+  var best = 0
+  for d in days:
+    t = await day_total(d)
+    if t > best:
+      best = t
+      best_day = d
+  best_day
+
+async def main:
+  big = orders(1).filter { |o| o.cents > 300 }.map { |o| o.id }.to_list
+  puts big
+
+  revenue = orders(1).fold(0) { |total, o| total + o.cents }
+  puts revenue
+  puts await day_total(2)
+  puts await busiest([1, 2, 3])
+  for i, o in orders(3).skip(2).enumerate:
+    puts "#{i}: #{o.id}"

@@ -1,0 +1,76 @@
+# a02_worker_pool: `await tasks.next_done` on a `var` list: one at a time,
+# down to `None` on an empty list; the rest awaited in start order; a drain
+# loop; and a bounded worker pool written as an async generator, with a
+# chain over it. Sleeps are 1 ms against 200 and 400, so the finishing order
+# printed is certain; the pool's results are sorted before they print.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 3
+# Some("fast done")
+# 2
+# medium done
+# slow done
+# None
+# 0
+# Some("b done")
+# ["a done", "c done"]
+# about done, blog done, home done
+# [4, 16, 36]
+# [50, 65, 82]
+# 6
+
+async def job(name: Str, ms: Int) -> Str:
+  await Time.sleep(ms)
+  "#{name} done"
+
+async def square_later(n: Int) -> Int:
+  await Time.sleep(n % 3)
+  n * n
+
+# a fixed number of workers through a long list; results come out as ready
+async def pool(ns: [Int], at_once: Int) -> Iterator[Int]:
+  var running: [Task[Int]] = []
+  var started = 0
+  while started < ns.len or not running.empty?:
+    while started < ns.len and running.len < at_once:
+      n = ns.at(started)
+      running.push(spawn: await square_later(n))
+      started += 1
+    match await running.next_done:
+      Some(r) -> yield r
+      None -> return
+
+async def main:
+  var tasks = [spawn: await job("slow", 400), spawn: await job("fast", 1), spawn: await job("medium", 200)]
+  puts tasks.len
+  first = await tasks.next_done
+  puts first
+  puts tasks.len
+  second = await tasks.next_done
+  puts second.or("nothing")
+  third = await tasks.next_done
+  puts third.or("nothing")
+  puts await tasks.next_done
+  puts tasks.len
+
+  # the ones left keep their order when the list is awaited
+  var rest = [spawn: await job("a", 300), spawn: await job("b", 1), spawn: await job("c", 250)]
+  puts await rest.next_done
+  puts await rest
+
+  # drained one by one, in the order they finish
+  var crawl: [Task[Str]] = []
+  for name, ms in [("home", 400), ("about", 1), ("blog", 200)]:
+    crawl.push(spawn: await job(name, ms))
+  var order: [Str] = []
+  while not crawl.empty?:
+    done = await crawl.next_done
+    order.push(done.or("?"))
+  puts order.join(", ")
+
+  evens = pool([1, 2, 3, 4, 5, 6], 2).filter { |r| r % 2 == 0 }.to_list
+  puts evens.sort
+  bumped = pool([7, 8, 9], 3).map { |r| r + 1 }.to_list
+  puts bumped.sort
+  all = pool([1, 2, 3, 4, 5, 6], 4).to_list
+  puts all.len

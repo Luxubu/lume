@@ -1,0 +1,26 @@
+# Probes an async generator method walked by `for` in a plain `def`, called
+# from async `main`.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `s.titles` is an `async` generator, which runs as a task, so it is called from async code
+#   --> corpus/m90/b14_method_plain_def.lume:21:13
+#    |
+# 21 |   for t in s.titles:
+#    |             ^
+#   help: call it in an `async def` or a `spawn:` body
+
+struct Shelf:
+  books: [Str]
+
+  async def titles -> Iterator[Str]:
+    for b in books:
+      yield b
+
+def count_titles(s: Shelf) -> Int:
+  var n = 0
+  for t in s.titles:
+    n += 1
+  n
+
+async def main:
+  puts count_titles(Shelf(books: ["a", "b"]))

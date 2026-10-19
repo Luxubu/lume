@@ -1,0 +1,7 @@
+error: an `async Iterator[Str]` has no `join` yet
+  --> corpus/m90/b13_async_join.lume:16:36
+   |
+16 |   puts names().map { |s| s.upcase }.join(", ")
+   |                                    ^
+  help: its chains are `map`, `filter`, `reject`, `take_while`, `take`, `skip` and `enumerate`; for the rest, keep its items with `.to_list` and chain over the list
+exit: 1

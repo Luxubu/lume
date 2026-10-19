@@ -1,0 +1,16 @@
+problem: cannot read `/tmp/lume-review-c/c06/d.txt`: No such file or directory (os error 2)
+problem: e.txt is empty
+loaded: ["a.txt", "b.txt", "c.txt"]
+{"red": ["a.txt", "c.txt"], "green": ["a.txt", "b.txt"], "blue": ["a.txt", "c.txt"], "yellow": ["b.txt"]}
+red 4
+green 3
+blue 2
+yellow 1
+[("red", 4), ("green", 3)]
+1. blue
+2. green
+3. red
+4. yellow
+["red: c.txt", "yellow: b.txt", "blue: c.txt"]
+most in a and b: 3 green
+exit: 0

@@ -1,0 +1,76 @@
+# a06_policy_interface: generators that take an interface value and keep it:
+# a plain one given items of a `[Policy]` list and a concrete value changed
+# after the call, and an async one giving pairs, walked with two names and
+# chained with filter and map.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# up to 3: [50, 100]
+# policy: []
+# [10]
+# job 6 took 1
+# job 2 took 3
+# job 1 took 3
+# [1, 1]
+# ["job 1", "job 2", "job 3"]
+# EXPECTED STDERR:
+# warning: `policies` holds values of different types behind `Policy`, so calls on its items go through a pointer
+#   --> corpus/m90/a06_policy_interface.lume:62:3
+#    |
+# 62 |   policies: [Policy] = [UpTo(most: 3), Never(why: "read-only")]
+#    |   ^
+#   help: fine for most code; use a single concrete type or an enum if this is a hot loop
+
+interface Policy:
+  def allow?(tries: Int) -> Bool
+  def name -> Str = "policy"
+
+struct UpTo:
+  most: Int
+
+  def allow?(tries: Int) -> Bool = tries < most
+  def name -> Str = "up to #{most}"
+
+struct Never:
+  why: Str
+
+  def allow?(tries: Int) -> Bool = tries < 0
+
+# the delays to wait between tries, for as long as the policy allows
+def delays(p: Policy, base: Int) -> Iterator[Int]:
+  var t = 1
+  var d = base
+  while p.allow?(t):
+    yield d
+    d = d * 2
+    t += 1
+
+# stands for a flaky call: it works once job * try reaches 6
+async def attempt(job: Int, try_no: Int) -> Bool:
+  await Time.sleep(1)
+  job * try_no >= 6
+
+async def tries_for(jobs: [Int], p: Policy) -> Iterator[(Int, Int)]:
+  for j in jobs:
+    var t = 1
+    var ok = await attempt(j, t)
+    while not ok and p.allow?(t):
+      t += 1
+      ok = await attempt(j, t)
+    yield (j, t)
+
+async def main:
+  policies: [Policy] = [UpTo(most: 3), Never(why: "read-only")]
+  for p in policies:
+    puts "#{p.name}: #{delays(p, 50).to_list}"
+
+  # the generator has its own copy of the policy, taken at the call
+  var u = UpTo(most: 2)
+  g = delays(u, 10)
+  u.most = 5
+  puts g.to_list
+
+  for j, t in tries_for([6, 2, 1], UpTo(most: 3)):
+    puts "job #{j} took #{t}"
+  puts tries_for([6, 2], Never(why: "off")).map { |p| p.1 }.to_list
+  slow = tries_for([1, 2, 3, 6], UpTo(most: 4)).filter { |p| p.1 > 1 }.map { |p| "job #{p.0}" }.to_list
+  puts slow

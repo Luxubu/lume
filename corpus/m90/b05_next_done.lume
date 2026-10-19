@@ -1,0 +1,37 @@
+# Probes `await tasks.next_done`: on an empty `var` list, picking the 1 ms
+# task out of three, the rest then awaited in start order, draining a list
+# in a `while` with `match` and `break`, and the list pushed to again after.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# None
+# 0
+# Some(2)
+# 2
+# [1, 3]
+# got 7
+# got 8
+# 0
+# [9]
+
+async def nap(id: Int, ms: Int) -> Int:
+  await Time.sleep(ms)
+  id
+
+async def main:
+  var idle: [Task[Int]] = []
+  puts await idle.next_done
+  puts idle.len
+  var tasks = [spawn: await nap(1, 200), spawn: await nap(2, 1), spawn: await nap(3, 250)]
+  puts await tasks.next_done
+  puts tasks.len
+  puts await tasks
+  var more: [Task[Int]] = []
+  more.push(spawn: await nap(7, 1))
+  more.push(spawn: await nap(8, 200))
+  while true:
+    match await more.next_done:
+      Some(r) -> puts "got #{r}"
+      None -> break
+  puts more.len
+  more.push(spawn: await nap(9, 1))
+  puts await more

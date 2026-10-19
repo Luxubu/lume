@@ -1,0 +1,59 @@
+# Probes generators in `extend` blocks: of a struct (bare field), of `Str`
+# (bare `split(" ")`), of `[T]` (with a `var` inside), of a generic struct;
+# a struct's generator walking the copy taken at the call; a `for` over one.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ["to a", "to b"]
+# ["ba", "fed"]
+# 1:true 2:false
+# ["crate 1.5", "end"]
+# ["to x"]
+# ih
+# oy
+# hi yo
+
+interface Walk:
+  def steps -> Iterator[Str]
+
+struct Path:
+  stops: [Str]
+
+extend Path with Walk:
+  def steps -> Iterator[Str]:
+    for s in stops:
+      yield "to #{s}"
+
+extend Str with Walk:
+  def steps -> Iterator[Str]:
+    for w in split(" "):
+      yield w.reverse if w.len > 1
+
+extend [T] with Walk:
+  def steps -> Iterator[Str]:
+    var i = 0
+    for x in self:
+      i += 1
+      yield "#{i}:#{x}"
+
+struct Crate[T]:
+  held: [T]
+
+extend Crate[T] with Walk:
+  def steps -> Iterator[Str]:
+    for x in held:
+      yield "crate #{x}"
+    yield "end"
+
+def main:
+  puts Path(stops: ["a", "b"]).steps.to_list
+  puts "ab c def".steps.to_list
+  puts [true, false].steps.join(" ")
+  puts Crate(held: [1.5]).steps.to_list
+  var p = Path(stops: ["x"])
+  g = p.steps
+  p.stops = ["x", "y"]
+  puts g.to_list
+  text = "hi yo"
+  for w in text.steps:
+    puts w
+  puts text

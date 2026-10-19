@@ -1,0 +1,26 @@
+# Probes a chain block using a field inside an async generator method, whose
+# body already walks its own copy of the value.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: the block of `take_while` runs as items arrive, after this line, so it cannot use `self` or its fields
+#   --> corpus/m90/b15_self_in_gen_chain.lume:22:36
+#    |
+# 22 |     for n in naturals().take_while { |k| k < most }:
+#    |                                    ^
+#   help: bind what it needs to a name before the chain, and use that
+
+async def naturals -> Iterator[Int]:
+  var n = 0
+  while true:
+    yield n
+    n += 1
+
+struct Gate:
+  most: Int
+
+  async def open -> Iterator[Int]:
+    for n in naturals().take_while { |k| k < most }:
+      yield n
+
+async def main:
+  puts Gate(most: 3).open.to_list

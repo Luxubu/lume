@@ -1,0 +1,6 @@
+error: `make` keeps the block `f` it is given, but `Maker` lends its `make` a block only for the call
+  --> examples/errors/iface_block_kept.lume:13:3
+   |
+13 |   def make(f: (Int) -> Bool) -> Rule = Rule(check: f)
+   |   ^
+  help: a block given to an interface method is lent for the call; have the caller make what holds the block, and pass that instead

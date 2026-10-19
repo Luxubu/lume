@@ -1,0 +1,42 @@
+# Probes `enumerate` then destructuring in `for` (both spellings), `.next`
+# on a `var` chain, walking a chain after `.next` moved it along, and `.next`
+# on a chain that has ended.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 0=birch
+# 1=cedar
+# 2=dogwood
+# 2:cedar
+# 3:dogwood
+# Some("ASH")
+# Some("BIRCH")
+# CEDAR
+# DOGWOOD
+# Some((0, "ash"))
+# [(1, "birch"), (2, "cedar"), (3, "dogwood")]
+# Some("ash")
+# None
+# None
+
+async def words -> Iterator[Str]:
+  for w in ["ash", "birch", "cedar", "dogwood"]:
+    await Time.sleep(1)
+    yield w
+
+async def main:
+  for i, w in words().filter { |x| x.len > 3 }.enumerate:
+    puts "#{i}=#{w}"
+  for (i, w) in words().enumerate.skip(2):
+    puts "#{i}:#{w}"
+  var c = words().map { |x| x.upcase }
+  puts c.next
+  puts c.next
+  for w in c:
+    puts w
+  var e = words().enumerate
+  puts e.next
+  puts e.to_list
+  var one = words().take(1)
+  puts one.next
+  puts one.next
+  puts one.next

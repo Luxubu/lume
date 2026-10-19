@@ -1,0 +1,23 @@
+warning: `ps` holds values of different types behind `Plugin`, so calls on its items go through a pointer
+  --> corpus/m90/c03_plugins.lume:110:3
+    |
+110 |   ps: [Plugin] = [Upper(tag: "!"), Swap(from: "cats", to: "dogs"), Len(min: 5)]
+    |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+plugin upper
+plugin swap
+len >= 5
+["!HI THERE", "!CATS"]
+["[swap] dogs and dogs", "[swap] !dogs"]
+["[len] 13 chars"]
+["[word:dogs] has dogs"]
+plugin word:dogs
+!hi there => 9 chars
+cats and dogs => dogs and dogs
+!cats => !dogs
+["!hi there: upper+len"]
+cats and dogs: swap+len
+ok: none
+!cats: upper+swap+len
+["*CATS AND DOGS"]
+exit: 0

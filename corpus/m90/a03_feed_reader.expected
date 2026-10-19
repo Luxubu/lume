@@ -1,0 +1,13 @@
+tech 1: 120 words
+tech 2: 40 words
+["tech/1", "tech/3", "tech/5"]
+[40, 300, 90, 250]
+800
+old 1
+old 2
+new
+0 a.org item 1
+1 a.org item 2
+0 work: 7 unread
+0 b.net item 1
+exit: 0

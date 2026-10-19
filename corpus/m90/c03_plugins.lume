@@ -1,0 +1,130 @@
+# c03_plugins: a plugin system. Plugins are interface values: structs that
+# have the methods, and `Str` given them by an `extend`. They are handed to
+# generators that keep them (a single one, a list of them, with a block
+# beside it), to an async generator, and to a struct's async generator
+# method through a field. The interface has a default that is a generator.
+# One binding holds plugins of different types, which warns.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# plugin upper
+# plugin swap
+# len >= 5
+# ["!HI THERE", "!CATS"]
+# ["[swap] dogs and dogs", "[swap] !dogs"]
+# ["[len] 13 chars"]
+# ["[word:dogs] has dogs"]
+# plugin word:dogs
+# !hi there => 9 chars
+# cats and dogs => dogs and dogs
+# !cats => !dogs
+# ["!hi there: upper+len"]
+# cats and dogs: swap+len
+# ok: none
+# !cats: upper+swap+len
+# ["*CATS AND DOGS"]
+# EXPECTED STDERR:
+# warning: `ps` holds values of different types behind `Plugin`, so calls on its items go through a pointer
+#   --> corpus/m90/c03_plugins.lume:110:3
+#     |
+# 110 |   ps: [Plugin] = [Upper(tag: "!"), Swap(from: "cats", to: "dogs"), Len(min: 5)]
+#     |   ^
+#   help: fine for most code; use a single concrete type or an enum if this is a hot loop
+
+interface Plugin:
+  def name -> Str
+  def handle(line: Str) -> Str?
+  def describe -> Str = "plugin #{name}"
+
+  # a default that is a generator, made from the required methods
+  def outputs(lines: [Str]) -> Iterator[Str]:
+    for l in lines:
+      match handle(l):
+        Some(out) -> yield out
+        None -> ()
+
+struct Upper:
+  tag: Str
+
+  def name -> Str = "upper"
+  def handle(line: Str) -> Str? = if line.starts_with?(tag): Some(line.upcase) else: None
+
+struct Swap:
+  from: Str
+  to: Str
+
+  def name -> Str = "swap"
+  def handle(line: Str) -> Str? = if line.contains?(from): Some(line.replace(from, to)) else: None
+
+struct Len:
+  min: Int
+
+  def name -> Str = "len"
+  def describe -> Str = "len >= #{min}"
+  def handle(line: Str) -> Str? = if line.len >= min: Some("#{line.len} chars") else: None
+
+# a word is a plugin too
+extend Str with Plugin:
+  def name -> Str = "word:#{self}"
+  def handle(line: Str) -> Str? = if line.contains?(self): Some("has #{self}") else: None
+
+# keeps the interface value it is given
+def tagged(p: Plugin, lines: [Str]) -> Iterator[Str]:
+  for l in lines:
+    match p.handle(l):
+      Some(out) -> yield "[#{p.name}] #{out}"
+      None -> ()
+
+# keeps a list of interface values, and a block that picks among them
+def first_hit(ps: [Plugin], lines: [Str], keep: (Str) -> Bool) -> Iterator[(Str, Str)]:
+  for l in lines:
+    var done = false
+    for p in ps:
+      if not done and keep(p.name):
+        match p.handle(l):
+          Some(out) ->
+            yield (l, out)
+            done = true
+          None -> ()
+
+# an async generator keeps one too
+async def slowly(p: Plugin, lines: [Str]) -> Iterator[Str]:
+  for l in lines:
+    await Time.sleep(1)
+    yield p.handle(l).or("-")
+
+struct Host:
+  plugins: [Plugin]
+
+  async def stream(lines: [Str]) -> Iterator[Str]:
+    for l in lines:
+      await Time.sleep(1)
+      var hits: [Str] = []
+      for p in plugins:
+        if p.handle(l).some?:
+          hits.push(p.name)
+      shown = if hits.empty?: "none" else: hits.join("+")
+      yield "#{l}: #{shown}"
+
+async def main:
+  lines = ["!hi there", "cats and dogs", "ok", "!cats"]
+  ps: [Plugin] = [Upper(tag: "!"), Swap(from: "cats", to: "dogs"), Len(min: 5)]
+  for p in ps:
+    puts p.describe
+
+  puts ps.at(0).outputs(lines).to_list
+  puts tagged(ps.at(1), lines).to_list
+  puts tagged(Len(min: 10), lines).to_list
+  puts tagged("dogs", lines).to_list
+  puts "dogs".describe
+
+  banned = "upper"
+  for l, out in first_hit(ps, lines, { |n| n != banned }):
+    puts "#{l} => #{out}"
+
+  host = Host(plugins: ps)
+  puts host.stream(lines).take(1).to_list
+  for s in host.stream(lines).skip(1):
+    puts s
+
+  mark = "*"
+  puts slowly(Upper(tag: "c"), lines).filter { |s| s != "-" }.map { |s| mark + s }.to_list

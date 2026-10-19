@@ -1,0 +1,13 @@
+job 1: ok after 3
+job 2: ok after 2
+job 3: ok after 1
+job 4: gave up after 3
+job 5: ok after 3
+["job 1: gave up after 1", "job 3: ok after 1"]
+["job 4: gave up after 3"]
+1) job 7: ok after 1
+2) job 2: ok after 2
+[10, 20, 40, 80, 160]
+[10, 30, 90]
+[8, 16, 32]
+exit: 0

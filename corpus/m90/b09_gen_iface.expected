@@ -1,0 +1,15 @@
+warning: `held` holds values of different types behind `Sized`, so calls on its items go through a pointer
+  --> corpus/m90/b09_gen_iface.lume:58:3
+   |
+58 |   held: [Sized] = [Bin(n: 4), "xy"]
+   |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+[2, 4, 6]
+[30, 60]
+[1]
+[4, 8]
+[6, 7]
+[1, 2]
+[4, 8]
+[3]
+exit: 0

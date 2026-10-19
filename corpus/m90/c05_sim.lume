@@ -1,0 +1,132 @@
+# c05_sim: a simulation stepped by generator methods. Two particles bounce
+# between the walls of a world; the world's generator methods give its
+# frames, its events (an enum) and the moments a block picks out; an
+# async generator method gives it live, with chains over that (`map`,
+# `take_while`, `take`, `enumerate`, `skip`). An interface implemented in
+# an `extend` of the struct draws a frame, from a generator of cells.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# .a......b..
+# 1 ....a.b....
+# 2 ....b..a...
+# 3 ..b.......a
+# 4 b......a...
+# 5 ..b.a......
+# t2 a crosses b
+# t4 a bounces at 7
+# t5 b bounces at 2
+# t6 a crosses b
+# t7 a bounces at 2
+# [(2, Cross(left: "a", right: "b")), (4, Bounce(name: "a", pos: 7))]
+# t3 b@2, t4 b@0, t5 b@2, t6 a@1, t7 a@2
+# ["t1 b@6", "t2 a@7", "t3 a@10"]
+# ....b..a...
+# [2, 3, 8, 7, 2, 3]
+# [2, 3]
+# 2: ..b.......a
+# 3: b......a...
+# .a......b..
+
+struct Particle:
+  name: Str
+  pos: Int
+  vel: Int
+
+  def moved(width: Int) -> Particle:
+    n = pos + vel
+    if n < 0:
+      Particle(name, 0 - n, 0 - vel)
+    elif n > width:
+      Particle(name, 2 * width - n, 0 - vel)
+    else:
+      Particle(name, n, vel)
+
+enum Event:
+  Bounce(name: Str, pos: Int)
+  Cross(left: Str, right: Str)
+
+  def show -> Str:
+    match self:
+      Bounce(n, p) -> "#{n} bounces at #{p}"
+      Cross(l, r) -> "#{l} crosses #{r}"
+
+struct World:
+  width: Int
+  ps: [Particle]
+
+  def step -> World:
+    w = width
+    World(width, ps.map { |p| p.moved(w) }.to_list)
+
+  def frames(steps: Int) -> Iterator[World]:
+    var w = self
+    for t in 1..steps:
+      w = w.step
+      yield w
+
+  def events(steps: Int) -> Iterator[(Int, Event)]:
+    var w = self
+    for t in 1..steps:
+      before = w
+      w = w.step
+      for i, p in w.ps.enumerate:
+        yield (t, Bounce(p.name, p.pos)) if p.vel != before.ps.at(i).vel
+      a = w.ps.at(0)
+      b = w.ps.at(1)
+      was = before.ps.at(0).pos < before.ps.at(1).pos
+      yield (t, Cross(a.name, b.name)) if was != (a.pos < b.pos)
+
+  # a generator method that keeps the block it is given
+  def watch(steps: Int, pick: (Particle) -> Bool) -> Iterator[Str]:
+    var w = self
+    for t in 1..steps:
+      w = w.step
+      for p in w.ps:
+        yield "t#{t} #{p.name}@#{p.pos}" if pick(p)
+
+  async def live(steps: Int) -> Iterator[World]:
+    var w = self
+    for t in 1..steps:
+      await Time.sleep(1)
+      w = w.step
+      yield w
+
+interface Render:
+  def cells -> Iterator[Str]
+  def line -> Str = cells.join("")
+
+extend World with Render:
+  def cells -> Iterator[Str]:
+    for x in 0..width:
+      here = ps.filter { |p| p.pos == x }.to_list
+      match here.len:
+        0 -> yield "."
+        1 -> yield here.at(0).name
+        _ -> yield "*"
+
+async def main:
+  world = World(10, [Particle("a", 1, 3), Particle("b", 8, 0 - 2)])
+  puts world.line
+  for i, f in world.frames(5).enumerate:
+    puts "#{i + 1} #{f.line}"
+
+  for t, e in world.events(8):
+    puts "t#{t} #{e.show}"
+  puts world.events(8).take(2).to_list
+
+  edge = 2
+  puts world.watch(8) { |p| p.pos <= edge }.join(", ")
+
+  # the method walks a copy taken at the call
+  var probe = world
+  later = probe.watch(3) { |p| p.pos > 5 }
+  probe = probe.step.step
+  puts later.to_list
+  puts probe.line
+
+  puts world.live(20).map { |w| w.ps.at(0).pos - w.ps.at(1).pos }.map { |d| d.abs }.take(6).to_list
+  limit = 8
+  puts world.live(20).map { |w| (w.ps.at(0).pos - w.ps.at(1).pos).abs }.take_while { |d| d < limit }.to_list
+  for i, l in world.live(10).map { |w| w.line }.enumerate.skip(2).take(2):
+    puts "#{i}: #{l}"
+  puts world.line

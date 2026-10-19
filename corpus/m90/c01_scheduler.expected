@@ -1,0 +1,14 @@
+1. greet  exit 0: hello
+2. math   collatz(27) = 111
+3. broken exit 4
+4. count  exit 0: c b a
+5. small  collatz(6) = 8
+6. rest   slept
+{"ok": 5, "failed": 1}
+failed: ["broken"]
+in order: [1, 2]
+0: naps/2 ok
+1: naps/3 ok
+2: naps/1 ok
+total steps: 119
+exit: 0

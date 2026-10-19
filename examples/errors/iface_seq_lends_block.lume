@@ -1,0 +1,14 @@
+# An interface method that gives a sequence keeps its block, so each type's
+# method must keep it too: a generator does, a chain made during the call does not.
+
+interface Scan:
+  def picks(keep: (Int) -> Bool) -> Iterator[Int]
+
+struct Nums:
+  xs: [Int]
+
+  def picks(keep: (Int) -> Bool) -> Iterator[Int] = xs.filter { |x| keep(x) }
+
+def main:
+  s: Scan = Nums(xs: [1, 2])
+  puts s.picks { |x| x > 1 }.to_list

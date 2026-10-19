@@ -1,0 +1,7 @@
+error: an `async Iterator[Order]` has no `fold` yet
+  --> corpus/m90/a09_orders_fold.lume:43:22
+   |
+43 |   revenue = orders(1).fold(0) { |total, o| total + o.cents }
+   |                      ^
+  help: its chains are `map`, `filter`, `reject`, `take_while`, `take`, `skip` and `enumerate`; for the rest, keep its items with `.to_list` and chain over the list
+exit: 1

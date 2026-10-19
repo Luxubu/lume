@@ -1,0 +1,15 @@
+apples      3
+pears      12
+total      15
+
+day 1       5
+day 3       7
+day 4       2
+total      14
+
+["kiosk:tea    4"]
+13
+quick,brown,jumps
+[("day 1", 5), ("day 3", 7), ("day 4", 2)]
+["APPLES", "PEARS"]
+exit: 0

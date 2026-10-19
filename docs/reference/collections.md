@@ -436,7 +436,10 @@ async def main:
 #! the block of `take_while` runs as items arrive, after this line, so it cannot use `self` or its fields
 ```
 
-A chain moves the sequence it is made from, as `for` does.
+A chain moves the sequence it is made from, as `for` does. It may be kept
+in a name and walked later, or handed to a task; its block still has the
+copies it took when the chain was made. After `enumerate`, a block may name
+the two parts, `{ |i, x| ... }`, as a list's chain does.
 
 ### Taking a sequence: `xs: Iterator[T]`
 

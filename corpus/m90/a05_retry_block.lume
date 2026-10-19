@@ -1,0 +1,64 @@
+# a05_retry_block: a retry policy handed as a block to an async generator,
+# which keeps it (the names it uses are copied in at the call); a kept block
+# from a binding handed to one; an endless plain generator taking a block or a
+# function's name; and chains over each.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# job 1: ok after 3
+# job 2: ok after 2
+# job 3: ok after 1
+# job 4: gave up after 3
+# job 5: ok after 3
+# ["job 1: gave up after 1", "job 3: ok after 1"]
+# ["job 4: gave up after 3"]
+# 1) job 7: ok after 1
+# 2) job 2: ok after 2
+# [10, 20, 40, 80, 160]
+# [10, 30, 90]
+# [8, 16, 32]
+
+# stands for a flaky call: whether it works depends only on the job and try
+async def attempt(job: Int, try_no: Int) -> Bool:
+  await Time.sleep(1)
+  (job + try_no) % 4 == 0
+
+async def run_all(jobs: [Int], again: (Int) -> Bool) -> Iterator[Str]:
+  for j in jobs:
+    var tries = 1
+    var ok = await attempt(j, tries)
+    while not ok and again(tries):
+      tries += 1
+      ok = await attempt(j, tries)
+    if ok:
+      yield "job #{j}: ok after #{tries}"
+    else:
+      yield "job #{j}: gave up after #{tries}"
+
+# never ends: the caller decides how many delays it wants
+def backoff(start: Int, grow: (Int) -> Int) -> Iterator[Int]:
+  var ms = start
+  while true:
+    yield ms
+    ms = grow(ms)
+
+def double(n: Int) -> Int = n * 2
+
+async def main:
+  var limit = 3
+  runs = run_all([1, 2, 3, 4, 5], { |n| n < limit })
+  limit = 1
+  for line in runs:
+    puts line
+
+  never: (Int) -> Bool = { |n| n < limit }
+  puts run_all([1, 3], never).to_list
+
+  puts run_all([1, 2, 3, 4, 5], { |n| n < 3 }).filter { |s| s.contains?("gave up") }.to_list
+
+  for i, line in run_all([7, 2], { |n| n < 2 }).enumerate:
+    puts "#{i + 1}) #{line}"
+
+  puts backoff(10, { |ms| ms * 2 }).take(5).to_list
+  cap = 100
+  puts backoff(10, { |ms| ms * 3 }).take_while { |ms| ms < cap }.to_list
+  puts backoff(1, double).skip(3).take(3).to_list

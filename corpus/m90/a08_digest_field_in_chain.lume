@@ -1,0 +1,54 @@
+# a08_digest_field_in_chain: a struct method that chains over an async
+# generator, where the `reject` block reads a field of the struct. The block
+# runs as items arrive, after the line, so it cannot use a field; `take(most)`
+# reads one too, but on this line, not in a block, so it is not the error.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: the block of `reject` runs as items arrive, after this line, so it cannot use `self` or its fields
+#   --> corpus/m90/a08_digest_field_in_chain.lume:28:22
+#    |
+# 28 |     stories().reject { |s| s.score < min_score }.map { |s| s.title }.take(most).to_list
+#    |                      ^
+#   help: bind what it needs to a name before the chain, and use that
+
+struct Story:
+  title: Str
+  score: Int
+
+async def stories -> Iterator[Story]:
+  for i in 1..5:
+    await Time.sleep(1)
+    yield Story(title: "story #{i}", score: i * 20)
+
+struct Digest:
+  min_score: Int
+  most: Int
+
+  async def picks -> [Str]:
+    stories().reject { |s| s.score < min_score }.map { |s| s.title }.take(most).to_list
+
+  def describe -> Str = "at least #{min_score}, at most #{most}"
+
+# the same digest written the way the help says: the field bound first
+struct Weekly:
+  min_score: Int
+  most: Int
+
+  async def picks -> [Str]:
+    floor = min_score
+    stories().reject { |s| s.score < floor }.map { |s| s.title }.take(most).to_list
+
+  async def best -> Str:
+    var top = "none"
+    for s in stories():
+      top = s.title if s.score >= 80
+    top
+
+async def main:
+  d = Digest(min_score: 50, most: 2)
+  puts d.describe
+  picked = await d.picks
+  puts picked
+  w = Weekly(min_score: 50, most: 2)
+  puts await w.picks
+  puts await w.best

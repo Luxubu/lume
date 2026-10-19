@@ -1,0 +1,71 @@
+# a01_paged_fetch: a paginated fetcher as an async generator that stops at the
+# first empty page (`return` alone), and every chain over it: filter, map,
+# reject, take, skip, enumerate, take_while; plus `next` on a `var` holding
+# one and a `for` that carries on after it.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ["post 2", "post 4", "post 6", "post 8"]
+# [Item(id: 4, page: 2, title: "post 4"), Item(id: 5, page: 2, title: "post 5"), Item(id: 7, page: 3, title: "post 7")]
+# 0. post 8 (page 3)
+# 1. post 9 (page 3)
+# [1, 2, 3]
+# 9 items on 3 pages
+# Some(Item(id: 7, page: 3, title: "post 7"))
+# 8
+# 9
+# []
+
+struct Item:
+  id: Int
+  page: Int
+  title: Str
+
+PER_PAGE = 3
+LAST_PAGE = 3
+
+# stands for a request: what comes back depends only on the page number
+async def fetch_page(n: Int) -> [Item]:
+  await Time.sleep(1)
+  var out: [Item] = []
+  if n <= LAST_PAGE:
+    for k in 1..PER_PAGE:
+      id = (n - 1) * PER_PAGE + k
+      out.push(Item(id: id, page: n, title: "post #{id}"))
+  out
+
+async def all_items(first: Int) -> Iterator[Item]:
+  var page = first
+  while true:
+    batch = await fetch_page(page)
+    if batch.empty?:
+      return
+    for it in batch:
+      yield it
+    page += 1
+
+def label(it: Item) -> Str = "#{it.title} (page #{it.page})"
+
+async def main:
+  titles = all_items(1).filter { |it| it.id % 2 == 0 }.map { |it| it.title }.to_list
+  puts titles
+
+  puts all_items(2).reject { |it| it.id % 3 == 0 }.take(3).to_list
+
+  for i, it in all_items(1).skip(7).enumerate:
+    puts "#{i}. #{label(it)}"
+
+  early = all_items(1).take_while { |it| it.page < 2 }.map { |it| it.id }.to_list
+  puts early
+
+  every = all_items(1).to_list
+  pages = every.map { |it| it.page }.uniq
+  puts "#{every.len} items on #{pages.len} pages"
+
+  # moved along by hand, then walked from where it stopped
+  var g = all_items(3)
+  puts g.next
+  for it in g:
+    puts it.id
+
+  # a start past the last page gives nothing at all
+  puts all_items(4).map { |it| it.title }.to_list

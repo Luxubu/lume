@@ -1,0 +1,16 @@
+# Probes a method an async sequence lacks, `join`, at the end of a `map`.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: an `async Iterator[Str]` has no `join` yet
+#   --> corpus/m90/b13_async_join.lume:16:36
+#    |
+# 16 |   puts names().map { |s| s.upcase }.join(", ")
+#    |                                    ^
+#   help: its chains are `map`, `filter`, `reject`, `take_while`, `take`, `skip` and `enumerate`; for the rest, keep its items with `.to_list` and chain over the list
+
+async def names -> Iterator[Str]:
+  yield "a"
+  yield "b"
+
+async def main:
+  puts names().map { |s| s.upcase }.join(", ")

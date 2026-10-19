@@ -441,6 +441,39 @@ def main:
 In Rust the block is lent as a `&mut dyn FnMut`, which keeps the interface
 usable in every place above — a list, a field, a binding.
 
+So a type's method that keeps the block — in a field, say — is not what the
+interface asks for, and is refused.
+
+**A method that gives a sequence keeps its block**, since the sequence is
+walked after the call: in Rust a trait method handing back a lazy iterator
+takes its closure owned. Each type's method must then keep it too, which a
+generator does; one that builds a chain during the call is refused. The
+block copies in the names it uses, as any kept block does:
+
+```lume
+interface Scan:
+  def picks(keep: (Int) -> Bool) -> Iterator[Int]
+
+struct Nums:
+  xs: [Int]
+
+  def picks(keep: (Int) -> Bool) -> Iterator[Int]:
+    for x in xs:
+      yield x if keep(x)
+
+extend [Int] with Scan:
+  def picks(keep: (Int) -> Bool) -> Iterator[Int]:
+    for x in self:
+      yield x if keep(x)
+
+def main:
+  limit = 2
+  all: [Scan] = [Nums(xs: [1, 3]), [5, 2]]
+  for s in all:
+    puts s.picks { |x| x > limit }.to_list    #=> [3]
+                                              #=> [5]
+```
+
 **An interface method may have type parameters of its own, or be `async`.**
 Rust calls such a method one that only a known type can call, and so does
 Lume: it is called through a parameter typed as the interface or a bound, and

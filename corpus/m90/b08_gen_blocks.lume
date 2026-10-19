@@ -1,0 +1,56 @@
+# Probes generators that keep a block: a plain function (the block's copy of
+# a `var` changed afterwards), a generator handed back from a function whose
+# block uses that function's parameter, the same through an async generator,
+# and plain and async generator methods that take a block.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# [3, 1]
+# [5, 9, 3]
+# [4, 6]
+# ["t3", "t6"]
+# s11
+# s12
+# 100
+
+def keep(xs: [Int], ok: (Int) -> Bool) -> Iterator[Int]:
+  for x in xs:
+    yield x if ok(x)
+
+def above(limit: Int) -> Iterator[Int] = keep([1, 5, 9, 3], { |x| x > limit })
+
+async def slow_keep(xs: [Int], ok: (Int) -> Bool) -> Iterator[Int]:
+  for x in xs:
+    await Time.sleep(1)
+    yield x if ok(x)
+
+async def slow_above(limit: Int) -> Iterator[Int]:
+  for x in slow_keep([4, 1, 6], { |v| v > limit }):
+    yield x
+
+struct Tagger:
+  tag: Str
+
+  def tagged(xs: [Int], f: (Int) -> Int) -> Iterator[Str]:
+    for x in xs:
+      yield "#{tag}#{f(x)}"
+
+  async def slow_tagged(xs: [Int], f: (Int) -> Int) -> Iterator[Str]:
+    for x in xs:
+      await Time.sleep(1)
+      yield "#{tag}#{f(x)}"
+
+async def main:
+  var most = 4
+  g = keep([3, 8, 1, 5]) { |x| x < most }
+  most = 100
+  puts g.to_list
+  puts above(2).to_list
+  puts slow_above(3).to_list
+  k = 3
+  puts Tagger(tag: "t").tagged([1, 2]) { |x| x * k }.to_list
+  var step = 10
+  h = Tagger(tag: "s").slow_tagged([1, 2]) { |x| x + step }
+  step = 0
+  for line in h:
+    puts line
+  puts most

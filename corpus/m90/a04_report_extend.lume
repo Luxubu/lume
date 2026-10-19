@@ -1,0 +1,75 @@
+# a04_report_extend: generators in `extend`s, on built-in types (a map, a
+# list, `Str`) and on a struct, with an interface default that is itself a
+# generator made from the required one; a generator in an extend taking a
+# parameter; and chains over what they give.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# apples      3
+# pears      12
+# total      15
+#
+# day 1       5
+# day 3       7
+# day 4       2
+# total      14
+#
+# ["kiosk:tea    4"]
+# 13
+# quick,brown,jumps
+# [("day 1", 5), ("day 3", 7), ("day 4", 2)]
+# ["APPLES", "PEARS"]
+
+interface Report:
+  def rows -> Iterator[(Str, Int)]
+
+  def lines -> Iterator[Str]:
+    var total = 0
+    for label, n in rows:
+      total += n
+      yield "#{label.pad_right(8)}#{n.pad(5)}"
+    yield "#{"total".pad_right(8)}#{total.pad(5)}"
+
+extend {Str: Int} with Report:
+  def rows -> Iterator[(Str, Int)]:
+    for k, v in self:
+      yield (k, v)
+
+extend [Int] with Report:
+  def rows -> Iterator[(Str, Int)]:
+    for i, x in self.enumerate:
+      yield ("day #{i + 1}", x) if x > 0
+
+struct Shop:
+  name: Str
+  sales: [(Str, Int)]
+
+extend Shop with Report:
+  def rows -> Iterator[(Str, Int)]:
+    for item, n in sales:
+      yield ("#{name}:#{item}", n)
+
+interface Tokens:
+  def tokens(min: Int) -> Iterator[Str]
+
+extend Str with Tokens:
+  def tokens(min: Int) -> Iterator[Str]:
+    for w in split(" "):
+      yield w.downcase if w.len >= min
+
+def main:
+  stock: {Str: Int} = {"apples": 3, "pears": 12}
+  for l in stock.lines:
+    puts l
+  puts ""
+
+  week = [5, 0, 7, 2]
+  for l in week.lines:
+    puts l
+  puts ""
+
+  s = Shop(name: "kiosk", sales: [("tea", 4), ("cake", 9)])
+  puts s.lines.take(1).to_list
+  puts s.rows.map { |p| p.1 }.sum
+  puts "The Quick brown Fox jumps".tokens(4).join(",")
+  puts week.rows.to_list
+  puts stock.rows.map { |k, v| k.upcase }.to_list

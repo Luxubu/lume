@@ -1,0 +1,14 @@
+["105 disk 81%", "112 db timeout", "120 disk 92%", "121 db timeout"]
+["boot ok", "disk 81%", "user ada", "db timeout"]
+0: Info user ada
+1: Crit db timeout
+2: Warn disk 92%
+line 4: line `oops`: too short
+line 6: `xx` is not an integer
+{"Info": 3, "Warn": 2, "Crit": 2}
+{"db timeout"}
+[Warn, Crit]
+quiet after 110: [112, 120, 121]
+grep: 0 2
+report gone: true
+exit: 0
