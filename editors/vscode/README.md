@@ -13,7 +13,7 @@ setting `lume.path`. Then, from this folder:
 
     npm install
     npx @vscode/vsce package
-    code --install-extension lume-0.3.0.vsix
+    code --install-extension lume-0.4.0.vsix
 
 To try it without installing anything into your own VS Code, run it from
 this folder in a window of its own:

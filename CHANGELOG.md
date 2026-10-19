@@ -2,35 +2,97 @@
 
 ## Unreleased
 
-- **`tools/lumecheck/`**: the suite's docs, message-coverage and grammar
-  checks, written in Lume; the docs check runs three times faster.
-- **The test suite is written in Lume** and runs its checks in parallel:
-  2 minutes instead of 15. `tests/run.sh` runs it, with `-j N`.
-- **`Process.run_in(dir, program, args)`** runs a program in a folder.
-- **Async generators**: an `async def` with `yield` may `await`; its items
-  are walked with `for` in async code.
-- **Chains over async generators**: `map`, `filter`, `reject`,
-  `take_while`, `take`, `skip` and `enumerate`, lazy as Rust's `StreamExt`;
-  and a method may be an async generator.
-- **Generators** may be methods in an `extend`, and may take a block or an
-  interface value, which they keep.
+Nothing yet.
+
+## 0.4.0 — sequences that wait
+
+Eight milestones after 0.3.0 (83–90). Sequences learned to wait: an
+`async def` may `yield`, the sequence it gives has the chains a generator
+has, a method may be one, and tasks can be taken as they finish. The test
+suite was rewritten in Lume and runs on these features, and two review
+rounds checked them.
+
+### Install
+
+```sh
+git clone https://github.com/Luxubu/lume && cd lume && git checkout v0.4.0
+./install.sh
+lume run examples/async_generators.lume
+```
+
+It needs a Rust toolchain (<https://rustup.rs>). See `docs/install.md`.
+
+### What is new
+
+- **Async generators**: an `async def` that gives `Iterator[T]` and has
+  `yield` may `await` in its body. It runs as a task never more than one
+  item ahead, is walked with `for`, `next` and `.to_list` in async code,
+  and letting go of it ends it.
+- **Chains over them**: `map`, `filter`, `reject`, `take_while`, `take`,
+  `skip` and `enumerate`, lazy as Rust's `StreamExt`, so a chain over an
+  endless sequence ends. A chain's block copies in the names it uses.
+- **Async generator methods**, on structs, enums and generic types.
 - **`await tasks.next_done`**: whichever task in a `var` list finishes
-  first, taken out of the list, as tokio's `JoinSet::join_next`.
-- **`tests/run.sh`** tells each failure as soon as it is known, is 19%
-  faster, and takes `-x` (stop at the first failure) and `-v`.
-- **An interface method that gives a sequence keeps its block**, so a
-  generator can implement it; a method that only lends the block, or keeps
-  one an interface lends, is refused instead of reaching rustc.
-- **Fixed**: `for w in split(" ")` inside an `extend Str` reached rustc.
-- **Fixed**: a `filter` (or `reject`, `count`, `find`, ...) block that did not
-  give a `Bool` reached rustc.
-- **Fixed**: a task that used a generator, a stream or another task copied
-  it, which cannot be done; the task now takes it.
-- **Fixed**: an async generator that takes an `Iterator` reached rustc;
-  `yield Error(..)` into an `Iterator[T or Error]` was refused.
-- **Fixed**: two programs with the same file name, built at the same time,
-  could run each other's binary; a generator from another module lost the
-  type of its items.
+  first, taken out of the list, as tokio's `JoinSet::join_next`. With it
+  a fixed number of tasks can work through a long list.
+- **Generators in an `extend`**, of your own types and of built-in ones
+  such as `[T]` and `Str`.
+- **Generators that keep a block or an interface value**, plain or async,
+  functions or methods; an interface method that gives a sequence keeps
+  its block, so a generator can implement it.
+- **`Process.run_in(dir, program, args)`** runs a program in a folder.
+- **A task takes what cannot be copied**: a generator, an async sequence
+  or another task it uses is moved into it, and using it after is refused.
+
+### The test suite, in Lume
+
+- **`tools/lumecheck/`** holds the suite's checks, written in Lume: the
+  plan of every check, the docs examples, message coverage and the editor
+  grammar. Only the language-server driver, `tests/lsp_test.py`, is still
+  Python.
+- **`tests/run.sh`** runs it, a check starting as each finishes, through
+  an async generator and `next_done`: about 2½ minutes, from 15. It tells
+  each failure as soon as it is known, stops at the first with `-x`, and
+  names each pass with `-v`.
+
+### Fixed
+
+- A block for `filter`, `reject`, `take_while`, `count`, `any?`, `all?`,
+  `find` or `partition` that did not give a `Bool`.
+- `for w in split(" ")` inside an `extend Str`.
+- A method building a chain over a block an interface keeps, and one
+  keeping a block an interface lends: both refused now, with their own
+  messages.
+- Two programs with the same file name, built at the same time, could run
+  each other's binary; a generator from another module lost the type of
+  its items.
+- A program's own `struct Box` could shadow the one the runtime uses.
+
+All of these reached rustc before; each now runs or gets a Lume message.
+
+### How it was checked
+
+- **The suite**: `tests/run.sh`, 1185 checks and 422 docs examples, byte for
+  byte.
+- **Error messages**: 372 of the compiler's 389 messages are shown by a test;
+  the rest are listed in `examples/errors/UNREACHED.md` with why.
+- **Review rounds**: rounds eighteen and nineteen, 60 programs written from
+  the docs alone. Round nineteen: 51 guesses, 20 of 22 programs right on the
+  first run, no wrong output, and after its fixes all thirty print what
+  their authors predicted.
+- **Benchmarks**: eight programs against the Rust a person would write; six
+  are within 10% of it, and none is slower than at 0.3.0.
+
+### Known limits
+
+- **Async sequences**: no `count`, `fold` or the other methods that wait for
+  every item (keep the items with `.to_list`); an async generator cannot be
+  declared in an interface.
+- **VS Code**: packaged and installed, and its language server checked with
+  VS Code's messages, but not yet looked at in an editor window.
+- **`http` package**: no streaming bodies, and a fixed 30-second timeout.
+- **Time zones**: dates and times are UTC only.
+- **No registry**: packages come from paths and git.
 
 ## 0.3.0 — interfaces all the way
 
