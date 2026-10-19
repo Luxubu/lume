@@ -191,7 +191,7 @@ async def results(ns: [Int], at_once: Int) -> Iterator[Int]:
       None -> return
 
 async def main:
-  puts results([5, 1, 1, 1], 2).to_list    #=> [1, 1, 1, 5]
+  puts results([40, 1, 1, 1], 2).to_list    #=> [1, 1, 1, 40]
 ```
 
 `tools/lumecheck/main.lume` runs the test suite this way.

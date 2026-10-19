@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-Nothing yet.
+- **Async sequences wait for their items**: `first`, `count`, `sum`,
+  `any?`, `all?`, `find`, `each` and `fold`, as Rust's `StreamExt` has
+  them; `find`, `any?`, `all?` and `first` stop at their answer.
 
 ## 0.4.0 — sequences that wait
 

@@ -1,9 +1,9 @@
-# An async sequence has the chains that hand on items; the ones that wait for
-# all of them, like `count`, not yet.
+# An async sequence has the chains and the methods Rust's `StreamExt` has;
+# the rest of a list's, like `join`, are for its items kept with `.to_list`.
 
-async def nums -> Iterator[Int]:
-  yield 1
-  yield 2
+async def words -> Iterator[Str]:
+  yield "a"
+  yield "b"
 
 async def main:
-  puts nums().count { |x| x > 1 }
+  puts words().join(", ")

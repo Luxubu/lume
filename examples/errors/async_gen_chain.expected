@@ -1,6 +1,6 @@
-error: an `async Iterator[Int]` has no `count` yet
-  --> examples/errors/async_gen_chain.lume:9:14
+error: an `async Iterator[Str]` has no `join` yet
+  --> examples/errors/async_gen_chain.lume:9:15
   |
-9 |   puts nums().count { |x| x > 1 }
-  |              ^
-  help: its chains are `map`, `filter`, `reject`, `take_while`, `take`, `skip` and `enumerate`; for the rest, keep its items with `.to_list` and chain over the list
+9 |   puts words().join(", ")
+  |               ^
+  help: it has the chains `map`, `filter`, `reject`, `take_while`, `take`, `skip` and `enumerate`, and `first`, `count`, `sum`, `any?`, `all?`, `find`, `each` and `fold`; for the rest, keep its items with `.to_list`

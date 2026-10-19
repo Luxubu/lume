@@ -376,9 +376,9 @@ async def main:
 - **A method may be one**, as may a function of a type
   (`async def self.upto(n: Int)`). Its task walks a copy of the value, as a
   generator method does.
-- **Not yet:** an async generator in an interface, and the methods that
-  wait for every item, like `count` or `fold` — keep the items with
-  `.to_list` and use the list's.
+- **Not yet:** an async generator in an interface. Of a list's methods it
+  has those Rust's `StreamExt` has, below; for the rest — `join`, `sort`,
+  `max` — keep the items with `.to_list` and use the list's.
 - **More:** `examples/async_generators.lume` shows each of these.
 
 #### Chains over an async sequence
@@ -440,6 +440,38 @@ A chain moves the sequence it is made from, as `for` does. It may be kept
 in a name and walked later, or handed to a task; its block still has the
 copies it took when the chain was made. After `enumerate`, a block may name
 the two parts, `{ |i, x| ... }`, as a list's chain does.
+
+#### Methods that wait for the items
+
+**`first`, `count`, `sum`, `any?`, `all?`, `find`, `each` and `fold` wait
+for the items and give what a list's would**, as Rust's `StreamExt` has
+`next`, `count`, `any`, `all`, `for_each` and `fold`, so they go in async
+code. Each item is handled as it arrives, not kept. `first`, `find`,
+`any?` and `all?` stop at their answer and let go of the sequence, so they
+work on an endless one. Their block runs during the call, as a list's
+does, so it may change the names around it:
+
+```lume
+async def naturals -> Iterator[Int]:
+  var n = 0
+  while true:
+    yield n
+    n += 1
+
+async def words -> Iterator[Str]:
+  for w in ["fig", "apple", "kiwi"]:
+    await Time.sleep(1)
+    yield w
+
+async def main:
+  puts naturals().find { |n| n * n > 50 }       #=> Some(8)
+  puts naturals().any? { |n| n > 1000 }         #=> true
+  puts words().count { |w| w.len > 3 }          #=> 2
+  puts words().fold("") { |acc, w| acc + w.slice(0, 1) }    #=> fak
+  var total = 0
+  words().each { |w| total += w.len }
+  puts total                                    #=> 12
+```
 
 ### Taking a sequence: `xs: Iterator[T]`
 

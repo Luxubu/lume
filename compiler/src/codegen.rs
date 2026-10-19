@@ -874,6 +874,11 @@ impl<T: Send + 'static> LumeStream<T> {
         LumeStream { poll: ::std::boxed::Box::new(move |cx| (self.poll)(cx).map(|o| o.map(|x| { i += 1; (i - 1, x) }))) }
     }
 }
+/// A block kept in a local before an async sequence's items reach it: these
+/// say what it takes, which a closure on its own cannot.
+fn lume_takes<T, R, F: FnMut(T) -> R>(f: F) -> F { f }
+fn lume_looks<T, R, F: FnMut(&T) -> R>(f: F) -> F { f }
+fn lume_folds<A, T, F: FnMut(A, T) -> A>(f: F) -> F { f }
 // ---- end prelude ----
 "#;
 
@@ -6238,6 +6243,10 @@ impl Gen {
                 return Type::AsyncGen(Box::new(bt));
             }
             (Type::AsyncGen(_), "filter" | "reject" | "take_while") => return recv.clone(),
+            // the ones that wait for the items give what a list's would
+            (Type::AsyncGen(item), "count" | "sum" | "any?" | "all?" | "find" | "each" | "fold") => {
+                return self.block_method_type(&Type::List(item.clone()), name, params, body, init);
+            }
             _ => {}
         }
         let (elem, by_ref) = match self.elem_of(recv) {
@@ -9477,7 +9486,7 @@ impl Gen {
                         None => err.with_help(format!("a type with `def items -> [T]` takes the list's methods too; give `{}` one", type_name(&other))),
                     },
                     // items that arrive later: no chain runs over them yet
-                    Type::AsyncGen(_) => err.with_help("its chains are `map`, `filter`, `reject`, `take_while`, `take`, `skip` and `enumerate`; for the rest, keep its items with `.to_list` and chain over the list"),
+                    Type::AsyncGen(_) => err.with_help("it has the chains `map`, `filter`, `reject`, `take_while`, `take`, `skip` and `enumerate`, and `first`, `count`, `sum`, `any?`, `all?`, `find`, `each` and `fold`; for the rest, keep its items with `.to_list`"),
                     _ => err,
                 })
             }
@@ -9844,9 +9853,62 @@ impl Gen {
             };
             return Ok(format!("{{ {}({}).{} }}", prelude, r, call));
         }
+        if let (Type::AsyncGen(item), "count" | "sum" | "any?" | "all?" | "find" | "each" | "fold") = (&rt, name) {
+            // Rust's `StreamExt::any`, `fold`, `for_each`: each item awaited
+            // in turn and handed to the block, which runs during the call,
+            // so it is lent as a list's is; `any?`, `all?` and `find` let go
+            // of the sequence once they have their answer
+            if !self.in_async {
+                return Err(LumeError::new(e.line, e.col, format!("`.{}` waits for items that arrive later, so it goes in async code", name))
+                    .with_help("call it in an `async def` or a `spawn:` body"));
+            }
+            let item = (**item).clone();
+            if name == "fold" && args.len() != 1 {
+                return Err(LumeError::new(e.line, e.col, "`fold` takes the starting value and a block: `xs.fold(0) { |acc, x| acc + x }`"));
+            }
+            let r = self.give_away(recv)?;
+            let t = self.rt(&item);
+            let (pre, step, result) = match name {
+                "any?" => {
+                    let f = self.gen_lambda(params, body, &item, false, false, true, None, lam)?;
+                    (format!("let mut lume_f = lume_takes::<{}, _, _>({}); let mut lume_r = false;", t, f), "if lume_f(lume_x) { lume_r = true; break; }".to_string(), "lume_r")
+                }
+                "all?" => {
+                    let f = self.gen_lambda(params, body, &item, false, false, true, None, lam)?;
+                    (format!("let mut lume_f = lume_takes::<{}, _, _>({}); let mut lume_r = true;", t, f), "if !lume_f(lume_x) { lume_r = false; break; }".to_string(), "lume_r")
+                }
+                "find" => {
+                    let f = self.gen_lambda(params, body, &item, false, true, true, None, lam)?;
+                    (format!("let mut lume_f = lume_looks::<{}, _, _>({}); let mut lume_r = None;", t, f), "if lume_f(&lume_x) { lume_r = Some(lume_x); break; }".to_string(), "lume_r")
+                }
+                "count" => {
+                    let f = self.gen_lambda(params, body, &item, false, true, true, None, lam)?;
+                    (format!("let mut lume_f = lume_looks::<{}, _, _>({}); let mut lume_r = 0i64;", t, f), "if lume_f(&lume_x) { lume_r += 1; }".to_string(), "lume_r")
+                }
+                "each" => {
+                    let f = self.gen_lambda(params, body, &item, false, false, false, None, lam)?;
+                    (format!("let mut lume_f = lume_takes::<{}, _, _>({});", t, f), "lume_f(lume_x);".to_string(), "()")
+                }
+                "sum" => {
+                    let bt = self.lambda_body_type(params, &item, false, None, body);
+                    let f = self.gen_lambda(params, body, &item, false, false, true, None, lam)?;
+                    let zero = if bt == Type::Float { "0.0f64" } else { "0i64" };
+                    (format!("let mut lume_f = lume_takes::<{}, _, _>({}); let mut lume_r = {};", t, f, zero), "lume_r += lume_f(lume_x);".to_string(), "lume_r")
+                }
+                _ => {
+                    let seed = fold_acc_type(self.ty_of(&args[0].value).materialized(), &item);
+                    let acc_ty = self.fold_seed_from_body(seed, params, body, &item, false);
+                    let init = self.expr_owned(&args[0].value)?;
+                    let init = if type_is_known(&acc_ty) { format!("{{ let lume_seed: {} = {}; lume_seed }}", self.rt(&acc_ty), init) } else { init };
+                    let f = self.gen_lambda(params, body, &item, false, false, true, Some(&acc_ty), lam)?;
+                    (format!("let mut lume_f = lume_folds::<{}, {}, _>({}); let mut lume_r = {};", self.rt(&acc_ty), t, f, init), "lume_r = lume_f(lume_r, lume_x);".to_string(), "lume_r")
+                }
+            };
+            return Ok(format!("{{ let mut lume_s = {}; {} while let Some(lume_x) = lume_s.next().await {{ {} }} {} }}", r, pre, step, result));
+        }
         if let Type::AsyncGen(_) = &rt {
             return Err(LumeError::new(e.line, e.col, format!("{} has no `{}` yet", a_type(&rt), name))
-                .with_help("its chains are `map`, `filter`, `reject`, `take_while`, `take`, `skip` and `enumerate`; for the rest, keep its items with `.to_list` and chain over the list"));
+                .with_help("it has the chains `map`, `filter`, `reject`, `take_while`, `take`, `skip` and `enumerate`, and `first`, `count`, `sum`, `any?`, `all?`, `find`, `each` and `fold`; for the rest, keep its items with `.to_list`"));
         }
         if name == "map_error" && !matches!(rt.materialized(), Type::Result(..)) {
             let e2 = LumeError::new(e.line, e.col, format!("`map_error` changes the failure of a `T or Error`, but this is {}", a_type(&rt.materialized())));
@@ -12101,7 +12163,7 @@ impl Gen {
                     }
                 }
                 // an async sequence is used up by `.to_list`
-                let mut r = if matches!(rt, Type::AsyncGen(_)) && matches!(name.as_str(), "to_list" | "take" | "skip" | "enumerate") { self.give_away(recv)? } else { self.expr(recv)? };
+                let mut r = if matches!(rt, Type::AsyncGen(_)) && matches!(name.as_str(), "to_list" | "take" | "skip" | "enumerate" | "first" | "count" | "sum") { self.give_away(recv)? } else { self.expr(recv)? };
                 // `took.slice(0, n).to_int`: likewise, the piece is read in place
                 if rt == Type::Str {
                     if let ExprKind::Method { recv: text, name: sl, args: sl_args } = &recv.kind {
@@ -12327,7 +12389,7 @@ impl Gen {
                 // as a block-taking one says it
                 if matches!(rt, Type::AsyncGen(_)) && !builtin_applies(&rt, name) && builtins_for(&Type::List(Box::new(Type::Unknown))).contains(&name.as_str()) {
                     return Err(LumeError::new(e.line, e.col, format!("{} has no `{}` yet", a_type(&rt), name))
-                        .with_help("its chains are `map`, `filter`, `reject`, `take_while`, `take`, `skip` and `enumerate`; for the rest, keep its items with `.to_list` and chain over the list"));
+                        .with_help("it has the chains `map`, `filter`, `reject`, `take_while`, `take`, `skip` and `enumerate`, and `first`, `count`, `sum`, `any?`, `all?`, `find`, `each` and `fold`; for the rest, keep its items with `.to_list`"));
                 }
                 if rt != Type::Unknown && !builtin_applies(&rt, name) {
                     let err = LumeError::new(e.line, e.col, format!("`{}` values have no method `{}`", type_name(&rt), name));
@@ -12518,7 +12580,7 @@ impl Gen {
         Ok(match name {
             // a generator moved on by hand
             "next" if matches!(rt, Type::Gen(_)) => { need(0)?; format!("{}.next()", recv) }
-            "next" | "to_list" if matches!(rt, Type::AsyncGen(_)) => {
+            "next" | "to_list" | "first" | "count" | "sum" if matches!(rt, Type::AsyncGen(_)) => {
                 need(0)?;
                 if !self.in_async {
                     return Err(LumeError::new(e.line, e.col, format!("`.{}` waits for items that arrive later, so it goes in async code", name))
@@ -12526,6 +12588,14 @@ impl Gen {
                 }
                 if name == "next" {
                     format!("{}.next().await", recv)
+                } else if name == "first" {
+                    // the first item, and the sequence let go of at once
+                    format!("{{ let mut lume_s = {}; lume_s.next().await }}", recv)
+                } else if name == "count" {
+                    format!("{{ let mut lume_s = {}; let mut lume_n = 0i64; while lume_s.next().await.is_some() {{ lume_n += 1; }} lume_n }}", recv)
+                } else if name == "sum" {
+                    let zero = if matches!(rt, Type::AsyncGen(i) if **i == Type::Float) { "0.0f64" } else { "0i64" };
+                    format!("{{ let mut lume_s = {}; let mut lume_t = {}; while let Some(lume_x) = lume_s.next().await {{ lume_t += lume_x; }} lume_t }}", recv, zero)
                 } else {
                     format!("{{ let mut lume_s = {}; let mut lume_v = Vec::new(); while let Some(x) = lume_s.next().await {{ lume_v.push(x); }} lume_v }}", recv)
                 }
@@ -13040,7 +13110,9 @@ fn builtins_for(recv: &Type) -> Vec<&'static str> {
         Type::Map(..) => vec!["len", "empty?", "any?", "contains?", "keys", "values", "to_list", "remove", "get", "merge", "filter", "reject", "map_values", "each", "count", "all?", "find"],
         // items that arrive later: awaited one at a time, or all of them
         // and the chains that wait with them
-        Type::AsyncGen(_) => return vec!["next", "to_list", "map", "filter", "reject", "take_while", "take", "skip", "enumerate"],
+        Type::AsyncGen(_) => return vec![
+            "next", "to_list", "map", "filter", "reject", "take_while", "take", "skip", "enumerate", "first", "count", "sum", "any?", "all?", "find", "each", "fold",
+        ],
         // `next`, and through a chain every method a list has
         Type::Gen(_) => {
             let mut v = vec!["next"];
@@ -13486,6 +13558,9 @@ fn builtin_method_type(recv: &Type, name: &str) -> Type {
     }
     match (recv, name) {
         (Type::AsyncGen(_), "take" | "skip") => return recv.clone(),
+        (Type::AsyncGen(_), "count") => return Type::Int,
+        (Type::AsyncGen(item), "sum") => return (**item).clone(),
+        (Type::AsyncGen(item), "first") => return Type::Option(item.clone()),
         (Type::AsyncGen(item), "enumerate") => return Type::AsyncGen(Box::new(Type::Tuple(vec![Type::Int, (**item).clone()]))),
         _ => {}
     }

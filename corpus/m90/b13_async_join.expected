@@ -3,5 +3,5 @@ error: an `async Iterator[Str]` has no `join` yet
    |
 16 |   puts names().map { |s| s.upcase }.join(", ")
    |                                    ^
-  help: its chains are `map`, `filter`, `reject`, `take_while`, `take`, `skip` and `enumerate`; for the rest, keep its items with `.to_list` and chain over the list
+  help: it has the chains `map`, `filter`, `reject`, `take_while`, `take`, `skip` and `enumerate`, and `first`, `count`, `sum`, `any?`, `all?`, `find`, `each` and `fold`; for the rest, keep its items with `.to_list`
 exit: 1

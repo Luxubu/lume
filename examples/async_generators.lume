@@ -63,3 +63,11 @@ async def main:
   puts Station(name: "ab", every: 1).readings(5).take_while { |r| r < 8 }.enumerate.to_list
   for r in Station(name: "xyz", every: 1).readings(3).reject { |r| r == 6 }:
     puts r
+
+  # the methods that wait for the items; `find` and `any?` stop at their answer
+  puts ticks("w").find { |x| x.ends_with?("4") }
+  puts scores(["ann", "bob"]).count { |p| p.1 > 20 }
+  puts Station(name: "abc", every: 1).readings(3).fold(0) { |acc, r| acc + r }
+  var heard: [Str] = []
+  scores(["kim", "lu"]).each { |p| heard.push(p.0) }
+  puts heard
