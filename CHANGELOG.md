@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **`Process.spawn`**: a program running alongside, as Rust's
+  `tokio::process::Child` — its output as an async sequence of lines, or
+  read by line or by byte count; its input written to; its exit code
+  awaited.
 - **Async sequences wait for their items**: `first`, `count`, `sum`,
   `any?`, `all?`, `find`, `each` and `fold`, as Rust's `StreamExt` has
   them; `find`, `any?`, `all?` and `first` stop at their answer.

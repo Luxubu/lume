@@ -489,6 +489,149 @@ fn lume_process_run_in(dir: Option<&str>, program: &str, args: &[String]) -> ::s
         Err(e) => Err(Error { message: format!("cannot run `{}`: {}", program, e) }),
     }
 }
+/// What a running program writes to one of its outputs, read by a thread of
+/// its own as it comes and kept until it is asked for, by line or by count.
+/// Nothing waits for the reader, so a program writing to both outputs never
+/// stalls on the one that is not being read.
+struct LumePipe { buf: Vec<u8>, done: bool, waker: Option<std::task::Waker> }
+impl LumePipe {
+    fn rest(&mut self) -> Option<Option<String>> {
+        if !self.done { return None; }
+        Some(if self.buf.is_empty() { None } else { Some(String::from_utf8_lossy(&std::mem::take(&mut self.buf)).into_owned()) })
+    }
+    /// The next line, without its line ending, as Rust's `BufRead::lines`.
+    fn line(&mut self) -> Option<Option<String>> {
+        if let Some(i) = self.buf.iter().position(|b| *b == b'\n') {
+            let mut l: Vec<u8> = self.buf.drain(..=i).collect();
+            l.pop();
+            if l.last() == Some(&b'\r') { l.pop(); }
+            return Some(Some(String::from_utf8_lossy(&l).into_owned()));
+        }
+        self.rest()
+    }
+    /// The next `n` bytes, or what is left when the output ends first.
+    fn bytes(&mut self, n: usize) -> Option<Option<String>> {
+        if self.buf.len() >= n {
+            let b: Vec<u8> = self.buf.drain(..n).collect();
+            return Some(Some(String::from_utf8_lossy(&b).into_owned()));
+        }
+        self.rest()
+    }
+}
+type LumePipeRef = std::sync::Arc<std::sync::Mutex<LumePipe>>;
+fn lume_pipe<R: std::io::Read + Send + 'static>(mut r: R) -> LumePipeRef {
+    let p = std::sync::Arc::new(std::sync::Mutex::new(LumePipe { buf: Vec::new(), done: false, waker: None }));
+    let q = p.clone();
+    std::thread::spawn(move || {
+        let mut chunk = [0u8; 8192];
+        loop {
+            let n = r.read(&mut chunk).unwrap_or(0);
+            let mut g = q.lock().unwrap();
+            if n == 0 { g.done = true; } else { g.buf.extend_from_slice(&chunk[..n]); }
+            if let Some(w) = g.waker.take() { w.wake(); }
+            if n == 0 { break; }
+        }
+    });
+    p
+}
+fn lume_pipe_poll(p: &LumePipeRef, cx: &mut std::task::Context<'_>, take: impl Fn(&mut LumePipe) -> Option<Option<String>>) -> std::task::Poll<Option<String>> {
+    let mut g = p.lock().unwrap();
+    match take(&mut g) {
+        Some(v) => std::task::Poll::Ready(v),
+        None => { g.waker = Some(cx.waker().clone()); std::task::Poll::Pending }
+    }
+}
+/// A program started with `Process.spawn`, running alongside this one, as
+/// Rust's `tokio::process::Child`: its input written to, its outputs read
+/// as they come, its exit code awaited.
+#[derive(Clone)]
+struct LumeChild {
+    program: String,
+    child: std::sync::Arc<std::sync::Mutex<std::process::Child>>,
+    input: std::sync::Arc<std::sync::Mutex<Option<std::process::ChildStdin>>>,
+    out: LumePipeRef,
+    err: LumePipeRef,
+    exit: std::sync::Arc<std::sync::Mutex<(Option<i64>, Option<std::task::Waker>)>>,
+}
+impl std::fmt::Debug for LumeChild { fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "<child {}>", self.program) } }
+impl PartialEq for LumeChild { fn eq(&self, o: &Self) -> bool { std::sync::Arc::ptr_eq(&self.child, &o.child) } }
+impl LumeShow for LumeChild { fn lume_str(&self) -> String { format!("<child {}>", self.program) } }
+fn lume_process_spawn(dir: Option<&str>, program: &str, args: &[String]) -> ::std::result::Result<LumeChild, Error> {
+    let mut c = std::process::Command::new(program);
+    c.args(args);
+    if let Some(d) = dir {
+        if !std::path::Path::new(d).is_dir() {
+            return Err(Error { message: format!("cannot run `{}` in `{}`: no such folder", program, d) });
+        }
+        c.current_dir(d);
+    }
+    c.stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped());
+    let mut ch = c.spawn().map_err(|e| Error { message: format!("cannot run `{}`: {}", program, e) })?;
+    let input = ch.stdin.take();
+    let out = lume_pipe(ch.stdout.take().unwrap());
+    let err = lume_pipe(ch.stderr.take().unwrap());
+    let child = std::sync::Arc::new(std::sync::Mutex::new(ch));
+    let exit: std::sync::Arc<std::sync::Mutex<(Option<i64>, Option<std::task::Waker>)>> = std::sync::Arc::new(std::sync::Mutex::new((None, None)));
+    // the exit code, noted when the program ends; `kill` can still reach it
+    let (c2, e2) = (child.clone(), exit.clone());
+    std::thread::spawn(move || loop {
+        let ended = c2.lock().unwrap().try_wait();
+        let code = match ended {
+            Ok(Some(st)) => Some(st.code().map(|c| c as i64).unwrap_or(-1)),
+            Ok(None) => None,
+            Err(_) => Some(-1),
+        };
+        if let Some(code) = code {
+            let mut g = e2.lock().unwrap();
+            g.0 = Some(code);
+            if let Some(w) = g.1.take() { w.wake(); }
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    });
+    Ok(LumeChild { program: program.to_string(), child, input: std::sync::Arc::new(std::sync::Mutex::new(input)), out, err, exit })
+}
+impl LumeChild {
+    fn lines(&self) -> LumeStream<String> {
+        let p = self.out.clone();
+        LumeStream { poll: ::std::boxed::Box::new(move |cx| lume_pipe_poll(&p, cx, |g| g.line())) }
+    }
+    fn error_lines(&self) -> LumeStream<String> {
+        let p = self.err.clone();
+        LumeStream { poll: ::std::boxed::Box::new(move |cx| lume_pipe_poll(&p, cx, |g| g.line())) }
+    }
+    fn read_line(&self) -> impl std::future::Future<Output = Option<String>> + Send + 'static {
+        let p = self.out.clone();
+        std::future::poll_fn(move |cx| lume_pipe_poll(&p, cx, |g| g.line()))
+    }
+    fn read(&self, n: i64) -> impl std::future::Future<Output = Option<String>> + Send + 'static {
+        let p = self.out.clone();
+        let n = n.max(0) as usize;
+        std::future::poll_fn(move |cx| lume_pipe_poll(&p, cx, |g| g.bytes(n)))
+    }
+    fn write(&self, text: &str) -> ::std::result::Result<(), Error> {
+        use std::io::Write;
+        match self.input.lock().unwrap().as_mut() {
+            Some(i) => i.write_all(text.as_bytes()).and_then(|_| i.flush()).map_err(|e| Error { message: format!("cannot write to `{}`: {}", self.program, e) }),
+            None => Err(Error { message: format!("cannot write to `{}`: its input is closed", self.program) }),
+        }
+    }
+    fn close_input(&self) { self.input.lock().unwrap().take(); }
+    fn kill(&self) { let _ = self.child.lock().unwrap().kill(); }
+    /// The exit code, once the program ends; its input is closed first, as
+    /// Rust's `Child::wait` does, so a program reading it can finish.
+    fn wait(&self) -> impl std::future::Future<Output = i64> + Send + 'static {
+        self.close_input();
+        let e = self.exit.clone();
+        std::future::poll_fn(move |cx| {
+            let mut g = e.lock().unwrap();
+            match g.0 {
+                Some(c) => std::task::Poll::Ready(c),
+                None => { g.1 = Some(cx.waker().clone()); std::task::Poll::Pending }
+            }
+        })
+    }
+}
 /// Days since 1970-01-01 for a date in the proleptic Gregorian calendar
 /// (Howard Hinnant's `days_from_civil`), and back.
 fn lume_days_from_civil(y: i64, m: i64, d: i64) -> i64 {
@@ -1366,6 +1509,10 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, module_id: &str
     };
     // The built-in Error type: a struct with one field, defined in the prelude.
     g.structs.insert("Error".into(), StructInfo { generics: Vec::new(), fields: vec![("message".into(), Type::Str)], methods: HashMap::new(), statics: HashMap::new() });
+    // What `Process.spawn` gives: `LumeChild` in the prelude. A program's own
+    // `Child` takes the name instead.
+    g.structs.insert("Child".into(), StructInfo { generics: Vec::new(), fields: Vec::new(), methods: child_methods(), statics: HashMap::new() });
+    g.paths.insert("Child".into(), "LumeChild".into());
     g.is_entry = rust_mod.is_none();
     // `import lib.one` and a `def one` in the same file: one name, two
     // things. The import used to win without a word, so the file's own
@@ -3930,9 +4077,17 @@ impl Gen {
                     let generics = self.norm_generics(&s.generics);
                     self.register_statics(&s.name, &s.name, &generics, &statics);
                     self.structs.insert(s.name.clone(), StructInfo { generics, fields, methods, statics });
+                    if s.name == "Child" {
+                        self.paths.remove("Child");
+                    }
                 }
                 Item::Enum(e) => {
                     reserved_type_name(&e.name, e.line, e.col)?;
+                    // a program's own `enum Child` takes the name from the built-in one
+                    if e.name == "Child" && self.paths.get("Child").map(|p| p == "LumeChild").unwrap_or(false) {
+                        self.paths.remove("Child");
+                        self.structs.remove("Child");
+                    }
                     if !seen.insert(e.name.clone()) {
                         return Err(LumeError::new(e.line, e.col, format!("`{}` is defined twice", e.name)));
                     }
@@ -5746,12 +5901,22 @@ impl Gen {
         self.expr_arg(a, t)
     }
 
+    /// Is `recv` what `Process.spawn` gives, not a program's own `Child`?
+    fn is_builtin_child(&mut self, recv: &Expr) -> bool {
+        let t = self.ty_of(recv);
+        matches!(t, Type::Named(n) if n == "Child") && self.paths.get("Child").map(|p| p == "LumeChild").unwrap_or(false)
+    }
+
     /// Is `t` a value that must be awaited before use?
-    fn no_future(&self, t: &Type, e: &Expr) -> Result<()> {
+    fn no_future(&mut self, t: &Type, e: &Expr) -> Result<()> {
         if let Type::Future(_) = t {
             let what = match &e.kind {
                 ExprKind::Call { name, .. } => format!("`{}` is an `async def`", name),
                 ExprKind::Method { name, .. } if name == "next_done" => "`next_done` waits for the first task to finish".to_string(),
+                ExprKind::Method { recv, name, .. } if self.is_builtin_child(recv) => match name.as_str() {
+                    "wait" => "`wait` waits for the program to end".to_string(),
+                    _ => format!("`{}` waits for the program to write", name),
+                },
                 ExprKind::Method { name, .. } => format!("`{}` is an `async def`", name),
                 _ => "this is an async value".to_string(),
             };
@@ -11731,6 +11896,10 @@ impl Gen {
                 }
             }
             // a method that is one too; a chain over one starts nothing
+            ExprKind::Method { recv, name, .. } if !self.in_async && matches!(name.as_str(), "lines" | "error_lines") && self.is_builtin_child(recv) && matches!(name.as_str(), "lines" | "error_lines") => {
+                return Err(LumeError::new(e.line, e.col, format!("`{}` hands out lines as the program writes them, so it is walked in async code", describe_value(e)))
+                    .with_help("walk it in an `async def` or a `spawn:` body; `Process.run` waits for the program and gives all of its output at once"));
+            }
             ExprKind::Call { .. } | ExprKind::Method { .. } if !self.in_async && matches!(self.ty_of(e), Type::AsyncGen(_)) && !matches!(&e.kind, ExprKind::Method { recv, .. } if matches!(self.ty_of(recv), Type::AsyncGen(_))) => {
                 return Err(LumeError::new(e.line, e.col, format!("`{}` is an `async` generator, which runs as a task, so it is called from async code", describe_value(e)))
                     .with_help("call it in an `async def` or a `spawn:` body"));
@@ -12018,6 +12187,8 @@ impl Gen {
                                     format!("lume_process_run(&{}, &{})", parts[0], parts[1])
                                 }
                             }
+                            ("Process", "spawn") => { need(2)?; format!("lume_process_spawn(None, &{}, &{})", parts[0], parts[1]) }
+                            ("Process", "spawn_in") => { need(3)?; format!("lume_process_spawn(Some(&{}), &{}, &{})", parts[0], parts[1], parts[2]) }
                             ("Process", "run_in") => {
                                 need(3)?;
                                 let call = format!("lume_process_run_in(Some(&{}), &{}, &{})", parts[0], parts[1], parts[2]);
@@ -12057,7 +12228,7 @@ impl Gen {
                                 "Env" => "Env has args, get(name), stdin and exit(code)",
                                 "Dir" => "Dir has exists?, make, list, walk and remove",
                                 "Path" => "Path has join(a, b), dir, base, ext and stem",
-                                "Process" => "Process has run(program, args) and run_in(dir, program, args)",
+                                "Process" => "Process has run(program, args), run_in(dir, program, args), spawn(program, args) and spawn_in(dir, program, args)",
                                 _ => "Time has now (seconds), now_ms, sleep(ms), format(t, pattern), parse(text, pattern), date(y, m, d), and year, month, day, hour, minute, second, weekday and day_of_year of a time",
                             }));
                     }
@@ -13507,6 +13678,8 @@ fn builtin_namespace_params(ns: &str, name: &str) -> Option<Vec<Type>> {
         ("Env", "exit") | ("Time", "sleep") => vec![Type::Int],
         ("Process", "run") => vec![s(), Type::List(Box::new(s()))],
         ("Process", "run_in") => vec![s(), s(), Type::List(Box::new(s()))],
+        ("Process", "spawn") => vec![s(), Type::List(Box::new(s()))],
+        ("Process", "spawn_in") => vec![s(), s(), Type::List(Box::new(s()))],
         ("Time", "format") => vec![Type::Int, s()],
         ("Time", "parse") => vec![s(), s()],
         ("Time", "date") => vec![Type::Int, Type::Int, Type::Int],
@@ -13533,6 +13706,7 @@ fn builtin_namespace_type(ns: &str, name: &str) -> Option<Type> {
         ("Env", "args") => Type::List(Box::new(Type::Str)),
         ("Env", "get") => Type::Option(Box::new(Type::Str)),
         ("Process", "run") | ("Process", "run_in") => Type::Result(Box::new(Type::Tuple(vec![Type::Int, Type::Str, Type::Str])), err()),
+        ("Process", "spawn") | ("Process", "spawn_in") => Type::Result(Box::new(Type::Named("Child".into())), err()),
         ("Time", "format") => Type::Str,
         ("Time", "parse") | ("Time", "date") => Type::Result(Box::new(Type::Int), err()),
         ("Time", "year" | "month" | "day" | "hour" | "minute" | "second" | "weekday" | "day_of_year") => Type::Int,
@@ -13541,6 +13715,32 @@ fn builtin_namespace_type(ns: &str, name: &str) -> Option<Type> {
         ("Time", "sleep") => Type::Unit, // becomes `async ()` inside async code; see ty_of
         _ => return None,
     })
+}
+
+/// The methods of what `Process.spawn` gives, as the prelude's `LumeChild`
+/// has them.
+fn child_methods() -> HashMap<String, Sig> {
+    let m = |params: Vec<(&str, Type)>, ret: Type, is_async: bool| Sig {
+        var_params: vec![false; params.len()],
+        kept_params: vec![false; params.len()],
+        params: params.into_iter().map(|(n, t)| (n.to_string(), t)).collect(),
+        ret,
+        self_kind: SelfKind::Read,
+        is_async,
+        generics: Vec::new(),
+        dyn_blocks: false,
+    };
+    let lines = Type::AsyncGen(Box::new(Type::Str));
+    let mut out = HashMap::new();
+    out.insert("lines".to_string(), m(vec![], lines.clone(), false));
+    out.insert("error_lines".to_string(), m(vec![], lines, false));
+    out.insert("read_line".to_string(), m(vec![], Type::Option(Box::new(Type::Str)), true));
+    out.insert("read".to_string(), m(vec![("n", Type::Int)], Type::Option(Box::new(Type::Str)), true));
+    out.insert("write".to_string(), m(vec![("text", Type::Str)], Type::Result(Box::new(Type::Unit), Box::new(Type::Named("Error".into()))), false));
+    out.insert("close_input".to_string(), m(vec![], Type::Unit, false));
+    out.insert("kill".to_string(), m(vec![], Type::Unit, false));
+    out.insert("wait".to_string(), m(vec![], Type::Int, true));
+    out
 }
 
 /// Result type of a built-in method on a value of type `recv`.

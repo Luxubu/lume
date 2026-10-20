@@ -1,0 +1,6 @@
+error: `c.lines` hands out lines as the program writes them, so it is walked in async code
+  --> examples/errors/child_lines_outside_async.lume:6:13
+  |
+6 |   for l in c.lines:
+  |             ^
+  help: walk it in an `async def` or a `spawn:` body; `Process.run` waits for the program and gives all of its output at once

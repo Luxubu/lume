@@ -240,6 +240,55 @@ run at the same time; see [Concurrency](concurrency.md#a-task-that-waits-without
 for why that holds for a plain `def` too. `examples/jobr/` is a job runner
 built on this.
 
+### A program running alongside: `Process.spawn`
+
+**`Process.spawn(program, args)` starts a program and gives a `Child` at
+once**, as Rust's `tokio::process::Child`: what it writes is read as it
+comes, and it can be written to while it runs. `Process.spawn_in(dir,
+program, args)` starts it in a folder. Both give `Child or Error`, with the
+same messages as `Process.run`.
+
+| on a `Child` | gives | |
+|---|---|---|
+| `c.lines` | `async Iterator[Str]` | what it writes to standard output, a line at a time, without the line ending |
+| `c.error_lines` | `async Iterator[Str]` | the same, for standard error |
+| `await c.read_line` | `Str?` | the next line of its output; `None` once it has ended |
+| `await c.read(n)` | `Str?` | the next `n` bytes of its output, or what is left when it ends first |
+| `c.write(text)` | `() or Error` | writes `text` to its standard input; ``cannot write to `sort`: its input is closed`` after `close_input` or `wait` |
+| `c.close_input` | `()` | closes its standard input, so a program reading to the end can finish |
+| `await c.wait` | `Int` | its exit code, once it ends — `-1` when ended by a signal. Its input is closed first, as Rust's `Child::wait` does |
+| `c.kill` | `()` | stops it |
+
+`lines`, `read_line`, `read` and `wait` wait for the program, so they go in
+async code. Each output is read by a thread of its own and kept until it is
+asked for, so a program that writes to both never stalls on the one not
+being read. `lines` is an async sequence, with the chains and methods of
+[Async generators](collections.md#async-generators-async-def-with-yield).
+A `Child` can be kept in a list or a field and handed to tasks; a program's
+own type named `Child` takes the name instead.
+
+```lume
+async def main -> () or Error:
+  s = Process.spawn("sort", [])?
+  s.write("pear\napple\nfig\n")?
+  s.close_input
+  puts s.lines.to_list    #=> ["apple", "fig", "pear"]
+  puts await s.wait       #=> 0
+
+  # a line out, a line back
+  echo = Process.spawn("sh", ["-c", "while read x; do echo \"got $x\"; done"])?
+  for w in ["a", "b"]:
+    echo.write(w + "\n")?
+    puts await echo.read_line    #=> Some("got a")
+                                 #=> Some("got b")
+  puts await echo.wait    #=> 0
+  ()
+```
+
+`read(n)` is for output whose header says how long the next part is, as a
+language server's does: `read_line` for the header, `read(n)` for the body.
+`examples/process_spawn.lume` shows each of these.
+
 ## `Time`
 
 | call | gives | |

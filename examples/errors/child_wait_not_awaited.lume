@@ -1,0 +1,7 @@
+# `wait` waits for the program to end, so it is awaited.
+
+async def main -> () or Error:
+  c = Process.spawn("ls", [])?
+  code = c.wait
+  puts code
+  ()

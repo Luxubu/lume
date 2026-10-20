@@ -1,0 +1,15 @@
+apple
+fig
+pear
+sort exited with 0
+hey!
+you!
+shout exited with 0
+["hello", "hi"]
+["ONE", "TWO"]
+["oops"]
+exit 3
+["1", "4", "9"]
+Some(".")
+killed: -1
+cannot run `no-such-program`: No such file or directory (os error 2)

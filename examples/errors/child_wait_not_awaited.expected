@@ -1,0 +1,6 @@
+error: `wait` waits for the program to end: its result arrives later
+  --> examples/errors/child_wait_not_awaited.lume:5:11
+  |
+5 |   code = c.wait
+  |           ^
+  help: write `await` in front of the call to wait for it, or `spawn:` to run it alongside other work

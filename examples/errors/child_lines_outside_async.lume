@@ -1,0 +1,8 @@
+# A running program's output arrives as it writes it, so it is walked in
+# async code.
+
+def main -> () or Error:
+  c = Process.spawn("ls", [])?
+  for l in c.lines:
+    puts l
+  ()

@@ -1,0 +1,62 @@
+# `Process.spawn` starts a program and gives a `Child` at once, as Rust's
+# `tokio::process::Child`: what it writes is read as it comes, a line at a
+# time or a number of bytes at a time, and it can be written to while it
+# runs. `await c.wait` gives its exit code.
+
+# one question, one answer: a line out, a line back
+async def ask(c: Child, q: Str) -> Str or Error:
+  c.write(q + "\n")?
+  Ok((await c.read_line).or("(no answer)"))
+
+async def main -> () or Error:
+  # everything written first, then everything read
+  s = Process.spawn("sort", [])?
+  s.write("pear\napple\nfig\n")?
+  s.close_input
+  for line in s.lines:
+    puts line
+  puts "sort exited with #{await s.wait}"
+
+  # talking in turns
+  shout = Process.spawn("sh", ["-c", "while read x; do echo \"$x!\"; done"])?
+  for w in ["hey", "you"]:
+    puts await ask(shout, w)?
+  puts "shout exited with #{await shout.wait}"
+
+  # a header that says how many bytes follow, as a language server writes
+  m = Process.spawn("printf", ["Length: 5\n\nhelloLength: 2\n\nhi"])?
+  var bodies: [Str] = []
+  while true:
+    match await m.read_line:
+      Some(header) ->
+        n = header.split(": ").at(1).to_int.or(0)
+        _ = await m.read_line
+        bodies.push((await m.read(n)).or(""))
+      None -> break
+  puts bodies
+
+  # standard error and the exit code; lines are an async sequence
+  e = Process.spawn("sh", ["-c", "echo one; echo two; echo oops >&2; exit 3"])?
+  puts e.lines.map { |l| l.upcase }.to_list
+  puts e.error_lines.to_list
+  puts "exit #{await e.wait}"
+
+  # several at once, each in a task
+  var running: [Child] = []
+  for i in 1..3:
+    running.push(Process.spawn("sh", ["-c", "echo #{i * i}"])?)
+  results = await running.map { |c| spawn: c.lines.first.or("") }.to_list
+  puts results
+
+  # in a folder, and stopped
+  here = Process.spawn_in("/", "ls", ["-d", "."])?
+  puts here.lines.first
+  slow = Process.spawn("sleep", ["30"])?
+  slow.kill
+  puts "killed: #{await slow.wait}"
+
+  # starting one can fail; once running, it has run
+  match Process.spawn("no-such-program", []):
+    Ok(_) -> puts "started?"
+    Error(err) -> puts err.message
+  ()
