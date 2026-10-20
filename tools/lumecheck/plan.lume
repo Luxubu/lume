@@ -78,7 +78,8 @@ rm -rf "$tmpo" tests/.lume"""
 
   # editors: diagnostics as JSON, and the language server driven as an editor would
   all.push(script("check --json", "\"$LUME\" check examples/errors/arity.lume --json; echo \"exit: $?\"; \"$LUME\" check examples/fib.lume --json; echo \"exit: $?\"", "examples/check_json.expected"))
-  all.push(script("lume lsp", "python3 tests/lsp_test.py \"$LUME\"", "tests/lsp_test.expected"))
+  # the editor's side is tools/lumecheck/lsp.lume, the suite's own binary
+  all.push(script("lume lsp", "compiler/target/lumecheck lsp \"$LUME\"", "tests/lsp_test.expected"))
 
   # the json and http packages, their tests and programs that use them
   all.push(script("json package tests", "cd packages/json && \"$LUME\" test; echo \"exit: $?\"", "packages/json/test.expected"))

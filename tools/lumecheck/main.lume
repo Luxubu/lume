@@ -4,6 +4,7 @@
 #   lumecheck docs [-v] [-j N]     run every example in docs/ against what it claims
 #   lumecheck coverage [--check N] which compiler messages some test shows
 #   lumecheck keywords             every keyword is in the VS Code grammar
+#   lumecheck lsp LUME             drives `LUME lsp` as an editor does
 #   lumecheck suite [--update] [-j N] [-x] [-v]
 #                                  the whole test suite; -x stops at the
 #                                  first failure, -v names each pass
@@ -15,6 +16,7 @@ import runner
 import runner.Outcome
 import coverage
 import keywords
+import lsp
 import plan
 import suite
 import suite.Check
@@ -257,8 +259,9 @@ async def main -> () or Error:
     "suite" -> await run_suite(args)?
     "coverage" -> coverage_check(args)?
     "keywords" -> keywords_check()?
+    "lsp" -> await lsp.run(args[1].or("compiler/target/release/lume"))?
     _ ->
-      warn "usage: lumecheck docs [-v] [-j N] | coverage [--check N] | keywords | suite [--update] [-j N] [-x] [-v]"
+      warn "usage: lumecheck docs [-v] [-j N] | coverage [--check N] | keywords | lsp LUME | suite [--update] [-j N] [-x] [-v]"
       2
   Env.exit(code) if code != 0
   ()

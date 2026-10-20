@@ -554,7 +554,11 @@ struct LumeChild {
     exit: std::sync::Arc<std::sync::Mutex<(Option<i64>, Option<std::task::Waker>)>>,
 }
 impl std::fmt::Debug for LumeChild { fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "<child {}>", self.program) } }
+// one running program is equal only to itself, and hashes as itself, so a
+// struct holding one can still be compared, and kept in a set
 impl PartialEq for LumeChild { fn eq(&self, o: &Self) -> bool { std::sync::Arc::ptr_eq(&self.child, &o.child) } }
+impl Eq for LumeChild {}
+impl std::hash::Hash for LumeChild { fn hash<H: std::hash::Hasher>(&self, h: &mut H) { (std::sync::Arc::as_ptr(&self.child) as usize).hash(h) } }
 impl LumeShow for LumeChild { fn lume_str(&self) -> String { format!("<child {}>", self.program) } }
 fn lume_process_spawn(dir: Option<&str>, program: &str, args: &[String]) -> ::std::result::Result<LumeChild, Error> {
     let mut c = std::process::Command::new(program);
@@ -5117,7 +5121,8 @@ impl Gen {
                 } else if let Some(t) = self.field_type(n) {
                     t
                 } else if let Some(m) = self.bare_method(n) {
-                    m.ret
+                    // an `async` sibling, called bare, is awaited as `self.x` is
+                    if m.is_async { Type::Future(Box::new(m.ret)) } else { m.ret }
                 } else if let Some(st) = self.current_self_ty.clone().filter(Self::is_builtin_target) {
                     if builtin_method_type(&st, n) != Type::Unknown || is_builtin_name(n) {
                         builtin_method_type(&st, n)

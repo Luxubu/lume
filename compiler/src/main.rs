@@ -510,7 +510,61 @@ fn build_with_cargo(path: &Path, rust: &str, deps: &[(String, String)], bin: &Pa
     }
     let built = shared_target_dir().join(profile).join(cargo_bin_name(path));
     fs::copy(&built, bin).map_err(|e| format!("error: cannot copy `{}` to `{}`: {}", built.display(), bin.display(), e))?;
+    prune_shared_cache(&shared_target_dir().join(profile));
     Ok(())
+}
+
+/// How many programs the shared cache keeps the build of, per profile.
+const KEEP_PROGRAMS: usize = 300;
+
+/// The shared cache keeps the programs built most recently, as a cache
+/// does: past `KEEP_PROGRAMS`, the oldest programs' binaries, compiled
+/// objects and incremental state go, down to nine in ten of the limit.
+/// The crates every program shares stay, and cargo rebuilds a program it
+/// finds missing. Without this, each new program left its build behind
+/// for good: a busy machine's cache reached 13 GB.
+fn prune_shared_cache(dir: &Path) {
+    let Ok(rd) = fs::read_dir(dir) else { return };
+    // a program's binary is `<stem>_<8 hex digits>`, with a `.d` beside it
+    let mut bins: Vec<(std::time::SystemTime, String)> = rd
+        .flatten()
+        .filter_map(|e| {
+            let name = e.file_name().to_string_lossy().to_string();
+            if !e.file_type().ok()?.is_file() || !is_program_name(&name) {
+                return None;
+            }
+            Some((e.metadata().ok()?.modified().ok()?, name))
+        })
+        .collect();
+    if bins.len() <= KEEP_PROGRAMS {
+        return;
+    }
+    bins.sort();
+    let gone: std::collections::HashSet<String> = bins[..bins.len() - KEEP_PROGRAMS * 9 / 10].iter().map(|(_, n)| n.clone()).collect();
+    for n in &gone {
+        let _ = fs::remove_file(dir.join(n));
+        let _ = fs::remove_file(dir.join(format!("{}.d", n)));
+    }
+    // `deps/<name>-<hash>` and `incremental/<name>-<id>`
+    for sub in ["deps", "incremental"] {
+        let Ok(rd) = fs::read_dir(dir.join(sub)) else { continue };
+        for e in rd.flatten() {
+            let name = e.file_name().to_string_lossy().to_string();
+            let owner = name.rsplit_once('-').map(|(a, _)| a).unwrap_or("");
+            if gone.contains(owner) {
+                let p = e.path();
+                let _ = if p.is_dir() { fs::remove_dir_all(&p) } else { fs::remove_file(&p) };
+            }
+        }
+    }
+}
+
+/// `deps_6f1a2b3c`: what `cargo_bin_name` makes.
+fn is_program_name(name: &str) -> bool {
+    match name.rsplit_once('_') {
+        Some((stem, hash)) => !stem.is_empty() && hash.len() == 8 && hash.chars().all(|c| c.is_ascii_hexdigit()),
+        None => false,
+    }
 }
 
 /// `Iterate` is `lume run`/`lume test`: the fastest turnaround that still

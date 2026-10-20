@@ -1,3 +1,6 @@
 [package]
 name = "lumecheck"
 version = "0.1.0"
+
+[dependencies]
+json = { path = "../../packages/json" }

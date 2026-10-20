@@ -1,0 +1,322 @@
+# Drives `lume lsp` the way an editor does and prints what comes back, with
+# the temporary folder written as <tmp>, for the suite to compare with
+# tests/lsp_test.expected. The server is a `Process.spawn` child: messages
+# go to its input, and come back as a header line, a blank line and as many
+# bytes as the header said.
+
+import json
+import json.Json
+import json.ToJson
+
+# ---- JSON as Python's `json.dumps(sort_keys=True)` writes it, which the
+# expected file was first made with: keys in order, `", "` and `": "`
+# between, and every character past ASCII written as `\uXXXX`
+
+def hex4(n: Int) -> Str:
+  digits = "0123456789abcdef"
+  var out = ""
+  var v = n
+  for _ in 0...4:
+    out = digits.slice(v % 16, 1) + out
+    v = v / 16
+  out
+
+pub def quoted(s: Str) -> Str:
+  var out = "\""
+  for c in s.chars:
+    code = c.code
+    if c == "\"":
+      out += "\\\""
+    elif c == "\\":
+      out += "\\\\"
+    elif c == "\n":
+      out += "\\n"
+    elif c == "\r":
+      out += "\\r"
+    elif c == "\t":
+      out += "\\t"
+    elif code == 8:
+      out += "\\b"
+    elif code == 12:
+      out += "\\f"
+    elif code < 32 or (code > 126 and code < 65536):
+      out += "\\u" + hex4(code)
+    elif code >= 65536:
+      # beyond the first plane: a surrogate pair, as Python writes it
+      v = code - 65536
+      out += "\\u" + hex4(55296 + v / 1024) + "\\u" + hex4(56320 + v % 1024)
+    else:
+      out += c.to_s
+  out + "\""
+
+pub def dumped(j: Json) -> Str:
+  match j:
+    Obj(pairs) -> "{" + pairs.sort_by { |k, v| k }.map { |k, v| quoted(k) + ": " + dumped(v) }.join(", ") + "}"
+    Arr(items) -> "[" + items.map { |x| dumped(x) }.join(", ") + "]"
+    Str(s) -> quoted(s)
+    _ -> json.show(j)
+
+# the text, or the whole number, at a path of keys and positions
+def text_at(j: Json, path: Str) -> Str? = j.path(path)?.str
+
+def int_at(j: Json, path: Str) -> Int? = j.path(path)?.int
+
+# ---- the conversation
+
+struct Server:
+  child: Child
+  tmp: Str
+
+  def uri(path: Str) -> Str = "file://" + path
+
+  def hide(text: Str) -> Str = text.replace("file://" + tmp, "<tmp>")
+
+  def show(m: Json):
+    puts hide(dumped(m))
+
+  # a request when `id` is given, a notice otherwise
+  def send(method: Str, params: Json, id: Int?) -> () or Error:
+    var fields: [(Str, Json)] = [("jsonrpc", "2.0".to_json), ("method", method.to_json), ("params", params)]
+    match id:
+      Some(n) -> fields.push(("id", n.to_json))
+      None -> ()
+    # written with every character past ASCII escaped, so its length in
+    # characters is its length in bytes
+    body = dumped(json.obj(fields))
+    child.write("Content-Length: #{body.len}\r\n\r\n" + body)?
+
+  async def recv -> Json or Error:
+    var n = 0
+    while true:
+      line = (await child.read_line).or_error("the server stopped")?
+      break if line.trim == ""
+      if line.starts_with?("Content-Length:"):
+        n = line.split(":").at(1).trim.to_int.or(0)
+    body = (await child.read(n)).or_error("the server stopped in the middle of a message")?
+    json.parse(body)
+
+  # messages until the one about `target`; prints each
+  async def diagnostics_until(target: Str) -> () or Error:
+    while true:
+      m = (await recv)?
+      show(m)
+      match m.path("params.uri"):
+        Some(u) -> return Ok(()) if u.str == Some(uri(target))
+        None -> ()
+    ()
+
+  # the diagnostics a change starts come first: skip to them, quietly
+  async def skip_to_diagnostics(target: Str) -> () or Error:
+    while true:
+      m = (await recv)?
+      if text_at(m, "method") == Some("textDocument/publishDiagnostics") and text_at(m, "params.uri") == Some(uri(target)):
+        return Ok(())
+    ()
+
+def pos(line: Int, character: Int) -> Json = json.obj([("line", line.to_json), ("character", character.to_json)])
+
+def doc(uri: Str) -> Json = json.obj([("uri", uri.to_json)])
+
+def opened(uri: Str, text: Str) -> Json = json.obj([("textDocument", json.obj([("uri", uri.to_json), ("languageId", "lume".to_json), ("version", 1.to_json), ("text", text.to_json)]))])
+
+def changed(uri: Str, version: Int, text: Str) -> Json:
+  json.obj([("textDocument", json.obj([("uri", uri.to_json), ("version", version.to_json)])), ("contentChanges", Arr([json.obj([("text", text.to_json)])]))])
+
+def at_position(uri: Str, p: Json) -> Json = json.obj([("textDocument", doc(uri)), ("position", p)])
+
+# The position of the `nth` `token` on the first line holding `line_has`.
+def find_at(lines: [Str], token: Str, nth: Int, line_has: Str) -> Json or Error:
+  for i, l in lines.enumerate:
+    if l.contains?(line_has):
+      var k = -1
+      for _ in 0...nth:
+        k = (l.slice(k + 1, l.len).index_of(token).or_error("no `#{token}` in `#{l}`")?) + k + 1
+      return Ok(pos(i, k))
+  Error("no line holds `#{line_has}`")
+
+# What hover and go to definition say at a token, on one line.
+async def probe(s: Server, file: Str, lines: [Str], what: Str, token: Str, nth: Int, line_has: Str, next_id: Int) -> () or Error:
+  p = find_at(lines, token, nth, line_has)?
+  s.send("textDocument/hover", at_position(s.uri(file), p), Some(next_id))?
+  h = (await s.recv)?.get("result")
+  shown = match h:
+    Some(found) if found.kind == "object" -> quoted(text_at(found, "contents.value").or("").replace("```lume\n", "").replace("\n```", ""))
+    _ -> "null"
+  s.send("textDocument/definition", at_position(s.uri(file), p), Some(next_id + 1))?
+  d = (await s.recv)?.get("result")
+  place = match d:
+    Some(dj) if dj.kind == "object" ->
+      u = s.hide(text_at(dj, "uri").or(""))
+      line = int_at(dj, "range.start.line").or(0)
+      col = int_at(dj, "range.start.character").or(0)
+      "#{u}:#{line + 1}:#{col + 1}"
+    _ -> "None"
+  puts "#{what.pad_right(30)} hover #{shown} | definition #{place}"
+
+def write_file(tmp: Str, rel: Str, text: Str) -> Str or Error:
+  p = Path.join(tmp, rel)
+  Dir.make(Path.dir(p))?
+  File.write(p, text)?
+  Ok(p)
+
+# the labels of a completion's items
+async def labels_of(s: Server) -> [Str] or Error:
+  items = (await s.recv)?.path("result.items").map { |v| v.items }.or([])
+  Ok(items.map { |i| text_at(i, "label").or("") }.to_list)
+
+NAV_TEXT = r"""
+  import helper
+
+  struct Person:
+    name: Str
+    age: Int
+
+    def greet -> Str = "hi #{name}"
+
+  def older(p: Person, by: Int) -> Person = Person(name: p.name, age: p.age + by)
+
+  def main:
+    ann = Person(name: "ann", age: 30)
+    var later = older(ann, 1)
+    puts later.greet
+    puts later.name.upcase
+    puts helper.twice(2)
+  """
+
+SEQ_TEXT = r"""
+  interface Source:
+    def each_item -> Iterator[Int]
+    def doubled -> Iterator[Int]:
+      for x in each_item:
+        yield x * 2
+
+  struct Bag:
+    xs: [Int]
+    def each_item -> Iterator[Int] = xs.filter { |x| x > 0 }
+
+  def naturals -> Iterator[Int]:
+    var n = 0
+    while true:
+      yield n
+      n += 1
+
+  def main:
+    var g = naturals()
+    bag = Bag(xs: [1, 2])
+    puts g.next
+    puts bag.doubled.to_list
+  """
+
+pub async def run(lume_arg: Str) -> Int or Error:
+  lume = if lume_arg.starts_with?("/"): lume_arg else: Path.join(Env.get("PWD").or("."), lume_arg)
+  # the folder as the system names it, links followed, since that is how
+  # the server will write it back
+  made = Path.join(Env.get("TMPDIR").or("/tmp"), "lumelsp-#{Time.now_ms}")
+  Dir.make(made)?
+  (_, real, _) = Process.run_in(made, "pwd", ["-P"])?
+  tmp = real.trim
+  one = write_file(tmp, "one/hello.lume", "def main:\n  puts 1\n")?
+  helper = write_file(tmp, "mods/helper.lume", "pub def twice(n: Int) -> Int = n * 2\n")?
+  _ = write_file(tmp, "mods/main.lume", "import helper\n\ndef main:\n  puts helper.twice(2)\n")?
+  _ = write_file(tmp, "pkg/lume.toml", "[package]\nname = \"pkg\"\nversion = \"0.1.0\"\n")?
+  _ = write_file(tmp, "pkg/main.lume", "import util\n\ndef main:\n  puts util.hi\n")?
+  util = write_file(tmp, "pkg/util.lume", "pub def hi -> Str = \"hi\"\n")?
+  s = Server(child: Process.spawn_in(tmp, lume, ["lsp"])?, tmp: tmp)
+
+  puts "--- initialize"
+  s.send("initialize", json.obj([("processId", Null), ("rootUri", s.uri(tmp).to_json), ("capabilities", json.obj([]))]), Some(1))?
+  s.show((await s.recv)?)
+  s.send("initialized", json.obj([]), None)?
+
+  puts "--- a file with an error, then fixed"
+  s.send("textDocument/didOpen", opened(s.uri(one), "def main:\n  puts nope + 1\n"), None)?
+  await s.diagnostics_until(one)?
+  s.send("textDocument/didChange", changed(s.uri(one), 2, "def main:\n  puts 1 + 1\n"), None)?
+  await s.diagnostics_until(one)?
+
+  puts "--- a module, checked through the main.lume that imports it"
+  s.send("textDocument/didOpen", opened(s.uri(helper), "pub def twice(n: Int) -> Int = n * \"2\"\n"), None)?
+  await s.diagnostics_until(helper)?
+
+  puts "--- a module of a package, unsaved text"
+  s.send("textDocument/didOpen", opened(s.uri(util), "pub def hi -> Str = 42\n"), None)?
+  await s.diagnostics_until(util)?
+  s.send("textDocument/didClose", json.obj([("textDocument", doc(s.uri(util)))]), None)?
+  await s.diagnostics_until(util)?
+
+  puts "--- the module fixed again"
+  s.send("textDocument/didChange", changed(s.uri(helper), 2, "pub def twice(n: Int) -> Int = n * 2\n"), None)?
+  await s.diagnostics_until(helper)?
+
+  puts "--- hover and go to definition"
+  nav_text = NAV_TEXT + "\n"
+  nav = write_file(tmp, "mods/nav.lume", nav_text)?
+  s.send("textDocument/didOpen", opened(s.uri(nav), nav_text), None)?
+  await s.diagnostics_until(nav)?
+  nav_lines = nav_text.split("\n").to_list
+  probes = [
+    ("a local", "ann", 1, "older(ann"),
+    ("a var", "later", 1, "puts later.greet"),
+    ("a parameter", "by", 2, "def older"),
+    ("a function", "older", 1, "var later"),
+    ("a constructor", "Person", 1, "ann = Person"),
+    ("a method", "greet", 1, "puts later.greet"),
+    ("a field", "name", 1, "later.name"),
+    ("a field read bare in a method", "name", 1, r"hi #{name}"),
+    ("a built-in method", "upcase", 1, "upcase"),
+    ("a function of another module", "twice", 1, "helper.twice"),
+  ]
+  var id = 2
+  for what, token, nth, line_has in probes:
+    await probe(s, nav, nav_lines, what, token, nth, line_has, id)?
+    id += 2
+
+  puts "--- completion while typing: the file does not parse, the last check is used"
+  for typed in ["puts later.", "puts helper.", "puts later.name.", "puts la"]:
+    text = nav_text + "  " + typed + "\n"
+    s.send("textDocument/didChange", changed(s.uri(nav), 9, text), None)?
+    await s.skip_to_diagnostics(nav)?
+    line = text.split("\n").to_list.len - 2
+    s.send("textDocument/completion", at_position(s.uri(nav), pos(line, ("  " + typed).len)), Some(id))?
+    id += 1
+    labels = await labels_of(s)?
+    if typed.ends_with?("."):
+      more = if labels.len > 12: " ..." else: ""
+      puts "#{typed.pad_right(18)} -> #{labels.take(12).join(", ")}#{more}"
+    else:
+      wanted = ["ann", "later", "older", "Person", "helper", "def", "while"]
+      puts "#{typed.pad_right(18)} -> offers #{wanted.filter { |w| labels.contains?(w) }.join(", ")}"
+
+  puts "--- generators and interfaces (milestones 70-77)"
+  seq_text = SEQ_TEXT + "\n"
+  seq = write_file(tmp, "mods/seq.lume", seq_text)?
+  s.send("textDocument/didOpen", opened(s.uri(seq), seq_text), None)?
+  await s.diagnostics_until(seq)?
+  seq_lines = seq_text.split("\n").to_list
+  for what, token, nth, line_has in [
+    ("a generator", "naturals", 1, "var g"),
+    ("a generator held in a var", "g", 1, "puts g.next"),
+    ("next on it", "next", 1, "puts g.next"),
+    ("a generator default", "doubled", 1, "bag.doubled"),
+  ]:
+    await probe(s, seq, seq_lines, what, token, nth, line_has, id)?
+    id += 2
+  s.send("textDocument/didChange", changed(s.uri(seq), 2, seq_text + "  puts g.\n"), None)?
+  await s.skip_to_diagnostics(seq)?
+  s.send("textDocument/completion", at_position(s.uri(seq), pos(seq_lines.len - 1, "  puts g.".len)), Some(id))?
+  id += 1
+  labels = await labels_of(s)?
+  puts "puts g.            -> offers #{["next", "take", "filter", "to_list", "zip"].filter { |w| labels.contains?(w) }.join(", ")}"
+  bad = seq_text.replace("  puts g.next\n", "  yield 1\n")
+  s.send("textDocument/didChange", changed(s.uri(seq), 3, bad), None)?
+  await s.diagnostics_until(seq)?
+
+  puts "--- a request it does not answer, then shutdown"
+  s.send("textDocument/rename", json.obj([("textDocument", doc(s.uri(one))), ("position", pos(0, 0)), ("newName", "x".to_json)]), Some(id))?
+  s.show((await s.recv)?)
+  s.send("shutdown", Null, Some(id + 1))?
+  s.show((await s.recv)?)
+  s.send("exit", Null, None)?
+  puts "exit: #{await s.child.wait}"
+  Dir.remove(made)?
+  Ok(0)

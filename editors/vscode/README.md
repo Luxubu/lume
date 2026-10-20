@@ -20,7 +20,7 @@ this folder in a window of its own:
 
     code --extensionDevelopmentPath="$PWD" path/to/your/program
 
-`tests/lsp_test.py` drives `lume lsp` with the messages VS Code sends —
+`tools/lumecheck/lsp.lume` drives `lume lsp` with the messages VS Code sends —
 opening and changing files, hover, go to definition and completion — and
 `tests/lumecheck.sh keywords` checks that the highlighting knows every
 keyword; both run in `tests/run.sh`.

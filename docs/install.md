@@ -70,8 +70,10 @@ does the rest. An unchanged program is not rebuilt at all.
 
 Generated Rust and binaries go in a `.lume/` directory next to the source
 file. Programs that use a crate or `async` are built with cargo, which shares
-one build cache per machine (`~/.cache/lume/target`), so a crate is compiled
-once rather than once per program.
+one build cache per machine (`~/.cache/lume/target`, or `$LUME_CACHE_DIR/target`),
+so a crate is compiled once rather than once per program. The cache keeps
+the builds of the 300 programs built most recently; an older one is rebuilt
+when it is run again. Deleting the folder is always safe.
 
 ## Editors
 

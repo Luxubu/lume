@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **The shared build cache stays bounded**: `~/.cache/lume/target` keeps
+  the builds of the 300 programs built most recently; before, it kept every
+  one, and grew to 13 GB.
+- **`tools/lumecheck lsp`** drives `lume lsp` as an editor does, in Lume on
+  `Process.spawn`; `tests/lsp_test.py` is gone.
+- **Fixed**: a bare call of an `async` sibling method could not be awaited;
+  a struct holding a `Child` did not compile.
 - **`Process.spawn`**: a program running alongside, as Rust's
   `tokio::process::Child` — its output as an async sequence of lines, or
   read by line or by byte count; its input written to; its exit code
