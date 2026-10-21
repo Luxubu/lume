@@ -945,6 +945,16 @@ impl Parser {
             let inner = self.parse_type_atom()?;
             return Ok(Type::Shared(Box::new(inner), mutable));
         }
+        // `async Iterator[T]`: items that arrive later, as messages name them
+        if self.at_kw("async") {
+            let (line, col) = self.here();
+            self.advance();
+            return match self.parse_type_atom()? {
+                Type::App(n, args) if args.len() == 1 && (n == "Iterator" || n.ends_with(".Iterator")) => Ok(Type::AsyncGen(Box::new(args.into_iter().next().unwrap()))),
+                _ => Err(LumeError::new(line, col, "`async` before a type goes only with `Iterator[T]`, as in `async Iterator[Str]`")
+                    .with_help("a function whose result arrives later is an `async def`; its type is what it gives")),
+            };
+        }
         if self.at_kw("Task") && matches!(self.peek_at(1), Tok::Sym("[")) {
             self.advance();
             self.advance();

@@ -1,14 +1,15 @@
 # http_demo — the http package against a server: a JSON document, a page
-# that is not there, a POST that is echoed back, and a server that is not
-# running. tests/http_local.sh starts a small server on this machine and
-# runs it:
+# that is not there, a POST that is echoed back, a body read as it arrives,
+# a request that times out, requests made from tasks, and a server that is
+# not running. tests/http_local.sh starts a small server on this machine
+# and runs it:
 #
 #   lume run -- http://127.0.0.1:8765
 
 import http
 import json
 
-def main -> () or Error:
+async def main -> () or Error:
   base = Env.args.first.or("http://127.0.0.1:8765")
 
   r = http.get("#{base}/hello.json")?
@@ -24,6 +25,24 @@ def main -> () or Error:
   back = echo.json?
   puts "POST /echo: #{echo.status}, sent back #{json.show(back.get("body").or(json.Json.Null))}"
   puts "  as #{back.get("type").map { |t| t.str.or("?") }.or("?")}"
+
+  # the status and headers first, then the body a line at a time as the
+  # server writes it
+  opened = http.request("GET", "#{base}/lines").open?
+  puts "GET /lines: #{opened.status}, #{opened.header("content-type").or("no type")}"
+  for line in opened.lines:
+    puts "  #{line}"
+  pieces = http.request("GET", "#{base}/lines").open?.chunks.fold("") { |all, c| all + c }
+  puts "  the same in pieces: #{pieces.lines.len} lines"
+
+  # an answer slower than the request waits for is an Error
+  match http.request("GET", "#{base}/slow").timeout(300).send:
+    Ok(_) -> puts "GET /slow: answered within 300 ms?"
+    Error(e) -> puts "GET /slow, 300 ms: an Error that says it timed out: #{e.message.contains?("timed out")}"
+
+  # from tasks, waited for as other work goes on
+  statuses = await ["hello.json", "nope", "hello.json"].map { |p| spawn: await http.request("GET", "#{base}/#{p}").fetch }.to_list
+  puts "three at once: #{statuses.map { |r| r.map { |x| x.status }.or(0) }.to_list}"
 
   # nothing listens on port 9: a request that cannot be made is an Error
   match http.get("http://127.0.0.1:9/"):

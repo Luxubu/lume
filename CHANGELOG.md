@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **`http`, streamed**: `http.request(method, url)` builds a request with
+  `.header`, `.with_body` and `.timeout(ms)`; `send` waits for it, `await
+  fetch` waits in async code, and `open` gives the body as it arrives, as
+  `lines` or `chunks`.
+- **`async Iterator[T]`** can be written as a type: a `def` may hand on an
+  async sequence, and a parameter take one by move.
 - **The shared build cache stays bounded**: `~/.cache/lume/target` keeps
   the builds of the 300 programs built most recently; before, it kept every
   one, and grew to 13 GB.

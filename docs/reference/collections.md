@@ -373,6 +373,13 @@ async def main:
   body stops at its next `yield`, so an endless one is fine.
 - **It moves like a generator**, and a task that uses one takes it. It
   keeps a block or an interface value it is given, as a generator does.
+- **Its type is written `async Iterator[T]`**, as messages name it. A
+  `def` that hands one on without `yield` says so — a chain over another,
+  or one a package's Rust makes:
+  `def evens -> async Iterator[Int] = naturals().filter { |n| n % 2 == 0 }`.
+  Such a `def` is called from async code, as an async generator is. A
+  parameter `xs: async Iterator[T]` takes one by move, as Rust takes a
+  `Stream`: a generator's, a chain's, or a `Child`'s `lines`.
 - **A method may be one**, as may a function of a type
   (`async def self.upto(n: Int)`). Its task walks a copy of the value, as a
   generator method does.

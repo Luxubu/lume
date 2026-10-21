@@ -541,6 +541,55 @@ fn lume_pipe_poll(p: &LumePipeRef, cx: &mut std::task::Context<'_>, take: impl F
         None => { g.waker = Some(cx.waker().clone()); std::task::Poll::Pending }
     }
 }
+/// A reader set aside under a number, for a package's Rust to hand out
+/// later as an async sequence — an HTTP body, say — read by a thread of its
+/// own as it arrives. Taking one gives it up: a second take gives nothing.
+fn lume_parked() -> &'static std::sync::Mutex<std::collections::HashMap<i64, ::std::boxed::Box<dyn std::io::Read + Send>>> {
+    static PARKED: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<i64, ::std::boxed::Box<dyn std::io::Read + Send>>>> = std::sync::OnceLock::new();
+    PARKED.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
+}
+fn lume_park(r: ::std::boxed::Box<dyn std::io::Read + Send>) -> i64 {
+    static NEXT: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(1);
+    let id = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    lume_parked().lock().unwrap().insert(id, r);
+    id
+}
+fn lume_parked_pipe(id: i64) -> LumePipeRef {
+    match lume_parked().lock().unwrap().remove(&id) {
+        Some(r) => lume_pipe(r),
+        None => std::sync::Arc::new(std::sync::Mutex::new(LumePipe { buf: Vec::new(), done: true, waker: None })),
+    }
+}
+/// Its lines, without their line endings.
+fn lume_parked_lines(id: i64) -> LumeStream<String> {
+    let p = lume_parked_pipe(id);
+    LumeStream { poll: ::std::boxed::Box::new(move |cx| lume_pipe_poll(&p, cx, |g| g.line())) }
+}
+/// What it has, a piece at a time, as the pieces arrive.
+fn lume_parked_chunks(id: i64) -> LumeStream<String> {
+    let p = lume_parked_pipe(id);
+    LumeStream { poll: ::std::boxed::Box::new(move |cx| lume_pipe_poll(&p, cx, |g| {
+        if g.buf.is_empty() {
+            return if g.done { Some(None) } else { None };
+        }
+        // whole characters only: the start of one that has not all arrived
+        // waits for the rest, unless nothing more is coming
+        let n = match std::str::from_utf8(&g.buf) {
+            Ok(_) => g.buf.len(),
+            // bytes that can never be a character go on as one replacement
+            Err(e) => match (e.valid_up_to(), e.error_len()) {
+                (0, Some(bad)) => bad,
+                (good, _) => good,
+            },
+        };
+        if n == 0 && !g.done {
+            return None;
+        }
+        let n = if n == 0 { g.buf.len() } else { n };
+        let b: Vec<u8> = g.buf.drain(..n).collect();
+        Some(Some(String::from_utf8_lossy(&b).into_owned()))
+    })) }
+}
 /// A program started with `Process.spawn`, running alongside this one, as
 /// Rust's `tokio::process::Child`: its input written to, its outputs read
 /// as they come, its exit code awaited.
@@ -1267,6 +1316,10 @@ pub struct Gen {
     /// Names a kept block copied in when it was made: changing one inside
     /// would change the copy.
     kept_captured: HashSet<String>,
+    /// The body of a `def` that gives an `async Iterator[T]`: it is only
+    /// called from async code, so it may start async generators, though it
+    /// waits for nothing itself.
+    starts_streams: bool,
     /// The chain over an async sequence whose block is being made: it runs
     /// as items arrive, so it is kept, though nothing names it.
     chain_block: Option<String>,
@@ -1452,6 +1505,7 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, module_id: &str
         emitted_impls: HashSet::new(),
         param_blocks: HashSet::new(),
         kept_captured: HashSet::new(),
+        starts_streams: false,
         chain_block: None,
         annotate_params: false,
         move_next_lambda: false,
@@ -5890,6 +5944,10 @@ impl Gen {
             self.arg_for_gen = false;
             return r;
         }
+        // an async sequence is taken by move, as a `Stream` is in Rust
+        if let Type::AsyncGen(_) = t {
+            return self.give_away(a);
+        }
         let have = self.ty_of(a);
         // a plain value where `T?` / `T or E` is expected: wrap it
         match t {
@@ -7238,6 +7296,12 @@ impl Gen {
                 parts.push(format!("mut {}: impl Iterator<Item = {}> + Send{}", rust_name(&p.name), self.rt(&item), lasting));
                 continue;
             }
+            if let Type::AsyncGen(item) = &pty {
+                // `xs: async Iterator[T]` — taken by move, as Rust takes a
+                // `Stream`; what a task walks must not borrow
+                parts.push(format!("mut {}: LumeStream<{}>", rust_name(&p.name), self.rt(item)));
+                continue;
+            }
             if self.is_interface(&pty) && self.in_trait_impl && !p.mutable {
                 // as the trait declares it: lent as `&dyn`
                 parts.push(format!("{}: &dyn {}", rust_name(&p.name), self.rust_iface(&pty)));
@@ -7307,6 +7371,10 @@ impl Gen {
         }
         let saved_async = self.in_async;
         self.in_async = f.is_async;
+        let saved_streams = std::mem::replace(&mut self.starts_streams, gen_item.is_none() && matches!(sig.ret, Type::AsyncGen(_)));
+        if self.starts_streams {
+            self.uses_async = true;
+        }
         // an `async` default in the trait: Rust's `async fn` in a trait does
         // not promise a future that can move between tasks, so it is
         // written as one that does, over an `async move` block
@@ -7421,7 +7489,7 @@ impl Gen {
             let pty = param_type(self.ct(&p.ty));
             // a sequence taken by move is the function's own, and so is
             // everything a generator is given
-            let own_seq = matches!(pty, Type::Gen(_));
+            let own_seq = matches!(pty, Type::Gen(_) | Type::AsyncGen(_));
             let borrowed = gen_item.is_none() && !own_seq && (!pty.is_copy() || lent_params.get(&p.name).copied().unwrap_or(false));
             if self.is_interface(&pty) {
                 self.iface_params.insert(p.name.clone());
@@ -7472,6 +7540,7 @@ impl Gen {
         }
         self.current_static_only = saved_static_only;
         self.in_async = saved_async;
+        self.starts_streams = saved_streams;
         self.pop_scope();
         self.pop_generics(saved_gs);
         self.lent_names = saved_lent;
@@ -11905,7 +11974,7 @@ impl Gen {
                 return Err(LumeError::new(e.line, e.col, format!("`{}` hands out lines as the program writes them, so it is walked in async code", describe_value(e)))
                     .with_help("walk it in an `async def` or a `spawn:` body; `Process.run` waits for the program and gives all of its output at once"));
             }
-            ExprKind::Call { .. } | ExprKind::Method { .. } if !self.in_async && matches!(self.ty_of(e), Type::AsyncGen(_)) && !matches!(&e.kind, ExprKind::Method { recv, .. } if matches!(self.ty_of(recv), Type::AsyncGen(_))) => {
+            ExprKind::Call { .. } | ExprKind::Method { .. } if !self.in_async && !self.starts_streams && matches!(self.ty_of(e), Type::AsyncGen(_)) && !matches!(&e.kind, ExprKind::Method { recv, .. } if matches!(self.ty_of(recv), Type::AsyncGen(_))) => {
                 return Err(LumeError::new(e.line, e.col, format!("`{}` is an `async` generator, which runs as a task, so it is called from async code", describe_value(e)))
                     .with_help("call it in an `async def` or a `spawn:` body"));
             }

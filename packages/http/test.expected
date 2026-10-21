@@ -1,5 +1,6 @@
 test a request that cannot be made is an Error ... ok
 test a response reads its headers in any case ... ok
+test a request is built a step at a time ... ok
 
-2 tests: 2 passed, 0 failed
+3 tests: 3 passed, 0 failed
 exit: 0

@@ -6,10 +6,17 @@
 #   http.post_json(url, doc)?                 # a Json document as the body
 #   http.send("PUT", url, [("X-Key", k)], body)?
 #
+#   req = http.request("GET", url).header("Accept", "text/plain").timeout(5000)
+#   resp = req.send?                          # the whole body, waited for
+#   resp = await req.fetch?                   # the same, as other tasks go on
+#   opened = req.open?                        # status and headers now ...
+#   for line in opened.lines:                 # ... and the body as it arrives
+#
 # Only a request that could not be made is an `Error` (no connection, a bad
 # URL, a timeout). A 404 or a 500 is a `Response` like any other, with
 # `ok?` false, as Python's requests and Rust's reqwest have it. Requests
-# time out after 30 seconds. It is built on the Rust crate ureq.
+# time out after 30 seconds unless they say otherwise. It is built on the
+# Rust crate ureq.
 
 import rust.ureq
 import json
@@ -32,41 +39,120 @@ pub struct Response:
   # the body, parsed as JSON
   def json -> Json or Error = json.parse(body).map_error { |e| Error("the body is not JSON: #{e.message}") }
 
-pub def get(url: Str) -> Response or Error = send("GET", url, [], "")
+# A request to be made, built a step at a time; each step gives a new one.
+pub struct Request:
+  method: Str
+  url: Str
+  headers: [(Str, Str)]
+  body: Str
+  # how long to wait for an answer, in milliseconds
+  timeout_ms: Int
 
-pub def delete(url: Str) -> Response or Error = send("DELETE", url, [], "")
+  def header(name: Str, value: Str) -> Request = Request(method: method, url: url, headers: headers + [(name, value)], body: body, timeout_ms: timeout_ms)
+
+  # a body, and what it is
+  def with_body(text: Str, content_type: Str) -> Request = Request(method: method, url: url, headers: headers + [("Content-Type", content_type)], body: text, timeout_ms: timeout_ms)
+
+  def timeout(ms: Int) -> Request = Request(method: method, url: url, headers: headers, body: body, timeout_ms: ms)
+
+  # Makes it and waits for the whole answer.
+  def send -> Response or Error:
+    opened = open()?
+    id = opened.body_id
+    u = url
+    text: Str or Error = rust:
+      {
+        use std::io::Read;
+        let mut r = lume_parked().lock().unwrap().remove(&id);
+        let mut b = Vec::new();
+        let read = match r.as_mut() { Some(r) => r.read_to_end(&mut b).map(|_| ()), None => Ok(()) };
+        match read {
+          Ok(()) => Ok(String::from_utf8_lossy(&b).into_owned()),
+          Err(e) => Err(Error { message: format!("reading the body from {}: {}", u, e) }),
+        }
+      }
+    Response(status: opened.status, headers: opened.headers, body: text?)
+
+  # The same as `send`, waited for in async code: other tasks go on.
+  async def fetch -> Response or Error:
+    req = Request(method: method, url: url, headers: headers, body: body, timeout_ms: timeout_ms)
+    t = spawn: req.send
+    await t
+
+  # Makes it and gives the status and headers once they arrive; the body
+  # comes after, as it arrives, through `lines` or `chunks`.
+  def open -> Opened or Error:
+    # the Rust below reads these by name
+    m = method
+    u = url
+    hs = headers
+    b = body
+    ms = timeout_ms
+    raw: (Int, [(Str, Str)], Int) or Error = rust:
+      {
+        let mut req = ureq::request(&m, &u).timeout(std::time::Duration::from_millis(ms.max(0) as u64));
+        for (k, v) in hs.iter() {
+            req = req.set(k, v);
+        }
+        let got = if b.is_empty() { req.call() } else { req.send_string(&b) };
+        match got {
+            Ok(r) | Err(ureq::Error::Status(_, r)) => {
+                let status = r.status() as i64;
+                let names: Vec<(String, String)> = r.headers_names().iter().filter_map(|n| r.header(n).map(|v| (n.to_lowercase(), v.to_string()))).collect();
+                Ok((status, names, lume_park(::std::boxed::Box::new(r.into_reader()))))
+            }
+            Err(e) => Err(Error { message: format!("{} {}: {}", m, u, e) }),
+        }
+      }
+    (status, got, id) = raw?
+    Opened(status: status, headers: got, body_id: id)
+
+# A response whose body has not been read yet.
+pub struct Opened:
+  status: Int
+  headers: [(Str, Str)]
+  # the body, set aside until it is walked; it can be walked once
+  body_id: Int
+
+  def ok? -> Bool = status >= 200 and status < 300
+
+  def header(name: Str) -> Str?:
+    n = name.downcase
+    headers.find { |k, v| k == n }.map { |kv| kv.1 }
+
+  # the body a line at a time, without line endings, as it arrives
+  def lines -> async Iterator[Str]:
+    id = body_id
+    s: async Iterator[Str] = rust:
+      lume_parked_lines(id)
+    s
+
+  # the body in the pieces it arrives in
+  def chunks -> async Iterator[Str]:
+    id = body_id
+    s: async Iterator[Str] = rust:
+      lume_parked_chunks(id)
+    s
+
+# A request to make: `http.request("GET", url)`, then `.header`, `.with_body`
+# and `.timeout` as needed.
+pub def request(method: Str, url: Str) -> Request = Request(method: method, url: url, headers: [], body: "", timeout_ms: 30000)
+
+pub def get(url: Str) -> Response or Error = request("GET", url).send
+
+pub def delete(url: Str) -> Response or Error = request("DELETE", url).send
 
 # a body, and what it is: `http.post(url, "a=1", "application/x-www-form-urlencoded")`
-pub def post(url: Str, body: Str, content_type: Str) -> Response or Error = send("POST", url, [("Content-Type", content_type)], body)
+pub def post(url: Str, body: Str, content_type: Str) -> Response or Error = request("POST", url).with_body(body, content_type).send
 
-pub def put(url: Str, body: Str, content_type: Str) -> Response or Error = send("PUT", url, [("Content-Type", content_type)], body)
+pub def put(url: Str, body: Str, content_type: Str) -> Response or Error = request("PUT", url).with_body(body, content_type).send
 
 # a JSON document as the body
 pub def post_json(url: Str, doc: Json) -> Response or Error = post(url, json.show(doc), "application/json")
 
 # Any method, headers of your own, and a body ("" for none).
 pub def send(method: Str, url: Str, headers: [(Str, Str)], body: Str) -> Response or Error:
-  raw: (Int, [(Str, Str)], Str) or Error = rust:
-    {
-      let mut req = ureq::request(&method, &url).timeout(std::time::Duration::from_secs(30));
-      for (k, v) in headers.iter() {
-          req = req.set(k, v);
-      }
-      let got = if body.is_empty() { req.call() } else { req.send_string(&body) };
-      match got {
-          Ok(r) | Err(ureq::Error::Status(_, r)) => {
-              let status = r.status() as i64;
-              let hs: Vec<(String, String)> = r.headers_names().iter().filter_map(|n| r.header(n).map(|v| (n.to_lowercase(), v.to_string()))).collect();
-              match r.into_string() {
-                  Ok(b) => Ok((status, hs, b)),
-                  Err(e) => Err(Error { message: format!("reading the body from {}: {}", url, e) }),
-              }
-          }
-          Err(e) => Err(Error { message: format!("{} {}: {}", method, url, e) }),
-      }
-    }
-  (status, hs, text) = raw?
-  Response(status: status, headers: hs, body: text)
+  Request(method: method, url: url, headers: headers, body: body, timeout_ms: 30000).send
 
 test "a request that cannot be made is an Error":
   r = get("not a url")
@@ -77,3 +163,9 @@ test "a response reads its headers in any case":
   assert not r.ok?
   assert r.header("Content-Type") == Some("text/plain")
   assert r.json.error?
+
+test "a request is built a step at a time":
+  r = request("POST", "http://example.com").header("X-A", "1").with_body("{}", "application/json").timeout(500)
+  assert r.headers == [("X-A", "1"), ("Content-Type", "application/json")]
+  assert r.body == "{}"
+  assert r.timeout_ms == 500

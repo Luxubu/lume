@@ -1,0 +1,6 @@
+error: `async` before a type goes only with `Iterator[T]`, as in `async Iterator[Str]`
+  --> examples/errors/async_not_iterator.lume:4:14
+  |
+4 | def later -> async Int = 1
+  |              ^
+  help: a function whose result arrives later is an `async def`; its type is what it gives

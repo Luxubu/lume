@@ -3,5 +3,12 @@ GET /hello.json: 200, application/json
 GET /nope: 404, ok? false
 POST /echo: 200, sent back {"name":"lume","n":3}
   as application/json
+GET /lines: 200, text/plain
+  one
+  two
+  three
+  the same in pieces: 3 lines
+GET /slow, 300 ms: an Error that says it timed out: true
+three at once: [200, 404, 200]
 port 9: no connection, an Error
 exit: 0

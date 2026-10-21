@@ -62,3 +62,21 @@ def word_count(s: Str) -> Int:
 
 `packages/http/` uses one for the few lines where it needs a crate's error
 type itself. See [HTTP](http.md).
+
+**A stream of bytes from Rust becomes an async sequence** through a number
+it is parked under: `lume_park(Box::new(reader))` takes anything that is
+`std::io::Read + Send` and gives an `Int`, and `lume_parked_lines(id)` or
+`lume_parked_chunks(id)` give it back as an `async Iterator[Str]`, read by a
+thread of its own as it arrives. That is how `http`'s `Opened.lines` reads
+a body:
+
+```lume-skip
+  def lines -> async Iterator[Str]:
+    id = body_id
+    s: async Iterator[Str] = rust:
+      lume_parked_lines(id)
+    s
+```
+
+Inside a method, the Rust names a field as `self.field`; binding it to a
+name first, as here, keeps the Rust short.

@@ -1,0 +1,7 @@
+# `async` before a type goes only with `Iterator[T]`: a value that arrives
+# later comes from an `async def`, whose type is what it gives.
+
+def later -> async Int = 1
+
+def main:
+  puts later
