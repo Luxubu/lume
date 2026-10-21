@@ -1,0 +1,15 @@
+greet   ok       hello | world
+sum     ok       6
+slow    ok       done
+fail    exit 2   trying  [1 on stderr]
+words   ok       a | b | c
+quiet   ok       (nothing)
+missing exit 127 (nothing)  [1 on stderr]
+every job came back once: true
+failed: fail, missing
+lines out: 8
+with two at once, 2 failed
+one at a time: greet, sum, slow, fail, words, quiet, missing
+first to say 6: Some("sum")
+on stderr in all: 2
+exit: 0

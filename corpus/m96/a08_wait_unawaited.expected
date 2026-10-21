@@ -1,0 +1,7 @@
+error: `wait` waits for the program to end: its result arrives later
+  --> corpus/m96/a08_wait_unawaited.lume:23:11
+   |
+23 |   code = c.wait
+   |           ^
+  help: write `await` in front of the call to wait for it, or `spawn:` to run it alongside other work
+exit: 1

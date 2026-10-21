@@ -1,0 +1,22 @@
+GET http://127.0.0.1:9/items [] body 0 chars, 30000 ms
+GET http://127.0.0.1:9/items [Accept=text/plain, X-Trace=a7] body 0 chars, 30000 ms
+GET http://127.0.0.1:9/items [] body 0 chars, 30000 ms
+POST http://127.0.0.1:9/notes [X-A=1, Content-Type=application/json, X-B=2] body 14 chars, 2000 ms
+{"text": "hi"}
+[("X-A", "1"), ("Content-Type", "application/json"), ("X-B", "2")]
+send: GET http://127.0.0.1:9/items
+fetch: POST http://127.0.0.1:9/notes
+open: GET http://127.0.0.1:9/feed
+get: GET not a url
+delete: DELETE http://127.0.0.1:9/x
+send(..): PUT http://127.0.0.1:9/y
+post: POST http://127.0.0.1:9/form
+[true, true, true]
+GET http://127.0.0.1:9/a
+GET http://127.0.0.1:9/b
+GET not a url either
+false
+Some("text/plain")
+None
+true
+exit: 0

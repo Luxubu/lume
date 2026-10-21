@@ -1,0 +1,19 @@
+1 2 -> 3
+40 2 -> 42
+100 -1 -> 99
+after close: None
+adder exited with 0
+Some("1: red")
+Some("2: green")
+Some("3: blue")
+Some("total 3")
+None
+counter exited with 0
+Some("abc")
+Some("def")
+Some("gh")
+None
+printf exited with 0
+echo said ok
+killed: -1
+exit: 0

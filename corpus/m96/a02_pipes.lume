@@ -1,0 +1,77 @@
+# a02_pipes: text piped through programs every machine has, with
+# Process.spawn: write it all, close the input, read the lines, wait for
+# the exit code. sort (plain, -r, -n, -u), tr (map, squeeze), wc -l, head,
+# two programs one after the other; a helper that turns a non-zero exit
+# into an Error; lines walked through `enumerate`; a write after
+# close_input.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ["apple", "banana", "cherry", "fig", "pear"]
+# pear fig cherry banana apple
+# 9 10 100
+# ["a", "b"]
+# ["HELLO, WORLD", "BYE"]
+# a b c
+# 5
+# ["apple", "banana"]
+# ["X-Y-Z"]
+# 0: KIWI
+# 1: LIME
+# 2: PLUM
+# cannot write to `sort`: its input is closed
+# sort exited with 0
+# sh exited with 4
+
+# the lines a program gives back for `input`, or an Error if it fails
+async def through(program: Str, args: [Str], input: Str) -> [Str] or Error:
+  c = Process.spawn(program, args)?
+  c.write(input)?
+  c.close_input
+  out = c.lines.to_list
+  code = await c.wait
+  if code != 0:
+    return Error("#{program} exited with #{code}")
+  out
+
+async def main -> () or Error:
+  fruit = "pear\napple\nfig\ncherry\nbanana\n"
+  sorted = await through("sort", [], fruit)?
+  puts sorted
+  rev = await through("sort", ["-r"], fruit)?
+  puts rev.join(" ")
+  nums = await through("sort", ["-n"], "100\n9\n10\n")?
+  puts nums.join(" ")
+  once = await through("sort", ["-u"], "b\na\nb\na\n")?
+  puts once
+
+  up = await through("tr", ["a-z", "A-Z"], "hello, world\nbye\n")?
+  puts up
+  squeezed = await through("tr", ["-s", " "], "a   b    c\n")?
+  puts squeezed.at(0)
+  counted = await through("wc", ["-l"], fruit)?
+  puts counted.at(0).trim
+  top = await through("head", ["-n", "2"], sorted.join("\n") + "\n")?
+  puts top
+
+  # one program's output is the next one's input
+  loud = await through("tr", ["a-z", "A-Z"], "x y z\n")?
+  dashed = await through("tr", [" ", "-"], loud.join("\n") + "\n")?
+  puts dashed
+
+  # written a piece at a time, read through a chain
+  s = Process.spawn("sort", [])?
+  for w in ["plum", "kiwi", "lime"]:
+    s.write(w.upcase + "\n")?
+  s.close_input
+  for i, line in s.lines.enumerate:
+    puts "#{i}: #{line}"
+  match s.write("late\n"):
+    Ok(_) -> puts "written after close?"
+    Error(e) -> puts e.message
+  puts "sort exited with #{await s.wait}"
+
+  # a program that fails: its code becomes the helper's Error
+  match await through("sh", ["-c", "cat > /dev/null; exit 4"], "ignored\n"):
+    Ok(lines) -> puts lines
+    Error(e) -> puts e.message
+  ()

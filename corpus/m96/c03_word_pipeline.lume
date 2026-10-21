@@ -1,0 +1,108 @@
+# c03_word_pipeline — a text pipeline whose stages are other programs:
+# `tr` to lower case, `tr` to one word a line, `sort`. Each stage's lines
+# are handed to the next as they come, by an `async def` taking an
+# `async Iterator[Str]` and a `Child`; the sorted words are counted in runs
+# by an async generator that takes the last stage's `lines`. Then the
+# waiting methods on a child's lines: count, first, sum (after map), all?,
+# fold, any?, and find on a program that never ends, which is then killed.
+# A file under /tmp/lume-review-c/ is one program's input.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# lower -> words: 3 lines
+# words -> sort: 17 lines
+# 11 distinct words, 17 in all
+# on=3 the=3 a=2 cat=2
+# {"and", "end", "hat", "it", "mat", "sat", "went"}
+# false
+# exits 0 0 0
+# -- waiting methods
+# 2
+# Some("A cat, a hat, the end.")
+# 62
+# true
+# TOA
+# true
+# Some("tick 5")
+# ticker stopped: -1
+
+TEXT = ["The cat sat on the mat.", "A cat, a hat, the end.", "On and on it went"]
+
+DIR = "/tmp/lume-review-c/c03"
+
+# hands every line of one program to the next, then closes its input
+async def pump(src: async Iterator[Str], dst: Child) -> Int or Error:
+  var n = 0
+  for line in src:
+    dst.write(line + "\n")?
+    n += 1
+  dst.close_input
+  n
+
+# sorted words in; each word with how many times it came, one run at a time
+async def runs(words: async Iterator[Str]) -> Iterator[(Str, Int)]:
+  var current = ""
+  var n = 0
+  for w in words:
+    if w == current:
+      n += 1
+    else:
+      if n > 0:
+        yield (current, n)
+      current = w
+      n = 1
+  if n > 0:
+    yield (current, n)
+
+# a program with its input already written and closed
+def feed(program: Str, args: [Str], text: [Str]) -> Child or Error:
+  c = Process.spawn(program, args)?
+  for line in text:
+    c.write(line + "\n")?
+  c.close_input
+  c
+
+async def main -> () or Error:
+  lower = feed("tr", ["A-Z", "a-z"], TEXT)?
+  words = Process.spawn("tr", ["-cs", "a-z", r"\n"])?
+  sorter = Process.spawn("sort", [])?
+  moved1 = await pump(lower.lines, words)?
+  puts "lower -> words: #{moved1} lines"
+  moved2 = await pump(words.lines, sorter)?
+  puts "words -> sort: #{moved2} lines"
+
+  counted = runs(sorter.lines).to_list
+  total = counted.map { |w, n| n }.sum
+  puts "#{counted.len} distinct words, #{total} in all"
+  ranked = counted.sort_by { |w, n| (0 - n, w) }
+  puts ranked.take(4).map { |w, n| "#{w}=#{n}" }.join(" ")
+  once = counted.filter { |w, n| n == 1 }.map { |w, n| w }.to_set
+  puts once
+  puts once.contains?("cat")
+  e1 = await lower.wait
+  e2 = await words.wait
+  e3 = await sorter.wait
+  puts "exits #{e1} #{e2} #{e3}"
+
+  puts "-- waiting methods"
+  up = feed("tr", ["a-z", "A-Z"], TEXT)?
+  puts up.lines.count { |l| l.contains?("CAT") }
+
+  Dir.make(DIR)?
+  path = Path.join(DIR, "text.txt")
+  File.write(path, TEXT.join("\n") + "\n")?
+  sorted = Process.spawn("sort", [path])?
+  puts sorted.lines.first
+
+  plain = feed("cat", [], TEXT)?
+  puts plain.lines.map { |l| l.len }.sum
+  bare = feed("tr", ["-d", "aeiou"], TEXT)?
+  puts bare.lines.all? { |l| not l.contains?("a") }
+  back = feed("sort", ["-r"], TEXT)?
+  puts back.lines.fold("") { |acc, l| acc + l.slice(0, 1) }
+  puts feed("cat", [], TEXT)?.lines.any? { |l| l.ends_with?("went") }
+
+  ticker = Process.spawn("sh", ["-c", "i=0; while true; do i=$((i + 1)); echo \"tick $i\"; done"])?
+  puts ticker.lines.find { |l| l == "tick 5" }
+  ticker.kill
+  puts "ticker stopped: #{await ticker.wait}"
+  Dir.remove(DIR)?

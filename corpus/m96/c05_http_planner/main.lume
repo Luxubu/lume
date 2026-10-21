@@ -1,0 +1,122 @@
+# c05_http_planner — a request planner. Each line of a plan names a method,
+# a path and options; it is checked, built with `http.request` and the
+# steps `.header`, `.with_body` and `.timeout`, and shown from the
+# Request's own fields. Plan lines that make no request are reported on
+# standard error with `warn`. A step gives a new Request and leaves the old
+# one as it was. Nothing listens on 127.0.0.1:9, so every request made is
+# an Error whose message starts with its method and URL: made from tasks
+# with `await fetch`, with `open`, with `http.send`, and with `send` to a
+# URL that does not parse. A Response built by hand is looked at too.
+# Probes list patterns with literals and a rest, map_error with `?`, `var`
+# rebinding in a loop, zip, spawn in a block, a set from a function.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 1. GET http://127.0.0.1:9/items [Accept: application/json], no body, 30000 ms
+# 2. POST http://127.0.0.1:9/items [Accept: application/json, Content-Type: application/json, Authorization: Bearer k1], a body of 14, 30000 ms
+# 3. DELETE http://127.0.0.1:9/items/7 [], no body, 500 ms
+# 3 requests planned
+# 0 30000 / 1 250
+# Request(method: "GET", url: "http://127.0.0.1:9/a", headers: [("X-Trace", "on")], body: "", timeout_ms: 250)
+# GET http://127.0.0.1:9/items: no answer, an Error naming it: true
+# POST http://127.0.0.1:9/items: no answer, an Error naming it: true
+# DELETE http://127.0.0.1:9/items/7: no answer, an Error naming it: true
+# open: true
+# send: true
+# bad URL: true
+# 503 false Some("5") true
+# EXPECTED STDERR:
+# plan line 4: `PATCH` is not a method this planner makes
+# plan line 5: `items` is not a path: it does not start with /
+# plan line 6: timeout: `soon` is not an integer
+# plan line 7: timeout: 0 is not above zero
+# plan line 8: `colour=blue` is not an option
+# plan line 9: `GET` needs a method and a path
+
+import http
+
+BASE = "http://127.0.0.1:9"
+
+def plan_text -> Str:
+  r"""
+    GET /items accept=json
+    POST /items accept=json body={"name":"fig"} auth=k1
+    DELETE /items/7 timeout=500
+    PATCH /items/7
+    GET items
+    PUT /items/7 timeout=soon
+    GET /health timeout=0
+    GET /feed accept=text colour=blue
+    GET
+    """
+
+def allowed -> {Str} = {"GET", "POST", "PUT", "DELETE"}
+
+def with_option(req: http.Request, opt: Str) -> http.Request or Error:
+  match opt.split("="):
+    ["accept", "json"] -> req.header("Accept", "application/json")
+    ["accept", "text"] -> req.header("Accept", "text/plain")
+    ["auth", token] -> req.header("Authorization", "Bearer #{token}")
+    ["body", text] -> req.with_body(text, "application/json")
+    ["timeout", ms] ->
+      n = ms.to_int.map_error { |e| Error("timeout: #{e.message}") }?
+      if n <= 0:
+        return Error("timeout: #{n} is not above zero")
+      req.timeout(n)
+    _ -> Error("`#{opt}` is not an option")
+
+def build(line: Str) -> http.Request or Error:
+  match line.split:
+    [method, path, ..opts] ->
+      if not allowed().contains?(method):
+        return Error("`#{method}` is not a method this planner makes")
+      if not path.starts_with?("/"):
+        return Error("`#{path}` is not a path: it does not start with /")
+      var req = http.request(method, BASE + path)
+      for opt in opts:
+        req = with_option(req, opt)?
+      req
+    _ -> Error("`#{line}` needs a method and a path")
+
+def describe(r: http.Request) -> Str:
+  hs = r.headers.map { |k, v| "#{k}: #{v}" }.join(", ")
+  body = if r.body.empty?: "no body" else: "a body of #{r.body.len}"
+  "#{r.method} #{r.url} [#{hs}], #{body}, #{r.timeout_ms} ms"
+
+async def main -> () or Error:
+  var good: [http.Request] = []
+  for i, line in plan_text().lines.enumerate:
+    match build(line):
+      Ok(req) ->
+        puts "#{i + 1}. #{describe(req)}"
+        good.push(req)
+      Error(e) -> warn "plan line #{i + 1}: #{e.message}"
+  puts "#{good.len} requests planned"
+
+  # each step gives a new Request
+  plain = http.request("GET", BASE + "/a")
+  traced = plain.header("X-Trace", "on").timeout(250)
+  puts "#{plain.headers.len} #{plain.timeout_ms} / #{traced.headers.len} #{traced.timeout_ms}"
+  puts traced
+
+  # all at once, from tasks; nothing is listening
+  tasks = good.map { |r| spawn: await r.fetch }.to_list
+  answers = await tasks
+  for r, a in good.zip(answers):
+    match a:
+      Ok(resp) -> puts "#{r.method} #{r.url} answered #{resp.status}?"
+      Error(e) ->
+        prefix = r.method + " " + r.url + ": "
+        puts "#{r.method} #{r.url}: no answer, an Error naming it: #{e.message.starts_with?(prefix)}"
+
+  match http.request("GET", BASE + "/feed").header("Accept", "text/plain").open:
+    Ok(o) -> puts "opened with #{o.status}?"
+    Error(e) -> puts "open: #{e.message.starts_with?("GET http://127.0.0.1:9/feed: ")}"
+  sent = http.send("PUT", BASE + "/x", [("X-A", "1")], "data")
+  puts "send: #{sent.error?}"
+  match http.request("GET", "not a url").send:
+    Ok(_) -> puts "a bad URL answered?"
+    Error(e) -> puts "bad URL: #{e.message.starts_with?("GET not a url: ")}"
+
+  # a Response is a value like any other
+  busy = http.Response(status: 503, headers: [("retry-after", "5")], body: "busy")
+  puts "#{busy.status} #{busy.ok?} #{busy.header("Retry-After")} #{busy.json.error?}"

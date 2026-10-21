@@ -1,0 +1,13 @@
+Some("ab")
+Some("c")
+None
+None
+0
+cannot write to `cat`: its input is closed
+["one"]
+0
+cannot write to `cat`: its input is closed
+-1
+None
+cannot write to `sleep`: its input is closed
+exit: 0

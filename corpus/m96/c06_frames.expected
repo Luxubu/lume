@@ -1,0 +1,13 @@
+frame 6: 1:abab
+2 -> frame 4: 2:xx
+3 -> frame 17: line one / line two
+4 -> frame 12: 4:hellohello
+broken: `Garbage` is not a Content-Length header
+["8: 6:endend", "17: line one / line two"]
+server exit: 0
+big frames before the broken one: 2
+batch exit: 0
+frame 10: short
+after the end: None
+printf exit: 0
+exit: 0

@@ -1,0 +1,8 @@
+["b", "a", "c"]
+count: 2
+0
+["a", "b"]
+Some("/")
+cannot run `ls` in `/no/such/folder-b`: no such folder
+cannot run `no-such-program-b`: No such file or directory (os error 2)
+exit: 0

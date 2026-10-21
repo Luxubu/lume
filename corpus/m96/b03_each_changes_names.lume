@@ -1,0 +1,58 @@
+# b03 — an `each` block (and a `fold` block) changing names around it, on an
+# async sequence, after a chain and on an empty one; a chain's block copying
+# a name when the chain is made; and a program's own `struct Child`, which
+# takes the name from the built-in one.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 12
+# ["FIG", "APPLE", "KIWI"]
+# abcd
+# 0
+# xy 2
+# 6
+# Child(name: "ann", lines: ["a", "b"])
+# 2
+# a!b!
+
+struct Child:
+  name: Str
+  lines: [Str]
+
+  def wait -> Int = lines.len
+
+async def words(xs: [Str]) -> Iterator[Str]:
+  for w in xs:
+    await Time.sleep(1)
+    yield w
+
+async def main:
+  var total = 0
+  var seen: [Str] = []
+  words(["fig", "apple", "kiwi"]).each do |w|
+    total += w.len
+    seen.push(w.upcase)
+  puts total
+  puts seen
+  var longest = ""
+  words(["ab", "abcd", "x", "abc"]).filter { |w| w.len > 1 }.each do |w|
+    if w.len > longest.len:
+      longest = w
+  puts longest
+  var hits = 0
+  words([]).each { |w| hits += 1 }
+  puts hits
+  var calls = 0
+  joined = words(["x", "y"]).fold("") do |acc, w|
+    calls += 1
+    acc + w
+  puts "#{joined} #{calls}"
+  var k = 2
+  doubled = words(["a", "bb"]).map { |w| w.len * k }
+  k = 100
+  puts doubled.fold(0) { |acc, n| acc + n }
+  kid = Child(name: "ann", lines: ["a", "b"])
+  puts kid
+  puts kid.wait
+  var out = ""
+  kid.lines.each { |l| out = out + l + "!" }
+  puts out

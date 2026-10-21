@@ -1,0 +1,125 @@
+# c02_sh_repl — a REPL client for a little server: `sh` running a `while
+# read` loop that answers each command with one line, or with several lines
+# ended by a `.`. Probes Process.spawn with a script, Child.write and
+# `await read_line` in turns, `read_line` giving None once the program has
+# ended, `error_lines` read after the end, `lines` with the waiting method
+# `each` (whose block changes a `var`) on a child that `read_line` was used
+# on before, an enum of replies, `match` on an optional with literal and
+# guarded patterns, a map as a tally, `break if`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# > add 2 3
+# = 5
+# > mul 4 5
+# = 20
+# > shout hi
+# ! unknown shout
+# > echo lume
+# = lume
+# > add 10 -4
+# = 6
+# > quit
+# (the server said bye)
+# {"answer": 4, "refused": 1, "bye": 1}
+# numbers [5, 20, 6], total 31
+# after quit: None
+# server stderr: ["unknown: shout"]
+# server exit: 0
+# -- a batch
+# count 3 -> ["1", "2", "3"]
+# count 0 -> []
+# rest: ["ok again", "ok 3"]
+# batch exit: 0
+
+def server_script -> Str:
+  r"""
+    while read cmd a b; do
+      case "$cmd" in
+        add) echo "ok $((a + b))" ;;
+        mul) echo "ok $((a * b))" ;;
+        echo) echo "ok $a" ;;
+        count)
+          i=1
+          while [ "$i" -le "$a" ]; do echo "$i"; i=$((i + 1)); done
+          echo . ;;
+        quit) echo bye; exit 0 ;;
+        *) echo "err unknown $cmd"; echo "unknown: $cmd" >&2 ;;
+      esac
+    done
+    """
+
+enum Reply:
+  Answer(text: Str)
+  Refused(why: Str)
+  Bye
+  Gone
+
+def parse_reply(line: Str?) -> Reply:
+  match line:
+    None -> Gone
+    Some("bye") -> Bye
+    Some(l) if l.starts_with?("ok ") -> Answer(l.slice(3, l.len))
+    Some(l) if l.starts_with?("err ") -> Refused(l.slice(4, l.len))
+    Some(l) -> Refused("garbled: #{l}")
+
+# one line out, one line back
+async def ask(c: Child, q: Str) -> Reply or Error:
+  c.write(q + "\n")?
+  parse_reply((await c.read_line))
+
+# one line out, lines back until a `.`
+async def ask_many(c: Child, q: Str) -> [Str] or Error:
+  c.write(q + "\n")?
+  var got: [Str] = []
+  while true:
+    match await c.read_line:
+      Some(".") -> break
+      Some(l) -> got.push(l)
+      None -> return Error("the server went away during `#{q}`")
+  got
+
+async def main -> () or Error:
+  server = Process.spawn("sh", ["-c", server_script()])?
+  var kinds: {Str: Int} = {}
+  var numbers: [Int] = []
+  for line in ["add 2 3", "mul 4 5", "shout hi", "echo lume", "add 10 -4", "quit"]:
+    puts "> #{line}"
+    reply = await ask(server, line)?
+    kind = match reply:
+      Answer(text) ->
+        puts "= #{text}"
+        match text.to_int:
+          Ok(n) -> numbers.push(n)
+          Error(_) -> ()
+        "answer"
+      Refused(why) ->
+        puts "! #{why}"
+        "refused"
+      Bye ->
+        puts "(the server said bye)"
+        "bye"
+      Gone ->
+        puts "(the server is gone)"
+        "gone"
+    kinds[kind] = kinds[kind].or(0) + 1
+    break if kind == "bye"
+  puts kinds
+  puts "numbers #{numbers}, total #{numbers.sum}"
+  after = await server.read_line
+  puts "after quit: #{after}"
+  errs = server.error_lines.to_list
+  puts "server stderr: #{errs}"
+  puts "server exit: #{await server.wait}"
+
+  # questions in turns, then the rest written at once and read to the end
+  puts "-- a batch"
+  batch = Process.spawn("sh", ["-c", server_script()])?
+  for q in ["count 3", "count 0"]:
+    got = await ask_many(batch, q)?
+    puts "#{q} -> #{got}"
+  batch.write("echo again\nadd 1 2\n")?
+  batch.close_input
+  var rest: [Str] = []
+  batch.lines.each { |l| rest.push(l) }
+  puts "rest: #{rest}"
+  puts "batch exit: #{await batch.wait}"

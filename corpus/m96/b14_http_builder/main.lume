@@ -1,0 +1,44 @@
+# b14 — the `http` request builder: each step gives a new `Request` and
+# leaves the one it was called on as it was; `header` keeps the order and
+# keeps a name given twice; `with_body` adds a `Content-Type` header each
+# time; `timeout` changes only the timeout. Nothing is sent.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# []
+# [("X-One", "1")]
+# [("X-One", "1"), ("X-Two", "2")]
+# [("X-One", "1"), ("X-Two", "2"), ("Content-Type", "application/x-www-form-urlencoded")]
+# true n=1
+# 30000 30000 250
+# POST http://example.com/items
+# 4
+# ("x-one", "again")
+# ["X-One", "X-Two", "Content-Type", "Content-Type"]
+# second
+# n=1
+# -5 250
+
+import http
+
+def main:
+  base = http.request("POST", "http://example.com/items")
+  a = base.header("X-One", "1")
+  b = a.header("X-Two", "2")
+  c = b.with_body("n=1", "application/x-www-form-urlencoded")
+  d = c.timeout(250)
+  puts base.headers
+  puts a.headers
+  puts b.headers
+  puts d.headers
+  puts "#{base.body.empty?} #{c.body}"
+  puts "#{base.timeout_ms} #{c.timeout_ms} #{d.timeout_ms}"
+  puts "#{d.method} #{d.url}"
+  e = d.header("x-one", "again")
+  puts e.headers.len
+  puts e.headers.at(3)
+  f = d.with_body("second", "text/plain")
+  puts f.headers.map { |h| h.0 }.to_list
+  puts f.body
+  puts d.body
+  g = d.timeout(0 - 5)
+  puts "#{g.timeout_ms} #{d.timeout_ms}"

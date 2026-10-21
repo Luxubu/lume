@@ -1,0 +1,42 @@
+# b13 — a `Child` kept in a list, in a struct field, and handed to a task;
+# `spawn_in` in a folder that exists and one that does not; a program that
+# does not exist.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ["b", "a", "c"]
+# count: 2
+# 0
+# ["a", "b"]
+# Some("/")
+# cannot run `ls` in `/no/such/folder-b`: no such folder
+# cannot run `no-such-program-b`: No such file or directory (os error 2)
+
+struct Job:
+  label: Str
+  child: Child
+
+async def main -> () or Error:
+  var kids: [Child] = []
+  for w in ["b", "a", "c"]:
+    kids.push(Process.spawn("echo", [w])?)
+  firsts = await kids.map { |c| spawn: c.lines.first.or("") }.to_list
+  puts firsts
+  j = Job(label: "count", child: Process.spawn("sh", ["-c", "echo 1; echo 2; echo 3"])?)
+  n = j.child.lines.count { |l| l != "2" }
+  puts "#{j.label}: #{n}"
+  puts await j.child.wait
+  sorter = Process.spawn("sort", [])?
+  sorter.write("b\na\n")?
+  sorter.close_input
+  t = spawn:
+    sorter.lines.to_list
+  puts await t
+  here = Process.spawn_in("/", "sh", ["-c", "pwd"])?
+  puts here.lines.first
+  match Process.spawn_in("/no/such/folder-b", "ls", []):
+    Ok(_) -> puts "started in a missing folder?"
+    Error(e) -> puts e.message
+  match Process.spawn("no-such-program-b", []):
+    Ok(_) -> puts "started?"
+    Error(e) -> puts e.message
+  ()

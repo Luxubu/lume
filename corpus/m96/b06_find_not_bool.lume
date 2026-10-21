@@ -1,0 +1,20 @@
+# b06 — a `find` block over an async sequence that gives an `Int`, not a
+# `Bool`; the message a list's `filter` gives for the same mistake is the
+# model.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: the block of `find` gives back an `Int`, but it must give a `Bool`
+#   --> corpus/m96/b06_find_not_bool.lume:20:21
+#    |
+# 20 |   puts words().find { |w| w.len }
+#    |                     ^
+#   help: it says yes or no to each item, as in `.find { |x| x > 0 }`
+
+async def words -> Iterator[Str]:
+  for w in ["fig", "apple", "kiwi"]:
+    await Time.sleep(1)
+    yield w
+
+async def main:
+  puts words().find { |w| w.len > 3 }
+  puts words().find { |w| w.len }

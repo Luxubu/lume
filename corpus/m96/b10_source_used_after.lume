@@ -1,0 +1,22 @@
+# b10 — an async sequence handed to a parameter `xs: async Iterator[Int]`
+# (taken by move, as the docs say), and then used again by the caller.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `s` is a generator, and it is used up here, so it cannot be used after
+#   --> corpus/m96/b10_source_used_after.lume:21:20
+#    |
+# 21 |   puts await total(s)
+#    |                    ^
+#   help: a generator hands out each item once: to walk the items twice, keep them with `.to_list` first
+
+async def nums -> Iterator[Int]:
+  yield 1
+  yield 2
+
+async def total(xs: async Iterator[Int]) -> Int:
+  xs.sum
+
+async def main:
+  s = nums()
+  puts await total(s)
+  puts s.first

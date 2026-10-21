@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **`==` on a `Child`** is refused, as on a block: a running program is
+  compared by what it gives.
+- **Fixed**: an async generator taking an `async Iterator[T]` reached rustc.
 - **`http`, streamed**: `http.request(method, url)` builds a request with
   `.header`, `.with_body` and `.timeout(ms)`; `send` waits for it, `await
   fetch` waits in async code, and `open` gives the body as it arrives, as

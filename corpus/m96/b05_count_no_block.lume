@@ -1,0 +1,20 @@
+# b05 — `count` with no block on an async sequence. A list's `count` needs
+# a block (`len` is the number of items), and the waiting methods "give what
+# a list's would"; Rust's `StreamExt::count` takes none. Which wins?
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `count` counts the items a block accepts, so it needs one
+#   --> corpus/m96/b05_count_no_block.lume:20:14
+#    |
+# 20 |   puts nums().count
+#    |              ^
+#   help: for how many items there are, use `.len`; to count some of them, `.count { |x| ... }`
+
+async def nums -> Iterator[Int]:
+  yield 1
+  yield 2
+  yield 3
+
+async def main:
+  puts nums().count { |n| n > 1 }
+  puts nums().count

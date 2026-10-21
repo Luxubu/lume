@@ -1,0 +1,14 @@
+quiet: exit 0, out [], err []
+both: exit 3, out ["one", "three"], err ["two"]
+usage: exit 64, out [], err ["bad input", "try again"]
+false: exit 1, out [], err []
+signal: exit -1, out ["going"], err []
+finished
+3000 lines on stderr
+noisy exited with 0
+Some("first problem")
+cannot run `no-such-tool-zz`: No such file or directory (os error 2)
+cannot run `ls` in `/no/such/place`: no such folder
+["a.txt", "b.txt"]
+ls exited with 0
+exit: 0

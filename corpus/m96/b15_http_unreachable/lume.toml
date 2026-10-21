@@ -1,0 +1,6 @@
+[package]
+name = "b15_http_unreachable"
+version = "0.1.0"
+
+[dependencies]
+http = { path = "../../../packages/http" }

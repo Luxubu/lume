@@ -1,0 +1,7 @@
+error: `==` cannot compare `Child` values
+  --> corpus/m96/b12_child_equal.lume:18:10
+   |
+18 |   puts a == b
+   |          ^
+  help: a `Child` is a running program: compare what it gives, such as its exit code from `await c.wait`
+exit: 1

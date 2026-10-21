@@ -1,0 +1,49 @@
+# b11 — `async Iterator[T]` written as a type: a plain `def` handing on a
+# chain over an async generator, one handing on a chain over a `Child`'s
+# `lines`, an `async def` parameter that takes one (a generator's, a
+# chain's, a `Child`'s lines), and a method parameter that takes one.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# [0, 2, 4]
+# 12
+# HI
+# YO
+# 0
+# lines: 2
+# 5
+
+async def naturals -> Iterator[Int]:
+  var n = 0
+  while true:
+    yield n
+    n += 1
+
+def evens -> async Iterator[Int] = naturals().filter { |n| n % 2 == 0 }
+
+def shouted(c: Child) -> async Iterator[Str] = c.lines.map { |l| l.upcase }
+
+async def total(xs: async Iterator[Int]) -> Int:
+  var t = 0
+  for x in xs:
+    t += x
+  t
+
+struct Tally:
+  label: Str
+
+  async def describe(xs: async Iterator[Str]) -> Str:
+    n = xs.count { |s| not s.empty? }
+    "#{label}: #{n}"
+
+async def main -> () or Error:
+  puts evens().take(3).to_list
+  puts await total(evens().take(4))
+  c = Process.spawn("printf", ["hi\nyo\n"])?
+  for l in shouted(c):
+    puts l
+  puts await c.wait
+  d = Process.spawn("printf", ["a\n\nb\n"])?
+  puts await Tally(label: "lines").describe(d.lines)
+  s = naturals().map { |n| n * n }.take(3)
+  puts await total(s)
+  ()

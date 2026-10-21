@@ -1,0 +1,7 @@
+error: an `async Iterator[Int]` has no `max` yet
+  --> corpus/m96/b07_no_max_yet.lume:19:32
+   |
+19 |   puts nums().map { |n| n * 2 }.max
+   |                                ^
+  help: it has the chains `map`, `filter`, `reject`, `take_while`, `take`, `skip` and `enumerate`, and `first`, `count`, `sum`, `any?`, `all?`, `find`, `each` and `fold`; for the rest, keep its items with `.to_list`
+exit: 1

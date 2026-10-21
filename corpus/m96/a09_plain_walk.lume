@@ -1,0 +1,43 @@
+# a09_plain_walk: a plain `def` that takes `xs: async Iterator[Str]` (a
+# Child's lines) and walks it with `for`. collections.md says a parameter
+# `xs: async Iterator[T]` takes one by move, and that an async sequence
+# "is walked in async code": a `for` over it waits, so it goes in an
+# `async def` or a `spawn:` body. A plain `def` may hand such a sequence
+# on as a chain (`shouted` below is fine), but not walk it.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `xs` hands out items that arrive later, so a `for` over it waits for each: it goes in async code
+#   --> corpus/m96/a09_plain_walk.lume:22:12
+#    |
+# 22 |   for x in xs:
+#    |            ^
+#   help: walk it in an `async def` or a `spawn:` body
+
+# handing it on as a chain is fine in a plain def
+def shouted(xs: async Iterator[Str]) -> async Iterator[Str] = xs.map { |s| s.upcase }
+
+# the number of characters in every line, not counting line endings
+def tally(xs: async Iterator[Str]) -> Int:
+  var n = 0
+  for x in xs:
+    n += x.len
+  n
+
+# the same walk in an async def is fine
+async def longest(xs: async Iterator[Str]) -> Str:
+  var best = ""
+  for x in xs:
+    if x.len > best.len:
+      best = x
+  best
+
+async def main -> () or Error:
+  c = Process.spawn("printf", ["ab\ncde\nf\n"])?
+  puts tally(shouted(c.lines))
+  puts await c.wait
+  s = Process.spawn("sort", [])?
+  s.write("fig\nbanana\nkiwi\n")?
+  s.close_input
+  puts await longest(s.lines)
+  puts await s.wait
+  ()

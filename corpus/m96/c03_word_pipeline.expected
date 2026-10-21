@@ -1,0 +1,17 @@
+lower -> words: 3 lines
+words -> sort: 17 lines
+11 distinct words, 17 in all
+on=3 the=3 a=2 cat=2
+{"and", "end", "hat", "it", "mat", "sat", "went"}
+false
+exits 0 0 0
+-- waiting methods
+2
+Some("A cat, a hat, the end.")
+62
+true
+TOA
+true
+Some("tick 5")
+ticker stopped: -1
+exit: 0

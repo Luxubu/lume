@@ -453,7 +453,9 @@ the two parts, `{ |i, x| ... }`, as a list's chain does.
 **`first`, `count`, `sum`, `any?`, `all?`, `find`, `each` and `fold` wait
 for the items and give what a list's would**, as Rust's `StreamExt` has
 `next`, `count`, `any`, `all`, `for_each` and `fold`, so they go in async
-code. Each item is handled as it arrives, not kept. `first`, `find`,
+code. Each item is handled as it arrives, not kept. `count` with no block
+counts every item, as `StreamExt::count` does — an async sequence has no
+`len` — where a list's `count` takes a block and its `len` counts all. `first`, `find`,
 `any?` and `all?` stop at their answer and let go of the sequence, so they
 work on an endless one. Their block runs during the call, as a list's
 does, so it may change the names around it:

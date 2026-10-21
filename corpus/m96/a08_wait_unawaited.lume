@@ -1,0 +1,46 @@
+# a08_wait_unawaited: a helper pipes words through `sort -u` and reads the
+# exit code with `c.wait` but no `await`. io.md says `wait` waits for the
+# program, so it goes in async code with `await` in front;
+# examples/errors/child_wait_not_awaited.lume shows the message for a
+# `main`, and this is the same misuse in an async helper that returns
+# `[Str] or Error`, after a loop of writes and a `lines.to_list`.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `wait` waits for the program to end: its result arrives later
+#   --> corpus/m96/a08_wait_unawaited.lume:23:11
+#    |
+# 23 |   code = c.wait
+#    |           ^
+#   help: write `await` in front of the call to wait for it, or `spawn:` to run it alongside other work
+
+# each word once, in order
+async def distinct(words: [Str]) -> [Str] or Error:
+  c = Process.spawn("sort", ["-u"])?
+  for w in words:
+    c.write(w + "\n")?
+  c.close_input
+  out = c.lines.to_list
+  code = c.wait
+  if code != 0:
+    return Error("sort exited with #{code}")
+  out
+
+# the words, last first, through `sort -r` in a shell
+async def backwards(words: [Str]) -> [Str] or Error:
+  c = Process.spawn("sh", ["-c", "sort -r"])?
+  for w in words:
+    c.write(w + "\n")?
+  c.close_input
+  out = c.lines.map { |l| l.trim }.to_list
+  code = await c.wait
+  if code != 0:
+    return Error("sort -r exited with #{code}")
+  out
+
+async def main -> () or Error:
+  text = "the cat saw the dog and the dog saw the cat"
+  words = text.split
+  puts await distinct(words)?
+  for line in await backwards(words)?:
+    puts line
+  ()

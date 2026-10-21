@@ -1,0 +1,95 @@
+# a01_waiting_methods: the methods that wait for an async sequence's items
+# (first, find, any?, all?, count, sum, fold, each) on async generators of
+# my own: one that awaits for each item, an endless one, a method that is
+# one, an empty one, and after chains (filter, map, take, enumerate).
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# Some(12)
+# Some(21)
+# None
+# true
+# true
+# false
+# 3
+# 75
+# 1215
+# Some(0)
+# Some(21)
+# true
+# false
+# 25
+# <0><3><6><9>
+# Some((3, 21))
+# None
+# 0
+# true
+# false
+# 15
+# ["ulysses"]
+# Some("DUNE")
+# 2
+# dune+emma+ulysses+
+
+async def slow(n: Int) -> Int:
+  await Time.sleep(1)
+  n
+
+# a reading that takes a moment to arrive
+async def readings(values: [Int]) -> Iterator[Int]:
+  for v in values:
+    yield await slow(v)
+
+async def naturals -> Iterator[Int]:
+  var n = 0
+  while true:
+    yield n
+    n += 1
+
+struct Shelf:
+  books: [Str]
+
+  async def titles -> Iterator[Str]:
+    for b in books:
+      await Time.sleep(1)
+      yield b
+
+async def main:
+  temps = [12, 15, 9, 21, 18]
+  puts readings(temps).first
+  puts readings(temps).find { |t| t > 16 }
+  puts readings(temps).find { |t| t > 30 }
+  puts readings(temps).any? { |t| t < 10 }
+  puts readings(temps).all? { |t| t > 0 }
+  puts readings(temps).all? { |t| t > 10 }
+  puts readings(temps).count { |t| t >= 15 }
+  puts readings(temps).sum
+  puts readings(temps).fold(0) { |acc, t| acc + t * t }
+
+  # endless: these stop at their answer
+  puts naturals().first
+  puts naturals().find { |n| n > 20 and n % 7 == 0 }
+  puts naturals().any? { |n| n * n == 144 }
+  puts naturals().all? { |n| n < 5 }
+
+  # after chains
+  puts naturals().filter { |n| n % 2 == 1 }.take(5).sum
+  puts naturals().map { |n| n * 3 }.take(4).fold("") { |acc, n| acc + "<#{n}>" }
+  puts readings(temps).enumerate.find { |i, t| i > 0 and t == 21 }
+
+  # nothing in it
+  puts readings([]).first
+  puts readings([]).sum
+  puts readings([]).all? { |t| t > 100 }
+  puts readings([]).any? { |t| t > 100 }
+
+  # each, and blocks that change the names around them
+  shelf = Shelf(books: ["dune", "emma", "ulysses"])
+  var letters = 0
+  shelf.titles.each { |t| letters += t.len }
+  puts letters
+  var long: [Str] = []
+  shelf.titles.filter { |t| t.len > 4 }.each { |t| long.push(t) }
+  puts long
+  puts shelf.titles.map { |t| t.upcase }.first
+  puts shelf.titles.count { |t| t.contains?("u") }
+  puts shelf.titles.fold("") { |acc, t| acc + t + "+" }

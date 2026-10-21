@@ -1,0 +1,83 @@
+# a06_stream_functions: functions that take or give `async Iterator[T]`:
+# plain defs that hand on a chain (map, reject, take, a block that keeps a
+# parameter), an async generator that walks one it is given, async defs
+# that walk one to an answer, all fed by async generators, by a chain kept
+# in a name, and by a Child's lines.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ["TEA", "AND", "CAKE"]
+# 1. MILK
+# 2. EGGS
+# 3. BREAD
+# printf exited with 0
+# 11
+# banana
+# [0, 2, 4, 6]
+# Some(10)
+# 6
+# ["w:a", "w:b"]
+# 2
+# ["1. x", "2. y"]
+
+async def naturals -> Iterator[Int]:
+  var n = 0
+  while true:
+    yield n
+    n += 1
+
+async def words(text: Str) -> Iterator[Str]:
+  for w in text.split:
+    await Time.sleep(1)
+    yield w
+
+def evens -> async Iterator[Int] = naturals().filter { |n| n % 2 == 0 }
+
+def shouted(xs: async Iterator[Str]) -> async Iterator[Str] = xs.map { |s| s.upcase }
+
+def nonblank(xs: async Iterator[Str]) -> async Iterator[Str] = xs.reject { |s| s.trim.empty? }
+
+def first_n(xs: async Iterator[Int], n: Int) -> async Iterator[Int] = xs.take(n)
+
+def tagged(xs: async Iterator[Str], tag: Str) -> async Iterator[Str] = xs.map { |s| "#{tag}:#{s}" }
+
+async def numbered(xs: async Iterator[Str]) -> Iterator[Str]:
+  var i = 0
+  for x in xs:
+    i += 1
+    yield "#{i}. #{x}"
+
+async def total_chars(xs: async Iterator[Str]) -> Int:
+  xs.fold(0) { |n, x| n + x.len }
+
+async def longest(xs: async Iterator[Str]) -> Str:
+  var best = ""
+  for x in xs:
+    if x.len > best.len:
+      best = x
+  best
+
+async def main -> () or Error:
+  puts shouted(words("tea and cake")).to_list
+
+  # a Child's lines, through three of them
+  c = Process.spawn("printf", ["milk\n\neggs\n  \nbread\n"])?
+  for line in numbered(shouted(nonblank(c.lines))):
+    puts line
+  puts "printf exited with #{await c.wait}"
+
+  puts await total_chars(words("one two three"))
+  s = Process.spawn("sort", [])?
+  s.write("kiwi\nbanana\nfig\n")?
+  s.close_input
+  puts await longest(s.lines)
+
+  puts evens().take(4).to_list
+  puts evens().find { |n| n > 9 }
+  puts first_n(evens(), 3).sum
+  puts tagged(words("a b"), "w").to_list
+
+  # a chain kept in a name, handed on later
+  loud = shouted(words("x y"))
+  puts await total_chars(loud)
+  puts numbered(words("x y")).to_list
+  ()

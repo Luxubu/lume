@@ -1,0 +1,117 @@
+# c06_frames — a client for a server whose answers are framed as a language
+# server's are: a `Content-Length: n` line, a blank line, then n bytes with
+# no line ending. The server is `sh` with a `while read` loop. Probes
+# `await read_line` for the header and `await read(n)` for the body (one
+# body has a newline inside it), requests written ahead of their answers,
+# a broken header and reading on past it, read(n) when the program ends
+# before n bytes, read(n) after the end, an async generator that takes a
+# `Child` and yields frames (mapped, and counted with `count`), an enum of
+# read results, `while` with `return` from a match arm.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# frame 6: 1:abab
+# 2 -> frame 4: 2:xx
+# 3 -> frame 17: line one / line two
+# 4 -> frame 12: 4:hellohello
+# broken: `Garbage` is not a Content-Length header
+# ["8: 6:endend", "17: line one / line two"]
+# server exit: 0
+# big frames before the broken one: 2
+# batch exit: 0
+# frame 10: short
+# after the end: None
+# printf exit: 0
+
+def server_script -> Str:
+  r"""
+    while read id word; do
+      case "$word" in
+        multi) printf 'Content-Length: 17\n\nline one\nline two' ;;
+        oops) printf 'Garbage\n\n' ;;
+        *) body="$id:$word$word"; printf 'Content-Length: %d\n\n%s' "${#body}" "$body" ;;
+      esac
+    done
+    """
+
+struct Frame:
+  size: Int
+  body: Str
+
+  def show -> Str = "#{size}: #{body.replace("\n", " / ")}"
+
+enum FrameRead:
+  Got(frame: Frame)
+  End
+  Broken(why: Str)
+
+# a header, a blank line, a body; blank lines before a header are skipped
+async def read_frame(c: Child) -> FrameRead:
+  var header = ""
+  while header.empty?:
+    match await c.read_line:
+      Some(h) -> header = h
+      None -> return End
+  match header.split(": "):
+    ["Content-Length", n] ->
+      match n.to_int:
+        Ok(size) ->
+          _ = await c.read_line
+          body = (await c.read(size)).or("")
+          Got(Frame(size: size, body: body))
+        Error(e) -> Broken(e.message)
+    _ -> Broken("`#{header}` is not a Content-Length header")
+
+async def ask(c: Child, id: Int, word: Str) -> FrameRead or Error:
+  c.write("#{id} #{word}\n")?
+  await read_frame(c)
+
+def describe(r: FrameRead) -> Str:
+  match r:
+    Got(f) -> "frame #{f.show}"
+    End -> "the end"
+    Broken(why) -> "broken: #{why}"
+
+# every frame until the output ends or a header is broken
+async def frames(c: Child) -> Iterator[Frame]:
+  while true:
+    match await read_frame(c):
+      Got(f) ->
+        yield f
+      End -> return
+      Broken(_) -> return
+
+async def main -> () or Error:
+  server = Process.spawn("sh", ["-c", server_script()])?
+  one = await ask(server, 1, "ab")?
+  puts describe(one)
+
+  # three asked before any answer is read
+  server.write("2 x\n3 multi\n4 hello\n")?
+  for i in 2..4:
+    r = await read_frame(server)
+    puts "#{i} -> #{describe(r)}"
+
+  bad = await ask(server, 5, "oops")?
+  puts describe(bad)
+
+  # the blank line the broken frame left behind is skipped
+  server.write("6 end\n7 multi\n")?
+  server.close_input
+  rest = frames(server).map { |f| f.show }.to_list
+  puts rest
+  puts "server exit: #{await server.wait}"
+
+  batch = Process.spawn("sh", ["-c", server_script()])?
+  batch.write("1 a\n2 bb\n3 multi\n4 oops\n5 never\n")?
+  batch.close_input
+  big = frames(batch).count { |f| f.size > 5 }
+  puts "big frames before the broken one: #{big}"
+  puts "batch exit: #{await batch.wait}"
+
+  # the header promises more than the program writes
+  short = Process.spawn("printf", ["Content-Length: 10\n\nshort"])?
+  cut = await read_frame(short)
+  puts describe(cut)
+  after = await short.read(4)
+  puts "after the end: #{after}"
+  puts "printf exit: #{await short.wait}"

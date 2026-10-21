@@ -1,0 +1,65 @@
+# a03_conversation: talking to a program that runs alongside, a line out
+# and a line back with write and read_line: an adding loop in sh, a
+# counter that keeps a running tally and reports it once its input is
+# closed, read(n) on output of a known length, and a loop stopped with
+# kill.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 1 2 -> 3
+# 40 2 -> 42
+# 100 -1 -> 99
+# after close: None
+# adder exited with 0
+# Some("1: red")
+# Some("2: green")
+# Some("3: blue")
+# Some("total 3")
+# None
+# counter exited with 0
+# Some("abc")
+# Some("def")
+# Some("gh")
+# None
+# printf exited with 0
+# echo said ok
+# killed: -1
+
+# one question, one answer
+async def ask(c: Child, q: Str) -> Str or Error:
+  c.write(q + "\n")?
+  Ok((await c.read_line).or("(no answer)"))
+
+async def main -> () or Error:
+  adder = Process.spawn("sh", ["-c", "while read a b; do echo $((a + b)); done"])?
+  for pair in ["1 2", "40 2", "100 -1"]:
+    answer = await ask(adder, pair)?
+    puts "#{pair} -> #{answer}"
+  adder.close_input
+  puts "after close: #{await adder.read_line}"
+  puts "adder exited with #{await adder.wait}"
+
+  # it says nothing more until its input ends
+  counter = Process.spawn("sh", ["-c", "n=0; while read x; do n=$((n + 1)); echo \"$n: $x\"; done; echo \"total $n\""])?
+  for colour in ["red", "green", "blue"]:
+    counter.write(colour + "\n")?
+    puts await counter.read_line
+  counter.close_input
+  puts await counter.read_line
+  puts await counter.read_line
+  puts "counter exited with #{await counter.wait}"
+
+  # a number of bytes at a time; the last read gets what is left
+  p = Process.spawn("printf", ["abcdefgh"])?
+  puts await p.read(3)
+  puts await p.read(3)
+  puts await p.read(3)
+  puts await p.read(3)
+  puts "printf exited with #{await p.wait}"
+
+  # a loop that would never end on its own
+  echo = Process.spawn("sh", ["-c", "while read x; do echo ok; done"])?
+  said = await ask(echo, "anything")?
+  puts "echo said #{said}"
+  echo.kill
+  puts "killed: #{await echo.wait}"
+  ()

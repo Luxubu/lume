@@ -1,0 +1,21 @@
+# b12 — two `Child` values compared with `==`. The docs say a `Child` can be
+# kept in a list or a field and handed to tasks, but not whether it has `==`;
+# a running program has no value to compare, as a block has none.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `==` cannot compare `Child` values
+#   --> corpus/m96/b12_child_equal.lume:18:10
+#    |
+# 18 |   puts a == b
+#    |          ^
+#   help: a `Child` is a running program: compare what it gives, such as its exit code from `await c.wait`
+
+async def main -> () or Error:
+  a = Process.spawn("echo", ["same"])?
+  b = Process.spawn("echo", ["same"])?
+  puts a.lines.first
+  puts b.lines.first
+  puts a == b
+  puts await a.wait
+  puts await b.wait
+  ()

@@ -1,0 +1,65 @@
+# a04_errors_and_codes: what programs write to standard error and how they
+# end: error_lines beside lines, exit codes from 0 to 64, a program ended
+# by a signal, a lot written to stderr while stdout is read first, the
+# first line of stderr, the Errors for a program that cannot start and a
+# folder that is missing, and spawn_in a folder that exists.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# quiet: exit 0, out [], err []
+# both: exit 3, out ["one", "three"], err ["two"]
+# usage: exit 64, out [], err ["bad input", "try again"]
+# false: exit 1, out [], err []
+# signal: exit -1, out ["going"], err []
+# finished
+# 3000 lines on stderr
+# noisy exited with 0
+# Some("first problem")
+# cannot run `no-such-tool-zz`: No such file or directory (os error 2)
+# cannot run `ls` in `/no/such/place`: no such folder
+# ["a.txt", "b.txt"]
+# ls exited with 0
+
+async def report(label: Str, script: Str) -> () or Error:
+  c = Process.spawn("sh", ["-c", script])?
+  out = c.lines.to_list
+  err = c.error_lines.to_list
+  code = await c.wait
+  puts "#{label}: exit #{code}, out #{out}, err #{err}"
+
+async def main -> () or Error:
+  await report("quiet", "exit 0")?
+  await report("both", "echo one; echo two >&2; echo three; exit 3")?
+  await report("usage", "echo bad input >&2; echo try again >&2; exit 64")?
+  await report("false", "false")?
+  await report("signal", "echo going; kill -9 $$")?
+
+  # stderr fills up while only stdout is read: it is kept, not stalled on
+  noisy = Process.spawn("sh", ["-c", "i=0; while [ $i -lt 3000 ]; do echo \"line $i\" >&2; i=$((i + 1)); done; echo finished"])?
+  for line in noisy.lines:
+    puts line
+  n = noisy.error_lines.count { |l| l.starts_with?("line ") }
+  puts "#{n} lines on stderr"
+  puts "noisy exited with #{await noisy.wait}"
+
+  e = Process.spawn("sh", ["-c", "echo first problem >&2; echo second problem >&2"])?
+  puts e.error_lines.first
+
+  # starting can fail; the Error says why
+  match Process.spawn("no-such-tool-zz", ["x"]):
+    Ok(_) -> puts "started?"
+    Error(err) -> puts err.message
+  match Process.spawn_in("/no/such/place", "ls", []):
+    Ok(_) -> puts "started?"
+    Error(err) -> puts err.message
+
+  dir = "/tmp/lume-review-a/a04"
+  if Dir.exists?(dir):
+    Dir.remove(dir)?
+  Dir.make(dir)?
+  File.write(Path.join(dir, "b.txt"), "b")?
+  File.write(Path.join(dir, "a.txt"), "a")?
+  l = Process.spawn_in(dir, "ls", [])?
+  puts l.lines.to_list
+  puts "ls exited with #{await l.wait}"
+  Dir.remove(dir)?
+  ()

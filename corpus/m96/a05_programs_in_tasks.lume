@@ -1,0 +1,69 @@
+# a05_programs_in_tasks: a few programs at once, each in a task, with the
+# results printed in the order the tasks were started, not the order the
+# programs finish: an async def that runs a script and gives its output
+# and exit code, Children kept in a list and finished in tasks, a task
+# whose `?` meets a program that cannot start, and slow programs started
+# first whose answers still come first.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 0: slow; (exit 0)
+# 1: fast; (exit 2)
+# 2: a;b; (exit 0)
+# 3:  (exit 127)
+# ["CHERRY/0", "APPLE/0", "BANANA/0"]
+# Ok(12)
+# failed: cannot run `no-such-zz`: No such file or directory (os error 2)
+# [3, 1, 2]
+
+# everything a script wrote, each line ended by `;`, and its exit code
+async def run_one(script: Str) -> (Str, Int) or Error:
+  c = Process.spawn("sh", ["-c", script])?
+  text = c.lines.fold("") { |acc, l| acc + l + ";" }
+  code = await c.wait
+  (text, code)
+
+async def finish(k: Child) -> Str:
+  first = k.lines.first.or("?")
+  code = await k.wait
+  "#{first}/#{code}"
+
+async def number_from(script: Str) -> Int or Error:
+  c = Process.spawn("sh", ["-c", script])?
+  n = c.lines.first.or("0").to_int?
+  n
+
+async def main -> () or Error:
+  scripts = ["sleep 0.3; echo slow", "echo fast; exit 2", "echo a; echo b", "no-such-cmd-zz 2> /dev/null"]
+  results = await scripts.map { |s| spawn: await run_one(s) }.to_list
+  for i, r in results.enumerate:
+    match r:
+      Ok(p) -> puts "#{i}: #{p.0} (exit #{p.1})"
+      Error(e) -> puts "#{i}: #{e.message}"
+
+  # started here, finished in tasks
+  words = ["cherry", "apple", "banana"]
+  var kids: [Child] = []
+  for w in words:
+    k = Process.spawn("tr", ["a-z", "A-Z"])?
+    k.write(w + "\n")?
+    k.close_input
+    kids.push(k)
+  puts await kids.map { |k| spawn: await finish(k) }.to_list
+
+  # `?` inside spawn: leaves the task, and the failure waits in it
+  t = spawn:
+    c = Process.spawn("printf", ["3\n4\n5\n"])?
+    c.lines.fold(0) { |acc, l| acc + l.to_int.or(0) }
+  puts await t
+  u = spawn:
+    c = Process.spawn("no-such-zz", [])?
+    c.lines.count { |l| l.len > 0 }
+  match await u:
+    Ok(n) -> puts "counted #{n}"
+    Error(e) -> puts "failed: #{e.message}"
+
+  # the slowest is started first, and its answer is still first
+  delays = ["sleep 0.3; echo 3", "sleep 0.1; echo 1", "echo 2"]
+  nums = await delays.map { |d| spawn: await number_from(d) }.to_list
+  puts nums.map { |r| r.or(0) }.to_list
+  ()

@@ -1,0 +1,109 @@
+# c04_job_pool — a job runner: each job is a `sh -c` script run as a child
+# program inside a task, never more than N at once. An async generator
+# starts a new task each time `next_done` hands back a finished one and
+# yields the results as they are ready. The order they finish in depends on
+# timing, so the first run is printed in the jobs' own order, from a map.
+# Then the waiting methods on the generator: count, a map chain with
+# to_list, find, fold; with one job at a time the order is fixed.
+# Also an interface as a parameter type, sets compared with subset?.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# greet   ok       hello | world
+# sum     ok       6
+# slow    ok       done
+# fail    exit 2   trying  [1 on stderr]
+# words   ok       a | b | c
+# quiet   ok       (nothing)
+# missing exit 127 (nothing)  [1 on stderr]
+# every job came back once: true
+# failed: fail, missing
+# lines out: 8
+# with two at once, 2 failed
+# one at a time: greet, sum, slow, fail, words, quiet, missing
+# first to say 6: Some("sum")
+# on stderr in all: 2
+
+struct Job:
+  name: Str
+  script: Str
+
+interface Shown:
+  def line -> Str
+
+struct Done:
+  name: Str
+  code: Int
+  out: [Str]
+  errs: [Str]
+
+  def ok? -> Bool = code == 0
+
+  def line -> Str:
+    status = if ok?: "ok" else: "exit #{code}"
+    shown = if out.empty?: "(nothing)" else: out.join(" | ")
+    note = if errs.empty?: "" else: "  [#{errs.len} on stderr]"
+    "#{name.pad_right(8)}#{status.pad_right(9)}#{shown}#{note}"
+
+def print_row(x: Shown):
+  puts x.line
+
+def jobs() -> [Job]:
+  [
+    Job("greet", "echo hello; echo world"),
+    Job("sum", "echo $((1 + 2 + 3))"),
+    Job("slow", "sleep 0.2; echo done"),
+    Job("fail", "echo trying; echo 'no disk' >&2; exit 2"),
+    Job("words", r"printf 'b\na\nc\n' | sort"),
+    Job("quiet", "true"),
+    Job("missing", "no-such-command-c04"),
+  ]
+
+async def run_job(job: Job) -> Done:
+  match Process.spawn("sh", ["-c", job.script]):
+    Error(e) -> Done(name: job.name, code: -2, out: [], errs: [e.message])
+    Ok(c) ->
+      out = c.lines.to_list
+      errs = c.error_lines.to_list
+      code = await c.wait
+      Done(name: job.name, code: code, out: out, errs: errs)
+
+# never more than `at_once` running; results as they finish
+async def pool(todo: [Job], at_once: Int) -> Iterator[Done]:
+  var running: [Task[Done]] = []
+  var started = 0
+  while started < todo.len or not running.empty?:
+    while started < todo.len and running.len < at_once:
+      job = todo.at(started)
+      running.push(spawn: await run_job(job))
+      started += 1
+    match await running.next_done:
+      Some(d) -> yield d
+      None -> return
+
+async def main:
+  todo = jobs()
+  var by_name: {Str: Done} = {}
+  for d in pool(todo, 3):
+    by_name[d.name] = d
+  for job in todo:
+    match by_name[job.name]:
+      Some(d) -> print_row(d)
+      None -> puts "#{job.name.pad_right(8)}never came back"
+
+  want = todo.map { |j| j.name }.to_set
+  got = by_name.keys.to_set
+  puts "every job came back once: #{want.subset?(got) and got.subset?(want) and by_name.len == todo.len}"
+  failed = by_name.values.filter { |d| not d.ok? }.map { |d| d.name }.sort
+  puts "failed: #{failed.join(", ")}"
+  lines_out = by_name.values.map { |d| d.out.len }.sum
+  puts "lines out: #{lines_out}"
+
+  bad = pool(todo, 2).count { |d| not d.ok? }
+  puts "with two at once, #{bad} failed"
+  names = pool(todo, 1).map { |d| d.name }.to_list
+  puts "one at a time: #{names.join(", ")}"
+  hit = pool(todo, 1).find { |d| d.out.contains?("6") }
+  hit_name = hit.map { |d| d.name }
+  puts "first to say 6: #{hit_name}"
+  errs = pool(todo, 4).fold(0) { |acc, d| acc + d.errs.len }
+  puts "on stderr in all: #{errs}"

@@ -1,0 +1,46 @@
+# b15 — `send`, `fetch` and `open` on a request that cannot be made: a URL
+# that does not parse, and `http://127.0.0.1:9/`, where nothing listens.
+# Each is an `Error` whose message starts with the method and the URL (the
+# rest is ureq's own words, which differ by system, so only the start is
+# printed). `http.get`, `http.send` and `http.post` the same.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# send: true
+# fetch: true
+# open: true
+# send: true
+# fetch: true
+# open: true
+# true
+# true
+# false
+
+import http
+
+def says(r: http.Response or Error, start: Str) -> Bool:
+  match r:
+    Ok(_) -> false
+    Error(e) -> e.message.starts_with?(start)
+
+async def main:
+  bad = http.request("GET", "not a url")
+  b_start = "GET not a url: "
+  sent = says(bad.send, b_start)
+  puts "send: #{sent}"
+  fetched = says(await bad.fetch, b_start)
+  puts "fetch: #{fetched}"
+  match bad.open:
+    Ok(_) -> puts "open: opened?"
+    Error(e) -> puts "open: #{e.message.starts_with?(b_start)}"
+  shut = http.request("POST", "http://127.0.0.1:9/").with_body("x", "text/plain").timeout(2000)
+  s_start = "POST http://127.0.0.1:9/: "
+  sent2 = says(shut.send, s_start)
+  puts "send: #{sent2}"
+  fetched2 = says(await shut.fetch, s_start)
+  puts "fetch: #{fetched2}"
+  match shut.open:
+    Ok(_) -> puts "open: opened?"
+    Error(e) -> puts "open: #{e.message.starts_with?(s_start)}"
+  puts http.get("http://127.0.0.1:9/").error?
+  puts http.send("PUT", "::", [], "").error?
+  puts http.post("http://127.0.0.1:9/x", "a", "text/plain").ok?

@@ -1,0 +1,9 @@
+0: slow; (exit 0)
+1: fast; (exit 2)
+2: a;b; (exit 0)
+3:  (exit 127)
+["CHERRY/0", "APPLE/0", "BANANA/0"]
+Ok(12)
+failed: cannot run `no-such-zz`: No such file or directory (os error 2)
+[3, 1, 2]
+exit: 0

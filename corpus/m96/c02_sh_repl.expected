@@ -1,0 +1,23 @@
+> add 2 3
+= 5
+> mul 4 5
+= 20
+> shout hi
+! unknown shout
+> echo lume
+= lume
+> add 10 -4
+= 6
+> quit
+(the server said bye)
+{"answer": 4, "refused": 1, "bye": 1}
+numbers [5, 20, 6], total 31
+after quit: None
+server stderr: ["unknown: shout"]
+server exit: 0
+-- a batch
+count 3 -> ["1", "2", "3"]
+count 0 -> []
+rest: ["ok again", "ok 3"]
+batch exit: 0
+exit: 0

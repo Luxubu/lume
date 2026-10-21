@@ -5563,6 +5563,13 @@ impl Gen {
             return Err(LumeError::new(line, col, format!("`{}` cannot compare {}", op, what))
                 .with_help("a block has no `==`: whether two do the same thing cannot be checked; compare the other fields, or give the type its own `def ==`"));
         }
+        // nor does a running program, as Rust's `Child` has none
+        if matches!(op, "==" | "!=") && (self.holds_child(lt, &mut Vec::new()) || self.holds_child(&rt, &mut Vec::new())) {
+            let direct = matches!(lt, Type::Named(n) if n == "Child");
+            let what = if direct { "`Child` values".to_string() } else { format!("`{}` values: they hold a `Child`", type_name(lt)) };
+            return Err(LumeError::new(line, col, format!("`{}` cannot compare {}", op, what))
+                .with_help("a `Child` is a running program: compare what it gives, such as its exit code from `await c.wait`"));
+        }
         let numeric = |t: &Type| matches!(t, Type::Int | Type::Float);
         let same = self.assignable(&rt, lt) && self.assignable(lt, &rt);
         let ok = match op {
@@ -5962,6 +5969,27 @@ impl Gen {
             _ => {}
         }
         self.expr_arg(a, t)
+    }
+
+    /// Whether a value of type `t` holds what `Process.spawn` gives,
+    /// directly or in a field, a list, an option or a tuple.
+    fn holds_child(&self, t: &Type, seen: &mut Vec<String>) -> bool {
+        let builtin = self.paths.get("Child").map(|p| p == "LumeChild").unwrap_or(false);
+        match t {
+            Type::Named(n) if n == "Child" => builtin,
+            Type::Named(n) | Type::App(n, _) => {
+                if seen.contains(n) {
+                    return false;
+                }
+                seen.push(n.clone());
+                let fields: Vec<Type> = self.structs.get(n).map(|s| s.fields.iter().map(|(_, t)| t.clone()).collect()).unwrap_or_default();
+                fields.iter().any(|f| self.holds_child(f, seen))
+            }
+            Type::List(i) | Type::Option(i) | Type::Set(i) => self.holds_child(i, seen),
+            Type::Map(k, v) => self.holds_child(k, seen) || self.holds_child(v, seen),
+            Type::Tuple(ts) => ts.iter().any(|x| self.holds_child(x, seen)),
+            _ => false,
+        }
     }
 
     /// Is `recv` what `Process.spawn` gives, not a program's own `Child`?
@@ -7407,7 +7435,8 @@ impl Gen {
             // since it runs after the call has returned
             for p in &f.params {
                 let pty = param_type(self.ct(&p.ty));
-                if matches!(pty, Type::Gen(_)) {
+                // a sequence it was given is its own already, taken by move
+                if matches!(pty, Type::Gen(_) | Type::AsyncGen(_)) {
                     continue;
                 }
                 if pty == Type::Str {
@@ -8854,7 +8883,7 @@ impl Gen {
                     // function would
                     self.expr(iter)?;
                     return Err(LumeError::new(iter.line, iter.col, format!("`{}` hands out items that arrive later, so a `for` over it waits for each: it goes in async code", describe_value(iter)))
-                        .with_help("loop over it in an `async def` or a `spawn:` body"));
+                        .with_help("walk it in an `async def` or a `spawn:` body"));
                 }
                 let (it, elem_ty, borrowed) = match &it_ty {
                     Type::AsyncGen(elem) => (self.give_away(iter)?, (**elem).clone(), false),
@@ -10098,6 +10127,8 @@ impl Gen {
             // so it is lent as a list's is; `any?`, `all?` and `find` let go
             // of the sequence once they have their answer
             if !self.in_async {
+                // what is wrong with the sequence itself says more
+                self.expr(recv)?;
                 return Err(LumeError::new(e.line, e.col, format!("`.{}` waits for items that arrive later, so it goes in async code", name))
                     .with_help("call it in an `async def` or a `spawn:` body"));
             }
@@ -11970,7 +12001,7 @@ impl Gen {
                 }
             }
             // a method that is one too; a chain over one starts nothing
-            ExprKind::Method { recv, name, .. } if !self.in_async && matches!(name.as_str(), "lines" | "error_lines") && self.is_builtin_child(recv) && matches!(name.as_str(), "lines" | "error_lines") => {
+            ExprKind::Method { recv, name, .. } if !self.in_async && !self.starts_streams && matches!(name.as_str(), "lines" | "error_lines") && self.is_builtin_child(recv) && matches!(name.as_str(), "lines" | "error_lines") => {
                 return Err(LumeError::new(e.line, e.col, format!("`{}` hands out lines as the program writes them, so it is walked in async code", describe_value(e)))
                     .with_help("walk it in an `async def` or a `spawn:` body; `Process.run` waits for the program and gives all of its output at once"));
             }

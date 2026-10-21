@@ -1,0 +1,134 @@
+# c01_build_steps — a small build tool. Each step is a program run in the
+# build folder; what it writes is streamed line by line with the step's name
+# in front, a step that fails stops the build, and the steps after it are
+# skipped. Probes Process.spawn_in, Child.write / close_input / lines /
+# error_lines / wait, a parameter typed `async Iterator[Str]` walked with
+# `for`, a write after close_input, spawn_in in a folder that does not exist,
+# enums with payloads and methods, `if` as a value, a map kept in order,
+# File / Dir / Path under /tmp/lume-review-c/.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# == count
+#   count | 4
+# == sort
+#   sort | apple
+#   sort | fig
+#   sort | pear
+# == shout
+#   shout | KIWI
+#   shout | LIME
+# == lint
+#   lint | checking
+# == summary
+# count  ok, 1 lines
+# sort   ok, 3 lines
+# shout  ok, 2 lines
+# lint   FAILED with 4: bad line 3; bad line 7
+# pack   skipped
+# 3 of 5 steps passed, 1 failed
+# == release
+# release: FAILED with 127: cannot run `ls` in `/tmp/lume-review-c/c01/no-such-dir`: no such folder
+# cannot write to `cat`: its input is closed
+# cat exited with 0
+# build folder still there: false
+
+ROOT = "/tmp/lume-review-c/c01"
+
+enum Feed:
+  NoInput
+  Input(text: Str)
+
+struct Step:
+  name: Str
+  program: Str
+  args: [Str]
+  feed: Feed
+
+enum Outcome:
+  Passed(lines: Int)
+  Failed(code: Int, errors: [Str])
+  Skipped
+
+  def ok? -> Bool:
+    match self:
+      Passed(_) -> true
+      _ -> false
+
+  def label -> Str:
+    match self:
+      Passed(n) -> "ok, #{n} lines"
+      Failed(code, errs) -> "FAILED with #{code}: #{errs.join("; ")}"
+      Skipped -> "skipped"
+
+# every line a step writes, shown as it arrives, and counted
+async def stream(name: Str, out: async Iterator[Str]) -> Int:
+  var n = 0
+  for line in out:
+    n += 1
+    puts "  #{name} | #{line}"
+  n
+
+async def run_step(dir: Str, step: Step) -> Outcome:
+  child = match Process.spawn_in(dir, step.program, step.args):
+    Ok(c) -> c
+    Error(e) -> return Failed(127, [e.message])
+  match step.feed:
+    Input(text) ->
+      match child.write(text):
+        Ok(_) -> ()
+        Error(e) -> return Failed(126, [e.message])
+    NoInput -> ()
+  child.close_input
+  n = await stream(step.name, child.lines)
+  errs = child.error_lines.to_list
+  code = await child.wait
+  if code == 0: Passed(n) else: Failed(code, errs)
+
+def steps() -> [Step]:
+  lint = "echo checking; echo 'bad line 3' >&2; echo 'bad line 7' >&2; exit 4"
+  [
+    Step(name: "count", program: "sh", args: ["-c", "wc -l < words.txt | tr -d ' '"], feed: NoInput),
+    Step(name: "sort", program: "sort", args: ["-u", "words.txt"], feed: NoInput),
+    Step(name: "shout", program: "tr", args: ["a-z", "A-Z"], feed: Input("kiwi\nlime\n")),
+    Step(name: "lint", program: "sh", args: ["-c", lint], feed: NoInput),
+    Step(name: "pack", program: "ls", args: [], feed: NoInput),
+  ]
+
+async def main -> () or Error:
+  Dir.make(ROOT)?
+  File.write(Path.join(ROOT, "words.txt"), "pear\napple\nfig\napple\n")?
+
+  var results: {Str: Outcome} = {}
+  var stopped = false
+  for step in steps():
+    if stopped:
+      results[step.name] = Skipped
+      next
+    puts "== #{step.name}"
+    outcome = await run_step(ROOT, step)
+    stopped = not outcome.ok?
+    results[step.name] = outcome
+
+  puts "== summary"
+  for name, o in results:
+    puts "#{name.pad_right(6)} #{o.label}"
+  passed = results.values.count { |o| o.ok? }
+  failed = results.values.count { |o| o.label.starts_with?("FAILED") }
+  puts "#{passed} of #{results.len} steps passed, #{failed} failed"
+
+  # a step whose folder is not there never starts
+  puts "== release"
+  missing = Path.join(ROOT, "no-such-dir")
+  release = await run_step(missing, Step(name: "release", program: "ls", args: [], feed: NoInput))
+  puts "release: #{release.label}"
+
+  # once its input is closed, a child takes no more
+  late = Process.spawn("cat", [])?
+  late.close_input
+  match late.write("too late\n"):
+    Ok(_) -> puts "wrote after closing?"
+    Error(e) -> puts e.message
+  puts "cat exited with #{await late.wait}"
+
+  Dir.remove(ROOT)?
+  puts "build folder still there: #{Dir.exists?(ROOT)}"

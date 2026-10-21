@@ -1,0 +1,16 @@
+["apple", "banana", "cherry", "fig", "pear"]
+pear fig cherry banana apple
+9 10 100
+["a", "b"]
+["HELLO, WORLD", "BYE"]
+a b c
+5
+["apple", "banana"]
+["X-Y-Z"]
+0: KIWI
+1: LIME
+2: PLUM
+cannot write to `sort`: its input is closed
+sort exited with 0
+sh exited with 4
+exit: 0

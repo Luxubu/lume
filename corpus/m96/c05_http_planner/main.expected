@@ -1,0 +1,20 @@
+1. GET http://127.0.0.1:9/items [Accept: application/json], no body, 30000 ms
+2. POST http://127.0.0.1:9/items [Accept: application/json, Content-Type: application/json, Authorization: Bearer k1], a body of 14, 30000 ms
+3. DELETE http://127.0.0.1:9/items/7 [], no body, 500 ms
+plan line 4: `PATCH` is not a method this planner makes
+plan line 5: `items` is not a path: it does not start with /
+plan line 6: timeout: `soon` is not an integer
+plan line 7: timeout: 0 is not above zero
+plan line 8: `colour=blue` is not an option
+plan line 9: `GET` needs a method and a path
+3 requests planned
+0 30000 / 1 250
+Request(method: "GET", url: "http://127.0.0.1:9/a", headers: [("X-Trace", "on")], body: "", timeout_ms: 250)
+GET http://127.0.0.1:9/items: no answer, an Error naming it: true
+POST http://127.0.0.1:9/items: no answer, an Error naming it: true
+DELETE http://127.0.0.1:9/items/7: no answer, an Error naming it: true
+open: true
+send: true
+bad URL: true
+503 false Some("5") true
+exit: 0

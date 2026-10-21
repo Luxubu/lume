@@ -1,0 +1,6 @@
+[package]
+name = "c05_http_planner"
+version = "0.1.0"
+
+[dependencies]
+http = { path = "../../../packages/http" }

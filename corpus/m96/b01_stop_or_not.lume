@@ -1,0 +1,41 @@
+# b01 — which waiting methods stop on an endless async sequence, and what
+# they give on an empty one: `first`, `find`, `any?`, `all?`, after chains.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# Some(0)
+# Some(5)
+# Some(6)
+# true
+# false
+# Some(3)
+# None
+# None
+# false
+# true
+# true
+
+async def naturals -> Iterator[Int]:
+  var n = 0
+  while true:
+    yield n
+    n += 1
+
+# yields only the items over 100, so it is empty for small ones
+async def big_of(xs: [Int]) -> Iterator[Int]:
+  for x in xs:
+    if x > 100:
+      yield x
+
+async def main:
+  puts naturals().first
+  puts naturals().skip(5).first
+  puts naturals().find { |n| n % 7 == 6 }
+  puts naturals().any? { |n| n * n == 49 }
+  # all? stops at the first item that fails
+  puts naturals().all? { |n| n < 3 }
+  puts naturals().map { |n| n * 3 }.filter { |n| n % 2 == 1 }.first
+  puts big_of([1, 2]).first
+  puts big_of([1, 2]).find { |n| n > 0 }
+  puts big_of([]).any? { |n| n > 0 }
+  puts big_of([5]).all? { |n| n > 1000 }
+  puts naturals().take_while { |n| n < 4 }.all? { |n| n < 4 }

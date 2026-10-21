@@ -1,0 +1,43 @@
+# b09 — a `Child` past its end: `read(n)` asking for more than is left and
+# then for more again, `read_line` after the end, `write` after
+# `close_input` and after `wait`, `kill` then `wait` then `read_line`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# Some("ab")
+# Some("c")
+# None
+# None
+# 0
+# cannot write to `cat`: its input is closed
+# ["one"]
+# 0
+# cannot write to `cat`: its input is closed
+# -1
+# None
+# cannot write to `sleep`: its input is closed
+
+def said(r: () or Error) -> Str:
+  match r:
+    Ok(_) -> "written"
+    Error(e) -> e.message
+
+async def main -> () or Error:
+  p = Process.spawn("printf", ["abc"])?
+  puts await p.read(2)
+  puts await p.read(5)
+  puts await p.read(1)
+  puts await p.read_line
+  puts await p.wait
+  c = Process.spawn("cat", [])?
+  c.write("one\n")?
+  c.close_input
+  puts said(c.write("two\n"))
+  puts c.lines.to_list
+  puts await c.wait
+  puts said(c.write("three\n"))
+  s = Process.spawn("sleep", ["30"])?
+  s.kill
+  puts await s.wait
+  puts await s.read_line
+  puts said(s.write("late\n"))
+  ()

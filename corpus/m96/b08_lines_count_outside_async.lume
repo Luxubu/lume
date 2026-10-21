@@ -1,0 +1,19 @@
+# b08 — a waiting method (`count`) on a `Child`'s `lines` in a plain
+# `def main`: not a `for`, as the example of this message has, but a method
+# that waits for the items.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `c.lines` hands out lines as the program writes them, so it is walked in async code
+#   --> corpus/m96/b08_lines_count_outside_async.lume:17:8
+#    |
+# 17 |   n = c.lines.count { |l| l == "a" }
+#    |        ^
+#   help: walk it in an `async def` or a `spawn:` body; `Process.run` waits for the program and gives all of its output at once
+
+def main -> () or Error:
+  (code, out, _) = Process.run("printf", ["a\nb\na\n"])?
+  puts "#{code} #{out.lines.len}"
+  c = Process.spawn("printf", ["a\nb\na\n"])?
+  n = c.lines.count { |l| l == "a" }
+  puts n
+  ()

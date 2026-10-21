@@ -1,0 +1,14 @@
+[]
+[("X-One", "1")]
+[("X-One", "1"), ("X-Two", "2")]
+[("X-One", "1"), ("X-Two", "2"), ("Content-Type", "application/x-www-form-urlencoded")]
+true n=1
+30000 30000 250
+POST http://example.com/items
+4
+("x-one", "again")
+["X-One", "X-Two", "Content-Type", "Content-Type"]
+second
+n=1
+-5 250
+exit: 0

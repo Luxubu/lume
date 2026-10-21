@@ -1,0 +1,19 @@
+# b07 — a list method an async sequence lacks (`max`), after a chain, so
+# the type is the chain's: an `async Iterator[Int]`.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: an `async Iterator[Int]` has no `max` yet
+#   --> corpus/m96/b07_no_max_yet.lume:19:32
+#    |
+# 19 |   puts nums().map { |n| n * 2 }.max
+#    |                                ^
+#   help: it has the chains `map`, `filter`, `reject`, `take_while`, `take`, `skip` and `enumerate`, and `first`, `count`, `sum`, `any?`, `all?`, `find`, `each` and `fold`; for the rest, keep its items with `.to_list`
+
+async def nums -> Iterator[Int]:
+  yield 4
+  yield 9
+  yield 2
+
+async def main:
+  puts nums().map { |n| n * 2 }.to_list
+  puts nums().map { |n| n * 2 }.max

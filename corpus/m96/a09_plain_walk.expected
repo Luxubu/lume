@@ -1,0 +1,7 @@
+error: `xs` hands out items that arrive later, so a `for` over it waits for each: it goes in async code
+  --> corpus/m96/a09_plain_walk.lume:22:12
+   |
+22 |   for x in xs:
+   |            ^
+  help: walk it in an `async def` or a `spawn:` body
+exit: 1

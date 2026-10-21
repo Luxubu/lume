@@ -1,0 +1,90 @@
+# a07_http_requests: the http package's request builder and its errors,
+# with no server: requests built a step at a time and their parts printed
+# (each step gives a new Request, headers keep their order, the last
+# timeout wins), then requests that cannot be made through send, fetch,
+# open, the one-call forms and tasks, and Responses made by hand.
+# Run from this folder with `lume run`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# GET http://127.0.0.1:9/items [] body 0 chars, 30000 ms
+# GET http://127.0.0.1:9/items [Accept=text/plain, X-Trace=a7] body 0 chars, 30000 ms
+# GET http://127.0.0.1:9/items [] body 0 chars, 30000 ms
+# POST http://127.0.0.1:9/notes [X-A=1, Content-Type=application/json, X-B=2] body 14 chars, 2000 ms
+# {"text": "hi"}
+# [("X-A", "1"), ("Content-Type", "application/json"), ("X-B", "2")]
+# send: GET http://127.0.0.1:9/items
+# fetch: POST http://127.0.0.1:9/notes
+# open: GET http://127.0.0.1:9/feed
+# get: GET not a url
+# delete: DELETE http://127.0.0.1:9/x
+# send(..): PUT http://127.0.0.1:9/y
+# post: POST http://127.0.0.1:9/form
+# [true, true, true]
+# GET http://127.0.0.1:9/a
+# GET http://127.0.0.1:9/b
+# GET not a url either
+# false
+# Some("text/plain")
+# None
+# true
+
+import http
+
+def describe(r: http.Request) -> Str:
+  hs = r.headers.map { |k, v| "#{k}=#{v}" }.join(", ")
+  "#{r.method} #{r.url} [#{hs}] body #{r.body.len} chars, #{r.timeout_ms} ms"
+
+# what an Error says before its reason: the method and the URL
+def made(e: Error) -> Str = e.message.split(": ").at(0)
+
+async def main -> () or Error:
+  base = http.request("GET", "http://127.0.0.1:9/items")
+  puts describe(base)
+  traced = base.header("Accept", "text/plain").header("X-Trace", "a7")
+  puts describe(traced)
+  puts describe(base)
+  post = http.request("POST", "http://127.0.0.1:9/notes").header("X-A", "1").with_body("{\"text\": \"hi\"}", "application/json").header("X-B", "2").timeout(100).timeout(2000)
+  puts describe(post)
+  puts post.body
+  puts post.headers
+
+  # port 9: nothing listens, so none of these can be made
+  match traced.send:
+    Ok(r) -> puts "send: answered #{r.status}?"
+    Error(e) -> puts "send: #{made(e)}"
+  match await post.fetch:
+    Ok(r) -> puts "fetch: answered #{r.status}?"
+    Error(e) -> puts "fetch: #{made(e)}"
+  match http.request("GET", "http://127.0.0.1:9/feed").open:
+    Ok(o) -> puts "open: answered #{o.status}?"
+    Error(e) -> puts "open: #{made(e)}"
+  match http.get("not a url"):
+    Ok(r) -> puts "get: answered #{r.status}?"
+    Error(e) -> puts "get: #{made(e)}"
+  match http.delete("http://127.0.0.1:9/x"):
+    Ok(r) -> puts "delete: answered #{r.status}?"
+    Error(e) -> puts "delete: #{made(e)}"
+  match http.send("PUT", "http://127.0.0.1:9/y", [("X-Key", "k1")], "data"):
+    Ok(r) -> puts "send(..): answered #{r.status}?"
+    Error(e) -> puts "send(..): #{made(e)}"
+  match http.post("http://127.0.0.1:9/form", "a=1", "application/x-www-form-urlencoded"):
+    Ok(r) -> puts "post: answered #{r.status}?"
+    Error(e) -> puts "post: #{made(e)}"
+
+  # several at once, from tasks; the results come back in the order started
+  urls = ["http://127.0.0.1:9/a", "http://127.0.0.1:9/b", "not a url either"]
+  outcomes = await urls.map { |u| spawn: await http.request("GET", u).timeout(1000).fetch }.to_list
+  puts outcomes.map { |r| r.error? }.to_list
+  for r in outcomes:
+    match r:
+      Ok(x) -> puts "answered #{x.status}?"
+      Error(e) -> puts made(e)
+
+  # a Response is a plain struct
+  gone = http.Response(status: 404, headers: [("content-type", "text/plain")], body: "gone")
+  puts gone.ok?
+  puts gone.header("Content-Type")
+  puts gone.header("Retry-After")
+  fine = http.Response(status: 204, headers: [], body: "")
+  puts fine.ok?
+  ()
