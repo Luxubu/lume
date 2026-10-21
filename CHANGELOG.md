@@ -2,29 +2,84 @@
 
 ## Unreleased
 
-- **`==` on a `Child`** is refused, as on a block: a running program is
-  compared by what it gives.
-- **Fixed**: an async generator taking an `async Iterator[T]` reached rustc.
+Nothing yet.
+
+## 0.5.0 — talking to the world
+
+Five milestones after 0.4.0 (92–96). A Lume program can now drive another
+program while it runs and read an HTTP body as it arrives, both as async
+sequences, which gained the methods that wait for their items. The
+language-server test moved to Lume on top of it, and a review round checked
+it all.
+
+### Install
+
+```sh
+git clone https://github.com/Luxubu/lume && cd lume && git checkout v0.5.0
+./install.sh
+lume run examples/process_spawn.lume
+```
+
+It needs a Rust toolchain (<https://rustup.rs>). See `docs/install.md`.
+
+### What is new
+
+- **`Process.spawn(program, args)`** and `Process.spawn_in(dir, ...)`: a
+  program running alongside, as Rust's `tokio::process::Child`. Its output
+  is an async sequence of lines (`lines`, `error_lines`), or read a line
+  or a number of bytes at a time (`await read_line`, `await read(n)`); its
+  input is written to (`write`, `close_input`); `await wait` gives its exit
+  code, and `kill` stops it.
+- **The methods that wait for an async sequence's items**: `first`,
+  `count`, `sum`, `any?`, `all?`, `find`, `each` and `fold`, as Rust's
+  `StreamExt` has them. Each item is handled as it arrives; `find`, `any?`,
+  `all?` and `first` stop at their answer, so they work on an endless
+  sequence; their block may change the names around it.
+- **`async Iterator[T]` as a type**: a `def` may hand on an async sequence
+  without `yield`, and a parameter takes one by move, as Rust takes a
+  `Stream`.
 - **`http`, streamed**: `http.request(method, url)` builds a request with
-  `.header`, `.with_body` and `.timeout(ms)`; `send` waits for it, `await
-  fetch` waits in async code, and `open` gives the body as it arrives, as
-  `lines` or `chunks`.
-- **`async Iterator[T]`** can be written as a type: a `def` may hand on an
-  async sequence, and a parameter take one by move.
-- **The shared build cache stays bounded**: `~/.cache/lume/target` keeps
-  the builds of the 300 programs built most recently; before, it kept every
-  one, and grew to 13 GB.
-- **`tools/lumecheck lsp`** drives `lume lsp` as an editor does, in Lume on
-  `Process.spawn`; `tests/lsp_test.py` is gone.
-- **Fixed**: a bare call of an `async` sibling method could not be awaited;
-  a struct holding a `Child` did not compile.
-- **`Process.spawn`**: a program running alongside, as Rust's
-  `tokio::process::Child` — its output as an async sequence of lines, or
-  read by line or by byte count; its input written to; its exit code
-  awaited.
-- **Async sequences wait for their items**: `first`, `count`, `sum`,
-  `any?`, `all?`, `find`, `each` and `fold`, as Rust's `StreamExt` has
-  them; `find`, `any?`, `all?` and `first` stop at their answer.
+  `.header`, `.with_body` and `.timeout(ms)`. `send` waits for the whole
+  answer, `await fetch` waits in async code as other tasks go on, and
+  `open` gives the status and headers at once and the body as it arrives,
+  as `lines` or `chunks`. `get`, `post` and the rest are as before.
+- **`==` on a `Child`**, or on a value holding one, is refused, as on a
+  block: compare what it gives.
+
+### Fixed
+
+- The shared build cache, `~/.cache/lume/target`, kept every program's
+  build for good, and reached 13 GB on one machine before the disk filled.
+  It now keeps the 300 programs built most recently.
+- A bare call of an `async` sibling method could not be awaited.
+- A struct holding a `Child` did not compile.
+- An async generator taking an `async Iterator[T]` reached rustc.
+- A `next_done` example in the docs depended on a 40 ms margin.
+
+### How it was checked
+
+- **The suite**: `tests/run.sh`, 1220 checks and 424 docs examples, byte for
+  byte. Its language-server test is `tools/lumecheck/lsp.lume` now, a Lume
+  program on `Process.spawn` that prints what the Python one did, byte for
+  byte; the only Python left is three local HTTP servers the tests start.
+- **Error messages**: 375 of the compiler's 391 messages are shown by a test.
+- **Review round twenty**: 30 programs written from the docs alone, 34
+  guesses, 20 of 22 right on the first run, no wrong output; all six whole
+  programs — driving `sort`, `tr`, `sh` loops and framed output — right on
+  the first run.
+- **Streaming**: against a local server writing a line every 400 ms, the
+  lines arrive 400 ms apart.
+- **Benchmarks**: eight programs against the Rust a person would write; six
+  are within 10% of it, as at 0.4.0.
+
+### Known limits
+
+- **HTTP**: a request's own body is sent whole, and Lume cannot serve HTTP.
+- **Async generators** cannot be declared in an interface.
+- **VS Code**: packaged, and its language server checked with VS Code's
+  messages, but not yet looked at in an editor window.
+- **Time zones**: dates and times are UTC only.
+- **No registry**: packages come from paths and git.
 
 ## 0.4.0 — sequences that wait
 
