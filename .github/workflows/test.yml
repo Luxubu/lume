@@ -1,0 +1,43 @@
+# The whole test suite, on Linux and on macOS, for every push and pull
+# request: what `tests/run.sh` checks on a developer's machine.
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  suite:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    env:
+      # the order `sort` and `ls` put text in, as the expected files have it
+      LC_ALL: C
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+
+      # the compiler's build, and the cache of crates every Lume program
+      # built with cargo shares (`~/.cache/lume`)
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            compiler/target
+            ~/.cache/lume
+          key: ${{ runner.os }}-lume-${{ hashFiles('compiler/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-lume-
+
+      - name: Build the compiler
+        run: cargo build --release --manifest-path compiler/Cargo.toml
+
+      - name: Test suite
+        run: tests/run.sh

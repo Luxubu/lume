@@ -105,7 +105,9 @@ pub def run_step(lume: Str, step: Step, update: Bool, scratch: Str) -> Verdict o
       (code, out) = lume_cmd(lume, ["run", step.what])?
       has_expected = File.exists?(step.expected)
       if leaked?(out):
-        return Ok(if has_expected: failed(step, ": rustc error leaked") else: Verdict(name: step.name, failure: None, skipped: true))
+        # what rustc said, so a leak seen only on another machine can be read
+        said = out.lines.filter { |l| l.starts_with?("error") or l.trim.starts_with?("-->") or l.contains?(" | ") }.take(12).map { |l| "    " + l }.join("\n")
+        return Ok(if has_expected: failed(step, ": rustc error leaked\n" + said) else: Verdict(name: step.name, failure: None, skipped: true))
       if not has_expected and not update:
         return Ok(Verdict(name: step.name, failure: None, skipped: true))
       compare(step, "#{out}\nexit: #{code}", update, scratch)

@@ -22,7 +22,11 @@ class H(http.server.BaseHTTPRequestHandler):
         elif p == "/flaky": self.answer(503 if seen[p] == 1 else 200, "ok now")
         elif p == "/text": self.answer(200, "hello")
         else: self.answer(404, "no")
-class S(socketserver.ThreadingMixIn, socketserver.TCPServer): daemon_threads = True
+# all eight checks connect at once: with Python's queue of five, Linux drops
+# the rest and they try again a second later
+class S(socketserver.ThreadingMixIn, socketserver.TCPServer):
+    daemon_threads = True
+    request_queue_size = 64
 with S(("127.0.0.1", 0), H) as s:
     print(s.server_address[1], flush=True); s.serve_forever()
 PY
@@ -49,7 +53,8 @@ JSON
 "$LUME" build -o "$tmp/hc" >/dev/null 2>&1
 start=$(python3 -c 'import time; print(time.time())')
 "$tmp/hc" "$tmp/checks.json" --json 2>&1; echo "exit: $?"
-python3 -c "import time; print('the slow checks ran together:', time.time() - $start < 1.5)"
+# how long it took goes to standard error when it is too long, so a failure says
+python3 -c "import sys, time; t = time.time() - $start; print('the slow checks ran together:', t < 1.5); t < 1.5 or print('took %.2f s' % t, file=sys.stderr)"
 printf '{"base": "x", "checks": [{"name": "a", "path": "/", "status": "200"}]}' > "$tmp/bad.json"
 "$tmp/hc" "$tmp/bad.json" 2>&1 | sed "s#$tmp#<tmp>#"; echo "exit: ${PIPESTATUS[0]}"
 kill $pid; wait $pid 2>/dev/null; rm -rf "$tmp" .lume

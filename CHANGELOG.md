@@ -2,7 +2,11 @@
 
 ## Unreleased
 
-Nothing yet.
+- **Tested on Linux**: the suite runs on Ubuntu and macOS for every push,
+  with the newest stable Rust.
+- **Fixed**: with Rust 1.99, a program whose interface has an `async`
+  method that can fail did not compile: the prelude's types were private,
+  and Rust 1.99 refuses them in a public signature. They are public now.
 
 ## 0.5.0 — talking to the world
 

@@ -14,7 +14,7 @@ use crate::error::{LumeError, Result};
 
 pub const PRELUDE: &str = r#"#![allow(unused, non_snake_case, non_camel_case_types, unused_parens, unused_mut, arithmetic_overflow, unconditional_panic, clippy::all)]
 // ---- Lume prelude ----
-trait LumePow { fn lume_pow(self, e: Self) -> Self; }
+pub trait LumePow { fn lume_pow(self, e: Self) -> Self; }
 impl LumePow for i64 { fn lume_pow(self, e: Self) -> Self { lume_int_pow(self, e) } }
 /// `Int` to a power: a whole number only when the power is 0 or more, and
 /// an overflow is named as one rather than as the multiply inside it.
@@ -26,23 +26,23 @@ fn lume_int_pow(x: i64, e: i64) -> i64 {
 impl LumePow for f64 { fn lume_pow(self, e: Self) -> Self { self.powf(e) } }
 /// A string however it is held: `String`, `&str`, `&&String`, ... Comparisons
 /// go through this so closure parameters need no deref guessing.
-trait LumeAsStr { fn lume_as_str(&self) -> &str; }
+pub trait LumeAsStr { fn lume_as_str(&self) -> &str; }
 impl LumeAsStr for str { fn lume_as_str(&self) -> &str { self } }
 impl LumeAsStr for String { fn lume_as_str(&self) -> &str { self.as_str() } }
 impl<T: LumeAsStr + ?std::marker::Sized> LumeAsStr for &T { fn lume_as_str(&self) -> &str { (**self).lume_as_str() } }
-trait LumeLen { fn lume_len(&self) -> i64; }
+pub trait LumeLen { fn lume_len(&self) -> i64; }
 impl<T> LumeLen for Vec<T> { fn lume_len(&self) -> i64 { self.len() as i64 } }
 impl<T> LumeLen for [T] { fn lume_len(&self) -> i64 { self.len() as i64 } }
 impl LumeLen for String { fn lume_len(&self) -> i64 { self.chars().count() as i64 } }
 impl LumeLen for str { fn lume_len(&self) -> i64 { self.chars().count() as i64 } }
 impl<T: LumeLen + ?std::marker::Sized> LumeLen for &T { fn lume_len(&self) -> i64 { (**self).lume_len() } }
-trait LumeEmpty { fn lume_empty(&self) -> bool; }
+pub trait LumeEmpty { fn lume_empty(&self) -> bool; }
 impl<T> LumeEmpty for Vec<T> { fn lume_empty(&self) -> bool { self.is_empty() } }
 impl<T> LumeEmpty for [T] { fn lume_empty(&self) -> bool { self.is_empty() } }
 impl LumeEmpty for String { fn lume_empty(&self) -> bool { self.is_empty() } }
 impl LumeEmpty for str { fn lume_empty(&self) -> bool { self.is_empty() } }
 impl<T: LumeEmpty + ?std::marker::Sized> LumeEmpty for &T { fn lume_empty(&self) -> bool { (**self).lume_empty() } }
-trait LumeSum<T> { fn lume_sum(&self) -> T; }
+pub trait LumeSum<T> { fn lume_sum(&self) -> T; }
 impl LumeSum<i64> for Vec<i64> { fn lume_sum(&self) -> i64 { self.iter().sum() } }
 impl LumeSum<f64> for Vec<f64> { fn lume_sum(&self) -> f64 { self.iter().sum() } }
 impl<T, U: LumeSum<T>> LumeSum<T> for &U { fn lume_sum(&self) -> T { (**self).lume_sum() } }
@@ -51,7 +51,7 @@ impl<T, U: LumeSum<T>> LumeSum<T> for &U { fn lume_sum(&self) -> T { (**self).lu
 // write it, which is what a value *inside* another one shows. They differ
 // only for text: `puts name` is `Ada`, and `puts [name]` is `["Ada"]`, so
 // one item and two can always be told apart.
-trait LumeShow {
+pub trait LumeShow {
     fn lume_str(&self) -> String;
     fn lume_in(&self) -> String { self.lume_str() }
 }
@@ -127,9 +127,9 @@ fn lume_assert_failed(line: usize, text: &str, sides: Option<(String, String)>) 
     std::panic::panic_any(LumeAssert(msg));
 }
 #[allow(dead_code)]
-struct LumeAssert(String);
+pub struct LumeAssert(String);
 #[derive(Debug, Clone, PartialEq)]
-struct Error { message: String }
+pub struct Error { message: String }
 impl LumeShow for Error { fn lume_str(&self) -> String { format!("Error({})", lume_quote(&self.message)) } }
 impl<T: LumeShow, E: LumeShow> LumeShow for ::std::result::Result<T, E> {
     fn lume_str(&self) -> String { match self { Ok(x) => format!("Ok({})", x.lume_in()), Err(e) => e.lume_str() } }
@@ -229,7 +229,7 @@ fn lume_path_stem(p: &str) -> String {
 /// finds them in one hash and one compare. Removal leaves a tombstone; the Vec is
 /// compacted when tombstones outnumber live entries.
 #[derive(Clone, Debug)]
-struct LumeMap<K, V> {
+pub struct LumeMap<K, V> {
     entries: Vec<Option<(K, V)>>,
     /// key -> its position in `entries`. One hash and one compare per
     /// lookup; `entries` alone carries the insertion order.
@@ -332,7 +332,7 @@ impl<K: std::hash::Hash + Eq + Clone, V: Clone> LumeEmpty for LumeMap<K, V> { fn
 // `split(sep)` keeps every piece, so `s.split(sep).join(sep)` is `s` again.
 // Rust's own `split` is exactly that rule, so there is nothing to wrap.
 #[derive(Clone, Debug)]
-struct LumeSet<T> { m: LumeMap<T, ()> }
+pub struct LumeSet<T> { m: LumeMap<T, ()> }
 impl<T: std::hash::Hash + Eq + Clone> LumeSet<T> {
     fn new() -> Self { LumeSet { m: LumeMap::new() } }
     fn from<const N: usize>(items: [T; N]) -> Self { let mut s = Self::new(); for i in items { s.insert(i); } s }
@@ -493,7 +493,7 @@ fn lume_process_run_in(dir: Option<&str>, program: &str, args: &[String]) -> ::s
 /// its own as it comes and kept until it is asked for, by line or by count.
 /// Nothing waits for the reader, so a program writing to both outputs never
 /// stalls on the one that is not being read.
-struct LumePipe { buf: Vec<u8>, done: bool, waker: Option<std::task::Waker> }
+pub struct LumePipe { buf: Vec<u8>, done: bool, waker: Option<std::task::Waker> }
 impl LumePipe {
     fn rest(&mut self) -> Option<Option<String>> {
         if !self.done { return None; }
@@ -518,7 +518,7 @@ impl LumePipe {
         self.rest()
     }
 }
-type LumePipeRef = std::sync::Arc<std::sync::Mutex<LumePipe>>;
+pub type LumePipeRef = std::sync::Arc<std::sync::Mutex<LumePipe>>;
 fn lume_pipe<R: std::io::Read + Send + 'static>(mut r: R) -> LumePipeRef {
     let p = std::sync::Arc::new(std::sync::Mutex::new(LumePipe { buf: Vec::new(), done: false, waker: None }));
     let q = p.clone();
@@ -594,7 +594,7 @@ fn lume_parked_chunks(id: i64) -> LumeStream<String> {
 /// Rust's `tokio::process::Child`: its input written to, its outputs read
 /// as they come, its exit code awaited.
 #[derive(Clone)]
-struct LumeChild {
+pub struct LumeChild {
     program: String,
     child: std::sync::Arc<std::sync::Mutex<std::process::Child>>,
     input: std::sync::Arc<std::sync::Mutex<Option<std::process::ChildStdin>>>,
@@ -898,7 +898,7 @@ fn lume_split(s: &str, sep: &str) -> Vec<String> {
 /// A block kept as a value: in a binding, a field, a list, or handed back.
 /// Shared rather than copied, so copying a struct that holds one is cheap;
 /// `==` is whether two are the same block, which Lume itself never asks.
-struct LumeFn<F: ?std::marker::Sized>(std::sync::Arc<F>);
+pub struct LumeFn<F: ?std::marker::Sized>(std::sync::Arc<F>);
 impl<F: ?std::marker::Sized> Clone for LumeFn<F> { fn clone(&self) -> Self { LumeFn(self.0.clone()) } }
 impl<F: ?std::marker::Sized> std::fmt::Debug for LumeFn<F> { fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { f.write_str("<block>") } }
 impl<F: ?std::marker::Sized> PartialEq for LumeFn<F> { fn eq(&self, o: &Self) -> bool { std::sync::Arc::ptr_eq(&self.0, &o.0) } }
@@ -911,9 +911,9 @@ impl<F: ?std::marker::Sized> LumeShow for LumeFn<F> { fn lume_str(&self) -> Stri
 /// makes one whose data is the address of its own slot, and the pause writes
 /// the item there. Only a generator's own `next` ever polls its body, so the
 /// address always has the item's type.
-struct LumeGen<T, F> { slot: Option<T>, body: Option<std::pin::Pin<::std::boxed::Box<F>>> }
-struct LumeYield<T>(std::marker::PhantomData<fn(T)>);
-struct LumePause<T>(Option<T>);
+pub struct LumeGen<T, F> { slot: Option<T>, body: Option<std::pin::Pin<::std::boxed::Box<F>>> }
+pub struct LumeYield<T>(std::marker::PhantomData<fn(T)>);
+pub struct LumePause<T>(Option<T>);
 impl<T> Unpin for LumePause<T> {}
 static LUME_GEN_VTABLE: std::task::RawWakerVTable = std::task::RawWakerVTable::new(|p| std::task::RawWaker::new(p, &LUME_GEN_VTABLE), |_| {}, |_| {}, |_| {});
 impl<T> std::future::Future for LumePause<T> {
@@ -955,14 +955,14 @@ impl<T, F: std::future::Future<Output = ()>> Iterator for LumeGen<T, F> {
 /// body, running as a task, and whoever walks it. The body waits at each
 /// `yield` until the item before has been taken, so it is never more than
 /// one item ahead; when the walker lets go, the next `yield` ends the body.
-struct LumeChan<T> { slot: Option<T>, body_done: bool, walker_gone: bool, walker: Option<std::task::Waker>, body: Option<std::task::Waker> }
+pub struct LumeChan<T> { slot: Option<T>, body_done: bool, walker_gone: bool, walker: Option<std::task::Waker>, body: Option<std::task::Waker> }
 /// What an async sequence is to whoever walks it: something polled for its
 /// next item, as Rust's `Stream` is. The channel of an `async def` with
 /// `yield` is one; a chain over one wraps it, and is polled through it.
-struct LumeStream<T> { poll: ::std::boxed::Box<dyn FnMut(&mut std::task::Context<'_>) -> std::task::Poll<Option<T>> + Send> }
-struct LumeSender<T> { ch: std::sync::Arc<std::sync::Mutex<LumeChan<T>>> }
+pub struct LumeStream<T> { poll: ::std::boxed::Box<dyn FnMut(&mut std::task::Context<'_>) -> std::task::Poll<Option<T>> + Send> }
+pub struct LumeSender<T> { ch: std::sync::Arc<std::sync::Mutex<LumeChan<T>>> }
 /// The walking end of the channel; letting go of it ends the body.
-struct LumeWalker<T> { ch: std::sync::Arc<std::sync::Mutex<LumeChan<T>>> }
+pub struct LumeWalker<T> { ch: std::sync::Arc<std::sync::Mutex<LumeChan<T>>> }
 fn lume_stream<T: Send + 'static>() -> (LumeSender<T>, LumeStream<T>) {
     let ch = std::sync::Arc::new(std::sync::Mutex::new(LumeChan { slot: None, body_done: false, walker_gone: false, walker: None, body: None }));
     let mut w = LumeWalker { ch: ch.clone() };

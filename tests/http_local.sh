@@ -28,7 +28,9 @@ class H(http.server.BaseHTTPRequestHandler):
         n = int(self.headers.get("Content-Length", 0)); body = self.rfile.read(n).decode()
         self.send(200, json.dumps({"type": self.headers.get("Content-Type"), "body": json.loads(body)}), "application/json")
 # a thread per request, so the slow one holds up no other
-with socketserver.ThreadingTCPServer(("127.0.0.1", 0), H) as s:
+class S(socketserver.ThreadingTCPServer):
+    request_queue_size = 64
+with S(("127.0.0.1", 0), H) as s:
     print(s.server_address[1], flush=True); s.serve_forever()
 PY
 python3 "$tmp/server.py" > "$tmp/port" 2>/dev/null &

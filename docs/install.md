@@ -24,6 +24,12 @@ lume --version
 lume run examples/fib.lume
 ```
 
+**Where it is tested.** The whole test suite runs on Linux (Ubuntu) and
+macOS for every push, with the newest stable Rust
+(`.github/workflows/test.yml`). Windows is not tested yet. A program that
+uses `async` or a Rust crate downloads and builds those crates the first
+time — tokio for `async` — which takes a few seconds once.
+
 ## Without installing
 
 If you would rather not copy anything:
