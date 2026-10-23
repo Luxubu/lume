@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **A program that stops says where**: `xs.at(9)`, `!` on a failure, a
+  division by zero, an overflow or an `assert` now name the file and line
+  it stopped on, and show the line, as a compile error does — in a method,
+  a block, a generator, a module or a task, the line it happened on. A
+  failing `lume test` names the line for any stop, not only an `assert`.
+  Rust's "index out of bounds" reads `no item at 7 — the list has 3`. A
+  task that stopped is told once, not again when it is awaited.
+
 - **What is settled**: `docs/stability.md` says which parts of Lume are
   settled and which are previews, and promises that a settled part does not
   break a working program without a warning release first. From here on, a

@@ -76,6 +76,14 @@ pub def checks -> [Check] or Error:
 rm -rf "$tmpo" tests/.lume"""
   all.push(script("overflow by build mode", overflow, "tests/overflow.expected"))
 
+  # a program that stops says where, in Lume: the file, the line and its text
+  stops = """for f in list_at in_a_method in_a_block in_a_generator in_a_task assert shop/main; do
+  "$LUME" run tests/stops/$f.lume; echo "exit: $?"
+done
+"$LUME" test tests/stops/tests.lume; echo "exit: $?"
+rm -rf tests/stops/.lume tests/stops/shop/.lume"""
+  all.push(script("runtime stops name the Lume line", stops, "tests/stops.expected"))
+
   # editors: diagnostics as JSON, and the language server driven as an editor would
   all.push(script("check --json", "\"$LUME\" check examples/errors/arity.lume --json; echo \"exit: $?\"; \"$LUME\" check examples/fib.lume --json; echo \"exit: $?\"", "examples/check_json.expected"))
   # the editor's side is tools/lumecheck/lsp.lume, the suite's own binary

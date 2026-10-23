@@ -1,0 +1,9 @@
+# the line is the method's, not the caller's
+struct Bill:
+  items: [Int]
+
+  def first_item -> Int = items.at(0)
+
+def main:
+  b = Bill(items: [])
+  puts b.first_item

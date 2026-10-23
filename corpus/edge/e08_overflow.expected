@@ -1,3 +1,5 @@
 error: Int overflow in `+`
-  (set LUME_BACKTRACE=1 to see where in the generated Rust)
+  --> corpus/edge/e08_overflow.lume:3
+  |
+3 |   puts x + 1
 exit: 101

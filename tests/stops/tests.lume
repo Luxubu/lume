@@ -1,0 +1,12 @@
+# a test that stops names its line, as a failed assert does
+def half(n: Int) -> Int = n / 2
+
+test "halves":
+  assert half(8) == 4
+
+test "a wrong answer":
+  assert half(9) == 5
+
+test "a stop":
+  xs = [1]
+  puts xs.at(half(8))

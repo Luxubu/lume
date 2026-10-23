@@ -1,0 +1,6 @@
+# a task's failure is told once, at its own line, when it is awaited
+async def seat(i: Int) -> Str = ["window"].at(i)
+
+async def main:
+  t = spawn: await seat(2)
+  puts await t

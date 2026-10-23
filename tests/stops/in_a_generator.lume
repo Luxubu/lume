@@ -1,0 +1,8 @@
+# a generator stops on its own line, when the value is asked for
+def portions(pots: Int) -> Iterator[Int]:
+  yield 12 / 4
+  yield 12 / pots
+
+def main:
+  for p in portions(0):
+    puts p

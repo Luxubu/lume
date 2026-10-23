@@ -1,0 +1,5 @@
+# a list position that is not there
+def main:
+  tables = ["window", "door", "bar"]
+  puts tables.at(1)
+  puts tables.at(5)

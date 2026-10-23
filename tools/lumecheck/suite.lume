@@ -159,5 +159,6 @@ pub def round_trip(lume: Str, file: Str, scratch: Str) -> Verdict or Error:
     return Ok(Verdict(name: name, failure: Some(": formatted program compiles to different Rust"), skipped: false))
   Ok(Verdict(name: name, failure: None, skipped: false))
 
-# Generated Rust without the line that says when it was generated.
-def without_banner(text: Str) -> Str = text.lines.reject { |l| l.starts_with?("// Generated") }.to_list.join("\n")
+# Generated Rust without the banner, which names the file, and the line
+# table, which names its lines: formatting moves both.
+def without_banner(text: Str) -> Str = text.lines.reject { |l| l.starts_with?("// Generated") or l.starts_with?("pub static LUME_") }.to_list.join("\n")

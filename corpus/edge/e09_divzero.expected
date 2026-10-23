@@ -1,3 +1,5 @@
 error: division by zero
-  (set LUME_BACKTRACE=1 to see where in the generated Rust)
+  --> corpus/edge/e09_divzero.lume:4
+  |
+4 |   puts a / b
 exit: 101

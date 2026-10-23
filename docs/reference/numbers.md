@@ -302,7 +302,9 @@ puts 10 / x
 
 The message names the operator (`+`, `-`, `*`, and `-` for negating),
 goes to standard error after whatever the program printed before it, and the
-program exits with status 101, as a Rust program that panics does. `Float` arithmetic never stops the program: it gives `inf` or `NaN`
+program exits with status 101, as a Rust program that panics does. Below the
+message is the line it stopped on — see [where it
+stopped](errors.md#where-the-program-stopped). `Float` arithmetic never stops the program: it gives `inf` or `NaN`
 instead.
 
 A literal too large for an `Int` is refused before the program runs:

@@ -50,10 +50,18 @@ def main:
 ```
 
 When the zero comes from somewhere else — what a person typed, a file — the
-program stops when it gets there, with `error: division by zero`. That
-message does not yet say which line of your program it was; for now, the
-habit of checking first is worth more than usual. Checking
-for zero first is the way to avoid that; [lunch 5](05-making-decisions.md) shows how.
+program stops when it gets there, with `error: division by zero` and the
+line it stopped on:
+
+```text
+error: division by zero
+  --> share.lume:3
+  |
+3 |   puts 12 / people
+```
+
+Checking for zero first is the way to avoid that; [lunch
+5](05-making-decisions.md) shows how.
 
 ## 3.2 Fractions, and showing them to people
 

@@ -1,11 +1,15 @@
 9223372036854775806
 error: Int overflow in `+`
-  (set LUME_BACKTRACE=1 to see where in the generated Rust)
+  --> tests/overflow.lume:8
+  |
+8 |   puts big + 1
 exit: 101
 9223372036854775806
 -9223372036854775808
 exit: 0
 9223372036854775806
 error: Int overflow in `+`
-  (set LUME_BACKTRACE=1 to see where in the generated Rust)
+  --> tests/overflow.lume:8
+  |
+8 |   puts big + 1
 exit: 101

@@ -1,0 +1,4 @@
+# `assert` outside a test stops the program
+def main:
+  total = 2 + 2
+  assert total == 5

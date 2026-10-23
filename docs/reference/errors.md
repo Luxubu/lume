@@ -391,11 +391,39 @@ non-zero status:
 ```
 $ lume run bad.lume       # bad.lume says: puts "x".to_int!
 error: `x` is not an integer
-  (set LUME_BACKTRACE=1 to see where in the generated Rust)
+  --> bad.lume:1
+  |
+1 | puts "x".to_int!
 ```
 
 Use it in a test or a throwaway script. In anything that has to keep running,
 use `.or`, `match` or `?`.
+
+## Where the program stopped
+
+Whatever stops a program while it runs — `!` on a failure, `xs.at(i)` past
+the end, a division by zero, an overflow, an `assert` outside a test — Lume
+says what happened, then where: the file, the line, and the line itself, as
+a compile error does.
+
+```
+$ lume run seats.lume
+door
+error: no item at 5 — the list has 3
+  --> seats.lume:5
+  |
+5 |   puts tables.at(5)
+```
+
+The line is the one the failure happened on, which is not always the one
+that called it: a method, a block, a generator, another module, or a task
+stops on its own line. A task that stopped says so once, when it is awaited,
+as Rust's `JoinHandle` hands the panic on. A test that stops is told the same
+way by `lume test`, as `bill.lume:12: stopped: ...`.
+
+`LUME_BACKTRACE=1` adds the line of the generated Rust, for a bug in Lume
+itself. A stack overflow, from recursion too deep, is still told the way Rust
+tells it, with no line.
 
 ## The other methods
 

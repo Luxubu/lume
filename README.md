@@ -195,10 +195,10 @@ store`), none at its uses. That is the one ownership word in Lume.
 
 Speed: computation runs at Rust speed (`fib(35)`: 27 ms from `lume build`,
 56 ms with overflow checks on as under `lume run`; Python 1.04 s). Division
-by zero and an out-of-range position stop the program with a one-line Lume
-message in every build, and so does overflow under `lume run`, `lume test`
-and `lume build --checked` (`error: Int overflow in `+``), never with a Rust
-trace unless `LUME_BACKTRACE=1` is set.
+by zero and an out-of-range position stop the program with a Lume message
+and the line it stopped on, in every build, and so does overflow under `lume
+run`, `lume test` and `lume build --checked` (`error: Int overflow in `+``),
+never with a Rust trace unless `LUME_BACKTRACE=1` is set.
 String-and-map code is within 20% of hand-written Rust after milestone 8
 (word count over 360k words: hand-written Rust 19 ms, Lume 23 ms, Python
 79 ms). What made the difference: `split`/`lines` are lazy and yield string

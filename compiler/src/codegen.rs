@@ -18,6 +18,7 @@ pub trait LumePow { fn lume_pow(self, e: Self) -> Self; }
 impl LumePow for i64 { fn lume_pow(self, e: Self) -> Self { lume_int_pow(self, e) } }
 /// `Int` to a power: a whole number only when the power is 0 or more, and
 /// an overflow is named as one rather than as the multiply inside it.
+#[track_caller]
 fn lume_int_pow(x: i64, e: i64) -> i64 {
     if e < 0 { panic!("`pow` on an `Int` needs a power of 0 or more, and this one is {}", e); }
     let e = u32::try_from(e).unwrap_or(u32::MAX);
@@ -119,6 +120,7 @@ impl<T: LumeShow + ?std::marker::Sized> LumeShow for ::std::boxed::Box<T> {
 impl<T: LumeShow + ?std::marker::Sized> LumeShow for std::sync::Arc<T> { fn lume_str(&self) -> String { (**self).lume_str() } }
 impl<T: LumeShow> LumeShow for std::sync::Mutex<T> { fn lume_str(&self) -> String { self.lock().unwrap().lume_str() } }
 #[allow(dead_code)]
+#[track_caller]
 fn lume_assert_failed(line: usize, text: &str, sides: Option<(String, String)>) -> ! {
     let mut msg = format!(":{}: assert {}", line, text);
     if let Some((l, r)) = sides {
@@ -407,17 +409,20 @@ fn lume_capitalize(s: &str) -> String {
     let mut c = s.chars();
     match c.next() { Some(f) => f.to_uppercase().collect::<String>() + &c.as_str().to_lowercase(), None => String::new() }
 }
+#[track_caller]
 fn lume_clamp<T: PartialOrd + LumeShow + Copy>(x: T, lo: T, hi: T) -> T {
     if lo > hi { panic!("clamp: the low bound {} is above the high bound {}", lo.lume_str(), hi.lume_str()); }
     if x < lo { lo } else if x > hi { hi } else { x }
 }
 /// `xs.at(i)`: the item, when the caller has already checked the bound.
+#[track_caller]
 fn lume_at_ref<T>(xs: &[T], i: i64) -> &T {
     match usize::try_from(i).ok().and_then(|u| xs.get(u)) {
         Some(x) => x,
         None => panic!("no item at {} — the list has {}", i, xs.len()),
     }
 }
+#[track_caller]
 fn lume_at<T: Clone>(xs: &[T], i: i64) -> T {
     match usize::try_from(i).ok().and_then(|u| xs.get(u)) {
         Some(x) => x.clone(),
@@ -425,6 +430,7 @@ fn lume_at<T: Clone>(xs: &[T], i: i64) -> T {
     }
 }
 /// `x.decimals(n)`: the number as text, to that many places.
+#[track_caller]
 fn lume_decimals(x: f64, n: i64) -> String {
     if n < 0 { panic!("decimals: {} is not a number of places", n); }
     // half goes away from zero, as people expect of money
@@ -438,7 +444,9 @@ fn lume_decimals(x: f64, n: i64) -> String {
 fn lume_install_panic_hook() {
     std::panic::set_hook(::std::boxed::Box::new(|info| {
         let raw = if let Some(a) = info.payload().downcast_ref::<LumeAssert>() {
-            a.0.clone()
+            // ":3: assert x == 3" — the line is shown below, as for any failure
+            let t = a.0.trim_start_matches(':');
+            t.trim_start_matches(|c: char| c.is_ascii_digit()).trim_start_matches(": ").to_string()
         } else if let Some(s) = info.payload().downcast_ref::<String>() {
             s.clone()
         } else if let Some(s) = info.payload().downcast_ref::<&str>() {
@@ -446,26 +454,59 @@ fn lume_install_panic_hook() {
         } else {
             String::from("the program stopped")
         };
-        let msg = match raw.as_str() {
-            "attempt to add with overflow" => "Int overflow in `+`".to_string(),
-            "attempt to subtract with overflow" => "Int overflow in `-`".to_string(),
-            "attempt to multiply with overflow" => "Int overflow in `*`".to_string(),
-            "attempt to negate with overflow" => "Int overflow in `-`".to_string(),
-            "attempt to divide by zero" => "division by zero".to_string(),
-            "attempt to calculate the remainder with a divisor of zero" => "`%` by zero".to_string(),
-            "attempt to divide with overflow" => "Int overflow in `/`".to_string(),
-            m if m.starts_with("index out of bounds") || m.starts_with("insertion index") || m.starts_with("removal index") => "list position out of range".to_string(),
-            m => m.to_string(),
-        };
+        let msg = lume_panic_text(&raw);
         eprintln!("error: {}", msg);
+        let at = info.location().filter(|loc| loc.file() == file!()).and_then(|loc| lume_line_of(loc.line()));
+        if let Some((name, line, text)) = at {
+            let num = line.to_string();
+            let pad = " ".repeat(num.len());
+            eprintln!("  --> {}:{}", name, line);
+            eprintln!("{} |", pad);
+            eprintln!("{} | {}", num, text);
+        }
         if std::env::var("LUME_BACKTRACE").is_ok() {
             if let Some(loc) = info.location() {
                 eprintln!("  at {}:{} in the generated Rust", loc.file(), loc.line());
             }
-        } else {
+        } else if at.is_none() {
             eprintln!("  (set LUME_BACKTRACE=1 to see where in the generated Rust)");
         }
     }));
+}
+/// What Rust says when it stops a program, in Lume's words.
+#[allow(dead_code)]
+fn lume_panic_text(raw: &str) -> String {
+    match raw {
+        "attempt to add with overflow" => "Int overflow in `+`".to_string(),
+        "attempt to subtract with overflow" => "Int overflow in `-`".to_string(),
+        "attempt to multiply with overflow" => "Int overflow in `*`".to_string(),
+        "attempt to negate with overflow" => "Int overflow in `-`".to_string(),
+        "attempt to divide by zero" => "division by zero".to_string(),
+        "attempt to calculate the remainder with a divisor of zero" => "`%` by zero".to_string(),
+        "attempt to divide with overflow" => "Int overflow in `/`".to_string(),
+        m if m.starts_with("index out of bounds") => match lume_index_numbers(m) {
+            Some((len, i)) => format!("no item at {} — the list has {}", i, len),
+            None => "list position out of range".to_string(),
+        },
+        m if m.starts_with("insertion index") || m.starts_with("removal index") => "list position out of range".to_string(),
+        m => m.to_string(),
+    }
+}
+/// Rust's "index out of bounds: the len is 3 but the index is 7".
+#[allow(dead_code)]
+fn lume_index_numbers(m: &str) -> Option<(u64, u64)> {
+    let len = m.split("the len is ").nth(1)?.split(' ').next()?.parse().ok()?;
+    let i = m.split("the index is ").nth(1)?.trim().parse().ok()?;
+    Some((len, i))
+}
+/// The Lume file, line and text a line of this generated file came from.
+#[allow(dead_code)]
+fn lume_line_of(rust_line: u32) -> Option<(&'static str, u32, &'static str)> {
+    let rows: &[(u32, u32, u32, &str)] = crate::LUME_LINES;
+    let at = rows.partition_point(|r| r.0 <= rust_line);
+    let r = rows.get(at.checked_sub(1)?)?;
+    if r.2 == 0 { return None; }
+    Some((crate::LUME_FILES.get(r.1 as usize)?, r.2, r.3))
 }
 
 /// `Process.run`: the program's exit code and what it wrote. Only failing to
@@ -4438,6 +4479,8 @@ impl Gen {
             self.out.push_str(PRELUDE);
             self.out.push('\n');
         }
+        // the statement marks after this one are this file's lines
+        self.out.push_str(&format!("/*@F{}*/\n", self.this_file.replace("*/", "")));
         for item in program {
             if let Item::Import(imp) = item {
                 if !imp.is_rust {
@@ -8213,6 +8256,11 @@ impl Gen {
             _ => self.dying.clone(),
         };
         let saved = std::mem::replace(&mut self.dying, replacing);
+        // where this statement was written, for a failure while it runs:
+        // main.rs turns these marks into the table the panic hook reads
+        if let Some(line) = stmt_line(s) {
+            self.out.push_str(&format!("/*@L{}*/", line));
+        }
         let r = self.stmt_inner(s, is_tail);
         self.dying = saved;
         if crate::diag::indexing() {
@@ -11861,10 +11909,10 @@ impl Gen {
                 let v = v?;
                 match xt {
                     Type::Future(_) => format!("({}).await", v),
-                    Type::Task(_) => format!("({}).await.unwrap()", v),
+                    Type::Task(_) => format!("({}).await.unwrap_or_else(|e| std::panic::resume_unwind(e.into_panic()))", v),
                     Type::List(inner) if matches!(*inner, Type::Task(_)) => {
                         let v = self.expr_owned(x)?;
-                        format!("{{ let mut lume_done = Vec::new(); for lume_t in {} {{ lume_done.push(lume_t.await.unwrap()); }} lume_done }}", v)
+                        format!("{{ let mut lume_done = Vec::new(); for lume_t in {} {{ lume_done.push(lume_t.await.unwrap_or_else(|e| std::panic::resume_unwind(e.into_panic()))); }} lume_done }}", v)
                     }
                     Type::Unknown => return Err(LumeError::new(x.line, x.col, "cannot tell what is being awaited here")),
                     other => {
@@ -12955,7 +13003,7 @@ impl Gen {
             // taken out of the list; the others keep their order
             "next_done" => {
                 need(0)?;
-                format!("{{ let lume_ts = &mut {}; std::future::poll_fn(move |lume_cx| {{ if lume_ts.is_empty() {{ return std::task::Poll::Ready(None); }} for lume_i in 0..lume_ts.len() {{ if let std::task::Poll::Ready(lume_r) = std::future::Future::poll(std::pin::Pin::new(&mut lume_ts[lume_i]), lume_cx) {{ lume_ts.remove(lume_i); return std::task::Poll::Ready(Some(lume_r.unwrap())); }} }} std::task::Poll::Pending }}) }}", recv)
+                format!("{{ let lume_ts = &mut {}; std::future::poll_fn(move |lume_cx| {{ if lume_ts.is_empty() {{ return std::task::Poll::Ready(None); }} for lume_i in 0..lume_ts.len() {{ if let std::task::Poll::Ready(lume_r) = std::future::Future::poll(std::pin::Pin::new(&mut lume_ts[lume_i]), lume_cx) {{ lume_ts.remove(lume_i); return std::task::Poll::Ready(Some(lume_r.unwrap_or_else(|e| std::panic::resume_unwind(e.into_panic())))); }} }} std::task::Poll::Pending }}) }}", recv)
             }
             "take" | "skip" if matches!(rt, Type::AsyncGen(_)) => { need(1)?; format!("({}).lume_{}({})", recv, name, args[0]) }
             "enumerate" if matches!(rt, Type::AsyncGen(_)) => { need(0)?; format!("({}).lume_enumerate()", recv) }
@@ -14850,4 +14898,26 @@ fn field_uses(e: &Expr, name: &str, out: &mut Vec<Option<String>>) {
         }
         _ => {}
     }
+}
+
+/// The line a statement starts on, for the run-time line table.
+fn stmt_line(s: &Stmt) -> Option<usize> {
+    let n = match s {
+        Stmt::Bind { line, .. }
+        | Stmt::Destructure { line, .. }
+        | Stmt::Var { line, .. }
+        | Stmt::OpAssign { line, .. }
+        | Stmt::FieldAssign { line, .. }
+        | Stmt::IndexAssign { line, .. }
+        | Stmt::Return { line, .. }
+        | Stmt::Yield { line, .. }
+        | Stmt::For { line, .. }
+        | Stmt::Break { line, .. }
+        | Stmt::Next { line, .. }
+        | Stmt::Assert { line, .. }
+        | Stmt::Shared { line, .. } => *line,
+        Stmt::Expr(e) => e.line,
+        Stmt::While { cond, .. } => cond.line,
+    };
+    if n > 0 { Some(n) } else { None }
 }

@@ -1,0 +1,5 @@
+import menu
+
+def main:
+  puts menu.price(0)
+  puts menu.price(3)

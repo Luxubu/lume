@@ -15,5 +15,7 @@ false
 true
 -27
 error: clamp: the low bound 20 is above the high bound 5
-  (set LUME_BACKTRACE=1 to see where in the generated Rust)
+  --> corpus/m17/r15_num_methods.lume:34
+   |
+34 |   puts 10.clamp(20, 5)
 exit: 101

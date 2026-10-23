@@ -1,0 +1,4 @@
+# a block runs on the line it was written on
+def main:
+  guests = [4, 0, 2]
+  puts guests.map { |g| 12 / g }.to_list

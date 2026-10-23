@@ -3,5 +3,7 @@
 Some(2305843009213693952)
 4611686018427387904
 error: Int overflow in `*`
-  (set LUME_BACKTRACE=1 to see where in the generated Rust)
+  --> corpus/m69/b07_overflow_in_next.lume:22
+   |
+22 |     v = v * 2
 exit: 101

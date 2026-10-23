@@ -12,7 +12,7 @@
 # 4611686018427387904
 # (then, on standard error, and the program exits with a failure status:)
 # error: Int overflow in `*`
-#   (set LUME_BACKTRACE=1 to see where in the generated Rust)
+#   then where it stopped: line 22, `v = v * 2`
 # ("never" is not printed.)
 
 struct Doubler:
