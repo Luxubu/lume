@@ -1,0 +1,17 @@
+# kitchen/orders.lume — an order for one table. Its import path starts from
+# the folder that holds main.lume, as every path does.
+
+import menu.Dish
+
+pub KITCHEN = "the back kitchen"
+
+pub struct Order:
+  table: Int
+  dishes: [Dish]
+
+  def add(var self, d: Dish):
+    dishes.push(d)
+
+  def total -> Int = dishes.sum { |d| d.cents }
+
+  def summary -> Str = "table #{table}: #{dishes.map(_.name).join(", ")} = #{total}"

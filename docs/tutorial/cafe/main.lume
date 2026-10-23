@@ -1,0 +1,14 @@
+# The café from lunch 12, in three files: run it with `lume run main.lume`
+# from this folder. Each `import` path starts from this folder.
+
+import menu
+import kitchen.orders
+import kitchen.orders.Order
+
+def main:
+  var o = Order(table: 4, dishes: [])
+  o.add(menu.find("soup"))
+  o.add(menu.find("pie"))
+  o.add(menu.find("steak"))
+  puts o.summary
+  puts "served by #{orders.KITCHEN}"

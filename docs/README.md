@@ -1,6 +1,8 @@
 # Lume documentation
 
-**New here?** [Install it](install.md), then take [the tour](tour.md).
+**New here?** [Install it](install.md), then take [the tour](tour.md) —
+half an hour — or learn it properly, a chapter at a time, with
+[*Lume, a Lunch at a Time*](tutorial/README.md).
 
 Every example in these pages is compiled, run, and checked against the output
 it claims by `tests/docs.sh`. If an answer here is wrong, the build fails.

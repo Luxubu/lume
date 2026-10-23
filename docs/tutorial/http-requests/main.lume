@@ -1,0 +1,14 @@
+# Lunch 19's request building, checked with no network: every request here
+# goes to a port where nothing listens, so it cannot succeed.
+
+import http
+
+def main:
+  base = http.request("GET", "http://127.0.0.1:9/menu")
+  careful = base.header("Accept", "text/plain").timeout(500)
+  puts base.headers        # []
+  puts careful.headers     # [("Accept", "text/plain")]
+  puts careful.timeout_ms  # 500
+  match careful.send:
+    Ok(_) -> puts "answered?"
+    Error(e) -> puts e.message.starts_with?("GET http://127.0.0.1:9/menu")    # true

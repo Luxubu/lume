@@ -1,0 +1,6 @@
+[package]
+name = "http_requests"
+version = "0.1.0"
+
+[dependencies]
+http = { path = "../../../packages/http" }

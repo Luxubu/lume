@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **A tutorial**: *Lume, a Lunch at a Time*, in `docs/tutorial/` — 24
+  chapters, each about an hour, from a first program to a language-server
+  client, with exercises and answers. Every example in it is run by the
+  test suite.
+- **Fixed**: an `async def` call printed, put in text or in a list without
+  `await` reached rustc; it is refused with the message for a missing
+  `await`. `+=` inside a `spawn:` on a copied name said the name was not a
+  `var`; it now says the task has a copy.
 - **Tested on Linux**: the suite runs on Ubuntu and macOS for every push,
   with the newest stable Rust.
 - **Fixed**: with Rust 1.99, a program whose interface has an `async`

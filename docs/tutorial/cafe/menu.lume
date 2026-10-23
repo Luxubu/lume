@@ -1,0 +1,17 @@
+# menu.lume — what the café sells. Only `pub` items can be reached from
+# another file.
+
+pub struct Dish:
+  name: Str
+  cents: Int
+
+PRICES = {"soup": 400, "pie": 350, "stew": 600}
+
+# A dish by name, or a free glass of water when there is no such dish.
+pub def find(name: Str) -> Dish:
+  match PRICES[name]:
+    Some(c) -> Dish(name: name, cents: c)
+    None -> water()
+
+# Not `pub`: only this file can call it.
+def water -> Dish = Dish(name: "water", cents: 0)
