@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **A chain over several lines**: a line starting with `.name` continues the
+  line above, so a long chain can put one step on each line. `lume fmt`
+  keeps it so.
+- **Structs with no fields**: `struct Marker` alone, or a struct whose block
+  has only methods — a type that is all behaviour, made with `Marker()`, as
+  Rust's unit structs. `struct Marker:` with nothing under it is still
+  refused, with a message that says to drop the `:`.
+
 - **A program that stops says where**: `xs.at(9)`, `!` on a failure, a
   division by zero, an overflow or an `assert` now name the file and line
   it stopped on, and show the line, as a compile error does — in a method,

@@ -37,6 +37,8 @@ pub struct Shape {
     /// `lhs |> stage`, keyed by the node the stage produced; the value is
     /// true when the `|>` began a new line.
     pub pipes: std::collections::HashMap<(usize, usize), bool>,
+    /// `.method` that began a new line, continuing a chain, by position.
+    pub dots: std::collections::HashSet<(usize, usize)>,
 }
 
 pub fn parse_program(toks: Vec<Token>) -> Result<Vec<Item>> {
@@ -347,19 +349,23 @@ impl Parser {
                 .with_help(format!("rename it `{}`", capitalize(&name))));
         }
         let generics = self.generic_params("struct Name")?;
+        // `struct Marker` with no block: a struct with no fields, made with
+        // `Marker()`, as Rust has `struct Marker;`
+        if matches!(self.peek(), Tok::Newline | Tok::Eof) {
+            return Ok(StructDef { name, public: false, generics, fields: vec![], methods: vec![], line, col });
+        }
         if !self.eat_sym(":") {
             return Err(self
                 .err(format!("expected `:` after `struct {}`", name))
-                .with_help("a struct's fields and methods go in an indented block"));
+                .with_help("a struct's fields and methods go in an indented block; a struct with no fields is `struct Name` alone"));
         }
         if !matches!(self.peek(), Tok::Newline) {
             return Err(self.err("expected the fields of the struct on the following lines"));
         }
         self.advance();
         if !matches!(self.peek(), Tok::Indent) {
-            return Err(self
-                .err(format!("struct `{}` has no fields", name))
-                .with_help("indent at least one `name: Type` line under it"));
+            return Err(LumeError::new(line, col, format!("struct `{}` has nothing in its block", name))
+                .with_help(format!("indent its fields and methods under it; for a struct with no fields and no methods, leave out the `:` — `struct {}`", name)));
         }
         self.advance();
         let mut fields = Vec::new();
@@ -393,10 +399,6 @@ impl Parser {
         }
         if matches!(self.peek(), Tok::Dedent) {
             self.advance();
-        }
-        if fields.is_empty() {
-            return Err(LumeError::new(line, col, format!("struct `{}` has no fields", name))
-                .with_help("a struct needs at least one `name: Type` field"));
         }
         Ok(StructDef { name, public: false, generics, fields, methods, line, col })
     }
@@ -1861,6 +1863,9 @@ impl Parser {
         loop {
             if self.at_sym(".") {
                 let (line, col) = self.here();
+                if self.pos > 0 && self.toks[self.pos - 1].line < line {
+                    self.shape.dots.insert((line, col));
+                }
                 self.advance();
                 let name = match self.peek().clone() {
                     Tok::Ident(s) => {
@@ -2307,6 +2312,10 @@ impl Parser {
             Tok::Newline | Tok::Dedent | Tok::Eof => {
                 Err(self.err("expected a value here, but the line ended"))
             }
+            // `.name` beginning a block's first line: nothing above to continue
+            Tok::Sym(".") if self.pos > 0 && matches!(self.toks[self.pos - 1].tok, Tok::Indent | Tok::Newline) => Err(self
+                .err("a line starting with `.` continues the line above, and this one begins a block")
+                .with_help("put the value the chain starts from first: `xs` on this line, and `.map ...` under it")),
             _ => Err(self.err(format!("expected a value, found {}", self.describe()))),
         }
     }

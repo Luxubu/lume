@@ -11609,7 +11609,8 @@ impl Gen {
                 } else if self.fns.contains_key(name) {
                     return Err(LumeError::new(e.line, e.col, format!("`{}` is a function; call it with `{}()`", name, name)));
                 } else if self.structs.contains_key(name) {
-                    return Err(LumeError::new(e.line, e.col, format!("`{}` is a type; construct one with `{}(...)`", name, name)));
+                    let args = if self.structs[name].fields.is_empty() { "" } else { "..." };
+                    return Err(LumeError::new(e.line, e.col, format!("`{}` is a type; construct one with `{}({})`", name, name, args)));
                 } else if self.enums.contains_key(name) {
                     return Err(LumeError::new(e.line, e.col, format!("`{}` is an enum; pick a variant like `{}.{}`", name, name, self.enums[name].variants[0].0)));
                 } else {

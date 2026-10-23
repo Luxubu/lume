@@ -370,7 +370,11 @@ impl Fmt {
             }
             Item::Fn(f) => self.fn_text(f, false),
             Item::Struct(s) => {
-                let mut out = format!("{}struct {}{}:", if s.public { "pub " } else { "" }, s.name, generics_str(&s.generics));
+                let mut out = format!("{}struct {}{}", if s.public { "pub " } else { "" }, s.name, generics_str(&s.generics));
+                if s.fields.is_empty() && s.methods.is_empty() {
+                    return out;
+                }
+                out.push(':');
                 self.indent += 1;
                 out.push_str(&self.members_text(&s.fields, &[], &s.methods));
                 self.indent -= 1;
@@ -455,7 +459,10 @@ impl Fmt {
         }
         let all: Vec<(&FnDef, bool)> = methods.iter().map(|f| (f, false)).collect();
         if !all.is_empty() {
-            out.push('\n');
+            // a blank line between the fields and the methods, when there are fields
+            if !fields.is_empty() || !variants.is_empty() {
+                out.push('\n');
+            }
             self.suppress_blank = true;
             out.push_str(&self.defs_text(&all, false));
         }
@@ -909,6 +916,9 @@ impl Fmt {
                 let head = if self.is_pipe(e) {
                     let lhs = self.pipe_lhs(recv);
                     format!("{}.{}", self.pipe_prefix(e, lhs), name)
+                } else if self.shape.dots.contains(&(e.line, e.col)) {
+                    // a chain split over lines stays split, one step a line
+                    format!("{}\n{}.{}", self.expr_p(recv, 10), ind(self.indent + 1), name)
                 } else {
                     format!("{}.{}", self.expr_p(recv, 10), name)
                 };

@@ -1,0 +1,23 @@
+# Structs with no fields: `struct Name` alone, or a block of methods only.
+# Made with `Name()`; every value of one is equal to every other.
+
+interface Greeting:
+  def greet(name: Str) -> Str
+
+struct Formal:
+  def greet(name: Str) -> Str = "Good evening, #{name}."
+
+struct Casual:
+  def greet(name: Str) -> Str = "Hey #{name}!"
+
+struct Closed
+
+def welcome(g: Greeting, guests: [Str]) -> [Str] = guests.map { |n| g.greet(n) }.to_list
+
+def main:
+  puts welcome(Formal(), ["Ada", "Grace"])
+  puts welcome(Casual(), ["Linus"])
+  puts Closed()
+  puts Closed() == Closed()
+  seen = {Closed(), Closed()}
+  puts seen.len

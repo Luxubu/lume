@@ -1,0 +1,6 @@
+# A line starting with `.` continues the line above, so it cannot
+# begin a block.
+def main:
+  dishes = ["soup", "pie"]
+  for d in dishes:
+    .upcase

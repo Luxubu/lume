@@ -1,0 +1,6 @@
+# A struct with no fields is still made with `()`.
+struct Closed
+
+def main:
+  c = Closed
+  puts c

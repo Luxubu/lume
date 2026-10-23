@@ -42,6 +42,44 @@ def main:
   puts P(1, 2).just_x          #=> 1
 ```
 
+## A struct with no fields
+
+**A struct may have no fields: `struct Name` alone**, or with only methods
+in its block. It is made with `Name()`, and all its values are equal — what
+Rust calls a *unit struct*. It is for a type that is all behaviour, such as
+one way of doing something an interface describes:
+
+```lume
+struct Celsius:
+  def show(t: Float) -> Str = "#{t} °C"
+
+struct Fahrenheit:
+  def show(t: Float) -> Str = "#{t * 9.0 / 5.0 + 32.0} °F"
+
+interface Scale:
+  def show(t: Float) -> Str
+
+struct Marker
+
+def report(s: Scale) -> Str = s.show(20.0)
+
+def main:
+  puts report(Celsius())       #=> 20.0 °C
+  puts report(Fahrenheit())    #=> 68.0 °F
+  puts Marker()                #=> Marker()
+  puts Marker() == Marker()    #=> true
+```
+
+A `:` with nothing indented under it is a mistake, not an empty struct:
+
+```lume-bad
+struct Marker:
+
+def main:
+  puts Marker()
+#! struct `Marker` has nothing in its block
+```
+
 ## Two constructors, always
 
 **Every struct can be built positionally or by keyword**, with no extra

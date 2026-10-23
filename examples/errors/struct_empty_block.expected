@@ -1,0 +1,6 @@
+error: struct `Empty` has nothing in its block
+  --> examples/errors/struct_empty_block.lume:2:1
+  |
+2 | struct Empty:
+  | ^
+  help: indent its fields and methods under it; for a struct with no fields and no methods, leave out the `:` — `struct Empty`

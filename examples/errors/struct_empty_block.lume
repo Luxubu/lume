@@ -1,0 +1,5 @@
+# A `:` after a struct name with nothing indented under it.
+struct Empty:
+
+def main:
+  puts 1

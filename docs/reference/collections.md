@@ -21,6 +21,34 @@ puts xs.map { |n| n * 2 }.sort.join("-")   #=> 2-4-6
 `.to_list` is for when you want the list itself — to store it, return it, or
 index it. On something that is already a list it is a copy, not an error.
 
+**A chain too long for one line goes on the next, starting with `.`.** A line
+that begins with `.name` continues the line above, as in Ruby, and a chain
+in Rust is written the same way:
+
+```lume
+dishes = ["soup", "pie", "stew", "tea"]
+menu = dishes
+  .filter { |d| d.len > 3 }
+  .map(_.upcase)
+  .join(", ")
+puts menu    #=> SOUP, STEW
+```
+
+Indent the steps under the line they continue; `lume fmt` keeps them one a
+line. The first line of a block cannot begin with `.`, since there is no line
+above it in the block to continue:
+
+```lume-bad
+def main:
+  dishes = ["soup", "pie"]
+  for d in dishes:
+    .upcase
+#! a line starting with `.` continues the line above, and this one begins a block
+```
+
+`|>` (see [Operators](operators.md)) may also begin a line, for a
+pipeline that passes the value to functions as well as methods.
+
 ## Lists
 
 ```lume

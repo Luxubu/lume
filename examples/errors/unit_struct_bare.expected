@@ -1,0 +1,5 @@
+error: `Closed` is a type; construct one with `Closed()`
+  --> examples/errors/unit_struct_bare.lume:5:7
+  |
+5 |   c = Closed
+  |       ^

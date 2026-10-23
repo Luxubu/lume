@@ -110,8 +110,22 @@ def main:
   puts orders.filter { |o| o.len == 4 }.map(_.upcase).join(" and ")    #=> SOUP and STEW
 ```
 
-When a chain grows long, give its steps names. Each name says what that
-step is for, which the chain alone does not:
+When a chain grows too long for one line, put each step on a line of its
+own, starting with `.`, indented under the line it continues:
+
+```lume
+def main:
+  orders = ["tea", "soup", "pie", "stew", "tea"]
+  loud = orders
+    .filter { |o| o.len == 4 }
+    .map(_.upcase)
+    .join(" and ")
+  puts loud    #=> SOUP and STEW
+```
+
+A line that begins with `.` always continues the line above. Or give the
+steps names. Each name says what that step is for, which the chain alone
+does not:
 
 ```lume
 def main:
@@ -222,7 +236,8 @@ through a pointer.
   indented body, or `_` for the simplest case.
 - `map` changes each item, `filter` keeps and `reject` drops; `any?`,
   `all?`, `count`, `find`, `sum`, `sort_by`, `max_by` ask with a block.
-- Methods chain, left to right, as one pass over the items.
+- Methods chain, left to right, as one pass over the items; a line starting
+  with `.` continues the chain.
 - `fold` builds one value from all the items.
 - A function's name can stand in for a block, and a function can take a
   block: `f: (Int) -> Int`.

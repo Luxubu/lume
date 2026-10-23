@@ -1,0 +1,6 @@
+error: a line starting with `.` continues the line above, and this one begins a block
+  --> examples/errors/leading_dot_block.lume:6:5
+  |
+6 |     .upcase
+  |     ^
+  help: put the value the chain starts from first: `xs` on this line, and `.map ...` under it
