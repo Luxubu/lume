@@ -67,7 +67,11 @@ def judge_folder(lume: Str, scratch: Str, folder: Str) -> Str? or Error:
     # what building it left behind is not copied
     if not (rel.starts_with?(".lume/") or rel.contains?("/.lume/")):
       Dir.make(Path.dir(Path.join(work, rel)))?
-      File.write(Path.join(work, rel), File.read(f)?)?
+      text = File.read(f)?
+      # a dependency by a relative path still means the one beside the
+      # original folder, not beside the copy
+      kept = if Path.base(rel) == "lume.toml": anchored(text, Path.dir(f)) else: text
+      File.write(Path.join(work, rel), kept)?
   (code, out, err) = Process.run_in(work, lume, ["run", "main.lume"])?
   Dir.remove(scratch)?
   if code != 0:
@@ -77,6 +81,10 @@ def judge_folder(lume: Str, scratch: Str, folder: Str) -> Str? or Error:
   if got != want:
     return Ok(Some("output does not match main.expected\n  expected: #{py_list(want)}\n  it says:  #{py_list(got)}"))
   Ok(None)
+
+# A `lume.toml` with each relative `path = "..."` made to start from `dir`.
+def anchored(toml: Str, dir: Str) -> Str:
+  toml.lines.map { |l| if l.contains?("path = \"") and not l.contains?("path = \"/"): l.replace("path = \"", "path = \"#{dir}/") else: l }.to_list.join("\n") + "\n"
 
 # `text` without the newlines at its end.
 def without_newlines(text: Str) -> Str:

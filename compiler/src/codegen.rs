@@ -1320,6 +1320,8 @@ pub struct Gen {
     /// called from async code, so it may start async generators, though it
     /// waits for nothing itself.
     starts_streams: bool,
+    /// The expression being compiled is the one an `await` waits for.
+    awaiting: Option<(usize, usize)>,
     /// The chain over an async sequence whose block is being made: it runs
     /// as items arrive, so it is kept, though nothing names it.
     chain_block: Option<String>,
@@ -1506,6 +1508,7 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, module_id: &str
         param_blocks: HashSet::new(),
         kept_captured: HashSet::new(),
         starts_streams: false,
+        awaiting: None,
         chain_block: None,
         annotate_params: false,
         move_next_lambda: false,
@@ -8494,6 +8497,11 @@ impl Gen {
                         self.line(&format!("{} {} {};", rust_name(name), op, v));
                     }
                     Some(_) if self.kept_captured.contains(name) => return Err(self.kept_change(name, *line, *col)),
+                    // `+=` on what a task copied in: the same as `=` there
+                    Some(_) if self.spawn_captured.contains(name) => {
+                        return Err(LumeError::new(*line, *col, format!("`{}` inside `spawn:` is a copy, so changing it here would not be seen outside", name))
+                            .with_help(format!("declare it `shared var {}` before the `spawn:` if tasks are meant to change it, or bind a new name here", name)));
+                    }
                     Some(b) => {
                         return Err(LumeError::new(*line, *col, format!("`{}` is immutable and cannot be changed with `{}`", name, op))
                             .with_help(format!("declare it with `var {} = ...` on line {}", name, b.line)));
@@ -11404,6 +11412,15 @@ impl Gen {
         if crate::diag::indexing() {
             self.note_expr(e);
         }
+        // a call whose result arrives later is a value only to `await`; the
+        // awaited one is known by where it is, which a rewrite of it keeps
+        // (an interface's default has a message of its own for this)
+        if self.awaiting != Some((e.line, e.col)) && !self.in_trait_decl && matches!(e.kind, ExprKind::Call { .. } | ExprKind::Method { .. }) {
+            let t = self.ty_of(e);
+            if matches!(t, Type::Future(_)) {
+                self.no_future(&t, e)?;
+            }
+        }
         // `text.shout` / `Temp.from_f` where a kept block is wanted
         if let Some((ins, out)) = self.wanted_fn() {
             if let Some(key) = self.module_fn_ref(e) {
@@ -11784,7 +11801,10 @@ impl Gen {
                         }
                     }
                 }
-                let v = self.expr(x)?;
+                let saved_awaiting = self.awaiting.replace((x.line, x.col));
+                let v = self.expr(x);
+                self.awaiting = saved_awaiting;
+                let v = v?;
                 match xt {
                     Type::Future(_) => format!("({}).await", v),
                     Type::Task(_) => format!("({}).await.unwrap()", v),

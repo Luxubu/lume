@@ -1,0 +1,8 @@
+# `+=` on a name a task copied in changes only the copy, as `=` would.
+
+async def main:
+  var served = 0
+  t = spawn:
+    served += 1
+  await t
+  puts served

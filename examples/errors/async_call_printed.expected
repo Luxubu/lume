@@ -1,0 +1,6 @@
+error: `cook` is an `async def`: its result arrives later
+  --> examples/errors/async_call_printed.lume:9:8
+  |
+9 |   puts cook("toast")
+  |        ^
+  help: write `await` in front of the call to wait for it, or `spawn:` to run it alongside other work

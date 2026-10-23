@@ -1,0 +1,6 @@
+error: `served` inside `spawn:` is a copy, so changing it here would not be seen outside
+  --> examples/errors/spawn_copy_compound.lume:6:5
+  |
+6 |     served += 1
+  |     ^
+  help: declare it `shared var served` before the `spawn:` if tasks are meant to change it, or bind a new name here

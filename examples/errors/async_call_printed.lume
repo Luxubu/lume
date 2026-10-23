@@ -1,0 +1,9 @@
+# An `async def` call is a value only to `await`: printed, put in text or in
+# a list without it, it is refused, not handed to rustc.
+
+async def cook(dish: Str) -> Str:
+  await Time.sleep(1)
+  dish
+
+async def main:
+  puts cook("toast")
