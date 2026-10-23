@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **What is settled**: `docs/stability.md` says which parts of Lume are
+  settled and which are previews, and promises that a settled part does not
+  break a working program without a warning release first. From here on, a
+  change to a preview is listed in an item beginning **Preview:**, and a
+  coming change to a settled part in one beginning **Changing:**. Lunches 23
+  and 24 of the tutorial are marked as previews, as they use `http` and
+  `Process.spawn`.
 - **Fixed**: a `Char` as the key of a `{Str: Int}` map reached rustc;
   `take` and `skip` with a negative count wrapped around; `-> async
   Iterator[T]` on an async generator broke its callers.

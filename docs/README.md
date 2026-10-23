@@ -39,6 +39,8 @@ it claims by `tests/docs.sh`. If an answer here is wrong, the build fails.
 - [The examples](examples.md) — 5,000 lines of working programs, in a reading
   order.
 - [Installing](install.md) — and the commands.
+- [What is settled](stability.md) — what you can build on, what is a
+  preview, and how a settled part is allowed to change.
 
 ## About these docs
 

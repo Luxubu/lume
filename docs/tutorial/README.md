@@ -45,7 +45,8 @@ it.
 | 19 | [HTTP](19-http.md) *(0.5 preview)* | requests, and bodies read as they arrive |
 
 The chapters marked *0.5 preview* teach the newest parts of Lume, which may
-still change before 1.0; the others teach parts that are settled.
+still change before 1.0; the others teach parts that are settled. [What is
+settled](../stability.md) says which is which, and what each promises.
 
 ## Part 3: building things
 
@@ -58,8 +59,8 @@ marked *new here* where it is used.
 | 20 | [A CSV query tool](20-a-csv-query-tool.md) | reading a table, and answering questions about it |
 | 21 | [A log analyser](21-a-log-analyser.md) | a large file, read fast |
 | 22 | [A job runner](22-a-job-runner.md) | programs run in tasks, and their results gathered |
-| 23 | [A health checker](23-a-health-checker.md) | many web pages at once, with retries |
-| 24 | [Talking to a language server](24-talking-to-a-language-server.md) | a program that drives another, message by message |
+| 23 | [A health checker](23-a-health-checker.md) *(0.5 preview)* | many web pages at once, with retries |
+| 24 | [Talking to a language server](24-talking-to-a-language-server.md) *(0.5 preview)* | a program that drives another, message by message |
 
 ## How the chapters are written
 

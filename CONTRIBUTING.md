@@ -20,6 +20,17 @@ leaves `tests/run.sh` passing. A milestone is done when:
 Where Lume has to choose how something behaves, it does what Rust does,
 unless there is a reason written down not to.
 
+**A change to a settled part** — one listed as settled in
+[docs/stability.md](docs/stability.md) — that would stop a working program
+compiling, or change what it does, is made in two releases. The first adds a
+warning wherever the old form is used, saying what to write instead, with an
+example in `examples/errors/` and a `CHANGELOG.md` item beginning
+**Changing:**; the old form keeps working. The next release may then make
+the change. Fixing a program that reached rustc, or that did something other
+than the docs say, is a bug fix and needs no warning release. A change to a
+preview needs only a `CHANGELOG.md` item beginning **Preview:**. Settling a
+preview, or adding a new one, updates the lists in `docs/stability.md`.
+
 Every few milestones a **review round** checks the docs against people who
 have not seen the compiler. Reviewers write programs from `docs/` and
 `examples/` alone, predict every output by hand, and count what they had to

@@ -36,6 +36,8 @@ Then:
   reading order.
 - **[Installing](docs/install.md)** — and what each command does.
 - **[Changes](CHANGELOG.md)** — what each release holds; 0.5.0 is the latest.
+- **[What is settled](docs/stability.md)** — the parts you can build on, the
+  previews that may still change, and how a settled part is allowed to.
 
 Every example in the documentation is compiled, run, and checked against the
 output it claims, by `tests/docs.sh`. An answer that stops being true fails

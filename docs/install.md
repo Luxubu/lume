@@ -34,6 +34,9 @@ macOS for every push, with the newest stable Rust
 uses `async` or a Rust crate downloads and builds those crates the first
 time — tokio for `async` — which takes a few seconds once.
 
+**What you can build on.** Most of Lume is settled; a few newer parts are
+previews that may still change. [What is settled](stability.md) lists both.
+
 ## Without installing
 
 If you would rather not copy anything:

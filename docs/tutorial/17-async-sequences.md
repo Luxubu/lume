@@ -231,7 +231,7 @@ two values ahead. The chains and questions are those of Rust's `StreamExt`, and
 
 - An `async def` with `yield` is an async generator: it may `await` between
   values, and is walked in async code.
-- It runs at most one value ahead, and stops when the walker lets go.
+- It is never more than two values ahead, and stops when the walker lets go.
 - It has the chains of a list, each giving an async sequence; their blocks
   get copies of the names they use.
 - `first`, `count`, `sum`, `any?`, `all?`, `find`, `each` and `fold` wait

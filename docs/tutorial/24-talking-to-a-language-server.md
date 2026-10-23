@@ -1,5 +1,9 @@
 # Lunch 24: Talking to a language server
 
+> **A 0.5 preview.** This lunch is built on `Process.spawn` (lunch 18), one of
+> Lume's newest parts. It works as shown — every example is checked — but details may
+> change before 1.0. See [what is settled](../stability.md).
+
 **In this lunch you will build `lspeek`**, a small program that drives a
 **language server** — the program behind an editor's error underlines and
 hovers — and asks it questions, as an editor would. The server is Lume's
