@@ -52,6 +52,21 @@ def main:
   puts best(["fig", "pear"])     #=> Some("pear")
 ```
 
+**`Hashable`** is the other built-in bound: the values can be a map's keys
+or a set's items, which counting by value needs:
+
+```lume
+def tally[T: Hashable](xs: [T]) -> {T: Int}:
+  var counts: {T: Int} = {}
+  for x in xs:
+    counts[x] = counts[x].or(0) + 1
+  counts
+
+def main:
+  puts tally(["tea", "pie", "tea"])    #=> {"tea": 2, "pie": 1}
+  puts tally([3, 3, 1])                #=> {3: 2, 1: 1}
+```
+
 Without the bound, Lume points out what is missing:
 
 ```lume-bad
@@ -123,7 +138,9 @@ cafe/
 ```
 
 `menu.lume` keeps the menu. **Only what is marked `pub` can be reached from
-another file**; the rest is the file's own business:
+another file**; the rest is the file's own business. `pub` goes on the
+things at the top of a file — a struct, a function, a constant — and a
+`pub struct`'s fields and methods come with it, with no `pub` of their own:
 
 ```lume-skip
 # menu.lume — what the café sells. Only `pub` items can be reached from
@@ -203,6 +220,11 @@ There are two ways to import:
 every path starts from the folder that holds the file you run — inside
 `kitchen/` too.
 
+So check and run a program of several files **through the file that has
+`main`**: `lume check main.lume` checks `menu.lume` and
+`kitchen/orders.lume` with it. On its own, `lume check kitchen/orders.lume`
+cannot find `menu`, because its paths start from where `main.lume` is.
+
 ## 12.5 Tests
 
 A **test** is a block in a file, with a name, that checks the code does
@@ -279,7 +301,8 @@ interface bound is a trait bound. Each Lume file becomes a Rust module, and
 ## Try it
 
 1. Write `last_two[T](xs: [T]) -> [T]` that gives the last two items of a
-   list (or fewer, if it has fewer). `xs.skip(n)` drops the first `n`.
+   list (or fewer, if it has fewer). `xs.skip(n)` drops the first `n`, and
+   a negative `n` drops none.
 2. Write `count_of[T](xs: [T], x: T) -> Int` that counts how many items
    equal `x`, and use it on a list of `Int`s and a list of `Str`s.
 3. Make a generic `Pair[A, B]` struct with fields `left` and `right`, and a

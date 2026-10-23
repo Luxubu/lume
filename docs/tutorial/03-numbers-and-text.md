@@ -35,6 +35,11 @@ def main:
 Seven people sharing two tables gives three to a table, and `7 % 2` people
 left over. When you want the fraction, divide `Float`s.
 
+**Coming from Python?** Two things differ. Division of negative `Int`s
+drops the fraction toward zero, so `-7 / 2` is `-3`, not `-4`, and `%`
+takes the sign of the left side: `-7 % 2` is `-1`. And `round` (3.2) sends
+a half away from zero, so `2.5.round` is `3.0`, where Python gives `2`.
+
 Dividing an `Int` by zero has no answer, so it stops the program. When both
 numbers are written out, Lume sees it before the program runs:
 
@@ -45,7 +50,9 @@ def main:
 ```
 
 When the zero comes from somewhere else — what a person typed, a file — the
-program stops when it gets there, with `error: division by zero`. Checking
+program stops when it gets there, with `error: division by zero`. That
+message does not yet say which line of your program it was; for now, the
+habit of checking first is worth more than usual. Checking
 for zero first is the way to avoid that; [lunch 5](05-making-decisions.md) shows how.
 
 ## 3.2 Fractions, and showing them to people
@@ -180,7 +187,9 @@ def main:
 ## 3.6 Taking text apart
 
 **Positions in text count characters, starting at 0.** `s[a..b]` is the
-text from position `a` to position `b`, both included:
+text from position `a` to position `b`, **both included** — unlike Python's
+`s[a:b]`, which stops before `b`; `s[a...b]`, with three dots, stops before
+it, as lunch 5's ranges do:
 
 ```lume
 def main:
@@ -210,6 +219,10 @@ def main:
 def main:
   puts "tea".chars    #=> ["t", "e", "a"]
 ```
+
+Each one is a `Char` — one character — rather than a `Str`. A `Char`
+prints like one-letter text, and works where text is wanted, so you can
+mostly treat it as text; its type is `Char` when you write it down.
 
 ## 3.7 Text over several lines
 

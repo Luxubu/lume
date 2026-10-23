@@ -50,7 +50,8 @@ still change before 1.0; the others teach parts that are settled.
 ## Part 3: building things
 
 Each lunch builds one small program from start to finish, using what the
-first two parts taught.
+first two parts taught, and a few methods met for the first time, each
+marked *new here* where it is used.
 
 | | lunch | |
 |---|---|---|

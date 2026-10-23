@@ -63,6 +63,13 @@ def main:
 #! `Napkin` is used as a `Priced` here, but it has no `price` method
 ```
 
+**A field is not a method**, even with the right name: a struct with a
+field `price: Int` does not fit `Priced`, because the interface asks for a
+method. Lume's message says so when it sees such a field. A method and a
+field of one struct cannot share a name, so keep the number in a field
+named for what it is — `cents`, as `Dish` does — and give the method the
+interface's name.
+
 ## 11.3 Methods that come with the interface
 
 An interface can also hold methods **with** a body. Every type that fits

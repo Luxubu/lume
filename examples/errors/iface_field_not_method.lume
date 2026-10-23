@@ -1,0 +1,12 @@
+# A field is not a method, though it has the name an interface asks for.
+
+interface Priced:
+  def price -> Int
+
+struct Dish:
+  price: Int
+
+def total(p: Priced) -> Int = p.price
+
+def main:
+  puts total(Dish(price: 4))

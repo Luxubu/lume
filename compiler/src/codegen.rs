@@ -1937,7 +1937,9 @@ impl Gen {
             self_kind: f.self_kind,
             // calling an async generator starts it at once and gives the
             // stream: there is nothing to await at the call
-            is_async: f.is_async && !(block_yields(&f.body) && f.ret.as_ref().map(|t| matches!(self.ct(t), Type::App(n, ref a) if a.len() == 1 && is_iterator_name(&n))).unwrap_or(false)),
+            // `-> Iterator[T]` and `-> async Iterator[T]` say the same of an
+            // `async def` with `yield`: what it gives is the sequence itself
+            is_async: f.is_async && !(block_yields(&f.body) && f.ret.as_ref().map(|t| matches!(self.ct(t), Type::App(n, ref a) if a.len() == 1 && is_iterator_name(&n)) || matches!(self.ct(t), Type::AsyncGen(_))).unwrap_or(false)),
             generics: self.norm_generics(&f.generics),
             // a generator runs after the call, so it keeps every block it is
             // given; so does an interface's method that gives a sequence, as
@@ -3632,6 +3634,15 @@ impl Gen {
                     None => return Err(LumeError::new(line, col, format!("unknown interface `{}`", iface))),
                 };
                 let needs: Vec<String> = m.iter().filter_map(|n| info.methods.get(n).map(|s| format!("def {} {}", n, self.describe_sig(s)))).collect();
+                // a field of that name is the usual reason: it is not a method
+                let field = match t {
+                    Type::Named(n) => self.structs.get(n).and_then(|st| st.fields.iter().find(|(f, _)| m.contains(f)).map(|(f, ft)| (f.clone(), ft.clone()))),
+                    _ => None,
+                };
+                if let Some((f, ft)) = field {
+                    return Err(LumeError::new(line, col, format!("`{}` is used as a `{}` here, but it has no `{}` method", type_name(t), iface, m.join("`, `")))
+                        .with_help(format!("`{}` has a field `{}`, but an interface asks for a method; rename the field, say to `{}_value`, and add `def {} -> {} = {}_value`", type_name(t), f, f, f, type_name(&ft), f)));
+                }
                 Err(LumeError::new(line, col, format!("`{}` is used as a `{}` here, but it has no `{}` method", type_name(t), iface, m.join("`, `")))
                     .with_help(format!("`{}` needs: {}. Add {} to `{}`, or `extend {} with {}:`", iface, needs.join("; "), if m.len() == 1 { "it" } else { "them" }, type_name(t), type_name(t), iface)))
             }
@@ -5656,6 +5667,18 @@ impl Gen {
 
     /// The Rust text of a map key in a read position, borrowed as the map
     /// wants it. A one-character literal is a `Char` where the keys are.
+    /// A `Char` used as the key of a map whose keys are `Str`, as `.chars`
+    /// gives them: the key is the character's text, as a `Char` is a `Str`
+    /// wherever a method wants one.
+    fn char_as_str_key(&mut self, recv: &Expr, index: &Expr) -> Option<Expr> {
+        let is_str_map = matches!(self.ty_of(recv).materialized(), Type::Map(k, _) if *k == Type::Str);
+        if is_str_map && self.ty_of(index).materialized() == Type::Char {
+            Some(Expr::new(ExprKind::Method { recv: Box::new(index.clone()), name: "to_s".into(), args: vec![] }, index.line, index.col))
+        } else {
+            None
+        }
+    }
+
     fn map_key_text(&mut self, index: &Expr, key_ty: &Type, map_ty: &Type) -> Result<String> {
         if *key_ty == Type::Char {
             if let Some(c) = char_literal(index) {
@@ -6014,8 +6037,15 @@ impl Gen {
                 ExprKind::Method { name, .. } => format!("`{}` is an `async def`", name),
                 _ => "this is an async value".to_string(),
             };
-            return Err(LumeError::new(e.line, e.col, format!("{}: its result arrives later", what))
-                .with_help("write `await` in front of the call to wait for it, or `spawn:` to run it alongside other work"));
+            // the way out depends on where the call is
+            let help = if self.current_fn == "this task" {
+                "a task waits for it too: write `await` in front of the call, as in `spawn: await f(...)`".to_string()
+            } else if !self.in_async {
+                format!("only async code can wait for it: make `{}` an `async def`, then write `await` in front of the call", self.current_fn)
+            } else {
+                "write `await` in front of the call to wait for it, or `spawn:` to run it alongside other work".to_string()
+            };
+            return Err(LumeError::new(e.line, e.col, format!("{}: its result arrives later", what)).with_help(help));
         }
         Ok(())
     }
@@ -8415,9 +8445,20 @@ impl Gen {
                             return Err(LumeError::new(*line, *col, format!("`{}` is declared on line {}, outside this block; a new `{}` here would hide it and be lost when the block ends", name, b.line, name))
                                 .with_help(format!("to change it from here, declare it `var {}` on line {}; to make a separate value, give it another name", name, b.line)));
                         }
+                        // `price = price`: nothing changes — usually a field meant
+                        if matches!(&value.kind, ExprKind::Ident(n) if n == name) {
+                            let err = LumeError::new(*line, *col, format!("`{} = {}` gives `{}` the value it already has, which does nothing", name, name, name));
+                            return Err(if self.field_type(name).is_some() {
+                                err.with_help(format!("the parameter `{}` hides the field of the same name; to set the field, write `self.{} = {}`", name, name, name))
+                            } else {
+                                err.with_help("drop the line, or give the new value another name")
+                            });
+                        }
                         if leftmost_ident(value) == Some(name.as_str()) {
                             let v = self.expr_owned(value)?;
-                            self.declare(name, false, false, vt, *line);
+                            // a transform is the same name made again: messages
+                            // name the line it was first made on
+                            self.declare(name, false, false, vt, b.line);
                             self.line(&format!("let {} = {};", rust_name(name), v));
                         } else {
                             return Err(LumeError::new(*line, *col, format!("`{}` is immutable and cannot be reassigned", name))
@@ -8520,6 +8561,10 @@ impl Gen {
                 }
             }
             Stmt::IndexAssign { recv, index, op, value, line, col } => {
+                if let Some(key) = self.char_as_str_key(recv, index) {
+                    let st = Stmt::IndexAssign { recv: recv.clone(), index: key, op: *op, value: value.clone(), line: *line, col: *col };
+                    return self.stmt_inner(&st, is_tail);
+                }
                 // `grid[i][j] = v`: the row is reached in place, not as a `T?`
                 let rt = match self.indexed_collection(recv) {
                     Some(el) => el,
@@ -9124,6 +9169,11 @@ impl Gen {
     /// Rust lvalue text for a place: indexes become `[i as usize]` on lists
     /// and `get_mut` on maps.
     fn lvalue(&mut self, e: &Expr) -> Result<String> {
+        if let ExprKind::Index { recv, index } = &e.kind {
+            if let Some(key) = self.char_as_str_key(recv, index) {
+                return self.lvalue(&Expr::new(ExprKind::Index { recv: recv.clone(), index: Box::new(key) }, e.line, e.col));
+            }
+        }
         match &e.kind {
             ExprKind::Index { recv, index } => {
                 let rt = match self.indexed_collection(recv) {
@@ -11693,6 +11743,10 @@ impl Gen {
                     format!("::std::result::Result::<{}, Error>::Ok({})", t, v)
                 }
             }
+            ExprKind::Index { recv, index } if self.char_as_str_key(recv, index).is_some() => {
+                let key = self.char_as_str_key(recv, index).unwrap();
+                return self.expr(&Expr::new(ExprKind::Index { recv: recv.clone(), index: Box::new(key) }, e.line, e.col));
+            }
             ExprKind::Index { recv, index } => {
                 let rt = self.ty_of(recv).materialized();
                 let r = self.expr_val(recv)?;
@@ -12395,7 +12449,8 @@ impl Gen {
                     match name.as_str() {
                         "take" | "skip" if args.len() == 1 => {
                             let n = self.expr(&args[0].value)?;
-                            return Ok(format!("{}.{}(({}) as usize)", r, name, n));
+                            // a negative count is none, as `slice` reads one
+                            return Ok(format!("{}.{}(({}).max(0) as usize)", r, name, n));
                         }
                         "enumerate" if args.is_empty() => {
                             // pairs are values: a borrowed item is copied into its pair
@@ -12772,7 +12827,7 @@ impl Gen {
                         format!("({}).iter()", r)
                     };
                     match name.as_str() {
-                        "take" | "skip" if parts.len() == 1 => return Ok(format!("{}.{}(({}) as usize)", base, name, parts[0])),
+                        "take" | "skip" if parts.len() == 1 => return Ok(format!("{}.{}(({}).max(0) as usize)", base, name, parts[0])),
                         "enumerate" if parts.is_empty() => {
                             let x = if elem.is_copy() || consumed { "x" } else { "x.clone()" };
                             return Ok(format!("{}.enumerate().map(|(i, x)| (i as i64, {}))", base, x));

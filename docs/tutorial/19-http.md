@@ -152,7 +152,9 @@ async def main:
 ```
 
 The results come back in the order the requests were started, as lunch 16
-said of all tasks, so `zip` pairs each with its URL.
+said of all tasks, so **`zip`** — new here — pairs each with its URL:
+`a.zip(b)` is a list of pairs, the first of `a` with the first of `b`, and
+so on.
 
 ## 19.6 Checked without a network
 

@@ -3,7 +3,11 @@
 Lume compiles to Rust and `rustc` compiles that to a native binary, so you
 need a Rust toolchain — [rustup.rs](https://rustup.rs) is the usual way.
 
+Get Lume's source and install it:
+
 ```sh
+git clone https://github.com/Luxubu/lume
+cd lume
 ./install.sh
 ```
 

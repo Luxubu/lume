@@ -1,0 +1,6 @@
+error: `for` is one of Lume's own words, so it cannot be a name
+  --> examples/errors/keyword_as_name.lume:4:3
+  |
+4 |   for = 3
+  |   ^
+  help: pick another name, such as `for_count` or `my_for`

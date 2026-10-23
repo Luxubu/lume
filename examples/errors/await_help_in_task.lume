@@ -1,0 +1,7 @@
+# An `async def` called in a task is still awaited; the help says so there.
+
+async def cook(d: Str) -> Str = d
+
+async def main:
+  t = spawn: cook("x")
+  puts await t

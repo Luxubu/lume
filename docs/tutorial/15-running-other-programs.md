@@ -99,6 +99,11 @@ def main -> () or Error:
   puts out.lines    #=> ["tea", "soup", "pie"]
 ```
 
+The `\\n` is written with two backslashes: in Lume text, `\\` is one
+backslash, so the shell is given `\n`, which `printf` turns into a new line.
+A single `\n` would be a new line in the Lume text already — which here
+would work too, but the shell line would not read as written.
+
 ## 15.5 Running in a folder
 
 A program runs in the folder your program was started from. **`Process.run_in(dir,

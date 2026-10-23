@@ -1,0 +1,12 @@
+# `price = price` in a method whose parameter is named like a field changes
+# nothing; the help says how to set the field.
+
+struct Dish:
+  price: Int
+
+  def set_price(var self, price: Int):
+    price = price
+
+def main:
+  var d = Dish(price: 1)
+  d.set_price(2)

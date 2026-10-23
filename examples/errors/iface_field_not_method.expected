@@ -1,0 +1,6 @@
+error: `Dish` is used as a `Priced` here, but it has no `price` method
+  --> examples/errors/iface_field_not_method.lume:12:14
+   |
+12 |   puts total(Dish(price: 4))
+   |              ^
+  help: `Dish` has a field `price`, but an interface asks for a method; rename the field, say to `price_value`, and add `def price -> Int = price_value`

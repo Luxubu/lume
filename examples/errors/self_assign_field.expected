@@ -1,0 +1,6 @@
+error: `price = price` gives `price` the value it already has, which does nothing
+  --> examples/errors/self_assign_field.lume:8:5
+  |
+8 |     price = price
+  |     ^
+  help: the parameter `price` hides the field of the same name; to set the field, write `self.price = price`

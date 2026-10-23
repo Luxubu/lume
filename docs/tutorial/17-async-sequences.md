@@ -45,15 +45,17 @@ def main:
 #! is an `async` generator, which runs as a task, so it is called from async code
 ```
 
-## 17.2 Never more than one ahead
+## 17.2 A pass with room for one
 
-An async generator runs as a task of its own, and makes **at most one
-value ahead** of whoever walks it, then waits until that value is taken.
-Printing from inside it shows the turns:
+An async generator runs as a task of its own, and hands each value over
+through **one place** — like the pass between a kitchen and the dining
+room, with room for a single plate. While a value waits there, the
+generator goes on to make its next one, and then stops at its `yield`
+until the waiting one is taken. Printing from inside it shows the turns:
 
 ```lume
 async def orders -> Iterator[Str]:
-  for dish in ["soup", "pie"]:
+  for dish in ["soup", "pie", "tea"]:
     puts "  kitchen: #{dish} ready"
     yield dish
 
@@ -63,13 +65,17 @@ async def main:
     puts "waiter: served #{dish}"
   #=>   kitchen: soup ready
   #=>   kitchen: pie ready
+  #=>   kitchen: tea ready
   #=> waiter: served soup
   #=> waiter: served pie
+  #=> waiter: served tea
 ```
 
-The kitchen gets the pie ready while the waiter is still serving the soup
-— one ahead — and then waits. A kitchen that could run any number ahead
-would fill the pass with cold food.
+While the waiter serves the soup, the pie waits at the pass and the tea is
+ready in the kitchen's hands — and there the kitchen stops. **It is never
+more than two values ahead of what is being used**: one waiting, one made.
+A kitchen that could run any number ahead would fill the pass with cold
+food; one that could not run ahead at all would keep the waiter waiting.
 
 **When the walker lets go, the generator stops** at its next `yield`. So an
 endless one is fine, and `break` ends it:
@@ -145,6 +151,11 @@ async def main:
 Their blocks run during the call, so — unlike a chain's — they can change
 the names around them, as `each` changes `served`.
 
+**These wait without `await` being written**, as `for` and `to_list` do:
+walking an async sequence always waits, so saying so each time would add
+nothing. `await` is for calling an `async def` (lunch 16), which is why
+17.5 writes `await count_all(...)` but `orders().count`.
+
 ## 17.5 Methods, functions and parameters
 
 **A method can be an async generator**, as a plain one could in lunch 14.
@@ -174,6 +185,10 @@ async def main:
 A parameter takes the sequence: afterwards, the caller's name for it is
 used up, as a generator is after a walk.
 
+An async generator itself may say either `-> Iterator[T]`, as the examples
+here do, or `-> async Iterator[T]`; they mean the same, since its `async
+def` already says its values arrive later.
+
 ## 17.6 A task that walks one
 
 A task can walk an async sequence — **the task takes it**, as Rust moves a
@@ -197,7 +212,7 @@ An async sequence is what Rust calls a *stream*. Rust has no async
 generators of its own yet; the popular `async-stream` crate gives them, and
 Lume does the same thing: the body runs as a tokio task, and hands each
 value over through a one-place channel, which is why it is never more than
-one ahead. The chains and questions are those of Rust's `StreamExt`, and
+two values ahead. The chains and questions are those of Rust's `StreamExt`, and
 `async Iterator[T]` is Rust's `impl Stream<Item = T>`.
 
 ## Try it
@@ -209,7 +224,8 @@ one ahead. The chains and questions are those of Rust's `StreamExt`, and
    `1, 2, 3, ...`, doubled, as a list.
 3. Use `fold` on `bells(3)` to join its values with `" / "`.
 4. Write `async def loudest(xs: async Iterator[Str]) -> Str?` that gives the
-   longest value, and call it with `bells(3).map(_.upcase)`.
+   longest value, and call it with an async generator of `"pie"`,
+   `"minestrone"` and `"tea"`, in capitals.
 
 ## Recap
 
@@ -219,6 +235,6 @@ one ahead. The chains and questions are those of Rust's `StreamExt`, and
 - It has the chains of a list, each giving an async sequence; their blocks
   get copies of the names they use.
 - `first`, `count`, `sum`, `any?`, `all?`, `find`, `each` and `fold` wait
-  for the values; the first four stop at their answer.
+  for the values; `first`, `find`, `any?` and `all?` stop at their answer.
 - Its type is `async Iterator[T]`. A method may be one, a function may hand
   one on, a parameter or a task takes one.

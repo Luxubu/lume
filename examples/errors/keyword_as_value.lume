@@ -1,0 +1,4 @@
+# A keyword where a value goes.
+
+def main:
+  puts in

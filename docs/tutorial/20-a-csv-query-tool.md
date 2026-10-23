@@ -2,7 +2,8 @@
 
 Part 3 builds programs. Each lunch is one small, whole program, made a step
 at a time from what Parts 1 and 2 taught, with notes on why it is shaped
-the way it is.
+the way it is. A few methods appear here for the first time; each is
+marked **new here**, with what it does.
 
 **In this lunch you will build `csvq`**, which answers questions about a
 CSV file — a table kept as text, one row to a line, with commas between
@@ -118,13 +119,16 @@ column with `?`, so a bad column name stops it with that message:
 Three choices worth a look:
 
 - **`sum` says which line holds a field that is not a number.**
-  `map_error` (lunch 10's table) keeps the failure but gives it a better
-  reason, so `sum dish` says `line 2: ...` instead of only that `soup` is
-  not an integer.
+  **New here: `map_error`**, on a `T or Error`, keeps a failure a failure
+  but gives it a new reason, built from the old one by its block — so
+  `sum dish` says `line 2: ...` instead of only that `soup` is not an
+  integer. A good value passes through untouched.
 - **`matching` gives a `Table`**, not a list of rows, so its answer can be
   shown with the header — and could be asked another question.
 - **`tally` is lunch 6's counting pattern**, with the map in the order the
   values first appear.
+- **New here: `+` on two lists** gives one list, the first's items then the
+  second's: `show` puts the header in front of the rows that way.
 
 The method is `matching`, not `where`: `where` is one of Lume's words
 (lunch 5's `for x in xs where ...`), so it cannot name a method.
@@ -132,8 +136,10 @@ The method is `matching`, not `where`: `where` is one of Lume's words
 ## 20.5 Commands
 
 The command line gives a list of words. An enum names the four commands,
-and a function turns words into one — with list patterns (lunch 9), which
-take a list apart by its length and its words:
+and a function turns words into one. **New here: list patterns.** Lunch 9's
+`match` can take a list apart too: `["sum", c]` fits a list of exactly two
+items whose first is `"sum"`, and names the second `c`; `["count"]` fits
+only the list holding just `"count"`:
 
 ```lume-skip
 enum Command:
@@ -346,7 +352,8 @@ test "where with no match keeps the header":
   assert t.matching("a", "9").or(t).show == "a,b"
 ```
 
-`lume test csvq.lume` runs them.
+`lume test csvq.lume` runs them. **New here: `.error?`** on a `T or Error`
+asks whether it failed, and `.ok?` whether it worked.
 
 ## Underneath, in Rust
 

@@ -51,7 +51,11 @@ json = { git = "https://github.com/Luxubu/lume", tag = "v0.5.0" }
 `json.obj([...])` makes a JSON object from pairs, `x.to_json` turns a
 value into JSON, `json.show` writes a document as text and `json.parse`
 reads one. A parsed document answers `doc.path("result.contents.value")`,
-giving the value at that path if there is one.
+giving the value at that path if there is one. **New here**, all from the
+`json` package: a JSON value is a `Json`, an enum whose variants include
+`Null` and `Arr(items)` — a JSON array, made from a list; and `.str`,
+`.int` and `.items` read a value as text, a whole number or a list, each
+giving it if that is what the value is (a `T?`).
 
 ## 24.3 Sending and receiving
 
@@ -61,7 +65,6 @@ receiving reads header lines up to the blank one, then exactly the body:
 ```lume-skip
 import json
 import json.Json
-import json.ToJson
 
 struct Server:
   child: Child
@@ -138,7 +141,8 @@ FIXED = r"""
   def double(n: Int) -> Int = n * 2
 
   def main:
-    puts "#{double(4)}!"
+    total = double(4)
+    puts "#{total}!"
   """
 
 def show_diagnostics(msg: Json):
@@ -172,7 +176,7 @@ async def main -> () or Error:
   s.send(notice("textDocument/didChange", change))?
 
   # where `double` is called in the fixed text: line 4, which counted from 0
-  # is 3, and its `d` is character 10 of `  puts "#{double(4)}!"`
+  # is 3, and its `d` is character 10 of `  total = double(4)`
   at = json.obj([("line", 3.to_json), ("character", 10.to_json)])
   s.send(request(2, "textDocument/hover", json.obj([("textDocument", json.obj([("uri", uri.to_json)])), ("position", at)])))?
   hover = (await s.answer(2) { |m| show_diagnostics(m) })?
@@ -231,8 +235,11 @@ version of this conversation against every change to the compiler.
    line the answer points to (`result.range.start.line`, counted from 0).
 2. Send a second `textDocument/didChange` that breaks the program again
    in another way, and print the diagnostics that come back.
-3. Ask for `textDocument/completion` after `puts double(4).` — the
-   methods an `Int` has — and print the first five labels.
+3. Send a change whose last line is `  puts total.`, and ask for
+   `textDocument/completion` at the end of that line — the methods an
+   `Int` has — and print the first five labels. (The text does not parse
+   while you type `total.`, so the server answers from the last version
+   that checked cleanly, where `total` was an `Int`.)
 4. Send a request the server does not support, such as
    `textDocument/rename`, and print the error it answers with.
 

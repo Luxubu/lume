@@ -346,8 +346,10 @@ def main:
 
 **An `async def` that gives `Iterator[T]` and has `yield` in it is an async
 generator**: its body may `await`, so its items arrive one at a time. It
-runs as a task that is never more than one item ahead of whoever walks it,
-and `for` waits for each item. Stable Rust has no async generators yet;
+runs as a task that hands its items over through one place: while an item
+waits there, the body makes the next and stops at its `yield`, so it is
+never more than two items ahead of whoever walks it. `for` waits for each
+item. Stable Rust has no async generators yet;
 this is what the `async-stream` crate's `stream!` does.
 
 ```lume

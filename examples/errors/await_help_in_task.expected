@@ -1,0 +1,6 @@
+error: `cook` is an `async def`: its result arrives later
+  --> examples/errors/await_help_in_task.lume:6:14
+  |
+6 |   t = spawn: cook("x")
+  |              ^
+  help: a task waits for it too: write `await` in front of the call, as in `spawn: await f(...)`

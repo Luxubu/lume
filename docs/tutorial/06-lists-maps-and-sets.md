@@ -40,6 +40,9 @@ makes you say what happens when there is nothing, and that is why a Lume
 program does not crash on a missing item it forgot about — [lunch 10](10-absence-and-failure.md)
 tells the whole story.
 
+**Coming from Python?** A negative position counts from nothing: `menu[-1]`
+is `None`, not the last item. Ask for that by name, with `menu.last`.
+
 When you know the position is good — because you just checked the length,
 say — `.at(i)` gives the item, and stops the program if you were wrong:
 
@@ -197,7 +200,8 @@ def main:
 ```
 
 `intersect` keeps what both have, `union` what either has, and `diff`
-what the first has and the second does not.
+what the first has and the second does not. `.to_list` gives a set's values
+as a list, when you want one.
 
 ## 6.7 Empty ones need their type said
 

@@ -112,8 +112,16 @@ def main:
   puts Path.join("/home/ada", "recipes")    #=> /home/ada/recipes
 ```
 
-`Path.join` puts exactly one `/` between its two parts, so you need not
-worry whether the first one ended with a slash.
+`Path.join` puts a `/` between its two parts when there is none — but it
+does not take one away, so a slash on both sides stays doubled:
+
+```lume
+def main:
+  puts Path.join("a", "b")      #=> a/b
+  puts Path.join("a/", "b")     #=> a/b
+  puts Path.join("a", "/b")     #=> a/b
+  puts Path.join("a/", "/b")    #=> a//b
+```
 
 ## 13.5 A program's arguments
 

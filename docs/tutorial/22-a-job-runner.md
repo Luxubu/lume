@@ -34,10 +34,12 @@ def parse_jobs(text: Str) -> [Job] or Error:
   jobs
 ```
 
-`line[0...cut]` is the text before the colon, three dots stopping just
-before it; `line[cut + 2..line.len]` is everything after `": "` (lunch 3's
-ranges). Lines that start with `#` are comments, so a jobs file can explain
-itself.
+**New here:** `text.index_of(part)` gives the position where `part` first
+appears, if it does. `line[0...cut]` is the text before the colon, three
+dots stopping just before it; `line[cut + 2..line.len]` is everything after
+`": "` (lunch 3's ranges). `line.len` is one past the last position, which
+is fine: a range that runs past the end of text is cut short at the end.
+Lines that start with `#` are comments, so a jobs file can explain itself.
 
 ## 22.2 Running one job
 
@@ -256,8 +258,9 @@ write.
 2. Add a `--fail-fast` flag: once a job fails, start no new ones. (The pool
    loop can stop starting jobs when a finished one failed.)
 3. Show each failing job's whole error output, indented, under its line.
-4. Run your jobs with `-j 1`, then `-j 4`, and compare the times of `nap`
-   when there are two `nap` jobs.
+4. Add a second `nap` job, and time the whole run (`time ./jobrun ...`)
+   with `-j 1`, then `-j 4`. Each `nap` takes as long either way; what
+   changes is the whole.
 
 ## Recap
 

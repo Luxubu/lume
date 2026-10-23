@@ -117,7 +117,11 @@ def main:
 ```
 
 In `Card(digits)`, `digits` is a new name for the value inside — any name
-will do, and the values are taken in the order the variant lists them.
+will do, and the values are taken **in the order the variant lists them**:
+a pattern names them by position, not by field name, so `Card(last4: d)`
+is not a pattern. And the values inside a variant are reached only through
+a pattern: `p.last4` does not work on a `Payment`, since a `Cash` has no
+`last4` at all.
 
 ## 9.4 Methods on an enum
 

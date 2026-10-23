@@ -1123,6 +1123,14 @@ impl Parser {
 
     fn stmt(&mut self) -> Result<Stmt> {
         let (line, col) = self.here();
+        // `for = 3`: a word of the language used as a name
+        if let (Tok::Ident(w), Tok::Sym(op)) = (self.peek().clone(), self.peek_at(1).clone()) {
+            if crate::lexer::is_keyword(&w) && matches!(op, "=" | "+=" | "-=" | "*=" | "/=") {
+                return Err(self
+                    .err(format!("`{}` is one of Lume's own words, so it cannot be a name", w))
+                    .with_help(format!("pick another name, such as `{}_count` or `my_{}`", w, w)));
+            }
+        }
         if matches!(self.peek(), Tok::Indent) {
             return Err(self
                 .err("this line is indented more than the one above it, but nothing opened a block")
@@ -2254,6 +2262,12 @@ impl Parser {
                         self.block()?
                     } else {
                         let e = self.expr()?;
+                        // `spawn: n += 1`: a statement, where one line takes a value
+                        if matches!(self.peek(), Tok::Sym("=" | "+=" | "-=" | "*=" | "/=")) {
+                            return Err(self
+                                .err("a `spawn:` on one line takes a value, and this is a statement")
+                                .with_help("put the statement on the next line, indented under `spawn:`"));
+                        }
                         let b = Block { stmts: vec![Stmt::Expr(e)] };
                         self.mark_inline(&b);
                         b

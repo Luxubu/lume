@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- **Fixed**: a `Char` as the key of a `{Str: Int}` map reached rustc;
+  `take` and `skip` with a negative count wrapped around; `-> async
+  Iterator[T]` on an async generator broke its callers.
+- **Refused, with a message**: `price = price` (which changes nothing — the
+  help says `self.price = price` when a field has that name), and a keyword
+  used as a name.
+- **Better help** for a missing `await` inside a task or a plain `def`, a
+  statement after a one-line `spawn:`, and a field named as an interface's
+  method.
+- **The docs check** runs examples indented under a list item, which it
+  skipped.
+- **The tutorial**, after a dry run by three reviewers working through it as
+  beginners: false sentences corrected, things used before being taught
+  explained where first met, and Python habits named where they bite.
 - **A tutorial**: *Lume, a Lunch at a Time*, in `docs/tutorial/` — 24
   chapters, each about an hour, from a first program to a language-server
   client, with exercises and answers. Every example in it is run by the

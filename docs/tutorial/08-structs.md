@@ -165,6 +165,40 @@ So reading a struct's methods tells you which can change it — and a value
 held without `var` can be handed anywhere without fear that it will come
 back changed.
 
+**A parameter named like a field hides the field.** In
+`def set_price(var self, price: Int)`, a bare `price` means the parameter.
+To change the field, write it in full, `self.price = price`:
+
+```lume
+struct Dish:
+  name: Str
+  price: Int
+
+  def set_price(var self, price: Int):
+    self.price = price
+
+def main:
+  var d = Dish(name: "soup", price: 4)
+  d.set_price(5)
+  puts d.price    #=> 5
+```
+
+Lume refuses `price = price`, which would change nothing, and says why:
+
+```lume-bad
+struct Dish:
+  name: Str
+  price: Int
+
+  def set_price(var self, price: Int):
+    price = price
+
+def main:
+  var d = Dish(name: "soup", price: 4)
+  d.set_price(5)
+#! the parameter `price` hides the field of the same name; to set the field, write `self.price = price`
+```
+
 ## 8.6 Functions of the type: `def self.`
 
 Sometimes you want another way to make a value, or a value the type

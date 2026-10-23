@@ -99,7 +99,7 @@ def portions(guests: Int, per_pot: Int) -> Iterator[Str]:
   var left = guests
   var pot = 1
   while left > 0:
-    served = left.min(per_pot)
+    served = left.min(per_pot)    # the smaller of the two numbers
     yield "pot #{pot}: #{served}"
     left -= served
     pot += 1

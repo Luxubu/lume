@@ -1,0 +1,5 @@
+error: unexpected keyword `in` here
+  --> examples/errors/keyword_as_value.lume:4:8
+  |
+4 |   puts in
+  |        ^

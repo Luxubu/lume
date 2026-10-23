@@ -1,0 +1,4 @@
+# A word of the language used as a name says so.
+
+def main:
+  for = 3

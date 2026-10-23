@@ -251,6 +251,8 @@ as a `spawn_blocking` task, and `Time.sleep` in it is
 3. Make the pause between tries double each time: 20, 40, 80 ms.
 4. Count how many times `pretend` was called for each URL, with a `shared
    var` map, and print it after the checks. Which pages were fetched twice?
+   (A function can take a `shared var` as a parameter, written
+   `calls: shared var {Str: Int}`, and change it.)
 
 ## Recap
 

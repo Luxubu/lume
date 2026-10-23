@@ -165,7 +165,7 @@ most text in a Lume program is made.
   ```lume-bad
   def main:
     for = 3
-  #! expected a name to loop with
+  #! `for` is one of Lume's own words, so it cannot be a name
   ```
 
 ## Underneath, in Rust
@@ -185,7 +185,8 @@ list is a `Vec`. Text with `#{ }` in it becomes a `format!`.
 3. Take the text `"  LUNCH TIME  "`, trim it and lower-case it with
    transforms, and print the result in square brackets: `[lunch time]`.
 4. Work out the price of three dishes at `4` each with a `1.5` tip, and
-   print it. (You will need `to_float`.)
+   print it. (You will need `to_float`. Give the total a name before
+   printing it: why is lunch 3.4.)
 
 ## Recap
 

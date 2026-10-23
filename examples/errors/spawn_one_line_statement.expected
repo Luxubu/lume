@@ -1,0 +1,6 @@
+error: a `spawn:` on one line takes a value, and this is a statement
+  --> examples/errors/spawn_one_line_statement.lume:5:16
+  |
+5 |   t = spawn: n += 1
+  |                ^
+  help: put the statement on the next line, indented under `spawn:`

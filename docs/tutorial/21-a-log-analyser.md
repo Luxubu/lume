@@ -63,7 +63,9 @@ would be: `yield e` is a good item, `yield Error(...)` a failed one.
 ## 21.3 The report
 
 The report walks the entries once, keeping running totals — nothing holds
-the whole log:
+every entry. (The log's text itself is read whole, by `File.read`; for a
+log too big for memory, it would be read in pieces, which is beyond this
+lunch.)
 
 ```lume-skip
 struct Report:
@@ -97,8 +99,11 @@ is none.
 
 ## 21.4 Showing it
 
-Averages and the slowest pages come from the totals. `pad_right` lines up
-a column, as a person likes to read a table:
+Averages and the slowest pages come from the totals. **New here:**
+`text.pad_right(n)` adds spaces to the end of text until it is `n` long,
+which lines up a column, as a person likes to read a table; `map` on a
+`T?` changes the value inside, if there is one; and a map's `to_list`
+gives its pairs, `(key, value)`, which `sort` orders by key:
 
 ```lume-skip
 def show(r: Report) -> Str:

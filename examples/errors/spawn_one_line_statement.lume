@@ -1,0 +1,6 @@
+# A one-line `spawn:` takes a value; a statement goes on the lines below.
+
+async def main:
+  shared var n = 0
+  t = spawn: n += 1
+  await t

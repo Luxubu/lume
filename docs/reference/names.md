@@ -22,7 +22,7 @@ parameter or a function.**
 
 ```lume-bad
 in = 1
-#! unexpected keyword `in` here
+#! `in` is one of Lume's own words, so it cannot be a name
 ```
 
 ```lume-bad
@@ -33,8 +33,8 @@ def main:
 #! `in` is a keyword and cannot be used as a parameter name
 ```
 
-The error differs from word to word, because each keyword starts its own
-kind of line; `if = 1` says ``expected a value, found `=` ``.
+Any keyword given a value with `=`, or with `+=` and the like, is named in
+the message, and so is one used as a parameter.
 
 **`const` is reserved, but Lume constants do not use it.** A constant is a
 name and a value at the top level of a file, with no keyword:

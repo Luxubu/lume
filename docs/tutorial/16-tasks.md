@@ -46,7 +46,12 @@ async def main:
   puts await cook("toast", 2)    #=> toast after 2 minutes
 ```
 
-(A minute here is ten milliseconds, so the examples are quick.) Leave off
+(A minute here is ten milliseconds, so the examples are quick.)
+
+**Outside async code — in a plain `def` — `Time.sleep(ms)` is written
+without `await`, and simply pauses**: there is nothing else that code could
+get on with meanwhile. Inside an `async def` it must be awaited, so that
+other tasks run while it waits. Leave off
 the `await` and Lume says the result is not there yet:
 
 ```lume-bad
@@ -79,7 +84,13 @@ async def main:
 ```
 
 The three cook together, so this takes about as long as the pie, not as
-long as all three. The results come back in the order they were started,
+long as all three.
+
+Notice **`spawn: await cook(...)`**: `cook` is an `async def`, so even
+inside a task its result has to be waited for, with `await`, like any call
+to one. A `spawn:` on one line takes a value — `spawn: await cook("pie", 9)`
+or `spawn: sum_to(n)` — and for statements, such as `served += 1`, its body
+goes on the lines below it, indented. The results come back in the order they were started,
 so each one can be matched with what started it.
 
 Tasks are usually made from a list, with `map`:
@@ -150,6 +161,7 @@ trample on each other's changes:
 ```lume
 async def main:
   shared var served = 0
+  # a task whose body ends with a statement gives back nothing, `()`
   var waiters: [Task[()]] = []
   for table in 1..20:
     w = spawn:

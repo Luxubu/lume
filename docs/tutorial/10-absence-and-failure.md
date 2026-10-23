@@ -96,7 +96,7 @@ in `Ok` for you:
 
 ```lume
 def seats(text: Str) -> Int or Error:
-  n = text.to_int.or(0 - 1)
+  n = text.to_int.or(-1)
   if n < 0:
     return Error("`#{text}` is not a number of seats")
   n
@@ -111,7 +111,7 @@ apart as it does an optional:
 
 ```lume
 def seats(text: Str) -> Int or Error:
-  n = text.to_int.or(0 - 1)
+  n = text.to_int.or(-1)
   if n < 0:
     return Error("`#{text}` is not a number of seats")
   n
@@ -175,11 +175,20 @@ write `def main -> () or Error:`. Then a failure that reaches the end of
 `main` ends the program, printing its message:
 
 ```lume-skip
+def seats(text: Str) -> Int or Error:
+  n = text.to_int?
+  if n < 0:
+    return Error("seats cannot be negative")
+  n
+
 def main -> () or Error:
-  puts seats("6")?     # prints 6
-  puts seats("-2")?    # stops: error: seats cannot be negative
+  puts seats("6")?
+  puts seats("-2")?
   puts "never printed"
 ```
+
+The test suite cannot check this one, since it fails on purpose; run it,
+and it prints:
 
 ```text
 6
@@ -219,9 +228,10 @@ def main:
 | a missing value is really a failure | `.or_error("why")?` |
 | you truly do not care | `_ = ...` |
 
-There is one more, `!`, which takes the value and stops the whole program
-if there is none. Lume warns wherever you use it: it is for tests and
-quick scripts, never for code anyone relies on.
+There is one more, `!`, written after the value — `"4".to_int!` — which
+takes the value and stops the whole program if there is none. Lume warns
+wherever you use it: it is for tests and quick scripts, never for code
+anyone relies on.
 
 ## Underneath, in Rust
 

@@ -135,9 +135,9 @@ at the end of the line, and the block's body indented below:
 def main:
   var total = 0
   [4, 2, 7].each do |p|
-    with_tax = p * 11 / 10
-    total += with_tax
-  puts total    #=> 13
+    with_tip = p + 1
+    total += with_tip
+  puts total    #=> 16
 ```
 
 `each` runs the block for each item and gives nothing back — it is for

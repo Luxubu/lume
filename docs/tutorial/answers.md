@@ -248,7 +248,7 @@ def main:
 
 ```lume
 def main:
-  var counts: {Char: Int} = {}
+  var counts: {Str: Int} = {}
   for c in "banana".chars:
     counts[c] = counts[c].or(0) + 1
   puts counts    #=> {"b": 1, "a": 3, "n": 2}
@@ -535,9 +535,7 @@ def main:
 **1.**
 
 ```lume
-def last_two[T](xs: [T]) -> [T]:
-  drop = if xs.len > 2: xs.len - 2 else: 0
-  xs.skip(drop)
+def last_two[T](xs: [T]) -> [T] = xs.skip(xs.len - 2)
 
 def main:
   puts last_two([1, 2, 3, 4])    #=> [3, 4]
@@ -796,19 +794,17 @@ async def main:
 `to_list` and use the list's:
 
 ```lume
-async def bells(n: Int) -> Iterator[Str]:
-  for i in 1..n:
-    yield "ring #{i}"
+async def dishes -> Iterator[Str]:
+  for d in ["pie", "minestrone", "tea"]:
+    yield d
 
 async def loudest(xs: async Iterator[Str]) -> Str?:
   all = xs.to_list
   all.max_by { |x| x.len }
 
 async def main:
-  puts await loudest(bells(3).map(_.upcase))    #=> Some("RING 1")
+  puts await loudest(dishes().map(_.upcase))    #=> Some("MINESTRONE")
 ```
-
-All three are the same length, so `max_by` gives the first.
 
 ## Lunch 18
 
@@ -1076,13 +1072,25 @@ Each is a few lines added to `main`, before the `shutdown`.
 ``line 2: unknown name `nope` ``, printed by `show_diagnostics` while the next
 answer is awaited.
 
-**3.** Send the text with a line ending in `puts double(4).`, then a
-`textDocument/completion` request at the end of that line; the labels are
-at `result.items`, each item's `label`:
+**3.** A third version of the text, with `puts total.` as its last line,
+and a completion request at its end — line 4 (from 0), character 13:
 
 ```lume-skip
+  typing = r"""
+    def double(n: Int) -> Int = n * 2
+
+    def main:
+      total = double(4)
+      puts total.
+    """
+  typed = json.obj([("textDocument", json.obj([("uri", uri.to_json), ("version", 3.to_json)])), ("contentChanges", Arr([json.obj([("text", (typing + "\n").to_json)])]))])
+  s.send(notice("textDocument/didChange", typed))?
+  spot = json.obj([("line", 4.to_json), ("character", 13.to_json)])
+  s.send(request(6, "textDocument/completion", json.obj([("textDocument", json.obj([("uri", uri.to_json)])), ("position", spot)])))?
+  done = (await s.answer(6) { |m| () })?
   items = done.path("result.items").map { |x| x.items }.or([])
   puts items.take(5).map { |i| i.path("label").map { |x| x.str.or("") }.or("") }.to_list
+  # ["to_float", "to_int", "abs", "pad", "pad_right"]
 ```
 
 **4.**
