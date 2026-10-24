@@ -1,0 +1,28 @@
+# a05 — adding up stock counts read from text, with `!` on each number in a
+# chain broken one step a line. The third line is not a number, so `!`
+# meets an `Error` and the program stops inside the block, on the step's
+# own line. `!` also warns when the program is compiled.
+# Meant to STOP.
+# EXPECTED OUTPUT:
+# reading 4 lines
+# EXPECTED STDERR:
+# warning: `!` stops the program if the value is missing or an error
+#   --> corpus/m103/a05_stock_count.lume:26:24
+#    |
+# 26 |     .map { |n| n.to_int! }
+#    |                        ^
+#   help: fine in tests and quick scripts; elsewhere use `match`, `?` or `.or(default)`
+# error: `x` is not an integer
+#   --> corpus/m103/a05_stock_count.lume:26
+#    |
+# 26 |     .map { |n| n.to_int! }
+# EXPECTED EXIT: 101
+
+def main:
+  lines = ["3 apples", "2 pears", "x figs", "5 plums"]
+  puts "reading #{lines.len} lines"
+  total = lines
+    .map { |l| l.split(" ").at(0) }
+    .map { |n| n.to_int! }
+    .sum
+  puts "total: #{total}"

@@ -1,0 +1,29 @@
+# a03 — a podium printed with `.at`, one place too many: the program stops
+# in `main` on the `puts` line, after the first three places are printed.
+# The ranking is a chain broken one step a line after a binding.
+# Meant to STOP.
+# EXPECTED OUTPUT:
+# ["bo", "ana", "cy"]
+# 1. bo
+# 2. ana
+# 3. cy
+# EXPECTED STDERR:
+# error: no item at 3 — the list has 3
+#   --> corpus/m103/a03_podium.lume:29
+#    |
+# 29 |     puts "#{place}. #{podium.at(place - 1)}"
+# EXPECTED EXIT: 101
+
+struct Score:
+  player: Str
+  points: Int
+
+def main:
+  scores = [Score("ana", 12), Score("bo", 30), Score("cy", 7)]
+  podium = scores
+    .sort_by { |s| -s.points }
+    .map { |s| s.player }
+    .to_list
+  puts podium
+  for place in 1..4:
+    puts "#{place}. #{podium.at(place - 1)}"

@@ -1,0 +1,84 @@
+# c06: a weekly payroll, as a package (lume.toml, main.lume, rates.lume).
+# Pay policies are field-less structs in another module, behind a public
+# interface; the payroll keeps them in a map field and picks one per
+# employee at run time, falling back to `Contract()`. Totals, counts and
+# the overtime list are chains one step a line. The last report divides
+# pay by hours in `rates.effective_rate`; Ed worked 0 hours, so the
+# program stops with a division by zero on that line of rates.lume.
+# Run from the repository root as `lume run corpus/m103/c06_payroll/main.lume`.
+# Meant to STOP.
+# EXPECTED OUTPUT:
+# Ana   hourly      950.00
+# Bo    salaried   1000.00
+# Cy    hourly      540.00
+# Di    contract    900.00
+# Ed    salaried    750.00
+# Fay   contract     80.00
+# total: 4220.00
+# hourly=2, salaried=2, contract=1, temp=1
+# overtime: ["Ana"]
+# effective hourly rate:
+#   Ana: 2111
+#   Bo: 2500
+#   Cy: 1800
+#   Di: 7500
+# EXPECTED STDERR:
+# error: division by zero
+#   --> corpus/m103/c06_payroll/rates.lume:32
+#    |
+# 32 | pub def effective_rate(e: Employee, paid: Int) -> Int = paid / e.hours
+# EXPECTED EXIT: 101
+
+import rates
+import rates.Employee
+
+struct Payroll:
+  policies: {Str: rates.Policy}
+
+  def policy_for(e: Employee) -> rates.Policy:
+    match policies[e.policy]:
+      Some(p) -> p
+      None -> rates.Contract()
+
+def money(n: Int) -> Str = (n.to_float / 100.0).decimals(2)
+
+def main:
+  payroll = Payroll(policies: {
+    "hourly": rates.Hourly(),
+    "salaried": rates.Salaried(),
+    "contract": rates.Contract(),
+  })
+  staff = [
+    Employee("Ana", "hourly", 45, 2000),
+    Employee("Bo", "salaried", 40, 5200000),
+    Employee("Cy", "hourly", 30, 1800),
+    Employee("Di", "contract", 12, 90000),
+    Employee("Ed", "salaried", 0, 3900000),
+    Employee("Fay", "temp", 8, 8000),
+  ]
+
+  for e in staff:
+    puts payroll.policy_for(e).line(e)
+
+  total = staff
+    .map { |e| payroll.policy_for(e).pay(e) }
+    .sum
+  puts "total: #{money(total)}"
+
+  counts = staff
+    .group_by(_.policy)
+    .map { |k, v| "#{k}=#{v.len}" }
+    .join(", ")
+  puts counts
+
+  overtime = staff
+    .filter { |e| e.policy == "hourly" }
+    .filter { |e| e.hours > 40 }
+    .map(_.name)
+    .to_list
+  puts "overtime: #{overtime}"
+
+  puts "effective hourly rate:"
+  for e in staff:
+    paid = payroll.policy_for(e).pay(e)
+    puts "  #{e.name}: #{rates.effective_rate(e, paid)}"

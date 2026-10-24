@@ -1,0 +1,35 @@
+# a04 — average hours per team, worked out in a method with `Int`
+# division; a team with no hours divides by zero. The program stops inside
+# the method, on the division line, not on the `puts` that called it. The
+# loop's `for` header is a chain broken over two lines.
+# Meant to STOP.
+# EXPECTED OUTPUT:
+# ops: 8
+# design: 6
+# build: 10
+# EXPECTED STDERR:
+# error: division by zero
+#   --> corpus/m103/a04_team_hours.lume:23
+#    |
+# 23 |     total / hours.len
+# EXPECTED EXIT: 101
+
+struct Team:
+  name: Str
+  hours: [Int]
+
+  def average -> Int:
+    total = hours.sum
+    total / hours.len
+
+def main:
+  teams = [
+    Team("ops", [8, 9, 7]),
+    Team("design", [6, 6]),
+    Team("audit", []),
+    Team("build", [10]),
+  ]
+  for t in teams
+    .sort_by { |t| -t.hours.len }:
+    puts "#{t.name}: #{t.average}"
+  puts "all teams done"

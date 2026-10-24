@@ -1,0 +1,125 @@
+# c01: an order-pricing engine. Discount strategies are field-less structs
+# behind an interface, kept in a map held in a struct field and picked at
+# run time by the code on each order. Totals, a best-seller tally and a
+# revenue report are long chains written one step a line, one of them
+# finished with `|>`; a for header and a method body are chains too.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# order 1: 10% discount, $19.80
+# order 2: bulk discount, $22.98
+# order 3: no discount, $24.00
+# order 4: bulk discount, $4.50
+# top: clip x10, pen x6, pad x3
+# 10%  1 orders   19.80
+# bulk 2 orders   27.48
+# no   1 orders   24.00
+# over $20: [2, 3]
+# grand total: $71.28
+# lines with a discount:
+#   order 1 pen
+#   order 1 pad
+#   order 2 ink
+#   order 4 clip
+# [NoDiscount(), NoDiscount()]
+# true
+
+interface Discount:
+  def name -> Str
+  def off(cents: Int, qty: Int) -> Int
+
+  def describe -> Str = "#{name} discount"
+
+struct NoDiscount:
+  def name -> Str = "no"
+  def off(cents: Int, qty: Int) -> Int = 0
+
+struct TenPercent:
+  def name -> Str = "10%"
+  def off(cents: Int, qty: Int) -> Int = cents * qty / 10
+
+# one item free when three or more are bought
+struct BulkThree:
+  def name -> Str = "bulk"
+  def off(cents: Int, qty: Int) -> Int = if qty >= 3: cents else: 0
+
+struct Line:
+  sku: Str
+  cents: Int
+  qty: Int
+
+  def gross -> Int = cents * qty
+
+struct Order:
+  id: Int
+  code: Str
+  lines: [Line]
+
+struct Engine:
+  discounts: {Str: Discount}
+
+  def pick(code: Str) -> Discount:
+    match discounts[code]:
+      Some(d) -> d
+      None -> NoDiscount()
+
+  def total(o: Order) -> Int:
+    d = pick(o.code)
+    o.lines
+      .map { |l| l.gross - d.off(l.cents, l.qty) }
+      .sum
+
+def money(cents: Int) -> Str = "$" + (cents.to_float / 100.0).decimals(2)
+
+def main:
+  engine = Engine(discounts: {"TEN": TenPercent(), "BULK": BulkThree()})
+  orders = [
+    Order(id: 1, code: "TEN", lines: [Line("pen", 250, 4), Line("pad", 1200, 1)]),
+    Order(id: 2, code: "BULK", lines: [Line("ink", 899, 3), Line("pen", 250, 2)]),
+    Order(id: 3, code: "NONE", lines: [Line("pad", 1200, 2)]),
+    Order(id: 4, code: "BULK", lines: [Line("clip", 50, 10)]),
+  ]
+
+  for o in orders:
+    d = engine.pick(o.code)
+    puts "order #{o.id}: #{d.describe}, #{money(engine.total(o))}"
+
+  # best sellers by quantity, across every order
+  var qty: {Str: Int} = {}
+  for l in orders.flat_map { |o| o.lines }:
+    qty[l.sku] = qty[l.sku].or(0) + l.qty
+  top = qty
+    .sort_by { |sku, n| -n }
+    .take(3)
+    .map { |sku, n| "#{sku} x#{n}" }
+    .join(", ")
+  puts "top: #{top}"
+
+  # revenue under each discount, in the order the discounts first appear
+  by_name = orders
+    .group_by { |o| engine.pick(o.code).name }
+  for name, os in by_name:
+    revenue = os
+      .map { |o| engine.total(o) }
+      .sum
+    puts "#{name.pad_right(5)}#{os.len} orders #{money(revenue).slice(1, 20).pad(7)}"
+
+  big = orders
+    |> .filter { |o| engine.total(o) > 2000 }
+    |> .map(_.id)
+    |> .to_list
+  puts "over $20: #{big}"
+
+  grand = orders
+    .map { |o| engine.total(o) }
+    |> .sum
+  puts "grand total: #{money(grand)}"
+
+  puts "lines with a discount:"
+  for o in orders
+    .filter { |o| engine.pick(o.code).name != "no" }:
+    for l in o.lines
+      .filter { |l| engine.pick(o.code).off(l.cents, l.qty) > 0 }:
+      puts "  order #{o.id} #{l.sku}"
+
+  puts [NoDiscount(), NoDiscount()]
+  puts TenPercent() == TenPercent()
