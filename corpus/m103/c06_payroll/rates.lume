@@ -1,0 +1,34 @@
+# rates.lume: the employee record, the pay policies (field-less structs
+# behind a public interface) and an effective-rate helper that divides by
+# the hours worked.
+
+pub interface Policy:
+  def kind -> Str
+  def pay(e: Employee) -> Int
+
+  def line(e: Employee) -> Str = "#{e.name.pad_right(6)}#{kind.pad_right(9)}#{cents(pay(e)).pad(9)}"
+
+pub struct Employee:
+  name: Str
+  policy: Str
+  hours: Int
+  rate: Int
+
+pub struct Hourly:
+  def kind -> Str = "hourly"
+
+  def pay(e: Employee) -> Int:
+    overtime = (e.hours - 40).max(0)
+    e.rate * e.hours + e.rate * overtime / 2
+
+pub struct Salaried:
+  def kind -> Str = "salaried"
+  def pay(e: Employee) -> Int = e.rate / 52
+
+pub struct Contract:
+  def kind -> Str = "contract"
+  def pay(e: Employee) -> Int = e.rate
+
+pub def effective_rate(e: Employee, paid: Int) -> Int = paid / e.hours
+
+def cents(n: Int) -> Str = (n.to_float / 100.0).decimals(2)

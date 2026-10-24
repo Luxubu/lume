@@ -1,0 +1,134 @@
+# c05: a command dispatcher for a tiny stack calculator. Each command is a
+# field-less struct behind an interface; the dispatcher keeps them in a map
+# field by name and picks one per script line at run time. Script lines
+# come from a generator that drops blanks and comments. An unknown command
+# and a command with too little on the stack are reported, not fatal. The
+# help line and the arities are chains over the map, one step a line.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# commands: add/2 dup/1 mul/2 push/0 sub/2 swap/2
+# arities used: [0, 1, 2]
+# push 3  [3]
+# push 4  [3, 4]
+# add     [7]
+# dup     [7, 7]
+# mul     [49]
+# pop: unknown command
+# push 10 [49, 10]
+# swap    [10, 49]
+# sub     [-39]
+# add: needs 2, the stack has 1
+# result: [-39]
+# steps run: 8 of 10
+# Push() Push() true
+
+interface Command:
+  def needs -> Int
+  def apply(stack: [Int], arg: Int) -> [Int]
+
+struct Push:
+  def needs -> Int = 0
+  def apply(stack: [Int], arg: Int) -> [Int] = stack + [arg]
+
+struct Add:
+  def needs -> Int = 2
+  def apply(stack: [Int], arg: Int) -> [Int] = binary(stack) { |a, b| a + b }
+
+struct Sub:
+  def needs -> Int = 2
+  def apply(stack: [Int], arg: Int) -> [Int] = binary(stack) { |a, b| a - b }
+
+struct Mul:
+  def needs -> Int = 2
+  def apply(stack: [Int], arg: Int) -> [Int] = binary(stack) { |a, b| a * b }
+
+struct Dup:
+  def needs -> Int = 1
+  def apply(stack: [Int], arg: Int) -> [Int] = stack + [stack.at(stack.len - 1)]
+
+struct Swap:
+  def needs -> Int = 2
+  def apply(stack: [Int], arg: Int) -> [Int]:
+    n = stack.len
+    rest = stack.take(n - 2).to_list
+    rest + [stack.at(n - 1), stack.at(n - 2)]
+
+# the top two items, replaced by what `f` makes of them
+def binary(stack: [Int], f: (Int, Int) -> Int) -> [Int]:
+  n = stack.len
+  rest = stack.take(n - 2).to_list
+  rest + [f(stack.at(n - 2), stack.at(n - 1))]
+
+# the lines worth running: no blanks, no comments
+def steps(script: Str) -> Iterator[Str]:
+  for raw in script.lines:
+    line = raw.trim
+    yield line if not line.empty? and not line.starts_with?("#")
+
+struct Dispatcher:
+  commands: {Str: Command}
+
+  def run(script: Str) -> ([Int], Int):
+    var stack: [Int] = []
+    var done = 0
+    for line in steps(script):
+      words = line.split.to_list
+      name = words.at(0)
+      arg = words[1]
+        .map { |w| w.to_int.or(0) }
+        .or(0)
+      match commands[name]:
+        Some(cmd) ->
+          if stack.len < cmd.needs:
+            puts "#{name}: needs #{cmd.needs}, the stack has #{stack.len}"
+          else:
+            stack = cmd.apply(stack, arg)
+            done += 1
+            puts "#{line.pad_right(8)}#{stack}"
+        None -> puts "#{name}: unknown command"
+    (stack, done)
+
+def main:
+  d = Dispatcher(commands: {
+    "push": Push(),
+    "add": Add(),
+    "sub": Sub(),
+    "mul": Mul(),
+    "dup": Dup(),
+    "swap": Swap(),
+  })
+
+  help = d.commands
+    .sort_by { |name, c| name }
+    .map { |name, c| "#{name}/#{c.needs}" }
+    .join(" ")
+  puts "commands: #{help}"
+
+  arities = d.commands
+    .values
+    .map(_.needs)
+    .to_set
+    .sort
+  puts "arities used: #{arities}"
+
+  script = """
+    push 3
+    push 4
+    add
+
+    # square it
+    dup
+    mul
+    pop
+    push 10
+    swap
+    sub
+    add
+    """
+  (stack, done) = d.run(script)
+  total = steps(script)
+    .map { |s| 1 }
+    .sum
+  puts "result: #{stack}"
+  puts "steps run: #{done} of #{total}"
+  puts "#{Push()} #{Push()} #{Push() == Push()}"

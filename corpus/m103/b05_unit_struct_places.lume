@@ -1,0 +1,75 @@
+# b05: structs with no fields everywhere: in a list, compared, in a set, as a
+# map key (literal and written through), as an enum payload, as a generic
+# type argument, as a field, with `extend ... with`, behind an interface, in
+# a `match`, and a struct of methods only.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# [Marker(), Marker()]
+# true
+# false
+# 1
+# {Marker()}
+# {Marker(): 6}
+# {Marker(): "only"}
+# Held(m: Marker())
+# [Empty, Held(m: Marker())]
+# held Marker()
+# Box(item: Marker())
+# 2
+# marker
+# marker
+# Holder(m: Marker(), n: 2)
+# hello
+# Plain()
+
+interface Named:
+  def name -> Str
+
+struct Marker
+
+struct Plain:
+  def hello -> Str = "hello"
+
+extend Marker with Named:
+  def name -> Str = "marker"
+
+enum Slot:
+  Empty
+  Held(m: Marker)
+
+struct Box[T]:
+  item: T
+
+struct Holder:
+  m: Marker
+  n: Int
+
+def show(x: Named) -> Str = x.name
+
+def main:
+  ms = [Marker(), Marker()]
+  puts ms
+  puts Marker() == Marker()
+  puts Marker() != Marker()
+  seen = {Marker(), Marker(), Marker()}
+  puts seen.len
+  puts seen
+  var counts: {Marker: Int} = {}
+  counts[Marker()] = 1
+  counts[Marker()] = counts[Marker()].or(0) + 5
+  puts counts
+  puts {Marker(): "only"}
+  puts Held(m: Marker())
+  puts [Empty, Held(Marker())]
+  match Held(Marker()):
+    Held(x) -> puts "held #{x}"
+    Empty -> puts "empty"
+  b = Box(item: Marker())
+  puts b
+  bs: [Box[Marker]] = [b, Box(Marker())]
+  puts bs.len
+  puts Marker().name
+  puts show(Marker())
+  puts Holder(m: Marker(), n: 2)
+  puts Plain().hello
+  puts Plain()

@@ -1,0 +1,37 @@
+# b04: a `.name` line after an inline `if` (it continues the line, so it
+# belongs to the last value on it, the `else` branch), mixed with `|>` lines,
+# after a line ending in a `{ }` block, and before a final `|> puts`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# big
+# SMALL
+# 12
+# [30, 20, 10]
+# [8, 10]
+
+def double(n: Int) -> Int = n * 2
+
+def main:
+  n = 5
+  size = if n > 3: "big" else: "small"
+    .upcase
+  puts size
+  m = 1
+  other = if m > 3: "big" else: "small"
+    .upcase
+  puts other
+
+  total = [1, 2, 3, 4]
+    .filter { |x| x % 2 == 0 }
+    |> .map(double)
+    .sum
+  puts total
+
+  puts [3, 1, 2].map { |x| x * 10 }
+    .sort
+    .reverse
+
+  [4, 5]
+    .map(double)
+    .to_list
+    |> puts

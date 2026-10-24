@@ -1,0 +1,55 @@
+# b03: chains over lines inside bodies — after `return` in a method, in an
+# `if` inside a `for`, in a `match` arm's body, in a `do` block's body — with
+# `take` given a negative count (none), `skip` given one (drops none), and a
+# `Char` used as the key of a `{Str: Int}` map.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ["pie", "soup"]
+# []
+# [1, 2, 3]
+# PIE
+# TEA
+# Stew
+# stew 1
+# pie 1
+# soup 0
+# tea 1
+# {"n": 2, "o": 2}
+
+struct Menu:
+  dishes: [Str]
+
+  def short(n: Int) -> [Str]:
+    return dishes
+      .sort
+      .take(n)
+      .to_list
+
+def tally(word: Str) -> {Str: Int}:
+  var counts: {Str: Int} = {}
+  for c in word.chars:
+    counts[c] = counts[c].or(0) + 1
+  counts
+
+def main:
+  m = Menu(dishes: ["stew", "pie", "soup", "tea"])
+  puts m.short(2)
+  puts m.short(-1)
+  puts [1, 2, 3]
+    .skip(-2)
+    .to_list
+  for d in m.dishes:
+    if d.len == 3:
+      puts d
+        .upcase
+  match m.dishes.first:
+    Some(d) ->
+      puts d
+        .capitalize
+    None -> puts "none"
+  m.dishes.each do |d|
+    n = d
+      .chars
+      .count { |c| c == "e" }
+    puts "#{d} #{n}"
+  puts tally("noon")

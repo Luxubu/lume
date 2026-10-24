@@ -1,0 +1,31 @@
+# b01: a `.name` line continues the code line above it even when comment
+# lines stand between them — indented like the steps, or at the left edge —
+# and a step line may end in a comment of its own.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# SOUP, STEW
+# 4
+# [8, 6, 3]
+
+def main:
+  dishes = ["soup", "pie", "stew", "tea"]
+  menu = dishes
+    # keep the names longer than three letters
+    .filter { |d| d.len > 3 }
+    # shout them
+    .map(_.upcase)    # a comment after a step
+    .sort
+    .join(", ")
+  puts menu
+
+  puts dishes
+    # how many there are
+    .len
+
+  nums = [3, 8, 1, 6]
+  big = nums
+# a comment at the left edge, between two steps
+    .filter { |n| n > 2 }
+    .sort
+    .reverse
+  puts big

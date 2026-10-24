@@ -1,0 +1,22 @@
+# b06: `xs.at(i)` past the end inside a generator, walked by a `for` in
+# `main`. The items before it print; the stop names the generator's line,
+# not the `for` that asked for the item.
+# Meant to STOP.
+# EXPECTED OUTPUT:
+# 30
+# 10
+# EXPECTED STDERR:
+# error: no item at 5 — the list has 3
+#   --> corpus/m103/b06_generator_stop.lume:17
+#    |
+# 17 |     yield xs.at(i)
+# EXPECTED EXIT: 101
+
+def picks(xs: [Int], spots: [Int]) -> Iterator[Int]:
+  for i in spots:
+    yield xs.at(i)
+
+def main:
+  for p in picks([10, 20, 30], [2, 0, 5, 1]):
+    puts p
+  puts "never"

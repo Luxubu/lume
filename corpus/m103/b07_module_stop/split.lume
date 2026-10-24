@@ -1,0 +1,5 @@
+# split.lume — a module of the b07_module_stop package.
+
+pub def share(total: Int, people: Int) -> Int:
+  per = total / people
+  per

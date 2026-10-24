@@ -1,0 +1,20 @@
+# b02: a blank line between the steps of a chain. "A line that begins with
+# `.` always continues the line above": the line above that has code.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# apple+fig+kiwi
+# 3
+
+def main:
+  words = ["kiwi", "fig", "apple"]
+  out = words
+
+    .sort
+
+    .join("+")
+  puts out
+  n = words
+    .filter { |w| w.len > 2 }
+
+    .count { |w| w.len < 9 }
+  puts n

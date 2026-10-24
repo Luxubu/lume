@@ -1,0 +1,73 @@
+# a01 — an order report written with long chains, one step a line:
+# in a method body after `=`, after a binding, in a `for` header, inside
+# the parentheses of an argument, and mixed with `|>` stages (a function
+# stage and a `.method` stage) that also begin their own lines.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# [1, 3]
+# order 3: 15.50 (jam, pie, tea)
+# order 1: 11.25 (cake, tea)
+# 32.75
+# tea: 3
+# o3/o2/o1
+
+struct Item:
+  name: Str
+  qty: Int
+  cents: Int
+
+  def total -> Int = qty * cents
+
+struct Order:
+  id: Int
+  items: [Item]
+
+  def total -> Int = items
+    .map { |i| i.total }
+    .sum
+
+  def names -> Str = items
+    .map(_.name)
+    .sort
+    .join(", ")
+
+def money(cents: Int) -> Str = (cents.to_float / 100.0).decimals(2)
+
+def count_qty(xs: [Item]) -> Int = xs.map(_.qty).sum
+
+def tag_ids(ids: [Int]) -> Str = ids.map { |n| "o#{n}" }.join("/")
+
+def main:
+  orders = [
+    Order(1, [Item("tea", 2, 350), Item("cake", 1, 425)]),
+    Order(2, [Item("soup", 1, 600)]),
+    Order(3, [Item("pie", 3, 300), Item("tea", 1, 350), Item("jam", 2, 150)]),
+  ]
+
+  big = orders
+    .filter { |o| o.total > 1000 }
+    .map { |o| o.id }
+    .to_list
+  puts big
+
+  for o in orders
+    .sort_by { |o| -o.total }
+    .take(2):
+    puts "order #{o.id}: #{money(o.total)} (#{o.names})"
+
+  puts money(orders
+    .map { |o| o.total }
+    .sum)
+
+  tea_cups = orders
+    .flat_map { |o| o.items }
+    .filter { |i| i.name == "tea" }
+    .to_list
+    |> count_qty
+  puts "tea: #{tea_cups}"
+
+  route = orders
+    .map { |o| o.id }
+    |> .reverse
+    |> tag_ids
+  puts route
