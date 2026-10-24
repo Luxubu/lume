@@ -61,17 +61,23 @@ def main:
     puts "#{zip}: #{people.map(_.name).join(", ")}"
 ```
 
-It is sound in a way that is meant to be load-bearing: 283 programs written by
-twenty-one independent reviewers who had never seen the compiler, and not one of
-them produced a wrong answer or failed to compile after type-checking. What it
-refuses, it refuses with a message that names the fix — `examples/errors/` is
-115 programs kept around to prove it.
+It is sound in a way that is meant to be load-bearing: twenty review rounds,
+each by reviewers who had never seen the compiler, wrote programs from the docs
+alone and predicted their output by hand, and every problem they found was
+fixed — the 662 programs they left behind are run on every change and must
+print what they print today. What Lume refuses, it refuses with a message that
+names the fix — `examples/errors/` is 394 programs kept around to prove it.
 
-**Where it is.** Version 0.1. The language is settled enough to write real
-programs in, and there is no editor support, no package manager, and no way to
-depend on Lume code you did not write — imports resolve relative to your own
-files. Rust crates are reachable today through `import rust.<crate>`, which is
-most of what a young standard library would otherwise be for.
+**Where it is.** Version 0.5. The language, the collections, files and
+folders, running programs, tasks, tests, packages and the commands are
+settled: [docs/stability.md](docs/stability.md) promises that a working
+program does not break without a warning release first. Async generators,
+`Process.spawn`, the `http` package, the Rust bridge and editor support
+(`lume lsp` and a VS Code extension) work, and are previews whose shape may
+still change. Packages depend on one another by path or by git, through
+`lume.toml`; there is no package registry. Rust crates are reachable through
+`import rust.<crate>`, which is most of what a young standard library would
+otherwise be for.
 
 [HISTORY.md](HISTORY.md) is the record of how it got here, milestone by
 milestone, and the [design document](https://claude.ai/code/artifact/1872fe63-1816-4b1e-9983-dec2774382fb)
