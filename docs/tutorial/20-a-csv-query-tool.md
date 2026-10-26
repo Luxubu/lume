@@ -338,7 +338,7 @@ The questions most likely to go wrong unnoticed are the edges — an empty
 file, a short row. A few tests (lunch 12) at the bottom of `csvq.lume` keep
 them right as the tool grows:
 
-```lume-skip
+```lume-tests
 test "a short row says which line":
   match parse("a,b\n1,2\n3"):
     Ok(_) -> assert false

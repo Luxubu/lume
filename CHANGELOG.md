@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- **`async test`** *(preview)*: a test that can `await`, run on its own
+  tokio runtime, as Rust's `#[tokio::test]`. `await` in a plain `test` says
+  to write it.
+- **`lume test file.lume name`** runs only the tests with `name` in theirs,
+  as `cargo test name` does.
+- **Fixed**: each side of an `assert` comparison is worked out once, as
+  `assert_eq!` does. A failed `assert it.next == Some(1)` showed the item
+  after the one compared, and an `await` on a side did not compile.
+- **Docs**: a [Tests](docs/reference/testing.md) page in the reference. The
+  docs check now runs `lume test` on every example with tests in it, and
+  compares what it prints with the docs when they show it; a new
+  ```` ```lume-tests ```` block holds tests for the program above it, as
+  lunch 20's do.
+
 - **A chain over several lines**: a line starting with `.name` continues the
   line above, so a long chain can put one step on each line. `lume fmt`
   keeps it so.

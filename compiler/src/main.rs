@@ -436,7 +436,12 @@ fn test_runner(modules: &[&loader::Module]) -> String {
     format!(
         r#"
 fn main() {{
-    let tests: Vec<(&str, &str, fn())> = vec![{entries}];
+    let all: Vec<(&str, &str, fn())> = vec![{entries}];
+    // `lume test file.lume pie`: only the tests whose name has `pie` in it,
+    // as `cargo test pie` does
+    let filter = std::env::args().nth(1);
+    let tests: Vec<&(&str, &str, fn())> = all.iter().filter(|t| filter.as_deref().map(|f| t.0.contains(f)).unwrap_or(true)).collect();
+    let left_out = all.len() - tests.len();
     static LAST: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
     std::panic::set_hook(Box::new(|info| {{
         let msg = if let Some(a) = info.payload().downcast_ref::<LumeAssert>() {{
@@ -458,7 +463,7 @@ fn main() {{
         *LAST.lock().unwrap() = Some(msg);
     }}));
     let mut failed = 0usize;
-    for (name, file, f) in &tests {{
+    for (name, file, f) in tests.iter().copied() {{
         print!("test {{}} ... ", name);
         use std::io::Write;
         let _ = std::io::stdout().flush();
@@ -480,11 +485,18 @@ fn main() {{
     }}
     let _ = std::panic::take_hook();
     let total = tests.len();
+    let note = match &filter {{
+        Some(f) if left_out > 0 => format!(" ({{}} not matching `{{}}`)", left_out, f),
+        _ => String::new(),
+    }};
     if total == 0 {{
-        println!("no tests");
+        match &filter {{
+            Some(f) if left_out > 0 => println!("none of the {{}} test{{}} has `{{}}` in its name", left_out, if left_out == 1 {{ "" }} else {{ "s" }}, f),
+            _ => println!("no tests"),
+        }}
     }} else {{
         println!();
-        println!("{{}} test{{}}: {{}} passed, {{}} failed", total, if total == 1 {{ "" }} else {{ "s" }}, total - failed, failed);
+        println!("{{}} test{{}}: {{}} passed, {{}} failed{{}}", total, if total == 1 {{ "" }} else {{ "s" }}, total - failed, failed, note);
     }}
     if failed > 0 {{
         std::process::exit(1);
@@ -944,7 +956,7 @@ fn main() {
         return;
     }
     // A file, or — with none — the package the current folder is in.
-    let named = args.get(1).filter(|f| !f.starts_with('-') && !(cmd == "crate" && !f.ends_with(".lume") && args.len() == 2));
+    let named = args.get(1).filter(|f| !f.starts_with('-') && !(cmd == "crate" && !f.ends_with(".lume") && args.len() == 2) && !(cmd == "test" && !f.ends_with(".lume")));
     let (file, pkg_root, args): (PathBuf, Option<PathBuf>, Vec<String>) = match named {
         Some(f) => {
             let file = PathBuf::from(f);
@@ -1135,7 +1147,8 @@ fn main() {
                     process::exit(1);
                 }
             };
-            let status = Command::new(&bin).status().unwrap_or_else(|e| {
+            // `lume test [file.lume] [name]`: the rest is a filter on the names
+            let status = Command::new(&bin).args(args.get(2..).unwrap_or(&[])).status().unwrap_or_else(|e| {
                 eprintln!("error: cannot run `{}`: {}", bin.display(), e);
                 process::exit(1);
             });

@@ -259,7 +259,20 @@ test a remainder is dropped ... ok
 
 A failing `assert` says which, and shows both sides of a comparison, so you
 can see what it got. Change the second test to `assert split_bill(10, 4) ==
-3`, and:
+3`, and `lume test bill.lume` says what follows the program:
+
+```lume
+def split_bill(total: Int, people: Int) -> Int = total / people
+
+test "a bill splits evenly":
+  assert split_bill(12, 3) == 4
+
+test "a remainder is dropped":
+  assert split_bill(10, 4) == 3
+
+def main:
+  puts split_bill(12, 3)    #=> 4
+```
 
 ```text
 test a bill splits evenly ... ok
@@ -272,7 +285,10 @@ test a remainder is dropped ... FAILED
 ```
 
 `lume test` exits with status 1 when any test fails, so a script or a
-build server can tell.
+build server can tell. `lume test bill.lume remainder` runs only the tests
+with `remainder` in their name. [Tests](../reference/testing.md) in the
+reference has the rest, and how to test the async code of lunch 16 with
+`async test`.
 
 Write tests for the things that would be easy to get wrong and hard to
 notice: the edge cases, like an empty list or a remainder. Running them
@@ -295,8 +311,9 @@ A generic function is a Rust generic function, and Rust compiles a copy
 of it for each type it is used with — so `second` on `[Int]` runs as fast
 as one written for `Int` alone. `Ordered` is Rust's `PartialOrd` and an
 interface bound is a trait bound. Each Lume file becomes a Rust module, and
-`pub` is Rust's `pub`. A test becomes a Rust `#[test]` function, which
-`lume test` runs with Rust's own test runner.
+`pub` is Rust's `pub`. A test becomes a plain Rust function, and `lume
+test` builds a small runner that calls each one and catches its failure, as
+`cargo test` does for `#[test]` functions.
 
 ## Try it
 

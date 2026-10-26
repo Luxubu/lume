@@ -47,6 +47,26 @@ def judge(lume: Str, scratch: Str, b: Block) -> Str? or Error:
   want = fences.expected_out(b.body)
   if got != want:
     return Ok(Some("output does not match the docs\n  docs say: #{py_list(want)}\n  it says:  #{py_list(got)}"))
+  if fences.has_tests?(b.body):
+    return judge_tests(lume, scratch, src, b)
+  Ok(None)
+
+# A block with tests: `lume test` passes them all, or prints exactly what
+# the ```text after the block shows.
+def judge_tests(lume: Str, scratch: Str, src: Str, b: Block) -> Str? or Error:
+  Dir.make(scratch)?
+  file = Path.join(scratch, "#{fences.test_file(b.test_out)}.lume")
+  File.write(file, src)?
+  (code, out, err) = Process.run(lume, ["test", file])?
+  Dir.remove(scratch)?
+  if b.test_out.empty?:
+    if code != 0:
+      return Ok(Some("its tests did not pass:\n#{cut((out + err).trim, 600)}"))
+    return Ok(None)
+  got = without_newlines(out).split("\n")
+  want = without_newlines(b.test_out.join("\n")).split("\n")
+  if got != want:
+    return Ok(Some("`lume test` output does not match the docs\n  docs say: #{py_list(want)}\n  it says:  #{py_list(got)}"))
   Ok(None)
 
 # A multi-file example: `main.lume` beside `main.expected`, copied away so

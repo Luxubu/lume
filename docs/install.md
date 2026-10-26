@@ -51,7 +51,7 @@ compiler/target/release/lume run examples/fib.lume
 ```sh
 lume run   file.lume [-- args...]   compile and run it
 lume build file.lume [-o binary]    compile it, fully optimised (--checked keeps overflow checks)
-lume test  file.lume                run the file's `test` blocks
+lume test  file.lume [name]         run the file's `test` blocks (those with `name` in theirs)
 lume check file.lume                parse and type-check only
 lume fmt   file.lume                rewrite in the canonical layout
 lume emit  file.lume                print the generated Rust

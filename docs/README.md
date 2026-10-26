@@ -27,6 +27,7 @@ it claims by `tests/docs.sh`. If an answer here is wrong, the build fails.
 | [Generics](reference/generics.md) | type parameters, bounds, generic `extend` |
 | [Modules](reference/modules.md) | `import` paths and forms, `pub`, constants, `pub import`, where `extend` reaches |
 | [Packages](reference/packages.md) | `lume.toml`, `lib.lume`, importing another package, the orphan rule, `[rust]`, git and `lume.lock` |
+| [Tests](reference/testing.md) | `test` and `assert`, what a failure says, `lume test` by name, `async test` |
 | [Concurrency](reference/concurrency.md) | `async def`, `spawn:`, `await`, `shared var`, what a lock covers |
 | [HTTP](reference/http.md) | the `http` package: get, post, send; a 404 is a response, a lost connection an `Error` |
 | [Rust crates](reference/crates.md) | `import rust.x`, what the bridge maps, builders that use their value up, `rust:` blocks |

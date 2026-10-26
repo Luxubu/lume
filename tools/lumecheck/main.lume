@@ -12,6 +12,8 @@
 # Run it from the root of the repository.
 
 import fences
+import fences.Block
+import fences.Kind
 import runner
 import runner.Outcome
 import coverage
@@ -37,10 +39,16 @@ def docs_files -> [Str] or Error:
 def examples(scratch: Str) -> [(Int, Str, fences.Block)] or Error:
   var out: [(Int, Str, fences.Block)] = []
   for path in docs_files()?:
+    var program: [Str] = []
     for b in fences.blocks(File.read(path)?):
       match b.kind:
         Skip -> next
-        _ -> out.push((out.len, "#{path}:#{b.line}", b))
+        # the program above, with these tests added: run, and tested
+        Tests -> out.push((out.len, "#{path}:#{b.line}", Block(kind: Kind.Run, line: b.line, body: program + [""] + b.body, test_out: b.test_out)))
+        Run ->
+          program = b.body
+          out.push((out.len, "#{path}:#{b.line}", b))
+        Bad -> out.push((out.len, "#{path}:#{b.line}", b))
   Ok(out)
 
 # Each example's outcome as soon as it is known, with its place among the

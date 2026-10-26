@@ -1,0 +1,5 @@
+# `await` in a plain `test`: the test has to be `async test`.
+async def cook(dish: Str) -> Str = dish.upcase
+
+test "a dish is cooked":
+  assert await cook("pie") == "PIE"

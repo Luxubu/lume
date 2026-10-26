@@ -290,7 +290,7 @@ impl Parser {
                 self.skip_newlines();
                 continue;
             }
-            if self.at_kw("test") {
+            if self.at_kw("test") || (self.at_kw("async") && matches!(self.peek_at(1), Tok::Ident(t) if t == "test")) {
                 items.push(Item::Test(self.test_def()?));
                 self.skip_newlines();
                 continue;
@@ -838,6 +838,7 @@ impl Parser {
     /// `test "name":` followed by an indented body.
     fn test_def(&mut self) -> Result<TestDef> {
         let (line, col) = self.here();
+        let is_async = self.eat_kw("async");
         self.advance(); // test
         let name = match self.peek().clone() {
             Tok::Str(parts) => {
@@ -865,7 +866,7 @@ impl Parser {
             return Err(self.err(format!("expected `:` after the test name, found {}", self.describe())));
         }
         let body = self.block()?;
-        Ok(TestDef { name, body, line, col })
+        Ok(TestDef { name, body, is_async, line, col })
     }
 
     /// `[T]`, `[T: Ordered]`, `[K, V]` right after a `def`, `struct` or

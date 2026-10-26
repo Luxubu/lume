@@ -1,0 +1,18 @@
+# Each side of an `assert` comparison is worked out once, as Rust's
+# `assert_eq!` does: a failure shows the value that was compared. Each
+# `it.next` moves the generator on, so working one out twice would show
+# the next course, not the one compared.
+
+def courses -> Iterator[Str]:
+  yield "starter"
+  yield "main"
+  yield "dessert"
+
+test "the menu, one course at a time":
+  var it = courses()
+  assert it.next == Some("starter")
+  assert it.next == Some("main")
+
+test "this one fails on purpose":
+  var it = courses()
+  assert it.next == Some("main")

@@ -1,0 +1,8 @@
+test a dish is cooked ... ok
+test two tasks at once ... ok
+test the orders, in order ... ok
+test the first that is done ... ok
+test a plain test runs as before ... ok
+
+5 tests: 5 passed, 0 failed
+exit: 0

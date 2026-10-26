@@ -1,0 +1,33 @@
+# `async test` runs a test on tokio, as Rust's `#[tokio::test]` does, so it
+# can await an `async def`, a task, or an async sequence.
+
+async def cook(dish: Str, ms: Int) -> Str:
+  await Time.sleep(ms)
+  "#{dish} is ready"
+
+async def orders -> Iterator[Str]:
+  for d in ["soup", "pie", "tea"]:
+    await Time.sleep(1)
+    yield d
+
+async test "a dish is cooked":
+  assert await cook("soup", 5) == "soup is ready"
+
+async test "two tasks at once":
+  pie = spawn: await cook("pie", 10)
+  tea = spawn: await cook("tea", 1)
+  assert await [pie, tea] == ["pie is ready", "tea is ready"]
+
+async test "the orders, in order":
+  assert orders().to_list == ["soup", "pie", "tea"]
+  assert orders().count { |d| d.len == 3 } == 2
+
+async test "the first that is done":
+  var running = [spawn: await cook("slow", 30), spawn: await cook("quick", 1)]
+  assert await running.next_done == Some("quick is ready")
+
+test "a plain test runs as before":
+  assert "pie".len == 3
+
+async def main:
+  puts await cook("stew", 1)

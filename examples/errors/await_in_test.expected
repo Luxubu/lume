@@ -1,0 +1,6 @@
+error: `await` only works inside an `async def` or a `spawn:` block
+  --> examples/errors/await_in_test.lume:5:10
+  |
+5 |   assert await cook("pie") == "PIE"
+  |          ^
+  help: make it `async test "a dish is cooked":`, which runs the test on tokio

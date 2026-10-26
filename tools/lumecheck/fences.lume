@@ -5,20 +5,26 @@ pub enum Kind:
   Run
   Bad
   Skip
+  # tests for the last ```lume program above, run with it by `lume test`
+  Tests
 
 pub struct Block:
   kind: Kind
   # the line of the opening fence, counted from 1
   line: Int
   body: [Str]
+  # what `lume test` prints for it, when a ```text block beginning `test `
+  # follows (a ```sh block between them is passed over); empty otherwise
+  test_out: [Str]
 
-# ```lume, ```lume-bad or ```lume-skip, and nothing else on the line but
+# ```lume, ```lume-bad, ```lume-skip or ```lume-tests, and nothing else on the line but
 # the indentation of a list item it sits in
 def fence_kind(line: Str) -> Kind?:
   match line.trim:
     "```lume" -> Some(Kind.Run)
     "```lume-bad" -> Some(Kind.Bad)
     "```lume-skip" -> Some(Kind.Skip)
+    "```lume-tests" -> Some(Kind.Tests)
     _ -> None
 
 # Every fenced Lume block of a file's text, in order.
@@ -40,7 +46,43 @@ pub def blocks(text: Str) -> Iterator[Block]:
           body.push(if line.slice(0, indent).trim.empty?: line.slice(indent, line.len) else: line)
           i += 1
         i += 1
-        yield Block(kind: kind, line: start, body: body)
+        yield Block(kind: kind, line: start, body: body, test_out: test_output(lines, i))
+
+# The ```text block beginning `test ` that follows line `from`, if one
+# does, passing over blank lines and a ```sh block (`lume test x.lume`).
+def test_output(lines: [Str], from: Int) -> [Str]:
+  var i = from
+  while i < lines.len and lines.at(i).trim.empty?:
+    i += 1
+  if i < lines.len and lines.at(i).trim == "```sh":
+    i += 1
+    while i < lines.len and lines.at(i).trim != "```":
+      i += 1
+    i += 1
+    while i < lines.len and lines.at(i).trim.empty?:
+      i += 1
+  if i + 1 >= lines.len or lines.at(i).trim != "```text" or not lines.at(i + 1).starts_with?("test "):
+    return []
+  i += 1
+  var out: [Str] = []
+  while i < lines.len and lines.at(i).trim != "```":
+    out.push(lines.at(i))
+    i += 1
+  out
+
+# A block with `test "..."` in it: `lume test` must pass, or print what
+# the text after it shows.
+pub def has_tests?(body: [Str]) -> Bool = body.any? { |l| l.starts_with?("test \"") }
+
+# The file a test output names — `bill` in `    bill.lume:7: assert ...` —
+# so the example is run as that file; `doc` when it names none.
+pub def test_file(out: [Str]) -> Str:
+  for l in out:
+    t = l.trim
+    at = t.index_of(".lume:")
+    if at.or(-1) > 0 and l.starts_with?("    "):
+      return t.slice(0, at.or(0))
+  "doc"
 
 # A block is a whole program when it defines `main`; anything else is
 # statements, wrapped in one.

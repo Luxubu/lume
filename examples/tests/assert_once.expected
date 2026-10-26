@@ -1,0 +1,8 @@
+test the menu, one course at a time ... ok
+test this one fails on purpose ... FAILED
+    assert_once.lume:18: assert it.next == Some("main")
+      left:  Some("starter")
+      right: Some("main")
+
+2 tests: 1 passed, 1 failed
+exit: 1

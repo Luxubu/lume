@@ -421,7 +421,7 @@ impl Fmt {
                 out
             }
             Item::Test(t) => {
-                let mut out = format!("test \"{}\":", Self::escape(&t.name));
+                let mut out = format!("{}test \"{}\":", if t.is_async { "async " } else { "" }, Self::escape(&t.name));
                 self.indent += 1;
                 out.push_str(&self.block_text(&t.body));
                 self.indent -= 1;

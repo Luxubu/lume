@@ -220,6 +220,8 @@ pub struct ExtendDef {
 pub struct TestDef {
     pub name: String,
     pub body: Block,
+    /// `async test "..."`: run on tokio, so its body may `await`
+    pub is_async: bool,
     pub line: usize,
     pub col: usize,
 }

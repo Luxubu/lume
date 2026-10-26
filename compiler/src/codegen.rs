@@ -7683,6 +7683,14 @@ impl Gen {
     fn test_def(&mut self, t: &TestDef, index: usize) -> Result<()> {
         self.line(&format!("pub fn lume_test_{}() {{", index));
         self.indent += 1;
+        // `async test`: its own runtime, as `#[tokio::test]` gives each test
+        if t.is_async {
+            self.line("tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap().block_on(async move {");
+            self.indent += 1;
+            self.uses_async = true;
+        }
+        let saved_async = self.in_async;
+        self.in_async = t.is_async;
         self.push_scope();
         self.current_fn = format!("test \"{}\"", t.name);
         self.current_ret = Type::Unit;
@@ -7692,6 +7700,11 @@ impl Gen {
         self.block_body(&t.body, false)?;
         self.in_test = false;
         self.pop_scope();
+        self.in_async = saved_async;
+        if t.is_async {
+            self.indent -= 1;
+            self.line("});");
+        }
         self.indent -= 1;
         self.line("}");
         Ok(())
@@ -9121,6 +9134,32 @@ impl Gen {
                 if ct != Type::Bool && ct != Type::Unknown {
                     return Err(LumeError::new(cond.line, cond.col, format!("`assert` needs a `Bool`, but this is a `{}`", type_name(&ct)))
                         .with_help("compare it to something: `assert x == 3`, `assert xs.len > 0`"));
+                }
+                // Each side of a comparison is worked out once, as Rust's
+                // `assert_eq!` does: a side that is more than a name or a
+                // literal is bound first, so a failure prints the value that
+                // was compared — not a second `next`, nor a task awaited twice.
+                if let ExprKind::Binary { op, lhs, rhs } = &cond.kind {
+                    if matches!(*op, "==" | "!=" | "<" | "<=" | ">" | ">=") && (!assert_side_plain(lhs) || !assert_side_plain(rhs)) {
+                        self.line("{");
+                        self.indent += 1;
+                        self.push_scope();
+                        let mut side = |g: &mut Self, x: &Expr, name: &str| -> Result<Expr> {
+                            if assert_side_plain(x) {
+                                return Ok(x.clone());
+                            }
+                            g.stmt(&Stmt::Bind { name: name.to_string(), ty: None, value: x.clone(), line: x.line, col: x.col }, false)?;
+                            Ok(Expr::new(ExprKind::Ident(name.to_string()), x.line, x.col))
+                        };
+                        let l = side(self, lhs, "lume_left")?;
+                        let r = side(self, rhs, "lume_right")?;
+                        let cond2 = Expr::new(ExprKind::Binary { op, lhs: Box::new(l), rhs: Box::new(r) }, cond.line, cond.col);
+                        self.stmt(&Stmt::Assert { cond: cond2, line: *line, col: *col }, false)?;
+                        self.pop_scope();
+                        self.indent -= 1;
+                        self.line("}");
+                        return Ok(());
+                    }
                 }
                 let text = self.assert_text(*line, *col).replace('\\', "\\\\").replace('"', "\\\"");
                 let c = self.expr(cond)?;
@@ -11879,8 +11918,13 @@ impl Gen {
             }
             ExprKind::Await(x) => {
                 if !self.in_async {
+                    let help = if self.in_test && self.current_fn.starts_with("test ") {
+                        format!("make it `async {}:`, which runs the test on tokio", self.current_fn)
+                    } else {
+                        "make this function `async def`, or move the waiting into `async def main`".to_string()
+                    };
                     return Err(LumeError::new(e.line, e.col, "`await` only works inside an `async def` or a `spawn:` block")
-                        .with_help("make this function `async def`, or move the waiting into `async def main`"));
+                        .with_help(help));
                 }
                 self.uses_async = true;
                 let xt = self.ty_of(x).materialized();
@@ -14921,4 +14965,19 @@ fn stmt_line(s: &Stmt) -> Option<usize> {
         Stmt::While { cond, .. } => cond.line,
     };
     if n > 0 { Some(n) } else { None }
+}
+
+/// A side of an `assert` comparison that can be shown again without being
+/// worked out again: a name or a literal. (A field read is a method call
+/// to the parser, and `it.next` is one too, so neither is plain.)
+fn assert_side_plain(e: &Expr) -> bool {
+    match &e.kind {
+        ExprKind::Ident(_) | ExprKind::SelfRef | ExprKind::Int(_) | ExprKind::Float(_) | ExprKind::Bool(_) | ExprKind::None => true,
+        ExprKind::Str(pieces) => pieces.iter().all(|p| matches!(p, StrPiece::Lit(_))),
+        ExprKind::List(items) | ExprKind::Tuple(items) | ExprKind::SetLit(items) => items.iter().all(assert_side_plain),
+        ExprKind::MapLit(pairs) => pairs.iter().all(|(k, v)| assert_side_plain(k) && assert_side_plain(v)),
+        ExprKind::Some(x) | ExprKind::Ok(x) => assert_side_plain(x),
+        ExprKind::Unary { expr, .. } => assert_side_plain(expr),
+        _ => false,
+    }
 }

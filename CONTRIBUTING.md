@@ -14,7 +14,9 @@ leaves `tests/run.sh` passing. A milestone is done when:
    `examples/errors/UNREACHED.md` with the reason.
 3. **The docs say it**, in the page a reader would look in first. Every
    ```` ```lume ```` example there is run by `tests/docs.sh` and must print what
-   it claims.
+   it claims. An example with a `test` in it is run by `lume test` too: its
+   tests must pass, or print what the ```` ```text ```` block after it shows.
+   ```` ```lume-tests ```` holds tests for the ```` ```lume ```` program above it.
 4. **`HISTORY.md` has a row**: what was built, and what building it found.
 
 Where Lume has to choose how something behaves, it does what Rust does,

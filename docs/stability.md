@@ -34,7 +34,7 @@ a release says so; from then on the promise above covers it.
 | Files, folders, paths, the environment, time: `File`, `Dir`, `Path`, `Env`, `Time` | [Input and output](reference/io.md), lunch 13 |
 | Running a program and waiting for it: `Process.run`, `Process.run_in` | [Input and output](reference/io.md#process), lunch 15 |
 | Tasks: `async def`, `await`, `spawn:`, `shared var`, `next_done` | [Concurrency](reference/concurrency.md), lunch 16 |
-| Tests: `test` blocks, `assert`, `lume test` | lunch 12 |
+| Tests: `test` blocks, `assert`, `lume test` and its name filter | [Tests](reference/testing.md), lunch 12 |
 | Packages: `lume.toml`, dependencies by path and git, `lume.lock` | [Packages](reference/packages.md) |
 | The `json` package | [JSON](reference/json.md) |
 | The commands: `lume run`, `build`, `check`, `test`, `fmt`, `new`, `clean`, `update` | [Install](install.md#the-commands) |
@@ -48,6 +48,7 @@ a release says so; from then on the promise above covers it.
 | The `http` package | 0.2, streamed in 0.5 | [HTTP](reference/http.md), lunch 19 |
 | The Rust bridge: `import rust.crate`, `rust:` blocks, `[rust]` in `lume.toml`, `lume crate` | 0.1 | [Rust crates](reference/crates.md) |
 | Editor support: `lume lsp`, `lume check --json`, the VS Code extension | 0.1 | [Install](install.md#editors) |
+| `async test` | 0.6 | [Tests](reference/testing.md#testing-async-code-async-test) |
 
 The previews work, and every documented example of them is checked on
 every change, as the settled parts' are. What is not settled is their

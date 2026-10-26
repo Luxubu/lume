@@ -1,0 +1,5 @@
+test two tasks at once ... ok
+
+1 test: 1 passed, 0 failed (4 not matching `tasks`)
+none of the 5 tests has `stew` in its name
+exit: 0
