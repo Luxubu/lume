@@ -1,0 +1,6 @@
+6
+error: assert failed: not overdrawn?
+  --> corpus/m104/b10_assert_outside.lume:20
+   |
+20 |     assert not overdrawn?
+exit: 101

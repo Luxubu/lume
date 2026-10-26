@@ -55,9 +55,10 @@ def judge(lume: Str, scratch: Str, b: Block) -> Str? or Error:
 # the ```text after the block shows.
 def judge_tests(lume: Str, scratch: Str, src: Str, b: Block) -> Str? or Error:
   Dir.make(scratch)?
-  file = Path.join(scratch, "#{fences.test_file(b.test_out)}.lume")
-  File.write(file, src)?
-  (code, out, err) = Process.run(lume, ["test", file])?
+  # run in its folder, so the output names the file as the docs do
+  name = "#{fences.test_file(b.test_out)}.lume"
+  File.write(Path.join(scratch, name), src)?
+  (code, out, err) = Process.run_in(scratch, lume, ["test", name])?
   Dir.remove(scratch)?
   if b.test_out.empty?:
     if code != 0:

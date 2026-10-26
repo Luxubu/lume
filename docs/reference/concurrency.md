@@ -423,7 +423,10 @@ The `?` belongs to the `await`, not to `t`: a task has not failed until it has
 been waited for. `(await t)?` means the same and is still accepted.
 
 A crash inside a task — `.at(9)` on a short list, say — stops the whole
-program when the task is awaited, as a crash anywhere else would.
+program where the task is awaited, and is told there, with the line inside
+the task, as Rust's `JoinHandle` hands a panic on. A task that is never
+awaited does not stop the program; its crash is told when the program ends.
+See [where the program stopped](errors.md#where-the-program-stopped).
 
 ## `shared var`: one value that many tasks change
 

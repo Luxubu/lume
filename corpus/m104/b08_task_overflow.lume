@@ -1,0 +1,29 @@
+# b08: an `Int` overflow inside a task. The task that stops says so when it
+# is awaited, on the line of the multiplication in `grow`; what was printed
+# before the await, and the first task's result, come first.
+# Meant to STOP.
+# EXPECTED OUTPUT:
+# started
+# 5000000000000000000
+# EXPECTED STDERR:
+# error: Int overflow in `*`
+#   --> corpus/m104/b08_task_overflow.lume:19
+#    |
+# 19 |     x = x * 1000000
+# EXPECTED EXIT: 101
+
+def grow(n: Int) -> Int:
+  var x = n
+  var k = 0
+  while k < 3:
+    x = x * 1000000
+    k += 1
+  x
+
+async def main:
+  t = spawn: grow(5)
+  u = spawn: grow(9000000)
+  puts "started"
+  puts await t
+  puts await u
+  puts "never"

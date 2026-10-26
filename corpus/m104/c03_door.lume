@@ -1,0 +1,133 @@
+# c03: a small state machine for a door. Each state is a field-less struct
+# behind an interface whose `on` gives the next state; the door keeps the
+# current one in a field and replaces it in a `var self` method. The log
+# is an enum, one of whose variants carries a field-less `Beep` as its
+# payload, so it is printed, compared and counted. The events come from a
+# chain one step a line. A `[State]` binding gives the pointer warning.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# events: ["unlock", "open", "kick", "close", "lock", "open", "unlock", "open"]
+#  1. locked -> closed
+#  2. closed -> open
+#  3. ignored kick while open
+#  4. BEEP
+#  5. open -> closed
+#  6. closed -> locked
+#  7. ignored open while locked
+#  8. locked -> closed
+#  9. closed -> open
+# now: open
+# Alarm(sound: Beep())
+# alarms: 1
+# {"closed": 3, "open": 2, "locked": 1}
+# after open: locked, open, open
+# true 1
+# EXPECTED STDERR:
+# warning: `starts` holds values of different types behind `State`, so calls on its items go through a pointer
+#   --> corpus/m104/c03_door.lume:126:3
+#     |
+# 126 |   starts: [State] = [Locked(), Closed(), Open()]
+#     |   ^
+#   help: fine for most code; use a single concrete type or an enum if this is a hot loop
+
+interface State:
+  def name -> Str
+  def on(event: Str) -> State
+
+struct Locked:
+  def name -> Str = "locked"
+
+  def on(event: Str) -> State:
+    if event == "unlock":
+      return Closed()
+    Locked()
+
+struct Closed:
+  def name -> Str = "closed"
+
+  def on(event: Str) -> State:
+    if event == "open":
+      return Open()
+    if event == "lock":
+      return Locked()
+    Closed()
+
+struct Open:
+  def name -> Str = "open"
+
+  def on(event: Str) -> State:
+    if event == "close":
+      return Closed()
+    Open()
+
+struct Beep:
+  def sound -> Str = "BEEP"
+
+enum Entry:
+  Changed(from: Str, to: Str)
+  Ignored(event: Str, in_state: Str)
+  Alarm(sound: Beep)
+
+  def text -> Str:
+    match self:
+      Changed(f, t) -> "#{f} -> #{t}"
+      Ignored(e, s) -> "ignored #{e} while #{s}"
+      Alarm(b) -> b.sound
+
+  def change? -> Bool:
+    match self:
+      Changed(..) -> true
+      _ -> false
+
+struct Door:
+  state: State
+  log: [Entry]
+
+  def feed(var self, event: Str):
+    before = state.name
+    state = state.on(event)
+    after = state.name
+    if before == after:
+      log.push(Ignored(event: event, in_state: before))
+    else:
+      log.push(Changed(from: before, to: after))
+    log.push(Alarm(sound: Beep())) if event == "kick"
+
+def main:
+  script = "unlock, open, kick, close, , lock, OPEN, unlock, Open"
+  events = script
+    .split(",")
+    .map(_.trim)
+    .reject(_.empty?)
+    .map(_.downcase)
+    .to_list
+  puts "events: #{events}"
+
+  var door = Door(state: Locked(), log: [])
+  for e in events:
+    door.feed(e)
+
+  for i, entry in door.log.enumerate:
+    puts "#{(i + 1).pad(2)}. #{entry.text}"
+  puts "now: #{door.state.name}"
+  puts door.log.at(3)
+  alarms = door.log.count { |e| e == Alarm(sound: Beep()) }
+  puts "alarms: #{alarms}"
+
+  visits = door.log
+    .filter(_.change?)
+    .map { |e| e.text.split(" -> ").at(1) }
+    .to_list
+  var tally: {Str: Int} = {}
+  for v in visits:
+    tally[v] = tally[v].or(0) + 1
+  puts tally
+
+  starts: [State] = [Locked(), Closed(), Open()]
+  after = starts
+    .map { |s| s.on("open").name }
+    .join(", ")
+  puts "after open: #{after}"
+
+  beeps = {Beep(), Beep()}
+  puts "#{Beep() == Beep()} #{beeps.len}"

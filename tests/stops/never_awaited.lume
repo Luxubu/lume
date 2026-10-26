@@ -1,0 +1,8 @@
+# a task that stops and is never awaited does not stop the program; it is
+# told when the program ends
+async def seat(i: Int) -> Str = ["window"].at(i)
+
+async def main:
+  t = spawn: await seat(4)
+  await Time.sleep(20)
+  puts "the program goes on"

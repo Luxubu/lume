@@ -1,0 +1,18 @@
+warning: `!` stops the program if the value is missing or an error
+  --> corpus/m104/c04_units.lume:79:34
+   |
+79 |     amount = words.at(0).to_float!
+   |                                  ^
+  help: fine in tests and quick scripts; elsewhere use `match`, `?` or `.or(default)`
+cm < in < ft < m < km
+feet in metres: 0.305, 0.914, 3.048
+12.0 ft = 3.66 m
+100.0 cm = 39.37 in
+3.5 km = 11482.94 ft
+1.0 in = 2.54 cm
+skipped: unknown unit `yd`
+error: `abc` is not a number
+  --> corpus/m104/c04_units.lume:79
+   |
+79 |     amount = words.at(0).to_float!
+exit: 101

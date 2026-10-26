@@ -443,35 +443,78 @@ fn lume_decimals(x: f64, n: i64) -> String {
 #[allow(dead_code)]
 fn lume_install_panic_hook() {
     std::panic::set_hook(::std::boxed::Box::new(|info| {
-        let raw = if let Some(a) = info.payload().downcast_ref::<LumeAssert>() {
-            // ":3: assert x == 3" — the line is shown below, as for any failure
-            let t = a.0.trim_start_matches(':');
-            t.trim_start_matches(|c: char| c.is_ascii_digit()).trim_start_matches(": ").to_string()
-        } else if let Some(s) = info.payload().downcast_ref::<String>() {
-            s.clone()
-        } else if let Some(s) = info.payload().downcast_ref::<&str>() {
-            s.to_string()
-        } else {
-            String::from("the program stopped")
-        };
+        let raw = lume_payload_text(info.payload());
         let msg = lume_panic_text(&raw);
-        eprintln!("error: {}", msg);
+        // a task runs on a thread of its own; its stop is told, as any
+        // other, where it is awaited, which is where it stops the program,
+        // as a task's `T or Error` comes home there
+        let in_task = std::thread::current().name() != Some("main");
+        let mut told = format!("error: {}\n", msg);
         let at = info.location().filter(|loc| loc.file() == file!()).and_then(|loc| lume_line_of(loc.line()));
         if let Some((name, line, text)) = at {
             let num = line.to_string();
             let pad = " ".repeat(num.len());
-            eprintln!("  --> {}:{}", name, line);
-            eprintln!("{} |", pad);
-            eprintln!("{} | {}", num, text);
+            told.push_str(&format!("  --> {}:{}\n{} |\n{} | {}\n", name, line, pad, num, text));
         }
         if std::env::var("LUME_BACKTRACE").is_ok() {
             if let Some(loc) = info.location() {
-                eprintln!("  at {}:{} in the generated Rust", loc.file(), loc.line());
+                told.push_str(&format!("  at {}:{} in the generated Rust\n", loc.file(), loc.line()));
             }
         } else if at.is_none() {
-            eprintln!("  (set LUME_BACKTRACE=1 to see where in the generated Rust)");
+            told.push_str("  (set LUME_BACKTRACE=1 to see where in the generated Rust)\n");
+        }
+        if in_task {
+            LUME_TASK_STOPS.lock().unwrap_or_else(|e| e.into_inner()).push((raw, told));
+        } else {
+            eprint!("{}", told);
         }
     }));
+}
+/// The text a stop carries, whichever way it was raised.
+#[allow(dead_code)]
+fn lume_payload_text(p: &(dyn std::any::Any + Send)) -> String {
+    if let Some(a) = p.downcast_ref::<LumeAssert>() {
+        // ":3: assert x == 3" — the line is shown below, as for any
+        // failure — says "assert failed: x == 3", as Rust's
+        // "assertion failed: x == 3" does
+        let t = a.0.trim_start_matches(':');
+        let t = t.trim_start_matches(|c: char| c.is_ascii_digit()).trim_start_matches(": ");
+        format!("assert failed: {}", t.strip_prefix("assert ").unwrap_or(t))
+    } else if let Some(s) = p.downcast_ref::<String>() {
+        s.clone()
+    } else if let Some(s) = p.downcast_ref::<&str>() {
+        s.to_string()
+    } else {
+        String::from("the program stopped")
+    }
+}
+/// Tasks that stopped, told when they are awaited: (what stopped, the
+/// telling, which begins `error: `).
+#[allow(dead_code)]
+static LUME_TASK_STOPS: std::sync::Mutex<Vec<(String, String)>> = std::sync::Mutex::new(Vec::new());
+/// Awaiting a task that stopped: tell it, once, and stop here too. Awaited
+/// from another task, the telling waits for whoever awaits that one.
+#[allow(dead_code)]
+fn lume_task_panic(p: ::std::boxed::Box<dyn std::any::Any + Send>) -> ! {
+    if std::thread::current().name() == Some("main") {
+        let raw = lume_payload_text(&*p);
+        let mut stops = LUME_TASK_STOPS.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(i) = stops.iter().position(|(r, _)| *r == raw) {
+            eprint!("{}", stops.remove(i).1);
+        }
+    }
+    std::panic::resume_unwind(p)
+}
+/// Held by `main`: a task that stopped and was never awaited is told when
+/// the program ends, rather than not at all.
+#[allow(dead_code)]
+pub struct LumeTasksLeft;
+impl Drop for LumeTasksLeft {
+    fn drop(&mut self) {
+        for (_, told) in LUME_TASK_STOPS.lock().unwrap_or_else(|e| e.into_inner()).drain(..) {
+            eprint!("error: a task that was never awaited stopped: {}", told.trim_start_matches("error: "));
+        }
+    }
 }
 /// What Rust says when it stops a program, in Lume's words.
 #[allow(dead_code)]
@@ -1481,6 +1524,9 @@ pub struct Gen {
     text_borrows: HashMap<String, (String, usize)>,
     /// The program uses async somewhere: tokio goes in the dependencies.
     uses_async: bool,
+    /// The Lume line the Rust being written now belongs to, for the marks
+    /// a stop is looked up by.
+    mark_line: usize,
     /// Set by `iter_base` for a map: its items are `(key, value)` pairs of
     /// references, not a reference to a pair. Read once by the next lambda.
     map_items: bool,
@@ -1600,6 +1646,7 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, module_id: &str
         src_lines: src.lines().map(|l| l.to_string()).collect(),
         in_async: false,
         uses_async: false,
+        mark_line: 0,
         map_items: false,
         or_default_is_str: false,
         consts: HashMap::new(),
@@ -7505,6 +7552,7 @@ impl Gen {
         }
         if is_main && !self.test_mode {
             self.line("lume_install_panic_hook();");
+            self.line("let _lume_tasks_left = LumeTasksLeft;");
         }
         if let Some(item) = &gen_item {
             // the generator keeps its own copy of everything it was given,
@@ -7737,6 +7785,21 @@ impl Gen {
 
     /// In a function returning `T or E`, a result value of type `T` is
     /// wrapped in `Ok`, and one of type `E` in `Err`.
+    /// A function's result: a list or map literal of values behind an
+    /// interface the function returns — `def rules -> [Rule] = [Add(), Twice()]`
+    /// — is built as that type, each value made the pointer it holds.
+    fn result_value(&mut self, e: &Expr) -> Result<String> {
+        let ret = self.current_ret.clone();
+        let holds_iface = match &ret {
+            Type::List(t) | Type::Map(_, t) => self.is_interface(t),
+            _ => false,
+        };
+        if holds_iface && self.tail_of_fn && !self.in_block && matches!(e.kind, ExprKind::List(_) | ExprKind::MapLit(_)) {
+            return self.expr_owned_as(e, &ret);
+        }
+        self.expr_owned(e)
+    }
+
     fn coerce_result(&mut self, text: String, e: &Expr) -> Result<String> {
         // A block declared `(A) -> B?` implies its `Some` the same way one
         // declared `(A) -> B or E` implies its `Ok`.
@@ -8271,10 +8334,17 @@ impl Gen {
         let saved = std::mem::replace(&mut self.dying, replacing);
         // where this statement was written, for a failure while it runs:
         // main.rs turns these marks into the table the panic hook reads
+        let saved_mark = self.mark_line;
         if let Some(line) = stmt_line(s) {
             self.out.push_str(&format!("/*@L{}*/", line));
+            self.mark_line = line;
         }
         let r = self.stmt_inner(s, is_tail);
+        self.mark_line = saved_mark;
+        // the statement around this one goes on at its own line
+        if saved_mark > 0 && stmt_line(s).map(|l| l != saved_mark).unwrap_or(false) {
+            self.out.push_str(&format!("/*@L{}*/", saved_mark));
+        }
         self.dying = saved;
         if crate::diag::indexing() {
             if let Stmt::Bind { name, line, col, .. } | Stmt::Var { name, line, col, .. } = s {
@@ -8779,7 +8849,7 @@ impl Gen {
                             self.at_tail = self.tail_of_fn;
                             self.expr_owned(e)
                         }
-                        _ => self.expr_owned(e).and_then(|v| self.coerce_result(v, e)),
+                        _ => self.result_value(e).and_then(|v| self.coerce_result(v, e)),
                     };
                     self.want.pop();
                     let v = v?;
@@ -8878,7 +8948,7 @@ impl Gen {
                         let branching = matches!(e.kind, ExprKind::If { .. } | ExprKind::Match { .. });
                         self.at_tail = branching;
                         self.want.push(self.current_ret.clone());
-                        let v = if branching { self.expr_owned(e) } else { self.expr_owned(e).and_then(|v| self.coerce_result(v, e)) };
+                        let v = if branching { self.expr_owned(e) } else { self.result_value(e).and_then(|v| self.coerce_result(v, e)) };
                         self.want.pop();
                         self.tail_of_fn = saved;
                         let v = v?;
@@ -9720,6 +9790,23 @@ impl Gen {
                 }
                 Ok(format!("vec![{}]", parts.join(", ")))
             }
+            // `{"add": Add(k: 1), "twice": Twice()}` where `{Str: Rule}` is
+            // wanted: each value becomes the pointer the map holds, as a
+            // list's items do
+            (ExprKind::MapLit(pairs), Type::Map(kt, vt)) if !pairs.is_empty() && self.is_interface(vt) => {
+                let mut parts = Vec::new();
+                for (n, (k, v)) in pairs.iter().enumerate() {
+                    let later: Vec<Stmt> = pairs[n + 1..].iter().flat_map(|(a, b)| [Stmt::Expr(a.clone()), Stmt::Expr(b.clone())]).collect();
+                    self.rest_stack.push(later);
+                    let ks = self.expr_owned_as(k, kt);
+                    let vty = self.ty_of(v).materialized();
+                    let vs = self.expr_owned(v);
+                    self.rest_stack.pop();
+                    let vs = self.coerce(vs?, &vty, vt, v.line, v.col)?;
+                    parts.push(format!("({}, {})", ks?, vs));
+                }
+                Ok(format!("LumeMap::from([{}])", parts.join(", ")))
+            }
             (ExprKind::Some(inner), Type::Option(t)) if self.is_interface(t) => {
                 let it = self.ty_of(inner).materialized();
                 let v = self.expr_owned(inner)?;
@@ -9756,6 +9843,16 @@ impl Gen {
     fn expr_arg_inner(&mut self, e: &Expr, t: &Type) -> Result<String> {
         if let Type::Gen(_) = t {
             return self.seq_arg(e);
+        }
+        // a list or map literal of values behind an interface, lent: built
+        // as the parameter's type, each value the pointer it holds
+        if matches!(e.kind, ExprKind::List(_) | ExprKind::MapLit(_)) {
+            if let Type::List(v) | Type::Map(_, v) = t {
+                if self.is_interface(v) {
+                    let built = self.expr_owned_as(e, t)?;
+                    return Ok(format!("&{}", built));
+                }
+            }
         }
         // a slot the definition spelled `T`, filled in with `Str`: Rust
         // wants a `&String` there, and Lume's strings travel as `&str`
@@ -11546,6 +11643,27 @@ impl Gen {
     }
 
     fn expr(&mut self, e: &Expr) -> Result<String> {
+        // a step of a statement written on a later line — `.map { ... }`
+        // under the line it continues — gets a line of the Rust of its own,
+        // marked, so a stop inside it names its line, not the statement's
+        // (a chain is written from its last step, which writes out the
+        // blocks of the steps before it: those go back to their own lines)
+        let elsewhere = match e.kind {
+            ExprKind::Method { .. } => e.line > self.mark_line,
+            ExprKind::Lambda { .. } | ExprKind::Unwrap(_) | ExprKind::Call { .. } => e.line != self.mark_line,
+            _ => false,
+        };
+        if self.mark_line > 0 && e.line > 0 && elsewhere {
+            let saved = self.mark_line;
+            self.mark_line = e.line;
+            let r = self.expr_here(e);
+            self.mark_line = saved;
+            return r.map(|s| format!("\n/*@L{}*/{}\n/*@L{}*/", e.line, s, saved));
+        }
+        self.expr_here(e)
+    }
+
+    fn expr_here(&mut self, e: &Expr) -> Result<String> {
         if crate::diag::indexing() {
             self.note_expr(e);
         }
@@ -11954,10 +12072,10 @@ impl Gen {
                 let v = v?;
                 match xt {
                     Type::Future(_) => format!("({}).await", v),
-                    Type::Task(_) => format!("({}).await.unwrap_or_else(|e| std::panic::resume_unwind(e.into_panic()))", v),
+                    Type::Task(_) => format!("({}).await.unwrap_or_else(|e| lume_task_panic(e.into_panic()))", v),
                     Type::List(inner) if matches!(*inner, Type::Task(_)) => {
                         let v = self.expr_owned(x)?;
-                        format!("{{ let mut lume_done = Vec::new(); for lume_t in {} {{ lume_done.push(lume_t.await.unwrap_or_else(|e| std::panic::resume_unwind(e.into_panic()))); }} lume_done }}", v)
+                        format!("{{ let mut lume_done = Vec::new(); for lume_t in {} {{ lume_done.push(lume_t.await.unwrap_or_else(|e| lume_task_panic(e.into_panic()))); }} lume_done }}", v)
                     }
                     Type::Unknown => return Err(LumeError::new(x.line, x.col, "cannot tell what is being awaited here")),
                     other => {
@@ -13048,7 +13166,7 @@ impl Gen {
             // taken out of the list; the others keep their order
             "next_done" => {
                 need(0)?;
-                format!("{{ let lume_ts = &mut {}; std::future::poll_fn(move |lume_cx| {{ if lume_ts.is_empty() {{ return std::task::Poll::Ready(None); }} for lume_i in 0..lume_ts.len() {{ if let std::task::Poll::Ready(lume_r) = std::future::Future::poll(std::pin::Pin::new(&mut lume_ts[lume_i]), lume_cx) {{ lume_ts.remove(lume_i); return std::task::Poll::Ready(Some(lume_r.unwrap_or_else(|e| std::panic::resume_unwind(e.into_panic())))); }} }} std::task::Poll::Pending }}) }}", recv)
+                format!("{{ let lume_ts = &mut {}; std::future::poll_fn(move |lume_cx| {{ if lume_ts.is_empty() {{ return std::task::Poll::Ready(None); }} for lume_i in 0..lume_ts.len() {{ if let std::task::Poll::Ready(lume_r) = std::future::Future::poll(std::pin::Pin::new(&mut lume_ts[lume_i]), lume_cx) {{ lume_ts.remove(lume_i); return std::task::Poll::Ready(Some(lume_r.unwrap_or_else(|e| lume_task_panic(e.into_panic())))); }} }} std::task::Poll::Pending }}) }}", recv)
             }
             "take" | "skip" if matches!(rt, Type::AsyncGen(_)) => { need(1)?; format!("({}).lume_{}({})", recv, name, args[0]) }
             "enumerate" if matches!(rt, Type::AsyncGen(_)) => { need(0)?; format!("({}).lume_enumerate()", recv) }

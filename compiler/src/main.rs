@@ -427,7 +427,8 @@ fn test_runner(modules: &[&loader::Module]) -> String {
             if let ast::Item::Test(t) = item {
                 let path = if is_entry { format!("lume_test_{}", k) } else { format!("{}::lume_test_{}", m.rust_mod(), k) };
                 let label = if is_entry { t.name.clone() } else { format!("{}: {}", m.id, t.name) };
-                let file = m.path.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default();
+                // the file as `lume run` names it in a stop, and rustc in an error
+                let file = m.path.display().to_string();
                 entries.push(format!("(\"{}\", \"{}\", {} as fn())", label.replace('\\', "\\\\").replace('"', "\\\""), file, path));
                 k += 1;
             }

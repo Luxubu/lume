@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- **Review round twenty-one** (`corpus/m104/`): thirty programs by three
+  reviewers, from the docs alone; after the fixes all thirty print what
+  their authors predicted.
+- **Fixed**: a list or map literal of values behind an interface reached
+  rustc when given to a field, a parameter or a function's result
+  (`{"add": Add(k: 1), "twice": Twice()}` where `{Str: Rule}` is wanted).
+- **A task that stops is told where it is awaited**, in the form of any
+  other stop, so what a program prints no longer depends on when its tasks
+  stop; one that is never awaited is told when the program ends.
+- **A stop in a step of a chain over lines** names that step's line.
+- **A failed `assert` outside a test** says `assert failed: ...`, as Rust's
+  `assertion failed:` does; `lume test` names a file as it was given.
+- **`.name` as the first line of a `do |x|` block** says why it cannot be.
+
 - **`async test`** *(preview)*: a test that can `await`, run on its own
   tokio runtime, as Rust's `#[tokio::test]`. `await` in a plain `test` says
   to write it.

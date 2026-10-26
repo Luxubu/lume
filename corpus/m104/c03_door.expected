@@ -1,0 +1,23 @@
+warning: `starts` holds values of different types behind `State`, so calls on its items go through a pointer
+  --> corpus/m104/c03_door.lume:126:3
+    |
+126 |   starts: [State] = [Locked(), Closed(), Open()]
+    |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+events: ["unlock", "open", "kick", "close", "lock", "open", "unlock", "open"]
+ 1. locked -> closed
+ 2. closed -> open
+ 3. ignored kick while open
+ 4. BEEP
+ 5. open -> closed
+ 6. closed -> locked
+ 7. ignored open while locked
+ 8. locked -> closed
+ 9. closed -> open
+now: open
+Alarm(sound: Beep())
+alarms: 1
+{"closed": 3, "open": 2, "locked": 1}
+after open: locked, open, open
+true 1
+exit: 0

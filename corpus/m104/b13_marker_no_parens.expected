@@ -1,0 +1,6 @@
+error: `Marker` is a type; construct one with `Marker()`
+  --> corpus/m104/b13_marker_no_parens.lume:14:19
+   |
+14 |   ms = [Marker(), Marker]
+   |                   ^
+exit: 1

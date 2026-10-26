@@ -35,8 +35,28 @@ puts menu    #=> SOUP, STEW
 ```
 
 Indent the steps under the line they continue; `lume fmt` keeps them one a
-line. The first line of a block cannot begin with `.`, since there is no line
-above it in the block to continue:
+line. A comment line or a blank line between two steps is passed over, and
+the chain goes on. Steps may also sit inside a call's parentheses, and may
+mix with `|>` lines (see [Operators](operators.md)), which take everything
+above them:
+
+```lume
+def total(xs: [Int]) -> Int = xs.sum
+
+def main:
+  prices = [12, 3, 8, 15]
+  puts total(prices
+    .filter { |p| p > 5 }
+    # the dear ones, doubled
+    .map { |p| p * 2 })    #=> 70
+  prices
+    .filter { |p| p > 5 }
+    |> .sort
+    |> puts    #=> [8, 12, 15]
+```
+
+The first line of a block — after `:`, or after `do` and `do |x|` — cannot
+begin with `.`, since there is no line above it in the block to continue:
 
 ```lume-bad
 def main:
@@ -46,8 +66,9 @@ def main:
 #! a line starting with `.` continues the line above, and this one begins a block
 ```
 
-`|>` (see [Operators](operators.md)) may also begin a line, for a
-pipeline that passes the value to functions as well as methods.
+A `.name` line continues the expression that ends the line above, so after
+`x = if big: a else: b` it applies to `b` alone, as `.` binds tighter than
+anything; put the `if` in parentheses to apply it to either.
 
 ## Lists
 

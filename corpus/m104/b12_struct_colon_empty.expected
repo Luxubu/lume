@@ -1,0 +1,7 @@
+error: struct `Marker` has nothing in its block
+  --> corpus/m104/b12_struct_colon_empty.lume:12:1
+   |
+12 | struct Marker:
+   | ^
+  help: indent its fields and methods under it; for a struct with no fields and no methods, leave out the `:` — `struct Marker`
+exit: 1

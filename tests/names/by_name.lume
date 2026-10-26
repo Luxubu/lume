@@ -1,0 +1,13 @@
+# `lume test file name` runs only the tests with `name` in theirs. A file
+# of its own, so no other check builds it at the same time.
+
+def tip(bill: Int) -> Int = bill / 10
+
+test "a tip on a round bill":
+  assert tip(50) == 5
+
+test "a tip on a small bill":
+  assert tip(9) == 0
+
+test "no tip on nothing":
+  assert tip(0) == 0

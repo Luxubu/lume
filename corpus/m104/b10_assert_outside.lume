@@ -1,0 +1,27 @@
+# b10: an `assert` outside a test, in a `var self` method called from main.
+# It stops the program on the assert's own line, after what was printed.
+# Meant to STOP.
+# EXPECTED OUTPUT:
+# 6
+# EXPECTED STDERR:
+# error: assert failed: not overdrawn?
+#   --> corpus/m104/b10_assert_outside.lume:20
+#    |
+# 20 |     assert not overdrawn?
+# EXPECTED EXIT: 101
+
+struct Account:
+  balance: Int
+
+  def overdrawn? -> Bool = balance < 0
+
+  def withdraw(var self, amount: Int):
+    balance -= amount
+    assert not overdrawn?
+
+def main:
+  var a = Account(balance: 10)
+  a.withdraw(4)
+  puts a.balance
+  a.withdraw(9)
+  puts a.balance

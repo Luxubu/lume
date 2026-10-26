@@ -1,0 +1,111 @@
+# c02: a grade book. Grading schemes are field-less structs behind an
+# interface, kept in a list in a catalog and looked up by label at run
+# time; each course holds one in a field. Reports are chains written one
+# step a line inside a method. The last report assumes every student has
+# four assignments: `.at(3)` inside the `score` method stops the program
+# on Cy, who has three, and the stop names the method's line, not the
+# caller's.
+# Meant to STOP.
+# EXPECTED OUTPUT:
+# Maths (letter)
+#   Ana     91.3  A
+#   Di      85.8  B
+#   Bo      73.0  C
+#   Cy      55.0  F
+# Art (pass/fail)
+#   Bo      73.0  pass
+#   Cy      55.0  fail
+# honours: Ana and Di
+# first assignment, high to low: [92, 85, 71, 55]
+# Letter() picked twice: true
+# assignment 4:
+#   Ana: 90
+#   Bo: 77
+# EXPECTED STDERR:
+# error: no item at 3 — the list has 3
+#   --> corpus/m104/c02_gradebook.lume:66
+#    |
+# 66 |   def score(i: Int) -> Int = scores.at(i)
+# EXPECTED EXIT: 101
+
+interface Scheme:
+  def label -> Str
+  def grade(avg: Float) -> Str
+
+struct Letter:
+  def label -> Str = "letter"
+
+  def grade(avg: Float) -> Str:
+    if avg >= 90.0:
+      "A"
+    elif avg >= 80.0:
+      "B"
+    elif avg >= 70.0:
+      "C"
+    else:
+      "F"
+
+struct PassFail:
+  def label -> Str = "pass/fail"
+  def grade(avg: Float) -> Str = if avg >= 60.0: "pass" else: "fail"
+
+struct Catalog:
+  schemes: [Scheme]
+
+  def find(label: Str) -> Scheme:
+    for s in schemes:
+      if s.label == label:
+        return s
+    Letter()
+
+struct Student:
+  name: Str
+  scores: [Int]
+
+  def avg -> Float = scores.avg
+  def score(i: Int) -> Int = scores.at(i)
+
+struct Course:
+  title: Str
+  scheme: Scheme
+  roster: [Student]
+
+  def report -> [Str] = roster
+    .sort_by { |s| -s.avg }
+    .map { |s| "#{s.name.pad_right(6)}#{s.avg.decimals(1).pad(6)}  #{scheme.grade(s.avg)}" }
+    .to_list
+
+def main:
+  cat = Catalog(schemes: [Letter(), PassFail()])
+  ana = Student("Ana", [92, 88, 95, 90])
+  bo = Student("Bo", [71, 64, 80, 77])
+  cy = Student("Cy", [55, 62, 48])
+  di = Student("Di", [85, 91, 79, 88])
+  courses = [
+    Course("Maths", cat.find("letter"), [ana, bo, cy, di]),
+    Course("Art", cat.find("pass/fail"), [bo, cy]),
+  ]
+
+  for c in courses:
+    puts "#{c.title} (#{c.scheme.label})"
+    for line in c.report:
+      puts "  #{line}"
+
+  everyone = [ana, bo, cy, di]
+  honours = everyone
+    .filter { |s| s.avg >= 85.0 }
+    .map(_.name)
+    .join(" and ")
+  puts "honours: #{honours}"
+
+  firsts = everyone
+    .map { |s| s.score(0) }
+    .sort
+    .reverse
+  puts "first assignment, high to low: #{firsts}"
+
+  puts "#{Letter()} picked twice: #{Letter() == Letter()}"
+
+  puts "assignment 4:"
+  for s in everyone:
+    puts "  #{s.name}: #{s.score(3)}"

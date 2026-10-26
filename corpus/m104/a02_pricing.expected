@@ -1,0 +1,21 @@
+warning: `plans` holds values of different types behind `Pricing`, so calls on its items go through a pointer
+  --> corpus/m104/a02_pricing.lume:82:3
+   |
+82 |   plans: [Pricing] = [Regular(), BulkDeal(), HappyHour()]
+   |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+tea: 750 (regular)
+beer: 1000 (happy hour)
+cups: 1080 (bulk)
+bulk: 900
+regular: 1000
+bulk: 900
+happy hour: 500
+true
+["printer jam", "server down"]
+Ticket(title: "new mouse", priority: Normal)
+High(why: Urgent())
+{Urgent()}
+1
+{Urgent(): 3}
+exit: 0

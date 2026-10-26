@@ -1,0 +1,16 @@
+commands: add/2 dup/1 mul/2 push/0 sub/2 swap/2
+arities used: [0, 1, 2]
+push 3  [3]
+push 4  [3, 4]
+add     [7]
+dup     [7, 7]
+mul     [49]
+pop: unknown command
+push 10 [49, 10]
+swap    [10, 49]
+sub     [-39]
+add: needs 2, the stack has 1
+result: [-39]
+steps run: 8 of 10
+Push() Push() true
+exit: 0

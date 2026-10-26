@@ -1,0 +1,7 @@
+3
+6
+error: division by zero
+  --> corpus/m104/b07_module_stop/split.lume:4
+  |
+4 |   per = total / people
+exit: 101

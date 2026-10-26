@@ -1,0 +1,18 @@
+[Marker(), Marker()]
+true
+false
+1
+{Marker()}
+{Marker(): 6}
+{Marker(): "only"}
+Held(m: Marker())
+[Empty, Held(m: Marker())]
+held Marker()
+Box(item: Marker())
+2
+marker
+marker
+Holder(m: Marker(), n: 2)
+hello
+Plain()
+exit: 0

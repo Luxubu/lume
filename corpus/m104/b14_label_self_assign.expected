@@ -1,0 +1,7 @@
+error: `label = label` gives `label` the value it already has, which does nothing
+  --> corpus/m104/b14_label_self_assign.lume:19:5
+   |
+19 |     label = label
+   |     ^
+  help: the parameter `label` hides the field of the same name; to set the field, write `self.label = label`
+exit: 1

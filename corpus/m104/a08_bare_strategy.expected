@@ -1,0 +1,6 @@
+error: `Formal` is a type; construct one with `Formal()`
+  --> corpus/m104/a08_bare_strategy.lume:23:16
+   |
+23 |   puts welcome(Formal, ["Ada", "Grace"])
+   |                ^
+exit: 1

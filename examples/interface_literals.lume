@@ -1,0 +1,40 @@
+# A list or map literal of values behind an interface, wherever its type is
+# known: a field, a parameter, a function's result, a typed name. Each value
+# becomes the pointer the list or map holds.
+
+interface Rule:
+  def apply(n: Int) -> Int
+
+struct Add:
+  k: Int
+
+  def apply(n: Int) -> Int = n + k
+
+struct Twice:
+  def apply(n: Int) -> Int = n * 2
+
+struct Engine:
+  rules: {Str: Rule}
+  order: [Rule]
+
+def run_all(rules: [Rule], n: Int) -> Int = rules.fold(n) { |acc, r| r.apply(acc) }
+
+def by_name(rules: {Str: Rule}, name: Str, n: Int) -> Int? = rules[name].map { |r| r.apply(n) }
+
+def standard -> [Rule] = [Add(k: 1), Twice()]
+
+def named -> {Str: Rule}:
+  return {"add": Add(k: 10), "twice": Twice()}
+
+def main:
+  e = Engine(rules: {"add": Add(k: 1), "twice": Twice()}, order: [Twice(), Add(k: 3)])
+  puts e.rules.len
+  puts run_all(e.order, 5)
+  puts run_all([Add(k: 2), Twice()], 1)
+  puts run_all(standard(), 4)
+  puts by_name({"add": Add(k: 7)}, "add", 1)
+  puts by_name(named(), "twice", 21)
+  puts by_name(named(), "halve", 8)
+  var m: {Str: Rule} = {"twice": Twice()}
+  m["add"] = Add(k: 100)
+  puts m.keys.sort

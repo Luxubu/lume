@@ -77,7 +77,7 @@ rm -rf "$tmpo" tests/.lume"""
   all.push(script("overflow by build mode", overflow, "tests/overflow.expected"))
 
   # a program that stops says where, in Lume: the file, the line and its text
-  stops = """for f in list_at in_a_method in_a_block in_a_generator in_a_task assert shop/main; do
+  stops = """for f in list_at in_a_method in_a_block in_a_generator in_a_task never_awaited assert shop/main; do
   "$LUME" run tests/stops/$f.lume; echo "exit: $?"
 done
 "$LUME" test tests/stops/tests.lume; echo "exit: $?"
@@ -114,7 +114,7 @@ printf '%s\\nexit: %s' "$out" "$code"
   for f in lume_files("examples/tests")?:
     all.push(script("tests/#{Path.stem(f)}", with_exit("\"$LUME\" test '#{f}'"), expected_of(f)))
   # `lume test file name`: only the tests with `name` in theirs
-  all.push(script("tests by name", with_exit("\"$LUME\" test examples/tests/async_tests.lume tasks; \"$LUME\" test examples/tests/async_tests.lume stew"), "examples/tests/by_name.expected"))
+  all.push(script("tests by name", with_exit("\"$LUME\" test tests/names/by_name.lume bill; \"$LUME\" test tests/names/by_name.lume stew; rm -rf tests/names/.lume"), "tests/names/by_name.expected"))
   for (name, f, exp) in [("json tests", "examples/json/json.lume", "examples/json/json.test.expected"), ("mini tests", "examples/mini/main.lume", "examples/mini/main.test.expected"), ("site tests", "examples/site/main.lume", "examples/site/main.test.expected"), ("lib tests", "examples/lib/report.lume", "examples/lib/report.test.expected")]:
     all.push(script(name, with_exit("\"$LUME\" test '#{f}'"), exp))
 

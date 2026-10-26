@@ -1,0 +1,24 @@
+# b14: the `price = price` fix with another field: `label = label` in a
+# `var self` setter whose parameter is named like the field, after a line
+# that does change a field.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `label = label` gives `label` the value it already has, which does nothing
+#   --> corpus/m104/b14_label_self_assign.lume:19:5
+#    |
+# 19 |     label = label
+#    |     ^
+#   help: the parameter `label` hides the field of the same name; to set the field, write `self.label = label`
+
+struct Tag:
+  label: Str
+  uses: Int
+
+  def rename(var self, label: Str):
+    uses += 1
+    label = label
+
+def main:
+  var t = Tag(label: "old", uses: 0)
+  t.rename("new")
+  puts t

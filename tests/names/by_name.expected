@@ -1,0 +1,6 @@
+test a tip on a round bill ... ok
+test a tip on a small bill ... ok
+
+2 tests: 2 passed, 0 failed (1 not matching `bill`)
+none of the 3 tests has `stew` in its name
+exit: 0

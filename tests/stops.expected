@@ -25,7 +25,13 @@ error: no item at 2 — the list has 1
   |
 2 | async def seat(i: Int) -> Str = ["window"].at(i)
 exit: 101
-error: assert total == 5
+the program goes on
+error: a task that was never awaited stopped: no item at 4 — the list has 1
+  --> tests/stops/never_awaited.lume:3
+  |
+3 | async def seat(i: Int) -> Str = ["window"].at(i)
+exit: 0
+error: assert failed: total == 5
   left:  4
   right: 5
   --> tests/stops/assert.lume:4
@@ -40,11 +46,11 @@ error: no item at 3 — the list has 2
 exit: 101
 test halves ... ok
 test a wrong answer ... FAILED
-    tests.lume:8: assert half(9) == 5
+    tests/stops/tests.lume:8: assert half(9) == 5
       left:  4
       right: 5
 test a stop ... FAILED
-    tests.lume:12: stopped: no item at 4 — the list has 1
+    tests/stops/tests.lume:12: stopped: no item at 4 — the list has 1
 
 3 tests: 1 passed, 2 failed
 exit: 1

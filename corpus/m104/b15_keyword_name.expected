@@ -1,0 +1,7 @@
+error: `next` is one of Lume's own words, so it cannot be a name
+  --> corpus/m104/b15_keyword_name.lume:17:3
+   |
+17 |   next = s.next + 1
+   |   ^
+  help: pick another name, such as `next_count` or `my_next`
+exit: 1

@@ -1,0 +1,12 @@
+warning: `!` stops the program if the value is missing or an error
+  --> corpus/m104/a05_stock_count.lume:26:24
+   |
+26 |     .map { |n| n.to_int! }
+   |                        ^
+  help: fine in tests and quick scripts; elsewhere use `match`, `?` or `.or(default)`
+reading 4 lines
+error: `x` is not an integer
+  --> corpus/m104/a05_stock_count.lume:26
+   |
+26 |     .map { |n| n.to_int! }
+exit: 101

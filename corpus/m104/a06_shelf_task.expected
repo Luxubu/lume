@@ -1,0 +1,7 @@
+[6, 10, 4]
+started
+error: no item at 3 — the list has 3
+  --> corpus/m104/a06_shelf_task.lume:23
+   |
+23 |       total += shelves.at(i)
+exit: 101

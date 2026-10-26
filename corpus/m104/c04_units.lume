@@ -1,0 +1,108 @@
+# c04: a length converter. Each unit is a field-less struct behind an
+# interface with two defaults built on its one number; the table keeps
+# them in a list field and finds one by symbol at run time. Requests are
+# parsed by a function of the type, `Request.parse`, which validates the
+# amount with `!`: the last request's amount is `abc`, and the program
+# stops inside `parse`, on the line with the `!`. A chain in a `puts`
+# argument and a chain from a list literal are written one step a line.
+# Meant to STOP.
+# EXPECTED OUTPUT:
+# cm < in < ft < m < km
+# feet in metres: 0.305, 0.914, 3.048
+# 12.0 ft = 3.66 m
+# 100.0 cm = 39.37 in
+# 3.5 km = 11482.94 ft
+# 1.0 in = 2.54 cm
+# skipped: unknown unit `yd`
+# EXPECTED STDERR:
+# warning: `!` stops the program if the value is missing or an error
+#   --> corpus/m104/c04_units.lume:79:34
+#    |
+# 79 |     amount = words.at(0).to_float!
+#    |                                  ^
+#   help: fine in tests and quick scripts; elsewhere use `match`, `?` or `.or(default)`
+# error: `abc` is not a number
+#   --> corpus/m104/c04_units.lume:79
+#    |
+# 79 |     amount = words.at(0).to_float!
+# EXPECTED EXIT: 101
+
+interface Unit:
+  def symbol -> Str
+  def metres -> Float
+
+  def to_base(n: Float) -> Float = n * metres
+  def from_base(m: Float) -> Float = m / metres
+
+struct Metre:
+  def symbol -> Str = "m"
+  def metres -> Float = 1.0
+
+struct Centimetre:
+  def symbol -> Str = "cm"
+  def metres -> Float = 0.01
+
+struct Foot:
+  def symbol -> Str = "ft"
+  def metres -> Float = 0.3048
+
+struct Inch:
+  def symbol -> Str = "in"
+  def metres -> Float = 0.0254
+
+struct Kilometre:
+  def symbol -> Str = "km"
+  def metres -> Float = 1000.0
+
+struct Table:
+  units: [Unit]
+
+  def find(sym: Str) -> Unit or Error:
+    for u in units:
+      if u.symbol == sym:
+        return u
+    Error("unknown unit `#{sym}`")
+
+  def convert(r: Request) -> Str or Error:
+    a = find(r.from)?
+    b = find(r.to)?
+    out = b.from_base(a.to_base(r.amount))
+    "#{r.amount} #{a.symbol} = #{out.decimals(2)} #{b.symbol}"
+
+struct Request:
+  amount: Float
+  from: Str
+  to: Str
+
+  def self.parse(line: Str) -> Request:
+    words = line.split.to_list
+    amount = words.at(0).to_float!
+    Request(amount: amount, from: words.at(1), to: words.at(3))
+
+def main:
+  table = Table(units: [Metre(), Centimetre(), Foot(), Inch(), Kilometre()])
+  puts table.units
+    .sort_by { |u| u.metres }
+    .map(_.symbol)
+    .join(" < ")
+
+  feet = [1.0, 3.0, 10.0]
+    .map { |n| Foot().to_base(n) }
+    .map { |m| m.decimals(3) }
+    .join(", ")
+  puts "feet in metres: #{feet}"
+
+  lines = [
+    "12 ft > m",
+    "100 cm > in",
+    "3.5 km > ft",
+    "1 in > cm",
+    "5 yd > m",
+    "abc ft > m",
+    "2 m > cm",
+  ]
+  for line in lines:
+    r = Request.parse(line)
+    match table.convert(r):
+      Ok(text) -> puts text
+      Error(e) -> puts "skipped: #{e.message}"

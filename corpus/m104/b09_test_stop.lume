@@ -1,0 +1,29 @@
+# b09: a test that stops (`xs.at(i)` past the end, inside a function the test
+# calls), run with `lume test corpus/m104/b09_test_stop.lume` from the
+# repository root. The stop is told as a failed test naming the line of the
+# `at`, and the tests after it still run. `!` in a test gives no warning.
+# Meant to STOP. (Run with `lume test`; the whole output of that command is
+# below, all on standard output, and `lume test` exits 1.)
+# EXPECTED OUTPUT:
+# test the first seat ... ok
+# test a seat past the end ... FAILED
+#     corpus/m104/b09_test_stop.lume:16: stopped: no item at 5 — the list has 2
+# test still runs after ... ok
+#
+# 3 tests: 2 passed, 1 failed
+# EXPECTED EXIT: 1
+
+def seat(tables: [Str], i: Int) -> Str = tables.at(i)
+
+test "the first seat":
+  assert seat(["door", "window"], 0) == "door"
+
+test "a seat past the end":
+  assert seat(["door", "window"], 5) == "door"
+
+test "still runs after":
+  n = "4".to_int!
+  assert n + n == 8
+
+def main:
+  puts seat(["door"], 0)

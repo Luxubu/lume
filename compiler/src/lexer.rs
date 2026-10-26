@@ -140,9 +140,14 @@ pub fn lex_full(src: &str) -> Result<(Vec<Token>, LexInfo)> {
             // and so does one starting with `.name`: a chain split over
             // lines, as Ruby and Rust allow. (`..` there is a range.)
             let leading_dot = j + 1 < n && chars[j] == '.' && (chars[j + 1].is_alphabetic() || chars[j + 1] == '_');
-            // ...but not the first line of a block: that `.` begins nothing
-            let continues = matches!(toks.last().map(|t| &t.tok), Some(Tok::Newline))
-                && !matches!(toks.len().checked_sub(2).map(|k| &toks[k].tok), Some(Tok::Sym(":")));
+            // ...but not the first line of a block — after `:`, `do` or a
+            // `do |x|` — where that `.` begins nothing
+            let opener = match toks.len().checked_sub(2).map(|k| &toks[k].tok) {
+                Some(Tok::Sym(":")) | Some(Tok::Sym("|")) => true,
+                Some(Tok::Ident(w)) => w == "do",
+                _ => false,
+            };
+            let continues = matches!(toks.last().map(|t| &t.tok), Some(Tok::Newline)) && !opener;
             if (j + 1 < n && chars[j] == '|' && chars[j + 1] == '>') || (leading_dot && continues) {
                 if matches!(toks.last().map(|t| &t.tok), Some(Tok::Newline)) {
                     toks.pop();

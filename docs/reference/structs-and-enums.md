@@ -70,6 +70,24 @@ def main:
   puts Marker() == Marker()    #=> true
 ```
 
+It is a struct like any other: it can be a field, an enum's payload, a map's
+key, a set's item or a type argument, and `extend` can give it an
+interface. It prints as `Marker()` wherever it is, inside a list, a map or
+another value:
+
+```lume
+struct Urgent
+
+enum Priority:
+  High(why: Urgent)
+  Low
+
+def main:
+  puts High(Urgent())             #=> High(why: Urgent())
+  puts {Urgent(): 3}              #=> {Urgent(): 3}
+  puts [Urgent(), Urgent()].len   #=> 2
+```
+
 A `:` with nothing indented under it is a mistake, not an empty struct:
 
 ```lume-bad

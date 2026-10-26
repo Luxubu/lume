@@ -415,11 +415,48 @@ error: no item at 5 — the list has 3
 5 |   puts tables.at(5)
 ```
 
+Below the message come the file as it was named on the command line, the
+line, and the line itself. There is no column and no caret: the whole line
+is what ran. As in a compile error, the gutter is as wide as the line
+number, so line 12 is shown as `12 | ...` under `   |`.
+
 The line is the one the failure happened on, which is not always the one
-that called it: a method, a block, a generator, another module, or a task
-stops on its own line. A task that stopped says so once, when it is awaited,
-as Rust's `JoinHandle` hands the panic on. A test that stops is told the same
-way by `lume test`, as `bill.lume:12: stopped: ...`.
+that called it: a method, a type's own function, a block, a generator,
+another module, or a task stops on its own line — and a step of a chain
+written over several lines (`.map { |n| n.to_int! }`) on that step's line.
+
+**An `assert` outside a test** says `assert failed:`, as Rust's
+`assertion failed:` does, with both sides when it compares:
+
+```
+error: assert failed: total == 5
+  left:  4
+  right: 5
+  --> stock.lume:4
+  |
+4 |   assert total == 5
+```
+
+**A task that stops is told where it is awaited**, which is where it stops
+the program — as Rust's `JoinHandle` hands a task's panic on, and as a
+task's `T or Error` comes home there. Until then the program goes on, and
+the line named is the task's own:
+
+```
+$ lume run kitchen.lume
+waiting for the kitchen
+error: no item at 2 — the list has 2
+  --> kitchen.lume:1
+  |
+1 | async def cook(dishes: [Str], i: Int) -> Str = dishes.at(i)
+```
+
+So what a program prints does not depend on when its tasks happen to stop.
+A task that stops and is never awaited does not stop the program, as in
+Rust, but is not lost: when the program ends it is told, as `error: a task
+that was never awaited stopped: ...`. A test
+that stops is told by `lume test` in the form of a failed `assert`, as
+`bill.lume:12: stopped: ...` (see [Tests](testing.md#what-a-failure-says)).
 
 `LUME_BACKTRACE=1` adds the line of the generated Rust, for a bug in Lume
 itself. A stack overflow, from recursion too deep, is still told the way Rust

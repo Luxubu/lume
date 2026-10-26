@@ -1,0 +1,19 @@
+Ana   hourly      950.00
+Bo    salaried   1000.00
+Cy    hourly      540.00
+Di    contract    900.00
+Ed    salaried    750.00
+Fay   contract     80.00
+total: 4220.00
+hourly=2, salaried=2, contract=1, temp=1
+overtime: ["Ana"]
+effective hourly rate:
+  Ana: 2111
+  Bo: 2500
+  Cy: 1800
+  Di: 7500
+error: division by zero
+  --> corpus/m104/c06_payroll/rates.lume:32
+   |
+32 | pub def effective_rate(e: Employee, paid: Int) -> Int = paid / e.hours
+exit: 101

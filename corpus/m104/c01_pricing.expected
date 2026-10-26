@@ -1,0 +1,18 @@
+order 1: 10% discount, $19.80
+order 2: bulk discount, $22.98
+order 3: no discount, $24.00
+order 4: bulk discount, $4.50
+top: clip x10, pen x6, pad x3
+10%  1 orders   19.80
+bulk 2 orders   27.48
+no   1 orders   24.00
+over $20: [2, 3]
+grand total: $71.28
+lines with a discount:
+  order 1 pen
+  order 1 pad
+  order 2 ink
+  order 4 clip
+[NoDiscount(), NoDiscount()]
+true
+exit: 0

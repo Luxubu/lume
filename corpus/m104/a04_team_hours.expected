@@ -1,0 +1,8 @@
+ops: 8
+design: 6
+build: 10
+error: division by zero
+  --> corpus/m104/a04_team_hours.lume:23
+   |
+23 |     total / hours.len
+exit: 101

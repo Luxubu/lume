@@ -1,0 +1,19 @@
+Maths (letter)
+  Ana     91.3  A
+  Di      85.8  B
+  Bo      73.0  C
+  Cy      55.0  F
+Art (pass/fail)
+  Bo      73.0  pass
+  Cy      55.0  fail
+honours: Ana and Di
+first assignment, high to low: [92, 85, 71, 55]
+Letter() picked twice: true
+assignment 4:
+  Ana: 90
+  Bo: 77
+error: no item at 3 — the list has 3
+  --> corpus/m104/c02_gradebook.lume:66
+   |
+66 |   def score(i: Int) -> Int = scores.at(i)
+exit: 101

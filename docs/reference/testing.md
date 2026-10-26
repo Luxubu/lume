@@ -41,8 +41,9 @@ missing.
 
 ## What a failure says
 
-**A failed comparison shows both sides**: the line, the `assert` as you
-wrote it, and the two values, `left` and `right`:
+**A failed comparison shows both sides**: the file as it was named on the
+command line and the line, the `assert` as you wrote it, and the two
+values, `left` and `right`:
 
 ```lume
 def tip(bill: Int, percent: Int) -> Int = bill * percent / 100

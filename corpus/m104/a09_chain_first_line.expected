@@ -1,0 +1,7 @@
+error: a line starting with `.` continues the line above, and this one begins a block
+  --> corpus/m104/a09_chain_first_line.lume:17:5
+   |
+17 |     .map(_.capitalize)
+   |     ^
+  help: put the value the chain starts from first: `xs` on this line, and `.map ...` under it
+exit: 1

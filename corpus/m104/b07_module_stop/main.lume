@@ -1,0 +1,21 @@
+# b07: a division by zero in another module of the same package. Run as
+# `lume run corpus/m104/b07_module_stop` from the repository root. The stop
+# names the module's file and line, not the call in main.lume.
+# Meant to STOP.
+# EXPECTED OUTPUT:
+# 3
+# 6
+# EXPECTED STDERR:
+# error: division by zero
+#   --> corpus/m104/b07_module_stop/split.lume:4
+#   |
+# 4 |   per = total / people
+# EXPECTED EXIT: 101
+
+import split
+
+def main:
+  counts = [4, 2, 0, 5]
+  for c in counts:
+    puts split.share(12, c)
+  puts "never"

@@ -1,0 +1,7 @@
+30
+10
+error: no item at 5 — the list has 3
+  --> corpus/m104/b06_generator_stop.lume:17
+   |
+17 |     yield xs.at(i)
+exit: 101
