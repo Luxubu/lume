@@ -204,8 +204,8 @@ impl Loader {
     }
 
     fn is_lib(&self, k: usize, path: &Path) -> bool {
-        let a = std::fs::canonicalize(self.lib_path(k)).ok();
-        a.is_some() && a == std::fs::canonicalize(path).ok()
+        let a = crate::canonical(self.lib_path(k)).ok();
+        a.is_some() && a == crate::canonical(path).ok()
     }
 
     fn load_one(&mut self, pkg: Option<&str>, path: &Path, id: &str) -> Result<(), String> {

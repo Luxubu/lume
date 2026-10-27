@@ -36,6 +36,23 @@ use std::path::{Path, PathBuf};
 use std::process::{self, Command, Stdio};
 use std::time::Instant;
 
+/// `fs::canonicalize`, but on Windows without the `\\?\` it puts in front
+/// (`\\?\C:\...`), which git and people cannot read, and Windows does not
+/// need for paths of usual length.
+pub fn canonical<P: AsRef<Path>>(p: P) -> std::io::Result<PathBuf> {
+    let c = fs::canonicalize(p)?;
+    if cfg!(windows) {
+        let s = c.to_string_lossy().to_string();
+        if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
+            return Ok(PathBuf::from(format!(r"\\{}", rest)));
+        }
+        if let Some(rest) = s.strip_prefix(r"\\?\") {
+            return Ok(PathBuf::from(rest));
+        }
+    }
+    Ok(c)
+}
+
 /// A path as messages show it: with `/` on every system, as the docs write
 /// paths, though Windows joins them with `\`. Windows reads either.
 pub trait Shown {
@@ -534,7 +551,7 @@ fn cargo_bin_name(path: &Path) -> String {
     let (stem, proj) = cargo_project_dir(path);
     let pkg = stem.replace(|c: char| !c.is_alphanumeric() && c != '_', "_");
     let mut h = std::collections::hash_map::DefaultHasher::new();
-    fs::canonicalize(&proj).unwrap_or(proj).hash(&mut h);
+    crate::canonical(&proj).unwrap_or(proj).hash(&mut h);
     format!("{}_{:08x}", pkg, h.finish() as u32)
 }
 

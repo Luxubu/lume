@@ -94,7 +94,7 @@ pub fn indexed<T>(f: impl FnOnce() -> T) -> (T, Index) {
 }
 
 fn key(path: &Path) -> PathBuf {
-    std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+    crate::canonical(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
 /// The text of `path`: the editor's copy when it has one, else the file.

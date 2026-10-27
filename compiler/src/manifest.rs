@@ -71,7 +71,7 @@ impl GitRef {
 /// be, so messages name files the way the user wrote them.
 pub fn find(dir: &Path) -> Option<PathBuf> {
     let start = if dir.as_os_str().is_empty() { PathBuf::from(".") } else { dir.to_path_buf() };
-    let mut d = std::fs::canonicalize(&start).ok()?;
+    let mut d = crate::canonical(&start).ok()?;
     loop {
         let f = d.join(FILE);
         if f.is_file() {
@@ -86,7 +86,7 @@ pub fn find(dir: &Path) -> Option<PathBuf> {
 /// `abs` as seen from the working directory: `shelf/lume.toml`, or
 /// `../lume.toml` for a folder above it.
 fn relative(abs: &Path) -> PathBuf {
-    let cwd = match std::env::current_dir().ok().and_then(|c| std::fs::canonicalize(c).ok()) {
+    let cwd = match std::env::current_dir().ok().and_then(|c| crate::canonical(c).ok()) {
         Some(c) => c,
         None => return abs.to_path_buf(),
     };
@@ -315,7 +315,7 @@ fn git_url(root: &Path, url: &str) -> String {
     }
     // from the folder, which exists, not the repository, which may not:
     // the lock file must name it the same way whether or not it is there
-    let base = std::fs::canonicalize(if root.as_os_str().is_empty() { Path::new(".") } else { root }).unwrap_or(root.to_path_buf());
+    let base = crate::canonical(if root.as_os_str().is_empty() { Path::new(".") } else { root }).unwrap_or(root.to_path_buf());
     normalize(&base.join(url)).shown().to_string()
 }
 
@@ -413,8 +413,8 @@ pub fn load_all(root: Manifest, fetcher: &mut Fetcher) -> Result<Vec<Manifest>, 
                             }
                         }
                         (None, None) => {
-                            let a = std::fs::canonicalize(&all[j].root).unwrap_or(all[j].root.clone());
-                            let b = std::fs::canonicalize(&m.root).unwrap_or(m.root.clone());
+                            let a = crate::canonical(&all[j].root).unwrap_or(all[j].root.clone());
+                            let b = crate::canonical(&m.root).unwrap_or(m.root.clone());
                             if a != b {
                                 return Err(here(
                                     format!("package `{}` comes from two places: `{}` and `{}`", name, all[j].root.shown(), m.root.shown()),

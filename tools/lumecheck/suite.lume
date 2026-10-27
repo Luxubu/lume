@@ -48,6 +48,17 @@ pub def trimmed(text: Str) -> Str:
     t = t.slice(0, t.len - 1)
   t
 
+# The compiler the suite checks, named in full, since checks run it from
+# other folders: `compiler/target/release/lume` in the repository, which
+# on Windows is `lume.exe`, under the folder `tests/lumecheck.sh` names in
+# Windows' own form (Git's bash gives `PWD` as `/d/...`).
+pub def compiler -> Str:
+  root = Env.get("LUME_ROOT").or(Env.get("PWD").or("."))
+  exe = match Env.get("OS"):
+    Some(os) -> if os == "Windows_NT": ".exe" else: ""
+    None -> ""
+  Path.join(root, "compiler/target/release/lume#{exe}")
+
 # One of the Unix tools the suite uses: by name, or on Windows by its full
 # path in Git's `usr\bin` (`tests/lumecheck.sh` says where), since Windows
 # looks in its own folders before the PATH, and has a `bash` (WSL's) and a

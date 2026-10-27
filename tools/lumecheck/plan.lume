@@ -41,6 +41,27 @@ def corpus -> [Check] or Error:
     out.push(suite.one(name, How.Corpus, f, expected_of(f)))
   Ok(out)
 
+# Checks that drive Unix programs in ways Windows does not have, run
+# everywhere else. On Windows, Rust — and so Lume — finds Windows' own
+# `sort` before Git's; there are no signals; and Git's programs do not keep
+# a newline inside an argument, which these pass to `printf` and `sh`. The
+# suite says how many it left out.
+pub UNIX_ONLY = [
+  "corpus/m96/a02_pipes",
+  "corpus/m96/a04_errors_and_codes",
+  "corpus/m96/a05_programs_in_tasks",
+  "corpus/m96/b04_child_lines_wait",
+  "corpus/m96/b11_async_iterator_types",
+  "corpus/m96/b13_child_kept",
+  "corpus/m96/c01_build_steps",
+  "corpus/m96/c03_word_pipeline",
+]
+
+pub def on_windows? -> Bool:
+  match Env.get("OS"):
+    Some(os) -> os == "Windows_NT"
+    None -> false
+
 pub def checks -> [Check] or Error:
   var all: [Check] = []
 

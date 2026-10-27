@@ -68,7 +68,7 @@ async def block_outcomes(lume: Str, all: [(Int, Str, fences.Block)], scratch: St
       None -> return
 
 async def docs(args: [Str]) -> Int or Error:
-  lume = Path.join(Env.get("PWD").or("."), "compiler/target/release/lume")
+  lume = suite.compiler()
   if not File.exists?(lume):
     puts "build the compiler first: cd compiler && cargo build --release"
     return Ok(1)
@@ -132,13 +132,16 @@ def coverage_check(args: [Str]) -> Int or Error:
 
 # The whole suite: what tests/run.sh did, on several tasks at once.
 async def run_suite(args: [Str]) -> Int or Error:
-  lume = Path.join(Env.get("PWD").or("."), "compiler/target/release/lume")
+  lume = suite.compiler()
   update = args.contains?("--update")
   workers = flag(args, "-j", 8).max(1)
   # every program is compiled afresh: a warning is shown only when a
   # program is compiled, so a build left behind would change what a test sees
   clean_builds()?
-  checks = plan.checks()?
+  all_checks = plan.checks()?
+  # on Windows, the checks that need Unix programs as Unix has them are left out, and said so
+  checks = if plan.on_windows?(): all_checks.reject { |c| c.steps.any? { |s| plan.UNIX_ONLY.contains?(s.name) } }.to_list else: all_checks
+  left_out = all_checks.len - checks.len
   scratch = Path.join(Env.get("TMPDIR").or("/tmp"), "lumesuite-#{Time.now_ms}")
   fail_fast = args.contains?("-x")
   verbose = args.contains?("-v")
@@ -195,6 +198,7 @@ async def run_suite(args: [Str]) -> Int or Error:
   docs_code = await docs(["-j", "#{workers}"])?
   failed.push("docs") if docs_code != 0
   puts "#{pass} passed, #{failed.len} failed"
+  puts "#{left_out} left out here: they need Unix programs as Unix has them (plan.lume, UNIX_ONLY)" if left_out > 0
   for n in failed:
     puts "  #{n}"
   Ok(if failed.empty?: 0 else: 1)
@@ -267,7 +271,7 @@ async def main -> () or Error:
     "suite" -> await run_suite(args)?
     "coverage" -> coverage_check(args)?
     "keywords" -> keywords_check()?
-    "lsp" -> await lsp.run(args[1].or("compiler/target/release/lume"))?
+    "lsp" -> await lsp.run(args[1].or(suite.compiler()))?
     _ ->
       warn "usage: lumecheck docs [-v] [-j N] | coverage [--check N] | keywords | lsp LUME | suite [--update] [-j N] [-x] [-v]"
       2

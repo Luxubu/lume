@@ -195,7 +195,7 @@ impl Server {
                 Some(f) => cwd.join(f),
                 None => path.to_path_buf(),
             };
-            let file = std::fs::canonicalize(&file).unwrap_or(file);
+            let file = crate::canonical(&file).unwrap_or(file);
             let text = diag::read_source(&file).unwrap_or_default();
             by_uri.entry(path_to_uri(&file)).or_default().push(to_lsp(d, &text));
         }
@@ -205,7 +205,7 @@ impl Server {
             publish(stale, Vec::new());
         }
         // the edited file is always published, so a fix clears it at once
-        let here = path_to_uri(&std::fs::canonicalize(path).unwrap_or(path.to_path_buf()));
+        let here = path_to_uri(&crate::canonical(path).unwrap_or(path.to_path_buf()));
         if !now.contains(&here) && !before.contains(&here) {
             publish(&here, Vec::new());
         }
@@ -263,11 +263,11 @@ impl Server {
             Some(w) => w,
             None => return Value::Null,
         };
-        let me = std::fs::canonicalize(path).unwrap_or(path.to_path_buf());
+        let me = crate::canonical(path).unwrap_or(path.to_path_buf());
         let cwd = std::env::current_dir().unwrap_or_default();
         let same_file = |f: &str| {
             let p = cwd.join(f);
-            std::fs::canonicalize(&p).unwrap_or(p) == me
+            crate::canonical(&p).unwrap_or(p) == me
         };
         let uses = match self.index.get(&entry) {
             Some(ix) => &ix.uses,
@@ -288,7 +288,7 @@ impl Server {
             None => return Value::Null,
         };
         let target = cwd.join(&file);
-        let target = std::fs::canonicalize(&target).unwrap_or(target);
+        let target = crate::canonical(&target).unwrap_or(target);
         let dtext = diag::read_source(&target).unwrap_or_default();
         // a column of 0: the name's first appearance on that line
         let dstart = if dcol > 0 {
@@ -335,11 +335,11 @@ impl Server {
         while start > 0 && is_word(l[start - 1]) {
             start -= 1;
         }
-        let me = std::fs::canonicalize(path).unwrap_or(path.to_path_buf());
+        let me = crate::canonical(path).unwrap_or(path.to_path_buf());
         let cwd = std::env::current_dir().unwrap_or_default();
         let same_file = |f: &str| {
             let p = cwd.join(f);
-            std::fs::canonicalize(&p).unwrap_or(p) == me
+            crate::canonical(&p).unwrap_or(p) == me
         };
         let item = |m: &diag::Member| json!({ "label": m.label, "kind": m.kind, "detail": m.detail });
         // `recv.` — what the name before the dot offers
@@ -445,20 +445,20 @@ fn entry_for(path: &Path) -> PathBuf {
     if let Some(toml) = manifest::find(dir) {
         let root = toml.parent().map(|p| p.to_path_buf()).unwrap_or_default();
         let root = if root.as_os_str().is_empty() { PathBuf::from(".") } else { root };
-        let root = std::fs::canonicalize(&root).unwrap_or(root);
+        let root = crate::canonical(&root).unwrap_or(root);
         for f in ["main.lume", "lib.lume"] {
             if root.join(f).is_file() {
                 return root.join(f);
             }
         }
     }
-    let me = std::fs::canonicalize(path).unwrap_or(path.to_path_buf());
+    let me = crate::canonical(path).unwrap_or(path.to_path_buf());
     let mut d = me.parent().map(|p| p.to_path_buf());
     while let Some(dir) = d {
         let main = dir.join("main.lume");
         if main.is_file() && main != me {
             if let Ok(l) = loader::load(&main) {
-                if l.modules.iter().any(|m| std::fs::canonicalize(&m.path).ok().as_deref() == Some(me.as_path())) {
+                if l.modules.iter().any(|m| crate::canonical(&m.path).ok().as_deref() == Some(me.as_path())) {
                     return main;
                 }
             }

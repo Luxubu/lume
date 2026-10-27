@@ -18,6 +18,7 @@ fi
 # it: the suite runs `bash`, `diff` and `find` from there, not Windows' own
 if command -v cygpath >/dev/null 2>&1; then
   export LUME_UNIX_BIN="$(cygpath -m /usr/bin)"
+  export LUME_ROOT="$(pwd -W)"
   # and the temporary folder in a form both Git's tools and Lume read the
   # same way (`C:/...`): Git's `/tmp` is not the `\tmp` a Windows program sees
   export TMPDIR="$(cygpath -m "${TMPDIR:-/tmp}")"
