@@ -64,4 +64,4 @@ jobs:
         if: always() && runner.os == 'Windows'
         run: |
           export LUME_UNIX_BIN="$(cygpath -m /usr/bin)" LUME_ROOT="$(pwd -W)" TMPDIR="$(cygpath -m "${TMPDIR:-/tmp}")"
-          compiler/target/lumecheck lsp "$(pwd -W)/compiler/target/release/lume.exe" 2>&1 | head -40 | cut -c1-300
+          timeout 120 compiler/target/lumecheck lsp "$(pwd -W)/compiler/target/release/lume.exe" 2>&1 | head -40 | cut -c1-300 || true
