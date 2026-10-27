@@ -90,7 +90,10 @@ struct Server:
   async def recv -> Json or Error:
     var n = 0
     while true:
-      line = (await child.read_line).or_error("the server stopped")?
+      line = match await child.read_line:
+        Some(l) -> l
+        # what it said on its way out, which is why it stopped
+        None -> return Error("the server stopped: " + child.error_lines.to_list.join("\n"))
       break if line.trim == ""
       if line.starts_with?("Content-Length:"):
         n = line.split(":").at(1).trim.to_int.or(0)
