@@ -59,6 +59,11 @@ pub def compiler -> Str:
     None -> ""
   Path.join(root, "compiler/target/release/lume#{exe}")
 
+pub def on_windows? -> Bool:
+  match Env.get("OS"):
+    Some(os) -> os == "Windows_NT"
+    None -> false
+
 # One of the Unix tools the suite uses: by name, or on Windows by its full
 # path in Git's `usr\bin` (`tests/lumecheck.sh` says where), since Windows
 # looks in its own folders before the PATH, and has a `bash` (WSL's) and a

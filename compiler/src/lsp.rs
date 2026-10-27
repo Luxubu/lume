@@ -496,14 +496,27 @@ fn uri_to_path(uri: &str) -> Option<PathBuf> {
         out.push(bytes[i]);
         i += 1;
     }
-    Some(PathBuf::from(String::from_utf8_lossy(&out).to_string()))
+    let path = String::from_utf8_lossy(&out).to_string();
+    // `file:///c%3A/x` is the Windows path `c:/x`, without the URI's `/`
+    let b = path.as_bytes();
+    if b.len() >= 3 && b[0] == b'/' && b[1].is_ascii_alphabetic() && b[2] == b':' {
+        return Some(PathBuf::from(&path[1..]));
+    }
+    Some(PathBuf::from(path))
 }
 
 fn path_to_uri(p: &Path) -> String {
     let mut s = String::from("file://");
-    for b in p.shown().to_string().bytes() {
+    let text = p.shown().to_string();
+    // a Windows path, `C:/x`, is `file:///C:/x`: a URI's path begins with `/`
+    if !text.starts_with('/') {
+        s.push('/');
+    }
+    for (i, b) in text.bytes().enumerate() {
         match b {
             b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'/' | b'-' | b'_' | b'.' | b'~' => s.push(b as char),
+            // the drive's colon, as `C:`, is kept as it is
+            b':' if i == 1 => s.push(':'),
             _ => s.push_str(&format!("%{:02X}", b)),
         }
     }

@@ -68,9 +68,10 @@ struct Server:
   child: Child
   tmp: Str
 
-  def uri(path: Str) -> Str = "file://" + path
+  # `file:///C:/x` for a Windows path: a URI's path begins with `/`
+  def uri(path: Str) -> Str = if path.starts_with?("/"): "file://" + path else: "file:///" + path
 
-  def hide(text: Str) -> Str = text.replace("file://" + tmp, "<tmp>")
+  def hide(text: Str) -> Str = text.replace(uri(tmp), "<tmp>")
 
   def show(m: Json):
     puts hide(dumped(m))
@@ -209,12 +210,15 @@ SEQ_TEXT = r"""
   """
 
 pub async def run(lume_arg: Str) -> Int or Error:
-  lume = if lume_arg.starts_with?("/"): lume_arg else: Path.join(Env.get("PWD").or("."), lume_arg)
+  # absolute as given (`/x`, or `C:/x` on Windows), or under the folder it runs in
+  absolute = lume_arg.starts_with?("/") or lume_arg.slice(1, 2) == ":"
+  lume = if absolute: lume_arg else: Path.join(Env.get("PWD").or("."), lume_arg)
   # the folder as the system names it, links followed, since that is how
   # the server will write it back
   made = Path.join(Env.get("TMPDIR").or("/tmp"), "lumelsp-#{Time.now_ms}")
   Dir.make(made)?
-  (_, real, _) = Process.run_in(made, suite.unix("pwd"), ["-P"])?
+  # (`-W` on Windows: the folder in Windows' own form, `C:/...`)
+  (_, real, _) = Process.run_in(made, suite.unix("pwd"), [if suite.on_windows?(): "-W" else: "-P"])?
   tmp = real.trim
   one = write_file(tmp, "one/hello.lume", "def main:\n  puts 1\n")?
   helper = write_file(tmp, "mods/helper.lume", "pub def twice(n: Int) -> Int = n * 2\n")?

@@ -57,11 +57,6 @@ pub UNIX_ONLY = [
   "corpus/m96/c03_word_pipeline",
 ]
 
-pub def on_windows? -> Bool:
-  match Env.get("OS"):
-    Some(os) -> os == "Windows_NT"
-    None -> false
-
 pub def checks -> [Check] or Error:
   var all: [Check] = []
 

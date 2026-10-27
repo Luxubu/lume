@@ -140,7 +140,7 @@ async def run_suite(args: [Str]) -> Int or Error:
   clean_builds()?
   all_checks = plan.checks()?
   # on Windows, the checks that need Unix programs as Unix has them are left out, and said so
-  checks = if plan.on_windows?(): all_checks.reject { |c| c.steps.any? { |s| plan.UNIX_ONLY.contains?(s.name) } }.to_list else: all_checks
+  checks = if suite.on_windows?(): all_checks.reject { |c| c.steps.any? { |s| plan.UNIX_ONLY.contains?(s.name) } }.to_list else: all_checks
   left_out = all_checks.len - checks.len
   scratch = Path.join(Env.get("TMPDIR").or("/tmp"), "lumesuite-#{Time.now_ms}")
   fail_fast = args.contains?("-x")
