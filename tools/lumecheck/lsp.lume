@@ -7,6 +7,7 @@
 import json
 import json.Json
 import json.ToJson
+import suite
 
 # ---- JSON as Python's `json.dumps(sort_keys=True)` writes it, which the
 # expected file was first made with: keys in order, `", "` and `": "`
@@ -213,7 +214,7 @@ pub async def run(lume_arg: Str) -> Int or Error:
   # the server will write it back
   made = Path.join(Env.get("TMPDIR").or("/tmp"), "lumelsp-#{Time.now_ms}")
   Dir.make(made)?
-  (_, real, _) = Process.run_in(made, "pwd", ["-P"])?
+  (_, real, _) = Process.run_in(made, suite.unix("pwd"), ["-P"])?
   tmp = real.trim
   one = write_file(tmp, "one/hello.lume", "def main:\n  puts 1\n")?
   helper = write_file(tmp, "mods/helper.lume", "pub def twice(n: Int) -> Int = n * 2\n")?
