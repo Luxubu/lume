@@ -9,6 +9,7 @@
 //! text reaches it through `diag::set_overlay`.
 
 use std::collections::{HashMap, HashSet};
+use crate::Shown;
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
 
@@ -179,7 +180,7 @@ impl Server {
             }
             Err(_) => ds.push(diag::Diagnostic {
                 severity: "error".into(),
-                file: Some(entry.display().to_string()),
+                file: Some(entry.shown().to_string()),
                 line: 1,
                 col: 1,
                 message: "the Lume compiler stopped while checking this program; `lume check` on it will show where".into(),
@@ -500,7 +501,7 @@ fn uri_to_path(uri: &str) -> Option<PathBuf> {
 
 fn path_to_uri(p: &Path) -> String {
     let mut s = String::from("file://");
-    for b in p.display().to_string().bytes() {
+    for b in p.shown().to_string().bytes() {
         match b {
             b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'/' | b'-' | b'_' | b'.' | b'~' => s.push(b as char),
             _ => s.push_str(&format!("%{:02X}", b)),

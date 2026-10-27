@@ -17,7 +17,10 @@ fi
 # on Windows (Git's bash), the folder of Git's Unix tools, as Windows names
 # it: the suite runs `bash`, `diff` and `find` from there, not Windows' own
 if command -v cygpath >/dev/null 2>&1; then
-  export LUME_UNIX_BIN="$(cygpath -w /usr/bin)"
+  export LUME_UNIX_BIN="$(cygpath -m /usr/bin)"
+  # and the temporary folder in a form both Git's tools and Lume read the
+  # same way (`C:/...`): Git's `/tmp` is not the `\tmp` a Windows program sees
+  export TMPDIR="$(cygpath -m "${TMPDIR:-/tmp}")"
 fi
 bin=compiler/target/lumecheck
 built=$(compiler/target/release/lume build tools/lumecheck/main.lume -o "$bin" 2>&1) || { echo "lumecheck did not build:"; echo "$built"; exit 1; }

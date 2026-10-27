@@ -8,6 +8,7 @@
 //! machine, without asking the network. `lume update` moves them on.
 
 use std::path::{Path, PathBuf};
+use crate::Shown;
 use std::process::Command;
 
 use crate::manifest::GitRef;
@@ -102,7 +103,7 @@ impl Fetcher {
                     cur = Some((None, None, None));
                     continue;
                 }
-                let bad = || format!("error: `{}` line {} is not what lume writes\n  help: delete the file; the next build writes it again\n", path.display(), i + 1);
+                let bad = || format!("error: `{}` line {} is not what lume writes\n  help: delete the file; the next build writes it again\n", path.shown(), i + 1);
                 let (k, v) = t.split_once('=').ok_or_else(bad)?;
                 let v = v.trim().trim_matches('"').to_string();
                 let c = cur.as_mut().ok_or_else(bad)?;
@@ -186,11 +187,11 @@ impl Fetcher {
             git(&["fetch", "--quiet", "--force", "--prune", url, "+refs/heads/*:refs/heads/*", "+refs/tags/*:refs/tags/*"], Some(db)).map_err(failed)?;
         } else {
             let parent = db.parent().unwrap();
-            std::fs::create_dir_all(parent).map_err(|e| (format!("cannot create `{}`: {}", parent.display(), e), None))?;
+            std::fs::create_dir_all(parent).map_err(|e| (format!("cannot create `{}`: {}", parent.shown(), e), None))?;
             let tmp = parent.join(format!(".{}.tmp", db.file_name().unwrap().to_string_lossy()));
             let _ = std::fs::remove_dir_all(&tmp);
-            git(&["clone", "--quiet", "--bare", url, &tmp.display().to_string()], None).map_err(failed)?;
-            std::fs::rename(&tmp, db).map_err(|e| (format!("cannot create `{}`: {}", db.display(), e), None))?;
+            git(&["clone", "--quiet", "--bare", url, &tmp.shown().to_string()], None).map_err(failed)?;
+            std::fs::rename(&tmp, db).map_err(|e| (format!("cannot create `{}`: {}", db.shown(), e), None))?;
         }
         Ok(())
     }
@@ -216,7 +217,7 @@ impl Fetcher {
             text.push_str(&format!("\n[[package]]\nname = \"{}\"\nsource = \"{}\"\ncommit = \"{}\"\n", e.name, e.source, e.commit));
         }
         if std::fs::read_to_string(&path).ok().as_deref() != Some(text.as_str()) {
-            std::fs::write(&path, text).map_err(|e| format!("error: cannot write `{}`: {}\n", path.display(), e))?;
+            std::fs::write(&path, text).map_err(|e| format!("error: cannot write `{}`: {}\n", path.shown(), e))?;
         }
         Ok(moved)
     }
@@ -247,7 +248,7 @@ fn make_checkout(db: &Path, commit: &str, dir: &Path) -> Result<(), String> {
     std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     let tmp = parent.join(format!(".{}.tmp", dir.file_name().unwrap().to_string_lossy()));
     let _ = std::fs::remove_dir_all(&tmp);
-    git(&["clone", "--quiet", "--no-checkout", &db.display().to_string(), &tmp.display().to_string()], None)?;
+    git(&["clone", "--quiet", "--no-checkout", &db.shown().to_string(), &tmp.shown().to_string()], None)?;
     git(&["checkout", "--quiet", commit], Some(&tmp))?;
     let _ = std::fs::remove_dir_all(tmp.join(".git"));
     std::fs::rename(&tmp, dir).map_err(|e| e.to_string())

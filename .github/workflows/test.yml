@@ -41,6 +41,12 @@ jobs:
           key: ${{ runner.os }}-lume-${{ hashFiles('compiler/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-lume-
 
+      # a path such as `/tmp/x` in the examples is `\tmp\x` on the current
+      # drive to a Windows program; Windows has no such folder of its own
+      - name: A /tmp for Windows programs
+        if: runner.os == 'Windows'
+        run: mkdir -p "/$(pwd | cut -d/ -f2)/tmp"
+
       - name: Build the compiler
         run: cargo build --release --manifest-path compiler/Cargo.toml
 

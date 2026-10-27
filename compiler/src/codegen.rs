@@ -143,47 +143,47 @@ fn lume_to_float(s: &str) -> ::std::result::Result<f64, Error> {
     s.trim().parse::<f64>().map_err(|_| Error { message: format!("`{}` is not a number", s) })
 }
 fn lume_read_file(path: &str) -> ::std::result::Result<String, Error> {
-    std::fs::read_to_string(path).map_err(|e| Error { message: format!("cannot read `{}`: {}", path, e) })
+    std::fs::read_to_string(path).map_err(|e| Error { message: format!("cannot read `{}`: {}", path, lume_io(&e)) })
 }
 fn lume_write_file(path: &str, text: &str) -> ::std::result::Result<(), Error> {
-    std::fs::write(path, text).map_err(|e| Error { message: format!("cannot write `{}`: {}", path, e) })
+    std::fs::write(path, text).map_err(|e| Error { message: format!("cannot write `{}`: {}", path, lume_io(&e)) })
 }
 fn lume_args() -> Vec<String> { std::env::args().skip(1).collect() }
 /// Everything on standard input, to the end.
 fn lume_stdin() -> ::std::result::Result<String, Error> {
     use std::io::Read;
     let mut s = String::new();
-    std::io::stdin().read_to_string(&mut s).map_err(|e| Error { message: format!("cannot read input: {}", e) })?;
+    std::io::stdin().read_to_string(&mut s).map_err(|e| Error { message: format!("cannot read input: {}", lume_io(&e)) })?;
     Ok(s)
 }
 fn lume_append_file(path: &str, text: &str) -> ::std::result::Result<(), Error> {
     use std::io::Write;
     std::fs::OpenOptions::new().create(true).append(true).open(path)
         .and_then(|mut f| f.write_all(text.as_bytes()))
-        .map_err(|e| Error { message: format!("cannot append to `{}`: {}", path, e) })
+        .map_err(|e| Error { message: format!("cannot append to `{}`: {}", path, lume_io(&e)) })
 }
 fn lume_remove_file(path: &str) -> ::std::result::Result<(), Error> {
-    std::fs::remove_file(path).map_err(|e| Error { message: format!("cannot remove `{}`: {}", path, e) })
+    std::fs::remove_file(path).map_err(|e| Error { message: format!("cannot remove `{}`: {}", path, lume_io(&e)) })
 }
 fn lume_file_size(path: &str) -> ::std::result::Result<i64, Error> {
-    std::fs::metadata(path).map(|m| m.len() as i64).map_err(|e| Error { message: format!("cannot read `{}`: {}", path, e) })
+    std::fs::metadata(path).map(|m| m.len() as i64).map_err(|e| Error { message: format!("cannot read `{}`: {}", path, lume_io(&e)) })
 }
 /// Seconds since the epoch, as `File.modified` reports them.
 fn lume_file_modified(path: &str) -> ::std::result::Result<i64, Error> {
     std::fs::metadata(path)
         .and_then(|m| m.modified())
-        .map_err(|e| Error { message: format!("cannot read `{}`: {}", path, e) })
+        .map_err(|e| Error { message: format!("cannot read `{}`: {}", path, lume_io(&e)) })
         .map(|t| t.duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0))
 }
 fn lume_dir_make(path: &str) -> ::std::result::Result<(), Error> {
-    std::fs::create_dir_all(path).map_err(|e| Error { message: format!("cannot make `{}`: {}", path, e) })
+    std::fs::create_dir_all(path).map_err(|e| Error { message: format!("cannot make `{}`: {}", path, lume_io(&e)) })
 }
 /// The names inside a directory, sorted, without `.` and `..`.
 fn lume_dir_list(path: &str) -> ::std::result::Result<Vec<String>, Error> {
     let mut out = Vec::new();
-    let entries = std::fs::read_dir(path).map_err(|e| Error { message: format!("cannot list `{}`: {}", path, e) })?;
+    let entries = std::fs::read_dir(path).map_err(|e| Error { message: format!("cannot list `{}`: {}", path, lume_io(&e)) })?;
     for e in entries {
-        let e = e.map_err(|e| Error { message: format!("cannot list `{}`: {}", path, e) })?;
+        let e = e.map_err(|e| Error { message: format!("cannot list `{}`: {}", path, lume_io(&e)) })?;
         out.push(e.file_name().to_string_lossy().into_owned());
     }
     out.sort();
@@ -203,7 +203,7 @@ fn lume_dir_walk(path: &str) -> ::std::result::Result<Vec<String>, Error> {
     Ok(out)
 }
 fn lume_dir_remove(path: &str) -> ::std::result::Result<(), Error> {
-    std::fs::remove_dir_all(path).map_err(|e| Error { message: format!("cannot remove `{}`: {}", path, e) })
+    std::fs::remove_dir_all(path).map_err(|e| Error { message: format!("cannot remove `{}`: {}", path, lume_io(&e)) })
 }
 fn lume_path_join(a: &str, b: &str) -> String {
     if a.is_empty() { return b.to_string(); }
@@ -439,6 +439,16 @@ fn lume_decimals(x: f64, n: i64) -> String {
     let r = if scaled.is_finite() { scaled.round() / f } else { x };
     format!("{:.*}", n as usize, r)
 }
+/// An I/O failure's words. A missing file or folder is told as Unix tells
+/// it on every system, so a program says the same on Windows, where the
+/// system's own words differ, as on Linux and macOS.
+#[allow(dead_code)]
+fn lume_io(e: &std::io::Error) -> String {
+    if cfg!(windows) && e.kind() == std::io::ErrorKind::NotFound {
+        return "No such file or directory (os error 2)".to_string();
+    }
+    e.to_string()
+}
 /// Run-time failures speak Lume: no Rust file paths, no "attempt to".
 #[allow(dead_code)]
 fn lume_install_panic_hook() {
@@ -570,7 +580,7 @@ fn lume_process_run_in(dir: Option<&str>, program: &str, args: &[String]) -> ::s
     }
     match c.output() {
         Ok(o) => Ok((o.status.code().map(|c| c as i64).unwrap_or(-1), String::from_utf8_lossy(&o.stdout).into_owned(), String::from_utf8_lossy(&o.stderr).into_owned())),
-        Err(e) => Err(Error { message: format!("cannot run `{}`: {}", program, e) }),
+        Err(e) => Err(Error { message: format!("cannot run `{}`: {}", program, lume_io(&e)) }),
     }
 }
 /// What a running program writes to one of its outputs, read by a thread of
@@ -703,7 +713,7 @@ fn lume_process_spawn(dir: Option<&str>, program: &str, args: &[String]) -> ::st
         c.current_dir(d);
     }
     c.stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped());
-    let mut ch = c.spawn().map_err(|e| Error { message: format!("cannot run `{}`: {}", program, e) })?;
+    let mut ch = c.spawn().map_err(|e| Error { message: format!("cannot run `{}`: {}", program, lume_io(&e)) })?;
     let input = ch.stdin.take();
     let out = lume_pipe(ch.stdout.take().unwrap());
     let err = lume_pipe(ch.stderr.take().unwrap());
@@ -749,7 +759,7 @@ impl LumeChild {
     fn write(&self, text: &str) -> ::std::result::Result<(), Error> {
         use std::io::Write;
         match self.input.lock().unwrap().as_mut() {
-            Some(i) => i.write_all(text.as_bytes()).and_then(|_| i.flush()).map_err(|e| Error { message: format!("cannot write to `{}`: {}", self.program, e) }),
+            Some(i) => i.write_all(text.as_bytes()).and_then(|_| i.flush()).map_err(|e| Error { message: format!("cannot write to `{}`: {}", self.program, lume_io(&e)) }),
             None => Err(Error { message: format!("cannot write to `{}`: its input is closed", self.program) }),
         }
     }
