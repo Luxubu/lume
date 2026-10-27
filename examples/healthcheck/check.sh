@@ -5,6 +5,8 @@
 LUME="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
 cd "$(dirname "$0")" || exit 1
 tmp=$(mktemp -d)
+# on Windows, Git's `/tmp/...` is `C:/...` to Lume: name it the way both read
+command -v cygpath >/dev/null && tmp=$(cygpath -m "$tmp")
 cat > "$tmp/server.py" <<'PY'
 import http.server, socketserver, time, threading
 seen = {}
@@ -33,7 +35,7 @@ PY
 python3 "$tmp/server.py" > "$tmp/port" 2>/dev/null &
 pid=$!
 for _ in 1 2 3 4 5 6 7 8 9 10; do [ -s "$tmp/port" ] && break; sleep 0.2; done
-port=$(cat "$tmp/port")
+port=$(tr -d '\r' < "$tmp/port")
 if ! python3 -c "import socket,sys; socket.create_connection(('127.0.0.1', int(sys.argv[1])), timeout=2)" "$port" 2>/dev/null; then
   echo "skipped: no local connection allowed here"; kill $pid; wait $pid 2>/dev/null; rm -rf "$tmp"; exit 0
 fi
@@ -51,10 +53,10 @@ cat > "$tmp/checks.json" <<JSON
  ]}
 JSON
 "$LUME" build -o "$tmp/hc" >/dev/null 2>&1
-start=$(python3 -c 'import time; print(time.time())')
+start=$(python3 -c 'import time; print(time.time())' | tr -d '\r')
 "$tmp/hc" "$tmp/checks.json" --json 2>&1; echo "exit: $?"
 # how long it took goes to standard error when it is too long, so a failure says
-python3 -c "import sys, time; t = time.time() - $start; print('the slow checks ran together:', t < 1.5); t < 1.5 or print('took %.2f s' % t, file=sys.stderr)"
+python3 -c "import sys, time; t = time.time() - $start; print('the slow checks ran together:', t < 1.5); t < 1.5 or print('took %.2f s' % t, file=sys.stderr)" | tr -d '\r'
 printf '{"base": "x", "checks": [{"name": "a", "path": "/", "status": "200"}]}' > "$tmp/bad.json"
 "$tmp/hc" "$tmp/bad.json" 2>&1 | sed "s#$tmp#<tmp>#"; echo "exit: ${PIPESTATUS[0]}"
 kill $pid; wait $pid 2>/dev/null; rm -rf "$tmp" .lume

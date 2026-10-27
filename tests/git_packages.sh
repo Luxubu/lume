@@ -5,6 +5,8 @@
 # tests/run.sh to compare with tests/git_packages.expected.
 LUME="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
 tmp=$(cd "$(mktemp -d)" && pwd -P)
+# on Windows, Git's `/tmp/...` is `C:/...` to Lume: name it the way both read
+command -v cygpath >/dev/null && tmp=$(cygpath -m "$tmp")
 export LUME_HOME="$tmp/home"
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
 g() { git -c user.name=lume -c user.email=lume@example.com -c init.defaultBranch=main "$@"; }

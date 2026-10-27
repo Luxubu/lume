@@ -730,7 +730,8 @@ fn lume_process_spawn(dir: Option<&str>, program: &str, args: &[String]) -> ::st
         };
         if let Some(code) = code {
             let mut g = e2.lock().unwrap();
-            g.0 = Some(code);
+            // `kill` may have said already how it ended
+            g.0.get_or_insert(code);
             if let Some(w) = g.1.take() { w.wake(); }
             break;
         }
@@ -764,7 +765,18 @@ impl LumeChild {
         }
     }
     fn close_input(&self) { self.input.lock().unwrap().take(); }
-    fn kill(&self) { let _ = self.child.lock().unwrap().kill(); }
+    /// Ends the program. It then gives `-1`, as a program ended by a signal
+    /// does on Unix — on Windows too, where there are no signals and the
+    /// program would give `1`.
+    fn kill(&self) {
+        if self.child.lock().unwrap().kill().is_ok() && cfg!(windows) {
+            let mut g = self.exit.lock().unwrap();
+            if g.0.is_none() {
+                g.0 = Some(-1);
+                if let Some(w) = g.1.take() { w.wake(); }
+            }
+        }
+    }
     /// The exit code, once the program ends; its input is closed first, as
     /// Rust's `Child::wait` does, so a program reading it can finish.
     fn wait(&self) -> impl std::future::Future<Output = i64> + Send + 'static {

@@ -42,10 +42,16 @@ jobs:
           restore-keys: ${{ runner.os }}-lume-
 
       # a path such as `/tmp/x` in the examples is `\tmp\x` on the current
-      # drive to a Windows program; Windows has no such folder of its own
+      # drive to a Windows program; Windows has no such folder of its own.
+      # Made, and made the temporary folder, so that Git's `sh` — whose
+      # `/tmp` is the temporary folder — and Lume mean the same place
       - name: A /tmp for Windows programs
         if: runner.os == 'Windows'
-        run: mkdir -p "/$(pwd | cut -d/ -f2)/tmp"
+        run: |
+          d="/$(pwd | cut -d/ -f2)/tmp"
+          mkdir -p "$d"
+          echo "TEMP=$(cygpath -w "$d")" >> "$GITHUB_ENV"
+          echo "TMP=$(cygpath -w "$d")" >> "$GITHUB_ENV"
 
       - name: Build the compiler
         run: cargo build --release --manifest-path compiler/Cargo.toml
