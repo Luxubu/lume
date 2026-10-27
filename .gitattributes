@@ -1,0 +1,4 @@
+# Lume sources, expected outputs and scripts keep LF line endings on every
+# platform: the expected files are compared byte for byte.
+* text=auto eol=lf
+*.vsix binary

@@ -568,7 +568,12 @@ fn shared_target_dir() -> PathBuf {
     if let Ok(d) = env::var("LUME_CACHE_DIR") {
         return PathBuf::from(d).join("target");
     }
-    let home = env::var("XDG_CACHE_HOME").map(PathBuf::from).or_else(|_| env::var("HOME").map(|h| PathBuf::from(h).join(".cache"))).unwrap_or_else(|_| PathBuf::from(".lume-cache"));
+    // Windows has no `HOME` of its own, only in a shell that makes one
+    let home = env::var("XDG_CACHE_HOME")
+        .map(PathBuf::from)
+        .or_else(|_| env::var("HOME").map(|h| PathBuf::from(h).join(".cache")))
+        .or_else(|_| env::var("LOCALAPPDATA").map(PathBuf::from))
+        .unwrap_or_else(|_| PathBuf::from(".lume-cache"));
     home.join("lume").join("target")
 }
 
@@ -599,7 +604,7 @@ fn build_with_cargo(path: &Path, rust: &str, deps: &[(String, String)], bin: &Pa
         let err = String::from_utf8_lossy(&out.stderr);
         return Err(rustc_failed_banner(has_rust_blocks, &src_dir.join("main.rs"), "cargo", &err));
     }
-    let built = shared_target_dir().join(profile).join(cargo_bin_name(path));
+    let built = shared_target_dir().join(profile).join(format!("{}{}", cargo_bin_name(path), env::consts::EXE_SUFFIX));
     fs::copy(&built, bin).map_err(|e| format!("error: cannot copy `{}` to `{}`: {}", built.display(), bin.display(), e))?;
     prune_shared_cache(&shared_target_dir().join(profile));
     Ok(())
@@ -616,12 +621,14 @@ const KEEP_PROGRAMS: usize = 300;
 /// for good: a busy machine's cache reached 13 GB.
 fn prune_shared_cache(dir: &Path) {
     let Ok(rd) = fs::read_dir(dir) else { return };
-    // a program's binary is `<stem>_<8 hex digits>`, with a `.d` beside it
+    // a program's binary is `<stem>_<8 hex digits>` (`.exe` on Windows),
+    // with a `.d` beside it (and a `.pdb` on Windows)
     let mut bins: Vec<(std::time::SystemTime, String)> = rd
         .flatten()
         .filter_map(|e| {
-            let name = e.file_name().to_string_lossy().to_string();
-            if !e.file_type().ok()?.is_file() || !is_program_name(&name) {
+            let file = e.file_name().to_string_lossy().to_string();
+            let name = file.strip_suffix(env::consts::EXE_SUFFIX).filter(|_| !env::consts::EXE_SUFFIX.is_empty()).unwrap_or(&file).to_string();
+            if !e.file_type().ok()?.is_file() || !is_program_name(&name) || file != format!("{}{}", name, env::consts::EXE_SUFFIX) {
                 return None;
             }
             Some((e.metadata().ok()?.modified().ok()?, name))
@@ -633,8 +640,9 @@ fn prune_shared_cache(dir: &Path) {
     bins.sort();
     let gone: std::collections::HashSet<String> = bins[..bins.len() - KEEP_PROGRAMS * 9 / 10].iter().map(|(_, n)| n.clone()).collect();
     for n in &gone {
-        let _ = fs::remove_file(dir.join(n));
+        let _ = fs::remove_file(dir.join(format!("{}{}", n, env::consts::EXE_SUFFIX)));
         let _ = fs::remove_file(dir.join(format!("{}.d", n)));
+        let _ = fs::remove_file(dir.join(format!("{}.pdb", n)));
     }
     // `deps/<name>-<hash>` and `incremental/<name>-<id>`
     for sub in ["deps", "incremental"] {
@@ -701,7 +709,8 @@ fn build(path: &Path, out: Option<PathBuf>, quiet: bool, test_mode: bool, mode: 
     fs::create_dir_all(&build_dir).map_err(|e| format!("error: cannot create `{}`: {}", build_dir.display(), e))?;
     let rs_path = build_dir.join(format!("{}.rs", stem));
     fs::write(&rs_path, &rust).map_err(|e| format!("error: cannot write `{}`: {}", rs_path.display(), e))?;
-    let bin = out.unwrap_or_else(|| build_dir.join(&stem));
+    // `fib` here, `fib.exe` on Windows, as rustc and cargo name a program
+    let bin = out.unwrap_or_else(|| build_dir.join(format!("{}{}", stem, env::consts::EXE_SUFFIX)));
 
     // Nothing changed since the last build of this program in this mode? Run what we have.
     let stamp_path = build_dir.join(format!("{}.stamp", stem));

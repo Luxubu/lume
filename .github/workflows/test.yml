@@ -1,5 +1,5 @@
-# The whole test suite, on Linux and on macOS, for every push and pull
-# request: what `tests/run.sh` checks on a developer's machine.
+# The whole test suite, on Linux, macOS and Windows, for every push and
+# pull request: what `tests/run.sh` checks on a developer's machine.
 name: test
 
 on:
@@ -11,9 +11,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: 60
+    # the suite is bash scripts; on Windows, Git's bash, with its `sort`,
+    # `sh` and the rest ahead of Windows' own on the PATH
+    defaults:
+      run:
+        shell: bash
     env:
       # the order `sort` and `ls` put text in, as the expected files have it
       LC_ALL: C
