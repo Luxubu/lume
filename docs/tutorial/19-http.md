@@ -1,6 +1,6 @@
 # Lunch 19: HTTP
 
-> **A 0.5 preview.** This lunch teaches one of Lume's newest parts. It works
+> **A preview.** This lunch teaches one of Lume's newest parts. It works
 > as shown, but details may change before 1.0. Most of its examples talk to
 > a real web server, so the test suite cannot run them on every change; they
 > were run by hand, against `example.com`, a site kept for examples like
@@ -34,7 +34,7 @@ name = "pages"
 version = "0.1.0"
 
 [dependencies]
-http = { git = "https://github.com/Luxubu/lume", tag = "v0.5.0" }
+http = { git = "https://github.com/Luxubu/lume", tag = "v0.6.0" }
 ```
 
 Lume fetches the package the first time you run the program. From then on

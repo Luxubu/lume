@@ -1,6 +1,6 @@
 # Lunch 24: Talking to a language server
 
-> **A 0.5 preview.** This lunch is built on `Process.spawn` (lunch 18), one of
+> **A preview.** This lunch is built on `Process.spawn` (lunch 18), one of
 > Lume's newest parts. It works as shown — every example is checked — but details may
 > change before 1.0. See [what is settled](../stability.md).
 
@@ -11,7 +11,7 @@ own, `lume lsp`. The last lunch puts nearly everything together: a program
 running alongside (lunch 18), messages framed by their length, JSON from a
 package, structs, `?`, and async code.
 
-> Lunch 18's `Process.spawn` is a 0.5 preview, so this lunch is too. Its
+> Lunch 18's `Process.spawn` is a preview, so this lunch is too. Its
 > program needs `lume` on your `PATH`, which the test suite cannot assume,
 > so it was run by hand. Lume's own suite drives `lume lsp` the same way,
 > with a longer version of this program: `tools/lumecheck/lsp.lume`.
@@ -49,7 +49,7 @@ name = "lspeek"
 version = "0.1.0"
 
 [dependencies]
-json = { git = "https://github.com/Luxubu/lume", tag = "v0.5.0" }
+json = { git = "https://github.com/Luxubu/lume", tag = "v0.6.0" }
 ```
 
 `json.obj([...])` makes a JSON object from pairs, `x.to_json` turns a
@@ -202,7 +202,7 @@ lume run
 ```
 
 ```text
-talking to lume 0.5.0
+talking to lume 0.6.0
 line 4: `+` cannot combine an `Int` and a `Str`
 no problems
 hover: def double(n: Int) -> Int

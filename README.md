@@ -35,7 +35,7 @@ Then:
 - **[The examples](docs/examples.md)** — 5,000 lines of working programs, in a
   reading order.
 - **[Installing](docs/install.md)** — and what each command does.
-- **[Changes](CHANGELOG.md)** — what each release holds; 0.5.0 is the latest.
+- **[Changes](CHANGELOG.md)** — what each release holds; 0.6.0 is the latest.
 - **[What is settled](docs/stability.md)** — the parts you can build on, the
   previews that may still change, and how a settled part is allowed to.
 
@@ -68,7 +68,7 @@ fixed — the 662 programs they left behind are run on every change and must
 print what they print today. What Lume refuses, it refuses with a message that
 names the fix — `examples/errors/` is 394 programs kept around to prove it.
 
-**Where it is.** Version 0.5. The language, the collections, files and
+**Where it is.** Version 0.6. The language, the collections, files and
 folders, running programs, tasks, tests, packages and the commands are
 settled: [docs/stability.md](docs/stability.md) promises that a working
 program does not break without a warning release first. Async generators,

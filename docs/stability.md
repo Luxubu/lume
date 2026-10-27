@@ -1,6 +1,6 @@
 # What is settled, and what may change
 
-Lume is at 0.5, and still growing. This page says which parts of it you can
+Lume is at 0.6, and still growing. This page says which parts of it you can
 build on today — write programs in, teach, write tutorials about — and
 which are previews that may still change. It also says how a settled part
 is allowed to change, so that what you write keeps working.
@@ -68,7 +68,7 @@ and then.
 - **Speed.** Lume tries never to get slower, and the benchmarks in
   `bench/` guard that, but a program's exact speed is not a promise.
 - **Bugs.** A program that leaked an error from rustc, or did something
-  other than what the docs say, may be fixed to do what they say. Lume 0.5
+  other than what the docs say, may be fixed to do what they say. Lume 0.6
   refusing `price = price` — which compiled before and did nothing — is
   such a fix.
 - **What `lume lsp` offers an editor**, beyond its being a language server.

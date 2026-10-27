@@ -1,6 +1,6 @@
 # Lunch 23: A health checker
 
-> **A 0.5 preview.** This lunch is built on the `http` package (lunch 19), one of
+> **A preview.** This lunch is built on the `http` package (lunch 19), one of
 > Lume's newest parts. It works as shown — every example is checked — but details may
 > change before 1.0. See [what is settled](../stability.md).
 

@@ -1,6 +1,6 @@
 # Lunch 18: Programs alongside
 
-> **A 0.5 preview.** This lunch teaches one of Lume's newest parts. It works
+> **A preview.** This lunch teaches one of Lume's newest parts. It works
 > as shown — every example is checked — but details may change before 1.0.
 
 **In this lunch you will:**

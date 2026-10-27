@@ -10,7 +10,7 @@ output checked against what the page shows. If a release changes how
 something works, the suite fails until the page is fixed, so what you read
 here is what Lume does — for the version below.
 
-Written for **Lume 0.5**. You need Lume installed; [install.md](../install.md)
+Written for **Lume 0.6**. You need Lume installed; [install.md](../install.md)
 says how. No Rust is needed to follow along, though each chapter ends with a
 short *Underneath, in Rust* box for readers who know Rust or are curious about
 it.
@@ -40,11 +40,11 @@ it.
 | 14 | [Generators](14-generators.md) | sequences made a piece at a time, with `yield` |
 | 15 | [Running other programs](15-running-other-programs.md) | `Process.run`, and what comes back |
 | 16 | [Tasks](16-tasks.md) | many things at once, with `spawn:` and `await`; `shared var` |
-| 17 | [Async sequences](17-async-sequences.md) *(0.5 preview)* | items that arrive later: async generators and their methods |
-| 18 | [Programs alongside](18-programs-alongside.md) *(0.5 preview)* | `Process.spawn`: talk to a program while it runs |
-| 19 | [HTTP](19-http.md) *(0.5 preview)* | requests, and bodies read as they arrive |
+| 17 | [Async sequences](17-async-sequences.md) *(preview)* | items that arrive later: async generators and their methods |
+| 18 | [Programs alongside](18-programs-alongside.md) *(preview)* | `Process.spawn`: talk to a program while it runs |
+| 19 | [HTTP](19-http.md) *(preview)* | requests, and bodies read as they arrive |
 
-The chapters marked *0.5 preview* teach the newest parts of Lume, which may
+The chapters marked *preview* teach the newest parts of Lume, which may
 still change before 1.0; the others teach parts that are settled. [What is
 settled](../stability.md) says which is which, and what each promises.
 
@@ -59,8 +59,8 @@ marked *new here* where it is used.
 | 20 | [A CSV query tool](20-a-csv-query-tool.md) | reading a table, and answering questions about it |
 | 21 | [A log analyser](21-a-log-analyser.md) | a large file, read fast |
 | 22 | [A job runner](22-a-job-runner.md) | programs run in tasks, and their results gathered |
-| 23 | [A health checker](23-a-health-checker.md) *(0.5 preview)* | many web pages at once, with retries |
-| 24 | [Talking to a language server](24-talking-to-a-language-server.md) *(0.5 preview)* | a program that drives another, message by message |
+| 23 | [A health checker](23-a-health-checker.md) *(preview)* | many web pages at once, with retries |
+| 24 | [Talking to a language server](24-talking-to-a-language-server.md) *(preview)* | a program that drives another, message by message |
 
 ## How the chapters are written
 

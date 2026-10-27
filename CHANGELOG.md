@@ -2,84 +2,104 @@
 
 ## Unreleased
 
-- **Review round twenty-one** (`corpus/m104/`): thirty programs by three
-  reviewers, from the docs alone; after the fixes all thirty print what
-  their authors predicted.
-- **Fixed**: a list or map literal of values behind an interface reached
-  rustc when given to a field, a parameter or a function's result
-  (`{"add": Add(k: 1), "twice": Twice()}` where `{Str: Rule}` is wanted).
-- **A task that stops is told where it is awaited**, in the form of any
-  other stop, so what a program prints no longer depends on when its tasks
-  stop; one that is never awaited is told when the program ends.
-- **A stop in a step of a chain over lines** names that step's line.
-- **A failed `assert` outside a test** says `assert failed: ...`, as Rust's
-  `assertion failed:` does; `lume test` names a file as it was given.
-- **`.name` as the first line of a `do |x|` block** says why it cannot be.
+## 0.6.0 — kinder when it breaks
 
-- **`async test`** *(preview)*: a test that can `await`, run on its own
-  tokio runtime, as Rust's `#[tokio::test]`. `await` in a plain `test` says
-  to write it.
-- **`lume test file.lume name`** runs only the tests with `name` in theirs,
-  as `cargo test name` does.
-- **Fixed**: each side of an `assert` comparison is worked out once, as
-  `assert_eq!` does. A failed `assert it.next == Some(1)` showed the item
-  after the one compared, and an `await` on a side did not compile.
-- **Docs**: a [Tests](docs/reference/testing.md) page in the reference. The
-  docs check now runs `lume test` on every example with tests in it, and
-  compares what it prints with the docs when they show it; a new
-  ```` ```lume-tests ```` block holds tests for the program above it, as
-  lunch 20's do.
+Eight milestones after 0.5.0 (98–105). Lume got ready to be taught: a
+tutorial, *Lume, a Lunch at a Time*, tried by three beginners; a promise of
+what is settled; and a program that goes wrong now says where, in Lume's
+words. Tests got the care the docs get, and can test async code. Two
+review rounds — the tutorial's dry run and round twenty-one — checked it.
 
-- **A chain over several lines**: a line starting with `.name` continues the
-  line above, so a long chain can put one step on each line. `lume fmt`
-  keeps it so.
-- **Structs with no fields**: `struct Marker` alone, or a struct whose block
-  has only methods — a type that is all behaviour, made with `Marker()`, as
-  Rust's unit structs. `struct Marker:` with nothing under it is still
-  refused, with a message that says to drop the `:`.
+### Install
 
-- **A program that stops says where**: `xs.at(9)`, `!` on a failure, a
-  division by zero, an overflow or an `assert` now name the file and line
-  it stopped on, and show the line, as a compile error does — in a method,
-  a block, a generator, a module or a task, the line it happened on. A
-  failing `lume test` names the line for any stop, not only an `assert`.
-  Rust's "index out of bounds" reads `no item at 7 — the list has 3`. A
-  task that stopped is told once, not again when it is awaited.
+```sh
+git clone https://github.com/Luxubu/lume && cd lume && git checkout v0.6.0
+./install.sh
+lume run examples/chains_over_lines.lume
+```
 
+It needs a Rust toolchain (<https://rustup.rs>). See `docs/install.md`.
+
+### What is new
+
+- **A tutorial**: *Lume, a Lunch at a Time*, in `docs/tutorial/` — 24
+  chapters, each about an hour, from a first program to a language-server
+  client, with exercises and answers. Every example in it is run by the
+  test suite, its tests included.
 - **What is settled**: `docs/stability.md` says which parts of Lume are
   settled and which are previews, and promises that a settled part does not
   break a working program without a warning release first. From here on, a
   change to a preview is listed in an item beginning **Preview:**, and a
-  coming change to a settled part in one beginning **Changing:**. Lunches 23
-  and 24 of the tutorial are marked as previews, as they use `http` and
-  `Process.spawn`.
-- **Fixed**: a `Char` as the key of a `{Str: Int}` map reached rustc;
-  `take` and `skip` with a negative count wrapped around; `-> async
-  Iterator[T]` on an async generator broke its callers.
-- **Refused, with a message**: `price = price` (which changes nothing — the
-  help says `self.price = price` when a field has that name), and a keyword
-  used as a name.
-- **Better help** for a missing `await` inside a task or a plain `def`, a
-  statement after a one-line `spawn:`, and a field named as an interface's
-  method.
-- **The docs check** runs examples indented under a list item, which it
-  skipped.
-- **The tutorial**, after a dry run by three reviewers working through it as
-  beginners: false sentences corrected, things used before being taught
-  explained where first met, and Python habits named where they bite.
-- **A tutorial**: *Lume, a Lunch at a Time*, in `docs/tutorial/` — 24
-  chapters, each about an hour, from a first program to a language-server
-  client, with exercises and answers. Every example in it is run by the
-  test suite.
-- **Fixed**: an `async def` call printed, put in text or in a list without
-  `await` reached rustc; it is refused with the message for a missing
-  `await`. `+=` inside a `spawn:` on a copied name said the name was not a
-  `var`; it now says the task has a copy.
+  coming change to a settled part in one beginning **Changing:**.
+- **A program that stops says where**: `xs.at(9)`, `!` on a failure, a
+  division by zero, an overflow or an `assert` name the file and line they
+  stopped on, and show the line, as a compile error does — the line it
+  happened on, in a method, a block, a generator, a module, a task, or a
+  step of a chain. Rust's "index out of bounds" reads `no item at 7 — the
+  list has 3`, and a failed `assert` outside a test `assert failed: ...`.
+- **A task that stops is told where it is awaited**, in the form of any
+  other stop, so what a program prints does not depend on when its tasks
+  stop. One never awaited is told when the program ends.
+- **A chain over several lines**: a line starting with `.name` continues the
+  line above, so a long chain can put one step on each line, with comments
+  and blank lines between them. `lume fmt` keeps it so.
+- **Structs with no fields**: `struct Marker` alone, or a struct whose block
+  has only methods — a type that is all behaviour, made with `Marker()`, as
+  Rust's unit structs.
+- **`async test`** *(preview)*: a test that can `await`, run on its own
+  tokio runtime, as Rust's `#[tokio::test]`.
+- **`lume test file.lume name`** runs only the tests with `name` in theirs,
+  as `cargo test name` does. A failing test names its file as it was
+  given, and its line for any stop, not only an `assert`.
+- **A Tests page** in the reference.
 - **Tested on Linux**: the suite runs on Ubuntu and macOS for every push,
   with the newest stable Rust.
-- **Fixed**: with Rust 1.99, a program whose interface has an `async`
-  method that can fail did not compile: the prelude's types were private,
-  and Rust 1.99 refuses them in a public signature. They are public now.
+
+### Refused, with a message
+
+- `price = price`, which changes nothing — the help says `self.price =
+  price` when a field has that name. It compiled before.
+- A keyword used as a name, called one.
+- A line starting with `.` that begins a block, after `:`, `do` or `do |x|`.
+- `struct Marker:` with nothing under it — the help says to drop the `:`.
+- `await` in a plain `test`, with the `async test` to write.
+
+### Fixed
+
+- A list or map literal of values behind an interface reached rustc when
+  given to a field, a parameter or a function's result.
+- With Rust 1.99, a program whose interface has an `async` method that can
+  fail did not compile: the prelude's types were private.
+- An `async def` call printed, put in text or in a list without `await`
+  reached rustc.
+- A `Char` as the key of a `{Str: Int}` map reached rustc.
+- `take` and `skip` with a negative count wrapped around.
+- `-> async Iterator[T]` on an async generator broke its callers.
+- Each side of an `assert` comparison is worked out once, as `assert_eq!`
+  does: a failed `assert it.next == Some(1)` showed the item after the one
+  compared, and an `await` on a side did not compile.
+- Better help for a missing `await` inside a task or a plain `def`, a
+  statement after a one-line `spawn:`, `+=` on a task's copy of a name, and
+  a field named as an interface's method.
+
+### How it was checked
+
+- **The suite**: `tests/run.sh`, 1273 checks and 693 docs examples, byte
+  for byte, on Linux and macOS. The docs check now also runs the indented
+  examples under list items, and `lume test` on every example with tests.
+- **The tutorial's dry run** (milestone 99): three reviewers worked through
+  all 24 lunches as Python programmers new to Lume, typing every example
+  and doing every exercise; what they found is fixed (`corpus/m99/`).
+- **Review round twenty-one** (`corpus/m104/`): thirty programs by three
+  reviewers from the docs alone, with nothing run; after the fixes all
+  thirty print what their authors predicted.
+- Installed from a clean checkout and run.
+
+### Previews
+
+Async generators, `Process.spawn`, the `http` package, the Rust bridge,
+editor support and now `async test` are previews; see `docs/stability.md`.
+None of the previews from 0.5.0 changed shape in this release.
 
 ## 0.5.0 — talking to the world
 
