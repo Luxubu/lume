@@ -59,9 +59,19 @@ jobs:
       - name: Test suite
         run: tests/run.sh
 
-      # TEMPORARY (milestone 106): what the language-server test says on Windows
-      - name: LSP test output
+      # TEMPORARY (milestone 106): the language server on Windows, by hand
+      - name: LSP by hand
         if: always() && runner.os == 'Windows'
         run: |
-          export LUME_UNIX_BIN="$(cygpath -m /usr/bin)" LUME_ROOT="$(pwd -W)" TMPDIR="$(cygpath -m "${TMPDIR:-/tmp}")"
-          timeout 120 compiler/target/lumecheck lsp "$(pwd -W)/compiler/target/release/lume.exe" 2>&1 | head -40 | cut -c1-300 || true
+          d="$(cygpath -m /tmp)/lsphand"; mkdir -p "$d/one"; printf 'def main:\n  puts 1\n' > "$d/one/hello.lume"
+          u="file:///$d/one/hello.lume"
+          msg() { printf 'Content-Length: %d\r\n\r\n%s' "${#1}" "$1"; }
+          {
+            msg '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":"file:///'"$d"'","capabilities":{}}}'
+            msg '{"jsonrpc":"2.0","method":"initialized","params":{}}'
+            msg '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"'"$u"'","languageId":"lume","version":1,"text":"def main:\n  puts nope + 1\n"}}}'
+            sleep 5
+            msg '{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"'"$u"'","version":2},"contentChanges":[{"text":"def main:\n  puts 1 + 1\n"}]}}'
+            sleep 10
+          } | (cd "$d" && "$(pwd -W)/compiler/target/release/lume.exe" lsp > "$d/out.txt" 2> "$d/err.txt"; echo "exit: $?")
+          echo "--- stdout"; cat "$d/out.txt" | cut -c1-300; echo; echo "--- stderr"; cat "$d/err.txt"
