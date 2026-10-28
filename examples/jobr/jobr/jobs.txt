@@ -5,11 +5,11 @@ run = rm -rf out && mkdir -p out
 
 [fetch-a]
 after = prepare
-run = sleep 0.3 && echo alpha > out/a.txt
+run = sleep 1 && echo alpha > out/a.txt
 
 [fetch-b]
 after = prepare
-run = sleep 0.3 && echo beta > out/b.txt
+run = sleep 1 && echo beta > out/b.txt
 
 # fails the first time, then works: a retry is what it needs
 [flaky]

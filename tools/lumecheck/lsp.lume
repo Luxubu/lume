@@ -7,6 +7,7 @@
 import json
 import json.Json
 import json.ToJson
+import suite
 
 # ---- JSON as Python's `json.dumps(sort_keys=True)` writes it, which the
 # expected file was first made with: keys in order, `", "` and `": "`
@@ -67,9 +68,10 @@ struct Server:
   child: Child
   tmp: Str
 
-  def uri(path: Str) -> Str = "file://" + path
+  # `file:///C:/x` for a Windows path: a URI's path begins with `/`
+  def uri(path: Str) -> Str = if path.starts_with?("/"): "file://" + path else: "file:///" + path
 
-  def hide(text: Str) -> Str = text.replace("file://" + tmp, "<tmp>")
+  def hide(text: Str) -> Str = text.replace(uri(tmp), "<tmp>")
 
   def show(m: Json):
     puts hide(dumped(m))
@@ -88,7 +90,10 @@ struct Server:
   async def recv -> Json or Error:
     var n = 0
     while true:
-      line = (await child.read_line).or_error("the server stopped")?
+      line = match await child.read_line:
+        Some(l) -> l
+        # what it said on its way out, which is why it stopped
+        None -> return Error("the server stopped: " + child.error_lines.to_list.join("\n"))
       break if line.trim == ""
       if line.starts_with?("Content-Length:"):
         n = line.split(":").at(1).trim.to_int.or(0)
@@ -208,13 +213,17 @@ SEQ_TEXT = r"""
   """
 
 pub async def run(lume_arg: Str) -> Int or Error:
-  lume = if lume_arg.starts_with?("/"): lume_arg else: Path.join(Env.get("PWD").or("."), lume_arg)
+  # absolute as given (`/x`, or `C:/x` on Windows), or under the folder it runs in
+  absolute = lume_arg.starts_with?("/") or lume_arg.contains?(":/") or lume_arg.contains?(":\\")
+  lume = if absolute: lume_arg else: Path.join(Env.get("PWD").or("."), lume_arg)
   # the folder as the system names it, links followed, since that is how
   # the server will write it back
   made = Path.join(Env.get("TMPDIR").or("/tmp"), "lumelsp-#{Time.now_ms}")
   Dir.make(made)?
-  (_, real, _) = Process.run_in(made, "pwd", ["-P"])?
-  tmp = real.trim
+  # (on Windows the folder is named as Windows names it already, `C:/...`,
+  # and Git's `pwd` would give it as `/c/...`)
+  (_, real, _) = Process.run_in(made, suite.unix("pwd"), ["-P"])?
+  tmp = if suite.on_windows?(): made else: real.trim
   one = write_file(tmp, "one/hello.lume", "def main:\n  puts 1\n")?
   helper = write_file(tmp, "mods/helper.lume", "pub def twice(n: Int) -> Int = n * 2\n")?
   _ = write_file(tmp, "mods/main.lume", "import helper\n\ndef main:\n  puts helper.twice(2)\n")?

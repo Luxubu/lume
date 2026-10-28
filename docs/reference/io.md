@@ -234,6 +234,15 @@ def main -> () or Error:
   ()
 ```
 
+**On Windows**, as in Rust, a program named without a folder is looked for
+in Windows' own folders before the `PATH`, so `Process.run("sort", ...)` runs
+Windows' `sort`, not the one that comes with Git; give the full path, or run
+it through `sh -c`, to have the other. A program reads its own command line
+there, and some expand a `*` in it. A missing file or folder is told in the
+words above, `No such file or directory (os error 2)`, on every system, and
+a program ended by `kill` gives `-1` on Windows too, though Windows has no
+signals.
+
 **Inside a task, other tasks go on while one waits for its program.** Three
 programs started from three `spawn:` bodies, or from functions they call,
 run at the same time; see [Concurrency](concurrency.md#a-task-that-waits-without-await)
@@ -257,7 +266,7 @@ same messages as `Process.run`.
 | `c.write(text)` | `() or Error` | writes `text` to its standard input; ``cannot write to `sort`: its input is closed`` after `close_input` or `wait` |
 | `c.close_input` | `()` | closes its standard input, so a program reading to the end can finish |
 | `await c.wait` | `Int` | its exit code, once it ends — `-1` when ended by a signal. Its input is closed first, as Rust's `Child::wait` does |
-| `c.kill` | `()` | stops it |
+| `c.kill` | `()` | stops it; `await c.wait` then gives `-1`, on every system |
 
 `lines`, `read_line`, `read` and `wait` wait for the program, so they go in
 async code. Each output is read by a thread of its own and kept until it is

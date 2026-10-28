@@ -101,7 +101,21 @@ pub struct Request:
                 let names: Vec<(String, String)> = r.headers_names().iter().filter_map(|n| r.header(n).map(|v| (n.to_lowercase(), v.to_string()))).collect();
                 Ok((status, names, lume_park(::std::boxed::Box::new(r.into_reader()))))
             }
-            Err(e) => Err(Error { message: format!("{} {}: {}", m, u, e) }),
+            Err(e) => {
+                // a timeout says so in every system's words: Windows' own
+                // ("did not properly respond after a period of time") does not
+                let mut timed_out = false;
+                let mut cause: Option<&(dyn std::error::Error + 'static)> = std::error::Error::source(&e);
+                while let Some(c) = cause {
+                    if let Some(io) = c.downcast_ref::<std::io::Error>() {
+                        timed_out |= matches!(io.kind(), std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock);
+                    }
+                    cause = c.source();
+                }
+                let text = e.to_string();
+                let text = if timed_out && !text.contains("timed out") { format!("{} (timed out)", text) } else { text };
+                Err(Error { message: format!("{} {}: {}", m, u, text) })
+            }
         }
       }
     (status, got, id) = raw?

@@ -4,6 +4,7 @@
 //! `[rust]` crates with the requirement Cargo will be given.
 
 use std::collections::{HashMap, HashSet};
+use crate::Shown;
 use std::path::{Path, PathBuf};
 
 use crate::error::LumeError;
@@ -70,7 +71,7 @@ impl GitRef {
 /// be, so messages name files the way the user wrote them.
 pub fn find(dir: &Path) -> Option<PathBuf> {
     let start = if dir.as_os_str().is_empty() { PathBuf::from(".") } else { dir.to_path_buf() };
-    let mut d = std::fs::canonicalize(&start).ok()?;
+    let mut d = crate::canonical(&start).ok()?;
     loop {
         let f = d.join(FILE);
         if f.is_file() {
@@ -85,7 +86,7 @@ pub fn find(dir: &Path) -> Option<PathBuf> {
 /// `abs` as seen from the working directory: `shelf/lume.toml`, or
 /// `../lume.toml` for a folder above it.
 fn relative(abs: &Path) -> PathBuf {
-    let cwd = match std::env::current_dir().ok().and_then(|c| std::fs::canonicalize(c).ok()) {
+    let cwd = match std::env::current_dir().ok().and_then(|c| crate::canonical(c).ok()) {
         Some(c) => c,
         None => return abs.to_path_buf(),
     };
@@ -179,8 +180,8 @@ fn inline_table(s: &str) -> Option<Vec<(String, String)>> {
 }
 
 pub fn read(path: &Path) -> Result<Manifest, String> {
-    let src = crate::diag::read_source(path).map_err(|e| format!("error: cannot read `{}`: {}", path.display(), e))?;
-    let shown = path.display().to_string();
+    let src = crate::diag::read_source(path).map_err(|e| format!("error: cannot read `{}`: {}", path.shown(), e))?;
+    let shown = path.shown().to_string();
     let err = |line: usize, msg: String, help: Option<String>| {
         let mut e = LumeError::new(line, 1, msg);
         if let Some(h) = help {
@@ -314,8 +315,8 @@ fn git_url(root: &Path, url: &str) -> String {
     }
     // from the folder, which exists, not the repository, which may not:
     // the lock file must name it the same way whether or not it is there
-    let base = std::fs::canonicalize(if root.as_os_str().is_empty() { Path::new(".") } else { root }).unwrap_or(root.to_path_buf());
-    normalize(&base.join(url)).display().to_string()
+    let base = crate::canonical(if root.as_os_str().is_empty() { Path::new(".") } else { root }).unwrap_or(root.to_path_buf());
+    normalize(&base.join(url)).shown().to_string()
 }
 
 /// The folder below `dir`, at most `depth` levels down, holding a
@@ -365,7 +366,7 @@ pub fn load_all(root: Manifest, fetcher: &mut Fetcher) -> Result<Vec<Manifest>, 
                 if let Some(h) = help {
                     e = e.with_help(h);
                 }
-                e.render(&all[i].path.display().to_string(), &all[i].src)
+                e.render(&all[i].path.shown().to_string(), &all[i].src)
             };
             let (dir, origin) = match &d.source {
                 Source::Path(p) => (p.clone(), None),
@@ -386,11 +387,11 @@ pub fn load_all(root: Manifest, fetcher: &mut Fetcher) -> Result<Vec<Manifest>, 
                     ));
                 }
                 let whose = if origin.is_some() { "that commit of the repository" } else { "the folder" };
-                return Err(at(format!("`{}` has no `lume.toml`", dir.display()), Some(format!("a dependency is a package: {} needs a `lume.toml` whose name is `{}`", whose, d.name))));
+                return Err(at(format!("`{}` has no `lume.toml`", dir.shown()), Some(format!("a dependency is a package: {} needs a `lume.toml` whose name is `{}`", whose, d.name))));
             }
             let mut m = read(&file)?;
             if m.name != d.name {
-                return Err(at(format!("`{}` is the package `{}`, not `{}`", dir.display(), m.name, d.name), Some(match &d.source {
+                return Err(at(format!("`{}` is the package `{}`, not `{}`", dir.shown(), m.name, d.name), Some(match &d.source {
                     Source::Path(_) => format!("name it by its own name: `{} = {{ path = \"…\" }}`", m.name),
                     Source::Git { .. } => format!("name it by its own name: `{} = {{ git = \"…\" }}`", m.name),
                 })));
@@ -401,7 +402,7 @@ pub fn load_all(root: Manifest, fetcher: &mut Fetcher) -> Result<Vec<Manifest>, 
         for (name, m, line) in found {
             match by_name.get(&name) {
                 Some(&j) => {
-                    let here = |msg: String, help: &str| LumeError::new(line, 1, msg).with_help(help.to_string()).render(&all[i].path.display().to_string(), &all[i].src);
+                    let here = |msg: String, help: &str| LumeError::new(line, 1, msg).with_help(help.to_string()).render(&all[i].path.shown().to_string(), &all[i].src);
                     match (&all[j].origin, &m.origin) {
                         (Some(a), Some(b)) => {
                             if a.commit != b.commit {
@@ -412,11 +413,11 @@ pub fn load_all(root: Manifest, fetcher: &mut Fetcher) -> Result<Vec<Manifest>, 
                             }
                         }
                         (None, None) => {
-                            let a = std::fs::canonicalize(&all[j].root).unwrap_or(all[j].root.clone());
-                            let b = std::fs::canonicalize(&m.root).unwrap_or(m.root.clone());
+                            let a = crate::canonical(&all[j].root).unwrap_or(all[j].root.clone());
+                            let b = crate::canonical(&m.root).unwrap_or(m.root.clone());
                             if a != b {
                                 return Err(here(
-                                    format!("package `{}` comes from two places: `{}` and `{}`", name, all[j].root.display(), m.root.display()),
+                                    format!("package `{}` comes from two places: `{}` and `{}`", name, all[j].root.shown(), m.root.shown()),
                                     "a program has one copy of each package: point every `lume.toml` at the same folder",
                                 ));
                             }
@@ -424,7 +425,7 @@ pub fn load_all(root: Manifest, fetcher: &mut Fetcher) -> Result<Vec<Manifest>, 
                         _ => {
                             let (git, path) = if m.origin.is_some() { (&m, &all[j]) } else { (&all[j], &m) };
                             return Err(here(
-                                format!("package `{}` comes from two places: {} and `{}`", name, git.origin.as_ref().unwrap().source, path.root.display()),
+                                format!("package `{}` comes from two places: {} and `{}`", name, git.origin.as_ref().unwrap().source, path.root.shown()),
                                 "a program has one copy of each package: have every `lume.toml` take it from the same place",
                             ));
                         }
@@ -449,7 +450,7 @@ pub fn load_all(root: Manifest, fetcher: &mut Fetcher) -> Result<Vec<Manifest>, 
             let line = all[from].deps.iter().find(|d| d.name == all[k].name).map(|d| d.line).unwrap_or(1);
             let e = LumeError::new(line, 1, format!("packages depend on each other: {}", names.join(" -> ")))
                 .with_help("move what they share into a third package that both depend on");
-            return Err(e.render(&all[from].path.display().to_string(), &all[from].src));
+            return Err(e.render(&all[from].path.shown().to_string(), &all[from].src));
         }
         path.push(k);
         for d in &all[k].deps {

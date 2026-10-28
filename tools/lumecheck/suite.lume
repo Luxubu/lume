@@ -48,10 +48,35 @@ pub def trimmed(text: Str) -> Str:
     t = t.slice(0, t.len - 1)
   t
 
+# The compiler the suite checks, named in full, since checks run it from
+# other folders: `compiler/target/release/lume` in the repository, which
+# on Windows is `lume.exe`, under the folder `tests/lumecheck.sh` names in
+# Windows' own form (Git's bash gives `PWD` as `/d/...`).
+pub def compiler -> Str:
+  root = Env.get("LUME_ROOT").or(Env.get("PWD").or("."))
+  exe = match Env.get("OS"):
+    Some(os) -> if os == "Windows_NT": ".exe" else: ""
+    None -> ""
+  Path.join(root, "compiler/target/release/lume#{exe}")
+
+pub def on_windows? -> Bool:
+  match Env.get("OS"):
+    Some(os) -> os == "Windows_NT"
+    None -> false
+
+# One of the Unix tools the suite uses: by name, or on Windows by its full
+# path in Git's `usr\bin` (`tests/lumecheck.sh` says where), since Windows
+# looks in its own folders before the PATH, and has a `bash` (WSL's) and a
+# `find` of its own there.
+pub def unix(name: Str) -> Str:
+  match Env.get("LUME_UNIX_BIN"):
+    Some(dir) -> Path.join(dir, name + ".exe")
+    None -> name
+
 # A command's output, standard error included in the order it came, and
 # its exit code: `bash -c '<script> 2>&1'`.
 def shell(lume: Str, script: Str) -> (Int, Str) or Error:
-  (code, out, _) = Process.run("bash", ["-c", "LUME=\"$0\"; exec 2>&1; #{script}", lume])?
+  (code, out, _) = Process.run(unix("bash"), ["-c", "LUME=\"$0\"; exec 2>&1; #{script}", lume])?
   Ok((code, trimmed(out)))
 
 # The compiler run on a file, its errors and the program's output
@@ -65,7 +90,7 @@ def differ(scratch: Str, expected: Str, actual: Str) -> Str or Error:
   b = Path.join(scratch, "actual")
   File.write(a, expected + "\n")?
   File.write(b, actual + "\n")?
-  (_, out, _) = Process.run("diff", [a, b])?
+  (_, out, _) = Process.run(unix("diff"), [a, b])?
   Dir.remove(scratch)?
   Ok(out.lines.take(20).map { |l| "    " + l }.join("\n"))
 

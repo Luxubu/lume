@@ -81,13 +81,19 @@ codes mean.
 
 The program and its arguments are given apart: `["-r", "file.txt"]`, a list
 of separate words. No shell reads them, so a space inside an argument is
-just a space, and characters like `*`, `|` and `$` mean nothing special:
+just a space, and characters like `|` and `$` mean nothing special:
 
 ```lume
 def main -> () or Error:
-  (_, out, _) = Process.run("echo", ["two words", "*", "$HOME"])?
-  puts out.trim    #=> two words * $HOME
+  (_, out, _) = Process.run("echo", ["two words", "|", "$HOME"])?
+  puts out.trim    #=> two words | $HOME
 ```
+
+On Linux and macOS, `*` means nothing special either. On Windows a program
+reads its own command line, and some expand a `*` in it themselves — the
+`echo` that comes with Git for Windows among them. As in Rust, Lume hands
+the arguments over as written, and what the program makes of them is the
+program's.
 
 That makes it safe to pass a file name or text you were given, whatever it
 contains. When you *want* a shell — for a pipe, `|`, or `&&` — run `sh -c`

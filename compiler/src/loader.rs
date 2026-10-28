@@ -8,6 +8,7 @@
 //! `lib.lume` makes public.
 
 use std::collections::{HashMap, HashSet};
+use crate::Shown;
 use std::path::{Path, PathBuf};
 
 use crate::ast::{Import, Item};
@@ -59,11 +60,11 @@ pub struct Loaded {
 
 /// Renders an error against the file it belongs to.
 fn render(e: &LumeError, path: &Path, src: &str) -> String {
-    e.render(&path.display().to_string(), src)
+    e.render(&path.shown().to_string(), src)
 }
 
 fn parse_file(path: &Path) -> Result<(String, Vec<Item>), String> {
-    let src = crate::diag::read_source(path).map_err(|e| format!("error: cannot read `{}`: {}", path.display(), e))?;
+    let src = crate::diag::read_source(path).map_err(|e| format!("error: cannot read `{}`: {}", path.shown(), e))?;
     let toks = lexer::lex(&src).map_err(|e| render(&e, path, &src))?;
     let items = parser::parse_program(toks).map_err(|e| render(&e, path, &src))?;
     Ok((src, items))
@@ -119,11 +120,11 @@ fn resolve_local(root: &Path, prefix: &str, imp: &Import, where_help: &str) -> R
             ));
         }
         return Err((
-            format!("no module `{}`: neither `{}` nor `{}` exists", imp.path.join("."), as_module.display(), as_item_module.display()),
+            format!("no module `{}`: neither `{}` nor `{}` exists", imp.path.join("."), as_module.shown(), as_item_module.shown()),
             Some(where_help.into()),
         ));
     }
-    Err((format!("no module `{}`: `{}` does not exist", imp.path.join("."), as_module.display()), Some(where_help.into())))
+    Err((format!("no module `{}`: `{}` does not exist", imp.path.join("."), as_module.shown()), Some(where_help.into())))
 }
 
 const SINGLE_FILE_HELP: &str = "module paths are relative to the directory of the file that holds `main`";
@@ -203,8 +204,8 @@ impl Loader {
     }
 
     fn is_lib(&self, k: usize, path: &Path) -> bool {
-        let a = std::fs::canonicalize(self.lib_path(k)).ok();
-        a.is_some() && a == std::fs::canonicalize(path).ok()
+        let a = crate::canonical(self.lib_path(k)).ok();
+        a.is_some() && a == crate::canonical(path).ok()
     }
 
     fn load_one(&mut self, pkg: Option<&str>, path: &Path, id: &str) -> Result<(), String> {
@@ -276,7 +277,7 @@ impl Loader {
                     let clash = if file.exists() { file } else { dir };
                     return Err(Fail::At(
                         format!("`{}` is both {} and a module of this package", first, what),
-                        Some(format!("`import {}` always means the package, so the module can never be imported: rename `{}`", first, clash.display())),
+                        Some(format!("`import {}` always means the package, so the module can never be imported: rename `{}`", first, clash.shown())),
                     ));
                 }
                 return self.resolve_in_package(&first, imp, from_id).map(|r| (r, None));
@@ -305,8 +306,8 @@ impl Loader {
                                 first,
                                 whose.join("` and `"),
                                 first,
-                                self.packages[k].path.display(),
-                                self.packages[j].root.display()
+                                self.packages[k].path.shown(),
+                                self.packages[j].root.shown()
                             )),
                         ));
                     }
@@ -325,7 +326,7 @@ impl Loader {
         if !lib.is_file() {
             return Err(Fail::At(
                 format!("package `{}` has no `lib.lume`, so nothing can be imported from it", name),
-                Some(format!("a library's root is `lib.lume` next to its `lume.toml`: `{}`", lib.display())),
+                Some(format!("a library's root is `lib.lume` next to its `lume.toml`: `{}`", lib.shown())),
             ));
         }
         if self.visiting.iter().any(|v| v == name) {
@@ -384,7 +385,7 @@ impl Loader {
         if is_module {
             return Err(Fail::At(
                 format!("module `{}` of package `{}` is private", rest.join("."), name),
-                Some(format!("only what `{}` makes public can be reached from outside the package; it would need `pub import {}`", lib.display(), rest.join("."))),
+                Some(format!("only what `{}` makes public can be reached from outside the package; it would need `pub import {}`", lib.shown(), rest.join("."))),
             ));
         }
         if rest.len() == 1 {
@@ -393,7 +394,7 @@ impl Loader {
         }
         Err(Fail::At(
             format!("package `{}` has no public module `{}`", name, rest[..rest.len() - 1].join(".")),
-            Some(format!("a package offers what its `lib.lume` defines with `pub` and passes on with `pub import`: see `{}`", lib.display())),
+            Some(format!("a package offers what its `lib.lume` defines with `pub` and passes on with `pub import`: see `{}`", lib.shown())),
         ))
     }
 }

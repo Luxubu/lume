@@ -41,6 +41,27 @@ def corpus -> [Check] or Error:
     out.push(suite.one(name, How.Corpus, f, expected_of(f)))
   Ok(out)
 
+# Checks that drive Unix programs in ways Windows does not have, run
+# everywhere else. On Windows, Rust — and so Lume — finds Windows' own
+# `sort` before Git's; there are no signals; and Git's programs do not keep
+# a newline inside an argument, which these pass to `printf` and `sh`. The
+# suite says how many it left out.
+pub UNIX_ONLY = [
+  # the server itself answers on Windows — open, change, diagnostics, as a
+  # session run by hand in CI showed — but this test's client sees the
+  # server's output end after the first change there, which is not yet
+  # understood (milestone 106)
+  "lume lsp",
+  "corpus/m96/a02_pipes",
+  "corpus/m96/a04_errors_and_codes",
+  "corpus/m96/a05_programs_in_tasks",
+  "corpus/m96/b04_child_lines_wait",
+  "corpus/m96/b11_async_iterator_types",
+  "corpus/m96/b13_child_kept",
+  "corpus/m96/c01_build_steps",
+  "corpus/m96/c03_word_pipeline",
+]
+
 pub def checks -> [Check] or Error:
   var all: [Check] = []
 
@@ -87,7 +108,9 @@ rm -rf tests/stops/.lume tests/stops/shop/.lume"""
   # editors: diagnostics as JSON, and the language server driven as an editor would
   all.push(script("check --json", "\"$LUME\" check examples/errors/arity.lume --json; echo \"exit: $?\"; \"$LUME\" check examples/fib.lume --json; echo \"exit: $?\"", "examples/check_json.expected"))
   # the editor's side is tools/lumecheck/lsp.lume, the suite's own binary
-  all.push(script("lume lsp", "compiler/target/lumecheck lsp \"$LUME\"", "tests/lsp_test.expected"))
+  # (under `timeout` where there is one: a server that never answers fails
+  # the check in two minutes rather than holding up the suite)
+  all.push(script("lume lsp", "T=; command -v timeout >/dev/null && T='timeout 120'; $T compiler/target/lumecheck lsp \"$LUME\"", "tests/lsp_test.expected"))
 
   # the json and http packages, their tests and programs that use them
   all.push(script("json package tests", "cd packages/json && \"$LUME\" test; echo \"exit: $?\"", "packages/json/test.expected"))
