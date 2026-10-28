@@ -1,8 +1,5 @@
 # Lunch 17: Async sequences
 
-> **A preview.** This lunch teaches one of Lume's newest parts. It works
-> as shown — every example is checked — but details may change before 1.0.
-
 **In this lunch you will:**
 
 - write a generator whose values take time to arrive;
@@ -184,6 +181,10 @@ async def main:
 
 A parameter takes the sequence: afterwards, the caller's name for it is
 used up, as a generator is after a walk.
+
+An interface (lunch 11) may require one too, `async def items ->
+Iterator[Str]`, for each type that fits it to write; the
+[interfaces reference](../reference/interfaces.md) shows how.
 
 An async generator itself may say either `-> Iterator[T]`, as the examples
 here do, or `-> async Iterator[T]`; they mean the same, since its `async

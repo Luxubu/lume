@@ -1,4 +1,5 @@
-# An interface cannot ask for an async generator yet, so an `extend` cannot give one.
+# An interface that requires an async generator is not given one by a plain
+# generator: its items would not arrive later, and nothing could await them.
 
 interface Feed:
   async def posts -> Iterator[Str]
@@ -7,7 +8,7 @@ struct Blog:
   name: Str
 
 extend Blog with Feed:
-  async def posts -> Iterator[Str]:
+  def posts -> Iterator[Str]:
     yield name
 
 async def main:

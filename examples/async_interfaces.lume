@@ -1,0 +1,51 @@
+# An interface may require an async generator: `async def items -> Iterator[T]`
+# (or `def items -> async Iterator[T]`, which says the same), and each type
+# that fits it writes its own. The interface's value then hands out an async
+# sequence, with its chains and the methods that wait for its items.
+
+interface Feed[T]:
+  async def items(n: Int) -> Iterator[T]
+
+interface Named:
+  def names -> async Iterator[Str]
+
+struct Ticker:
+  from: Int
+
+  async def items(n: Int) -> Iterator[Int]:
+    for i in 0..n - 1:
+      await Time.sleep(2)
+      yield from + i
+
+struct Pantry:
+  stock: [Str]
+
+extend Pantry with Named:
+  async def names -> Iterator[Str]:
+    for s in stock:
+      yield s
+
+struct Shelf:
+  async def names -> Iterator[Str]:
+    yield "jam"
+
+# a function taking the interface, waiting for the items
+async def total(f: Feed[Int], n: Int) -> Int = f.items(n).sum
+
+# a function handing one on, chained
+def loud(n: Named) -> async Iterator[Str] = n.names.map(_.upcase)
+
+async def first_name(n: Named) -> Str? = n.names.first
+
+# an async generator built on one: what an interface's own default would be
+async def doubled(f: Feed[Int], n: Int) -> Iterator[Int]:
+  for x in f.items(n):
+    yield x
+    yield x
+
+async def main:
+  t = Ticker(from: 100)
+  puts await total(t, 3)
+  puts doubled(t, 2).to_list
+  puts loud(Pantry(stock: ["oats", "rice"])).to_list
+  puts await first_name(Shelf())

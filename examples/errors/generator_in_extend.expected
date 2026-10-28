@@ -1,5 +1,5 @@
-error: `Blog` is used as a `Feed`, but its `posts` is `-> async Iterator[Str]` and `Feed` needs `-> Iterator[Str]`
-  --> examples/errors/generator_in_extend.lume:9:1
-  |
-9 | extend Blog with Feed:
-  | ^
+error: `Blog` is used as a `Feed`, but its `posts` is `-> Iterator[Str]` and `Feed` needs `-> async Iterator[Str]`
+  --> examples/errors/generator_in_extend.lume:10:1
+   |
+10 | extend Blog with Feed:
+   | ^

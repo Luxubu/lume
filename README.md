@@ -69,9 +69,9 @@ print what they print today. What Lume refuses, it refuses with a message that
 names the fix — `examples/errors/` is 394 programs kept around to prove it.
 
 **Where it is.** Version 0.6. The language, the collections, files and
-folders, running programs, tasks, tests, packages and the commands are
-settled: [docs/stability.md](docs/stability.md) promises that a working
-program does not break without a warning release first. Async generators,
+folders, running programs, tasks and async sequences, tests, packages and
+the commands are settled: [docs/stability.md](docs/stability.md) promises
+that a working program does not break without a warning release first.
 `Process.spawn`, the `http` package, the Rust bridge and editor support
 (`lume lsp` and a VS Code extension) work, and are previews whose shape may
 still change. Packages depend on one another by path or by git, through

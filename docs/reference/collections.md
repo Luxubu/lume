@@ -434,9 +434,15 @@ async def main:
 - **A method may be one**, as may a function of a type
   (`async def self.upto(n: Int)`). Its task walks a copy of the value, as a
   generator method does.
-- **Not yet:** an async generator in an interface. Of a list's methods it
-  has those Rust's `StreamExt` has, below; for the rest — `join`, `sort`,
-  `max` — keep the items with `.to_list` and use the list's.
+- **An interface may require one**: `async def items -> Iterator[T]`, or
+  `def items -> async Iterator[T]`, which says the same; each type that fits
+  writes its own, and the interface's value hands out an async sequence.
+  An interface cannot give a default one, as a Rust trait has no async
+  generator either: write an `async def` function that takes the interface
+  value instead (`examples/async_interfaces.lume`).
+- Of a list's methods it has those Rust's `StreamExt` has, below; for the
+  rest — `join`, `sort`, `max` — keep the items with `.to_list` and use the
+  list's.
 - **More:** `examples/async_generators.lume` shows each of these.
 
 #### Chains over an async sequence

@@ -34,6 +34,7 @@ a release says so; from then on the promise above covers it.
 | Files, folders, paths, the environment, time: `File`, `Dir`, `Path`, `Env`, `Time` | [Input and output](reference/io.md), lunch 13 |
 | Running a program and waiting for it: `Process.run`, `Process.run_in` | [Input and output](reference/io.md#process), lunch 15 |
 | Tasks: `async def`, `await`, `spawn:`, `shared var`, `next_done` | [Concurrency](reference/concurrency.md), lunch 16 |
+| Async sequences: async generators, their chains and the methods that wait for their items, `async Iterator[T]`, an interface requiring one — settled in 0.7 | [Collections](reference/collections.md#async-generators-async-def-with-yield), lunch 17 |
 | Tests: `test` blocks, `assert`, `lume test` and its name filter | [Tests](reference/testing.md), lunch 12 |
 | Packages: `lume.toml`, dependencies by path and git, `lume.lock` | [Packages](reference/packages.md) |
 | The `json` package | [JSON](reference/json.md) |
@@ -43,7 +44,6 @@ a release says so; from then on the promise above covers it.
 
 | part | since | where it is described |
 |---|---|---|
-| Async generators and their chains and methods; `async Iterator[T]` as a type | 0.4, 0.5 | [Collections](reference/collections.md#async-generators-async-def-with-yield), lunch 17 |
 | A program running alongside: `Process.spawn`, `Process.spawn_in`, `Child` | 0.5 | [Input and output](reference/io.md#a-program-running-alongside-processspawn), lunch 18 |
 | The `http` package | 0.2, streamed in 0.5 | [HTTP](reference/http.md), lunch 19 |
 | The Rust bridge: `import rust.crate`, `rust:` blocks, `[rust]` in `lume.toml`, `lume crate` | 0.1 | [Rust crates](reference/crates.md) |

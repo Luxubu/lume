@@ -40,7 +40,7 @@ it.
 | 14 | [Generators](14-generators.md) | sequences made a piece at a time, with `yield` |
 | 15 | [Running other programs](15-running-other-programs.md) | `Process.run`, and what comes back |
 | 16 | [Tasks](16-tasks.md) | many things at once, with `spawn:` and `await`; `shared var` |
-| 17 | [Async sequences](17-async-sequences.md) *(preview)* | items that arrive later: async generators and their methods |
+| 17 | [Async sequences](17-async-sequences.md) | items that arrive later: async generators and their methods |
 | 18 | [Programs alongside](18-programs-alongside.md) *(preview)* | `Process.spawn`: talk to a program while it runs |
 | 19 | [HTTP](19-http.md) *(preview)* | requests, and bodies read as they arrive |
 

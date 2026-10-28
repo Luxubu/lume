@@ -1,6 +1,6 @@
-error: `items` is an `async` generator in an interface, which cannot be written yet
+error: `items` is an async generator written in an interface, which Lume cannot compile yet
   --> examples/errors/async_gen_method.lume:6:3
   |
 6 |   async def items -> Iterator[Str]:
   |   ^
-  help: write it as a method of each type, or as an `async def` function that takes the value
+  help: leave it a requirement, `async def items(...) -> Iterator[T]`, for each type to write; or make it an `async def` function that takes the interface value

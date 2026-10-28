@@ -2040,13 +2040,17 @@ impl Gen {
     }
 
     fn sig_of(&self, f: &FnDef) -> Sig {
+        // an `async def` giving `Iterator[T]` gives an async sequence: one
+        // with `yield`, and one an interface requires, which has no body
+        // to say so and is a promise of the same
+        let async_seq = f.is_async && (block_yields(&f.body) || f.body.stmts.is_empty());
         let gives_sequence = f.ret.as_ref().map(|t| matches!(self.ct(t), Type::App(n, ref a) if a.len() == 1 && is_iterator_name(&n))).unwrap_or(false);
         Sig {
             params: f.params.iter().map(|p| (p.name.clone(), param_type(Self::as_vars(&self.ct(&p.ty), &f.generics)))).collect(),
             var_params: f.params.iter().map(|p| p.mutable).collect(),
             ret: match f.ret.as_ref().map(|t| Self::as_vars(&self.ct(t), &f.generics)) {
                 // an `async def` with `yield`: items that arrive and are awaited
-                Some(Type::App(n, args)) if args.len() == 1 && is_iterator_name(&n) && f.is_async && block_yields(&f.body) => Type::AsyncGen(Box::new(args[0].clone())),
+                Some(Type::App(n, args)) if args.len() == 1 && is_iterator_name(&n) && async_seq => Type::AsyncGen(Box::new(args[0].clone())),
                 // a `def` that gives `Iterator[T]` gives a sequence by move, as
                 // Rust's `-> impl Iterator` does: a generator when it has `yield`
                 Some(Type::App(n, args)) if args.len() == 1 && is_iterator_name(&n) => Type::Gen(Box::new(args[0].clone())),
@@ -2058,7 +2062,7 @@ impl Gen {
             // stream: there is nothing to await at the call
             // `-> Iterator[T]` and `-> async Iterator[T]` say the same of an
             // `async def` with `yield`: what it gives is the sequence itself
-            is_async: f.is_async && !(block_yields(&f.body) && f.ret.as_ref().map(|t| matches!(self.ct(t), Type::App(n, ref a) if a.len() == 1 && is_iterator_name(&n)) || matches!(self.ct(t), Type::AsyncGen(_))).unwrap_or(false)),
+            is_async: f.is_async && !(async_seq && f.ret.as_ref().map(|t| matches!(self.ct(t), Type::App(n, ref a) if a.len() == 1 && is_iterator_name(&n)) || matches!(self.ct(t), Type::AsyncGen(_))).unwrap_or(false)),
             generics: self.norm_generics(&f.generics),
             // a generator runs after the call, so it keeps every block it is
             // given; so does an interface's method that gives a sequence, as
@@ -2218,6 +2222,8 @@ impl Gen {
             | (Type::Option(d), Type::Option(a))
             | (Type::Set(d), Type::Set(a))
             | (Type::Task(d), Type::Task(a))
+            | (Type::AsyncGen(d), Type::AsyncGen(a))
+            | (Type::Future(d), Type::Future(a))
             | (Type::Shared(d, _), Type::Shared(a, _)) => Self::unify(d, a, m),
             // a sequence: what it hands out, whatever kind it is
             (Type::Gen(d), Type::Gen(a) | Type::List(a) | Type::Set(a) | Type::Iter(a, _)) => Self::unify(d, a, m),
@@ -7400,8 +7406,12 @@ impl Gen {
             if owner.is_some() && f.self_kind == SelfKind::Mutate {
                 return refuse(&format!("`{}` is a generator, which walks its own copy of the value, so `var self` would change nothing", f.name), "drop `var`; to move a value along by hand, give it `def next(var self) -> T?`");
             }
+            // an interface may require an async generator, and each type
+            // writes its own; a default one, written in the interface, is
+            // not supported, as Rust has no async generator in a trait either
             if async_gen && owner.is_some() && f.self_kind != SelfKind::Static && self.in_trait_decl {
-                return refuse(&format!("`{}` is an `async` generator in an interface, which cannot be written yet", f.name), "write it as a method of each type, or as an `async def` function that takes the value");
+                return Err(LumeError::new(f.line, f.col, format!("`{}` is an async generator written in an interface, which Lume cannot compile yet", f.name))
+                    .with_help(format!("leave it a requirement, `async def {}(...) -> Iterator[T]`, for each type to write; or make it an `async def` function that takes the interface value", f.name)));
             }
             if let Some(p) = f.params.iter().find(|p| p.mutable) {
                 return Err(LumeError::new(p.line, p.col, format!("a generator takes a copy of what it is given, so `var {}` would change nothing the caller sees", p.name))

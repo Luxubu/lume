@@ -554,6 +554,33 @@ known type there — so make that default `async` too. And an `async` default
 cannot take a block: the block is lent for the call, and an `async` body may
 still be running after it.
 
+**An interface may require an async generator** — `async def items ->
+Iterator[T]`, or `def items -> async Iterator[T]`, which says the same — and
+each type that fits writes its own:
+
+```lume
+interface Feed:
+  async def items -> Iterator[Int]
+
+struct Ticker:
+  from: Int
+
+  async def items -> Iterator[Int]:
+    for i in from..from + 2:
+      await Time.sleep(1)
+      yield i
+
+async def total(f: Feed) -> Int = f.items.sum
+
+async def main:
+  puts await total(Ticker(from: 10))    #=> 33
+```
+
+An interface cannot give a default async generator: Rust has no async
+generator in a trait to make it of. An `async def` function that takes the
+interface value does the same work (see
+[async generators](collections.md#async-generators-async-def-with-yield)).
+
 ## `pub` and methods
 
 **A method of a `pub struct` needs no `pub` of its own.** Visibility is

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **Async sequences are settled**: async generators, their chains and the
+  methods that wait for their items, and `async Iterator[T]` are covered by
+  the promise in `docs/stability.md` from this release, and lunch 17 is no
+  longer a preview. Nothing in their shape changed.
+- **An interface may require an async generator**: `async def items ->
+  Iterator[T]`, or `def items -> async Iterator[T]`, written by each type
+  that fits — the gap 0.5.0 listed. A default one written in the interface
+  is refused, with what to write instead.
+- **Fixed**: a type with an async generator method did not fit a generic
+  interface requiring one (`Feed[Int]`), and reached rustc.
+
 - **Unused names are warned about**, as Rust's `unused_variables` lint
   does: a local given a value and never read, a parameter, a `for`
   variable, a block's parameter, a name a pattern binds. A name beginning
