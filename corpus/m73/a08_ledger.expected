@@ -1,3 +1,15 @@
+warning: block parameter `t` is never used
+  --> corpus/m73/a08_ledger.lume:74:37
+   |
+74 |   closing = running(txns, 5000).map { |t, b| b }.last.or(0)
+   |                                     ^
+  help: name it `_t`, or `_` alone
+warning: block parameter `t` is never used
+  --> corpus/m73/a08_ledger.lume:78:35
+   |
+78 |   puts running(txns, 5000).min_by { |t, b| b }
+   |                                   ^
+  help: name it `_t`, or `_` alone
 deposit        1200.00   1250.00
 withdrawal     -450.50    799.50
 fee: card        -2.50    797.00

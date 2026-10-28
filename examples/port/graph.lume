@@ -35,7 +35,7 @@ struct Graph:
     order
 
   def dependents_of(target: Str) -> [Str] =
-    edges.to_list.filter { |pkg, deps| deps.contains?(target) }.map(_.0)
+    edges.to_list.filter { |_, deps| deps.contains?(target) }.map(_.0)
 
 # An arena: nodes live in a list and point at each other by position.
 struct Node:

@@ -7,7 +7,7 @@
 def main:
   # replaced by what is built from it, in a loop: moved each time
   var rows = [["b", "2"], ["a", "1"], ["c", "3"], ["d", "4"]]
-  for keep in ["a", "b", "c"]:
+  for _ in ["a", "b", "c"]:
     rows = rows.filter { |r| r.at(0) != "d" }.to_list
   puts rows
 

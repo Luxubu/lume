@@ -199,10 +199,10 @@ map's `(key, value)`:
 
 ```lume
 pairs = [("ann", 3), ("bo", 1), ("cy", 3)]
-puts pairs.filter { |name, n| n > 1 }.map { |name, n| name }.join(",")    #=> ann,cy
-puts pairs.max_by { |name, n| n }       #=> Some(("ann", 3))
-puts pairs.min_by { |name, n| n }       #=> Some(("bo", 1))
-puts pairs.sort_by { |name, n| n }      #=> [("bo", 1), ("ann", 3), ("cy", 3)]
+puts pairs.filter { |_, n| n > 1 }.map { |name, _| name }.join(",")    #=> ann,cy
+puts pairs.max_by { |_, n| n }       #=> Some(("ann", 3))
+puts pairs.min_by { |_, n| n }       #=> Some(("bo", 1))
+puts pairs.sort_by { |_, n| n }      #=> [("bo", 1), ("ann", 3), ("cy", 3)]
 ```
 
 `ann` and `cy` tie on 3: `max_by` gives `ann`, the first. `sort_by` keeps them
@@ -213,7 +213,7 @@ part, as `for` does:
 
 ```lume
 rows = [("ann", 3, true), ("bo", 5, false)]
-puts rows.filter { |name, n, ok| ok }.map { |name, n, ok| "#{name}#{n}" }.to_list   #=> ["ann3"]
+puts rows.filter { |_, _, ok| ok }.map { |name, n, _| "#{name}#{n}" }.to_list   #=> ["ann3"]
 ```
 
 The ones that build something new:
@@ -358,12 +358,12 @@ The pair methods:
 
 ```lume
 m = {"ann": 3, "bo": 1, "cy": 3}
-puts m.max_by { |k, v| v }                 #=> Some(("ann", 3))
-puts m.sort_by { |k, v| v }                #=> [("bo", 1), ("ann", 3), ("cy", 3)]
+puts m.max_by { |_, v| v }                 #=> Some(("ann", 3))
+puts m.sort_by { |_, v| v }                #=> [("bo", 1), ("ann", 3), ("cy", 3)]
 puts m.map { |k, v| "#{k}=#{v}" }.join(" ")    #=> ann=3 bo=1 cy=3
-puts m.filter { |k, v| v > 1 }             #=> {"ann": 3, "cy": 3}
+puts m.filter { |_, v| v > 1 }             #=> {"ann": 3, "cy": 3}
 puts m.map_values { |v| v * 10 }           #=> {"ann": 30, "bo": 10, "cy": 30}
-puts m.find { |k, v| v == 1 }              #=> Some(("bo", 1))
+puts m.find { |_, v| v == 1 }              #=> Some(("bo", 1))
 puts m.merge({"bo": 5, "dee": 2})          #=> {"ann": 3, "bo": 5, "cy": 3, "dee": 2}
 ```
 

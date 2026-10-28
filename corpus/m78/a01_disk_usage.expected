@@ -1,3 +1,81 @@
+warning: block parameter `p` is never used
+  --> corpus/m78/a01_disk_usage.lume:64:35
+   |
+64 |   files = root.walk("", 0).filter { |p, s, d| s > 0 }.to_list
+   |                                   ^
+  help: name it `_p`, or `_` alone
+warning: block parameter `d` is never used
+  --> corpus/m78/a01_disk_usage.lume:64:35
+   |
+64 |   files = root.walk("", 0).filter { |p, s, d| s > 0 }.to_list
+   |                                   ^
+  help: name it `_d`, or `_` alone
+warning: block parameter `p` is never used
+  --> corpus/m78/a01_disk_usage.lume:66:22
+   |
+66 |   big = files.filter { |p, s, d| s >= 100 }.map { |p, s, d| p }.join(", ")
+   |                      ^
+  help: name it `_p`, or `_` alone
+warning: block parameter `d` is never used
+  --> corpus/m78/a01_disk_usage.lume:66:22
+   |
+66 |   big = files.filter { |p, s, d| s >= 100 }.map { |p, s, d| p }.join(", ")
+   |                      ^
+  help: name it `_d`, or `_` alone
+warning: block parameter `s` is never used
+  --> corpus/m78/a01_disk_usage.lume:66:49
+   |
+66 |   big = files.filter { |p, s, d| s >= 100 }.map { |p, s, d| p }.join(", ")
+   |                                                 ^
+  help: name it `_s`, or `_` alone
+warning: block parameter `d` is never used
+  --> corpus/m78/a01_disk_usage.lume:66:49
+   |
+66 |   big = files.filter { |p, s, d| s >= 100 }.map { |p, s, d| p }.join(", ")
+   |                                                 ^
+  help: name it `_d`, or `_` alone
+warning: block parameter `p` is never used
+  --> corpus/m78/a01_disk_usage.lume:68:21
+   |
+68 |   puts files.max_by { |p, s, d| s }
+   |                     ^
+  help: name it `_p`, or `_` alone
+warning: block parameter `d` is never used
+  --> corpus/m78/a01_disk_usage.lume:68:21
+   |
+68 |   puts files.max_by { |p, s, d| s }
+   |                     ^
+  help: name it `_d`, or `_` alone
+warning: block parameter `p` is never used
+  --> corpus/m78/a01_disk_usage.lume:69:23
+   |
+69 |   match files.sort_by { |p, s, d| 0 - d }.first:
+   |                       ^
+  help: name it `_p`, or `_` alone
+warning: block parameter `s` is never used
+  --> corpus/m78/a01_disk_usage.lume:69:23
+   |
+69 |   match files.sort_by { |p, s, d| 0 - d }.first:
+   |                       ^
+  help: name it `_s`, or `_` alone
+warning: `d` is never used in the loop
+  --> corpus/m78/a01_disk_usage.lume:74:3
+   |
+74 |   for p, s, d in files:
+   |   ^
+  help: name it `_d`, or write `for _ in ...` when only the count matters
+warning: block parameter `p` is never used
+  --> corpus/m78/a01_disk_usage.lume:79:22
+   |
+79 |   summed = files.sum { |p, s, d| s }
+   |                      ^
+  help: name it `_p`, or `_` alone
+warning: block parameter `d` is never used
+  --> corpus/m78/a01_disk_usage.lume:79:22
+   |
+79 |   summed = files.sum { |p, s, d| s }
+   |                      ^
+  help: name it `_d`, or `_` alone
 home/
   home/docs/
     home/docs/cv.pdf (120)

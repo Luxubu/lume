@@ -1,3 +1,57 @@
+warning: block parameter `sku` is never used
+  --> corpus/m78/a07_stock_manifest.lume:50:27
+   |
+50 |   by_bin = items.group_by { |sku, qty, bin| bin }
+   |                           ^
+  help: name it `_sku`, or `_` alone
+warning: block parameter `qty` is never used
+  --> corpus/m78/a07_stock_manifest.lume:50:27
+   |
+50 |   by_bin = items.group_by { |sku, qty, bin| bin }
+   |                           ^
+  help: name it `_qty`, or `_` alone
+warning: block parameter `s` is never used
+  --> corpus/m78/a07_stock_manifest.lume:52:22
+   |
+52 |     units = rows.sum { |s, q, b| q }
+   |                      ^
+  help: name it `_s`, or `_` alone
+warning: block parameter `b` is never used
+  --> corpus/m78/a07_stock_manifest.lume:52:22
+   |
+52 |     units = rows.sum { |s, q, b| q }
+   |                      ^
+  help: name it `_b`, or `_` alone
+warning: block parameter `s` is never used
+  --> corpus/m78/a07_stock_manifest.lume:55:21
+   |
+55 |   puts items.filter { |s, q, b| q < 30 }.map { |s, q, b| "#{s}@#{b}" }.to_list
+   |                     ^
+  help: name it `_s`, or `_` alone
+warning: block parameter `b` is never used
+  --> corpus/m78/a07_stock_manifest.lume:55:21
+   |
+55 |   puts items.filter { |s, q, b| q < 30 }.map { |s, q, b| "#{s}@#{b}" }.to_list
+   |                     ^
+  help: name it `_b`, or `_` alone
+warning: block parameter `q` is never used
+  --> corpus/m78/a07_stock_manifest.lume:55:46
+   |
+55 |   puts items.filter { |s, q, b| q < 30 }.map { |s, q, b| "#{s}@#{b}" }.to_list
+   |                                              ^
+  help: name it `_q`, or `_` alone
+warning: block parameter `s` is never used
+  --> corpus/m78/a07_stock_manifest.lume:56:21
+   |
+56 |   puts items.max_by { |s, q, b| q }
+   |                     ^
+  help: name it `_s`, or `_` alone
+warning: block parameter `b` is never used
+  --> corpus/m78/a07_stock_manifest.lume:56:21
+   |
+56 |   puts items.max_by { |s, q, b| q }
+   |                     ^
+  help: name it `_b`, or `_` alone
 bolt     40  A1
 nut      25  A1
 washer  100  B2

@@ -1,3 +1,123 @@
+warning: block parameter `name` is never used
+  --> corpus/m78/b04_tuple_blocks.lume:35:20
+   |
+35 |   puts rows.filter { |name, n, ok| ok }.map { |name, n, ok| name }.join(",")
+   |                    ^
+  help: name it `_name`, or `_` alone
+warning: block parameter `n` is never used
+  --> corpus/m78/b04_tuple_blocks.lume:35:20
+   |
+35 |   puts rows.filter { |name, n, ok| ok }.map { |name, n, ok| name }.join(",")
+   |                    ^
+  help: name it `_n`, or `_` alone
+warning: block parameter `n` is never used
+  --> corpus/m78/b04_tuple_blocks.lume:35:45
+   |
+35 |   puts rows.filter { |name, n, ok| ok }.map { |name, n, ok| name }.join(",")
+   |                                             ^
+  help: name it `_n`, or `_` alone
+warning: block parameter `ok` is never used
+  --> corpus/m78/b04_tuple_blocks.lume:35:45
+   |
+35 |   puts rows.filter { |name, n, ok| ok }.map { |name, n, ok| name }.join(",")
+   |                                             ^
+  help: name it `_ok`, or `_` alone
+warning: block parameter `name` is never used
+  --> corpus/m78/b04_tuple_blocks.lume:36:21
+   |
+36 |   puts rows.sort_by { |name, n, ok| 0 - n }
+   |                     ^
+  help: name it `_name`, or `_` alone
+warning: block parameter `ok` is never used
+  --> corpus/m78/b04_tuple_blocks.lume:36:21
+   |
+36 |   puts rows.sort_by { |name, n, ok| 0 - n }
+   |                     ^
+  help: name it `_ok`, or `_` alone
+warning: block parameter `name` is never used
+  --> corpus/m78/b04_tuple_blocks.lume:37:20
+   |
+37 |   puts rows.max_by { |name, n, ok| n }
+   |                    ^
+  help: name it `_name`, or `_` alone
+warning: block parameter `ok` is never used
+  --> corpus/m78/b04_tuple_blocks.lume:37:20
+   |
+37 |   puts rows.max_by { |name, n, ok| n }
+   |                    ^
+  help: name it `_ok`, or `_` alone
+warning: block parameter `name` is never used
+  --> corpus/m78/b04_tuple_blocks.lume:38:20
+   |
+38 |   puts rows.min_by { |name, n, ok| n }
+   |                    ^
+  help: name it `_name`, or `_` alone
+warning: block parameter `ok` is never used
+  --> corpus/m78/b04_tuple_blocks.lume:38:20
+   |
+38 |   puts rows.min_by { |name, n, ok| n }
+   |                    ^
+  help: name it `_ok`, or `_` alone
+warning: block parameter `name` is never used
+  --> corpus/m78/b04_tuple_blocks.lume:39:18
+   |
+39 |   puts rows.any? { |name, n, ok| n > 4 and ok }
+   |                  ^
+  help: name it `_name`, or `_` alone
+warning: block parameter `name` is never used
+  --> corpus/m78/b04_tuple_blocks.lume:40:19
+   |
+40 |   puts rows.count { |name, n, ok| ok }
+   |                   ^
+  help: name it `_name`, or `_` alone
+warning: block parameter `n` is never used
+  --> corpus/m78/b04_tuple_blocks.lume:40:19
+   |
+40 |   puts rows.count { |name, n, ok| ok }
+   |                   ^
+  help: name it `_n`, or `_` alone
+warning: block parameter `name` is never used
+  --> corpus/m78/b04_tuple_blocks.lume:41:18
+   |
+41 |   puts rows.find { |name, n, ok| not ok }
+   |                  ^
+  help: name it `_name`, or `_` alone
+warning: block parameter `n` is never used
+  --> corpus/m78/b04_tuple_blocks.lume:41:18
+   |
+41 |   puts rows.find { |name, n, ok| not ok }
+   |                  ^
+  help: name it `_n`, or `_` alone
+warning: block parameter `n` is never used
+  --> corpus/m78/b04_tuple_blocks.lume:42:56
+   |
+42 |   puts rows.map { |name, n, ok| (n, name, ok) }.max_by { |n, name, ok| name.len }
+   |                                                        ^
+  help: name it `_n`, or `_` alone
+warning: block parameter `ok` is never used
+  --> corpus/m78/b04_tuple_blocks.lume:42:56
+   |
+42 |   puts rows.map { |name, n, ok| (n, name, ok) }.max_by { |n, name, ok| name.len }
+   |                                                        ^
+  help: name it `_ok`, or `_` alone
+warning: block parameter `i` is never used
+  --> corpus/m78/b04_tuple_blocks.lume:54:28
+   |
+54 |   puts rows.enumerate.find { |i, row| row.1 == 5 }
+   |                            ^
+  help: name it `_i`, or `_` alone
+warning: block parameter `a` is never used
+  --> corpus/m78/b04_tuple_blocks.lume:56:26
+   |
+56 |   puts triples(3).filter { |a, b, c| c > 1 }.map { |a, b, c| a + b + c }.to_list
+   |                          ^
+  help: name it `_a`, or `_` alone
+warning: block parameter `b` is never used
+  --> corpus/m78/b04_tuple_blocks.lume:56:26
+   |
+56 |   puts triples(3).filter { |a, b, c| c > 1 }.map { |a, b, c| a + b + c }.to_list
+   |                          ^
+  help: name it `_b`, or `_` alone
 ["ann3true", "bo5false", "cy3true"]
 ann,cy
 [("bo", 5, false), ("ann", 3, true), ("cy", 3, true)]

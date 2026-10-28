@@ -1,3 +1,9 @@
+warning: block parameter `neg` is never used
+  --> corpus/m42/c09_grader.lume:59:19
+   |
+59 |   puts ranked.map { |neg, name| name }.join(", ")
+   |                   ^
+  help: name it `_neg`, or `_` alone
 ana 72 Pass [">= 50", "even"]
 bo 45 Fail []
 cy 90 Merit [">= 50", "even"]

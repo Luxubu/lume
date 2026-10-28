@@ -1,3 +1,9 @@
+warning: block parameter `i` is never used
+  --> corpus/m69/a02_tokenizer.lume:90:26
+   |
+90 |   puts lx.enumerate.find { |i, t| t == Sym("*") }
+   |                          ^
+  help: name it `_i`, or `_` alone
 word let
 word x
 sym =

@@ -21,7 +21,7 @@ struct Graph:
     seen.add(n)
 
   def neighbours(n: Int) -> {Int}:
-    edges.filter { |a, b| a == n }.map { |a, b| b }.to_list.to_set
+    edges.filter { |a, _| a == n }.map { |_, b| b }.to_list.to_set
 
 def main:
   var g = Graph(edges: {}, seen: {})
@@ -45,7 +45,7 @@ def main:
 
 test "sets and slices":
   assert {1, 2}.union({3}) == {1, 2, 3}
-  assert "héllo"[1] == Some("é")
+  assert "héllo"[1].map(_.to_s) == Some("é")
   assert [1, 2, 3][1..5] == [2, 3]
 
 def demo:

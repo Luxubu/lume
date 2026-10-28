@@ -179,7 +179,7 @@ def show(r: Report) -> Str:
   out.push("#{r.requests} requests, #{r.failed} failed")
   out.push("status: " + r.by_status.to_list.sort.map { |s, n| "#{s}x#{n}" }.join(" "))
   averages = r.hits.to_list.map { |p, n| (p, r.total_ms[p].or(0) / n) }
-  for p, avg in averages.sort_by { |p, avg| 0 - avg }.take(3):
+  for p, avg in averages.sort_by { |_, avg| 0 - avg }.take(3):
     out.push("  #{p.pad_right(10)} #{avg} ms on average")
   match r.slowest:
     Some(e) -> out.push("slowest: #{e.method} #{e.path} at #{e.time}, #{e.ms} ms")

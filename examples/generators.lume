@@ -24,7 +24,7 @@ def long_words(text: Str, min: Int) -> Iterator[Str]:
 
 # generic, and handing on another generator's items
 def repeat[T](x: T, times: Int) -> Iterator[T]:
-  for i in 0...times:
+  for _ in 0...times:
     yield x
 
 def padded -> Iterator[Str]:

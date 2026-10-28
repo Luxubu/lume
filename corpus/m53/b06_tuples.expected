@@ -1,3 +1,9 @@
+warning: block parameter `n` is never used
+  --> corpus/m53/b06_tuples.lume:50:31
+   |
+50 |   (hi, lo) = scores.partition { |n, v| v > 2 }
+   |                               ^
+  help: name it `_n`, or `_` alone
 ["a", "b"]
 t
 (["a", "b"], "t")

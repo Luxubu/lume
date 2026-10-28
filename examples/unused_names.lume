@@ -1,0 +1,42 @@
+# Names given a value and never read are warned about, as Rust's
+# `unused_variables` lint does: a local, a parameter, a `for` variable, a
+# block's parameter, a name a pattern binds. Each is a warning, not an
+# error: the program runs. A name beginning with `_` says it is meant, and
+# `_` alone, as often as needed, takes the place of a name.
+
+interface Discount:
+  def off(cents: Int, qty: Int) -> Int
+
+struct NoDiscount:
+  # the interface asks for both; this one needs neither
+  def off(cents: Int, qty: Int) -> Int = 0
+
+struct Bulk:
+  # `_cents` says it is there only to fit the interface
+  def off(_cents: Int, qty: Int) -> Int = if qty >= 10: 50 else: 0
+
+def total(prices: {Str: Int}) -> Int:
+  tax = 0
+  var sum = 0
+  for name, cents in prices:
+    sum += cents
+  sum
+
+def main:
+  prices = {"tea": 250, "pie": 400}
+  puts total(prices)
+  puts prices.filter { |name, cents| cents > 300 }
+  puts prices.filter { |_, cents| cents > 300 }
+  for i in 0..2:
+    puts "tick"
+  for _ in 0..2:
+    puts "tock"
+  match prices["tea"]:
+    Some(cents) -> puts "tea is on the menu"
+    None -> puts "no tea"
+  match prices["tea"]:
+    Some(_) -> puts "tea, again"
+    None -> puts "no tea"
+  d: Discount = Bulk()
+  puts d.off(100, 12)
+  puts NoDiscount().off(100, 12)

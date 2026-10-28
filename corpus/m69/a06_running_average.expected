@@ -1,3 +1,9 @@
+warning: block parameter `avg` is never used
+  --> corpus/m69/a06_running_average.lume:71:61
+   |
+71 |   puts feed.zip(r).filter { |t, avg| t.to_float > avg }.map { |t, avg| t }.to_list
+   |                                                             ^
+  help: name it `_avg`, or `_` alone
 12.00 13.50 12.67 14.00 15.20 14.17
 [12.0, 13.5, 12.666666666666666]
 Some(14.166666666666666)

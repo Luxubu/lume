@@ -1,3 +1,9 @@
+warning: `total` is given a value but never used
+  --> corpus/m18/s01_set_basics.lume:18:3
+   |
+18 |   total = 0
+   |   ^
+  help: use it, or name it `_total` to say it is not meant to be
 {5, 3, 1}
 3
 0

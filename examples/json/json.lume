@@ -251,7 +251,7 @@ pub def get(j: Json, path: Str) -> Json?:
   var cur = j
   for step in path.split("."):
     cur = match cur:
-      Obj(pairs) -> pairs.find { |k, v| k == step }.map { |kv| kv.1 }?
+      Obj(pairs) -> pairs.find { |k, _| k == step }.map { |kv| kv.1 }?
       Arr(items) -> items[step.to_int.ok()?]?
       _          -> return None
   cur
@@ -273,7 +273,7 @@ def walk(j: Json, depth: Int, var s: Stats):
   match j:
     Obj(pairs) ->
       s.objects += 1
-      for k, v in pairs:
+      for _, v in pairs:
         walk(v, depth + 1, s)
     Arr(items) ->
       s.arrays += 1

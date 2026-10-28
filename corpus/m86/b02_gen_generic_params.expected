@@ -1,3 +1,9 @@
+warning: `i` is never used in the loop
+  --> corpus/m86/b02_gen_generic_params.lume:16:3
+   |
+16 |   for i in 0...times:
+   |   ^
+  help: name it `_i`, or write `for _ in ...` when only the count matters
 ["ab", "ab", "ab"]
 [7, 7]
 true

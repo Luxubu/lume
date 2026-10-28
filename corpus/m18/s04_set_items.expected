@@ -1,3 +1,15 @@
+warning: block parameter `s` is never used
+  --> corpus/m18/s04_set_items.lume:20:21
+   |
+20 |   puts pairs.filter { |n, s| n == 1 }
+   |                     ^
+  help: name it `_s`, or `_` alone
+warning: block parameter `n` is never used
+  --> corpus/m18/s04_set_items.lume:21:18
+   |
+21 |   puts pairs.map { |n, s| s }.to_list
+   |                  ^
+  help: name it `_n`, or `_` alone
 {(1, "a"), (2, "b"), (1, "b")}
 3
 true

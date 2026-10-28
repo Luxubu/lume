@@ -1,3 +1,15 @@
+warning: block parameter `name` is never used
+  --> corpus/m69/b03_cycle_shapes.lume:64:24
+   |
+64 |   puts Pairs(k: 1).map { |name, sq| sq }.to_list
+   |                        ^
+  help: name it `_name`, or `_` alone
+warning: block parameter `name` is never used
+  --> corpus/m69/b03_cycle_shapes.lume:65:27
+   |
+65 |   puts Pairs(k: 0).max_by { |name, sq| 0 - sq }
+   |                           ^
+  help: name it `_name`, or `_` alone
 [Card(suit: "h", rank: 1), Card(suit: "s", rank: 12), Card(suit: "h", rank: 1)]
 26
 h

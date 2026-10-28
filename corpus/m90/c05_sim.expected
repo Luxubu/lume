@@ -1,3 +1,15 @@
+warning: `t` is never used in the loop
+  --> corpus/m90/c05_sim.lume:63:5
+   |
+63 |     for t in 1..steps:
+   |     ^
+  help: name it `_t`, or write `for _ in ...` when only the count matters
+warning: `t` is never used in the loop
+  --> corpus/m90/c05_sim.lume:89:5
+   |
+89 |     for t in 1..steps:
+   |     ^
+  help: name it `_t`, or write `for _ in ...` when only the count matters
 .a......b..
 1 ....a.b....
 2 ....b..a...

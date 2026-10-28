@@ -1,3 +1,9 @@
+warning: block parameter `k` is never used
+  --> corpus/m90/c04_textkit.lume:96:28
+   |
+96 |   for w, n in freq.sort_by { |k, c| 0 - c }.take(3):
+   |                            ^
+  help: name it `_k`, or `_` alone
 13
 {"the": 3, "cat": 3, "sat": 2, "a": 2, "hat": 1, "yes": 1, "end": 1}
 the 3

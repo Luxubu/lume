@@ -16,6 +16,12 @@ warning: `counts` is `shared var`: every use of it takes a lock, so tasks change
 59 |   shared var counts: {Str: Int} = {"a": 1}
    |   ^
   help: fine for a store or a counter; keep the work done while it is locked short
+warning: block parameter `k` is never used
+  --> corpus/m53/b09_shared_var.lume:61:26
+   |
+61 |   counts = counts.filter { |k, v| v > 1 }
+   |                          ^
+  help: name it `_k`, or `_` alone
 Box(items: ["a", "b"], label: "L")
 2
 L!["a", "b", "Lc"]

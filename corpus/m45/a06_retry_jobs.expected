@@ -1,3 +1,9 @@
+warning: parameter `attempt` is never used
+  --> corpus/m45/a06_retry_jobs.lume:39:17
+   |
+39 |   async def run(attempt: Int) -> Int or Error:
+   |                 ^
+  help: name it `_attempt` if it is there only to fit a signature, as an interface's method may be
 Ok(100)
 fetch -> 200
 error: parse gave up after 3 tries: parse failed on try 3

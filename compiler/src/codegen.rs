@@ -634,7 +634,7 @@ fn lume_pipe<R: std::io::Read + Send + 'static>(mut r: R) -> LumePipeRef {
     });
     p
 }
-fn lume_pipe_poll(p: &LumePipeRef, cx: &mut std::task::Context<'_>, take: impl Fn(&mut LumePipe) -> Option<Option<String>>) -> std::task::Poll<Option<String>> {
+fn lume_pipe_poll(p: &LumePipeRef, cx: &mut std::task::Context<'_>, take: impl ::std::ops::Fn(&mut LumePipe) -> Option<Option<String>>) -> std::task::Poll<Option<String>> {
     let mut g = p.lock().unwrap();
     match take(&mut g) {
         Some(v) => std::task::Poll::Ready(v),
@@ -1045,7 +1045,7 @@ impl<T> LumeYield<T> {
     fn put(&self, v: T) -> LumePause<T> { LumePause(Some(v)) }
 }
 impl<T, F: std::future::Future<Output = ()>> LumeGen<T, F> {
-    fn new(make: impl FnOnce(LumeYield<T>) -> F) -> Self {
+    fn new(make: impl ::std::ops::FnOnce(LumeYield<T>) -> F) -> Self {
         LumeGen { slot: None, body: Some(::std::boxed::Box::pin(make(LumeYield(std::marker::PhantomData)))) }
     }
 }
@@ -1071,7 +1071,7 @@ pub struct LumeChan<T> { slot: Option<T>, body_done: bool, walker_gone: bool, wa
 /// What an async sequence is to whoever walks it: something polled for its
 /// next item, as Rust's `Stream` is. The channel of an `async def` with
 /// `yield` is one; a chain over one wraps it, and is polled through it.
-pub struct LumeStream<T> { poll: ::std::boxed::Box<dyn FnMut(&mut std::task::Context<'_>) -> std::task::Poll<Option<T>> + Send> }
+pub struct LumeStream<T> { poll: ::std::boxed::Box<dyn ::std::ops::FnMut(&mut std::task::Context<'_>) -> std::task::Poll<Option<T>> + Send> }
 pub struct LumeSender<T> { ch: std::sync::Arc<std::sync::Mutex<LumeChan<T>>> }
 /// The walking end of the channel; letting go of it ends the body.
 pub struct LumeWalker<T> { ch: std::sync::Arc<std::sync::Mutex<LumeChan<T>>> }
@@ -1132,11 +1132,11 @@ impl<T: Send + 'static> LumeStream<T> {
     fn next(&mut self) -> impl std::future::Future<Output = Option<T>> + '_ {
         std::future::poll_fn(move |cx| (self.poll)(cx))
     }
-    fn lume_map<U: Send + 'static>(mut self, f: impl Fn(&T) -> U + Send + 'static) -> LumeStream<U> {
+    fn lume_map<U: Send + 'static>(mut self, f: impl ::std::ops::Fn(&T) -> U + Send + 'static) -> LumeStream<U> {
         LumeStream { poll: ::std::boxed::Box::new(move |cx| (self.poll)(cx).map(|o| o.map(|x| f(&x)))) }
     }
     /// `filter` keeps what the block says yes to; `reject` what it says no to.
-    fn lume_filter(mut self, keep: bool, f: impl Fn(&T) -> bool + Send + 'static) -> LumeStream<T> {
+    fn lume_filter(mut self, keep: bool, f: impl ::std::ops::Fn(&T) -> bool + Send + 'static) -> LumeStream<T> {
         LumeStream { poll: ::std::boxed::Box::new(move |cx| loop {
             match (self.poll)(cx) {
                 std::task::Poll::Ready(Some(x)) => if f(&x) == keep { return std::task::Poll::Ready(Some(x)); },
@@ -1144,7 +1144,7 @@ impl<T: Send + 'static> LumeStream<T> {
             }
         }) }
     }
-    fn lume_take_while(self, f: impl Fn(&T) -> bool + Send + 'static) -> LumeStream<T> {
+    fn lume_take_while(self, f: impl ::std::ops::Fn(&T) -> bool + Send + 'static) -> LumeStream<T> {
         let mut src = Some(self);
         LumeStream { poll: ::std::boxed::Box::new(move |cx| {
             let Some(s) = src.as_mut() else { return std::task::Poll::Ready(None) };
@@ -1184,9 +1184,9 @@ impl<T: Send + 'static> LumeStream<T> {
 }
 /// A block kept in a local before an async sequence's items reach it: these
 /// say what it takes, which a closure on its own cannot.
-fn lume_takes<T, R, F: FnMut(T) -> R>(f: F) -> F { f }
-fn lume_looks<T, R, F: FnMut(&T) -> R>(f: F) -> F { f }
-fn lume_folds<A, T, F: FnMut(A, T) -> A>(f: F) -> F { f }
+fn lume_takes<T, R, F: ::std::ops::FnMut(T) -> R>(f: F) -> F { f }
+fn lume_looks<T, R, F: ::std::ops::FnMut(&T) -> R>(f: F) -> F { f }
+fn lume_folds<A, T, F: ::std::ops::FnMut(A, T) -> A>(f: F) -> F { f }
 // ---- end prelude ----
 "#;
 
@@ -1764,7 +1764,10 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, module_id: &str
             format!("{}{}{}", head, uses, rest)
         }
     };
-    Ok((Output { rust, warnings: g.warnings, deps: rust_deps, has_rust_blocks: g.has_rust_blocks }, exports))
+    // names given a value and never read, as Rust's `unused_variables` has them
+    let mut warnings = g.warnings;
+    warnings.extend(crate::unused::warnings(program));
+    Ok((Output { rust, warnings, deps: rust_deps, has_rust_blocks: g.has_rust_blocks }, exports))
 }
 
 /// Rewrites a type from module `id` so its named types are keyed the way the
@@ -1861,7 +1864,7 @@ pub fn rust_type(t: &Type) -> String {
         Type::Shared(inner, true) => format!("std::sync::Arc<std::sync::Mutex<{}>>", rust_type(inner)),
         Type::Shared(inner, false) => format!("std::sync::Arc<{}>", rust_type(inner)),
         Type::App(n, args) => format!("{}<{}>", n, args.iter().map(rust_type).collect::<Vec<_>>().join(", ")),
-        Type::Fn(ps, r) => format!("impl FnMut({}) -> {}", ps.iter().map(rust_type).collect::<Vec<_>>().join(", "), rust_type(r)),
+        Type::Fn(ps, r) => format!("impl ::std::ops::FnMut({}) -> {}", ps.iter().map(rust_type).collect::<Vec<_>>().join(", "), rust_type(r)),
         Type::Var(n) => n.clone(),
         Type::Unknown => "_".into(),
     }
@@ -1957,7 +1960,7 @@ impl Gen {
     fn dyn_fn(&self, ins: &[Type], out: &Type) -> String {
         let ps: Vec<String> = ins.iter().map(|t| self.kept_block_param(t)).collect();
         let ret = if *out == Type::Unit { String::new() } else { format!(" -> {}", self.rt(out)) };
-        format!("dyn Fn({}){} + Send + Sync", ps.join(", "), ret)
+        format!("dyn ::std::ops::Fn({}){} + Send + Sync", ps.join(", "), ret)
     }
 
     /// The Rust path of a struct/enum/function key as seen from this module.
@@ -7459,7 +7462,7 @@ impl Gen {
         let saved_iface_params = std::mem::take(&mut self.iface_params);
         let mut lent_params: HashMap<String, bool> = HashMap::new();
         for p in &f.params {
-            if !names.insert(p.name.clone()) {
+            if p.name != "_" && !names.insert(p.name.clone()) {
                 return Err(LumeError::new(p.line, p.col, format!("parameter `{}` is listed twice", p.name)));
             }
             let pty = self.ct(&p.ty);
@@ -9159,7 +9162,7 @@ impl Gen {
                             let parts: Vec<String> = vars
                                 .iter()
                                 .zip(ts)
-                                .map(|(v, t)| if borrowed && !map_pairs && t.is_copy() { rust_name(v) } else if borrowed && !map_pairs { format!("ref {}", rust_name(v)) } else { rust_name(v) })
+                                .map(|(v, t)| if v == "_" { "_".to_string() } else if borrowed && !map_pairs && t.is_copy() { rust_name(v) } else if borrowed && !map_pairs { format!("ref {}", rust_name(v)) } else { rust_name(v) })
                                 .collect();
                             let inner = format!("({})", parts.join(", "));
                             if borrowed && !map_pairs { format!("&{}", inner) } else { inner }
@@ -10084,7 +10087,9 @@ impl Gen {
             };
             return Err(LumeError::new(at.line, at.col, msg));
         }
-        let names: Vec<String> = params.iter().map(|p| rust_name(p)).collect();
+        // among several, `_` stays Rust's `_`: nothing can read it, and it
+        // may be there more than once (alone it is the `_.x` shorthand's)
+        let names: Vec<String> = params.iter().map(|p| if params.len() >= 2 && p == "_" { "_".to_string() } else { rust_name(p) }).collect();
         let map_items = std::mem::take(&mut self.map_items);
         // The closure pattern spells out every reference layer, so each name
         // binds exactly what `declare_block_params` says it is: a Copy part by
@@ -10100,7 +10105,7 @@ impl Gen {
                 if pattern_ref { format!("&{}", pair) } else { pair }
             } else if by_ref || (pattern_ref && !elem.is_copy()) {
                 // a reference to a tuple: take Copy parts out, borrow the rest
-                let parts: Vec<String> = names.iter().zip(&ts).map(|(n, t)| if t.is_copy() { n.clone() } else { format!("ref {}", n) }).collect();
+                let parts: Vec<String> = names.iter().zip(&ts).map(|(n, t)| if t.is_copy() || n == "_" { n.clone() } else { format!("ref {}", n) }).collect();
                 let pair = format!("({})", parts.join(", "));
                 let depth = (by_ref as usize) + (pattern_ref as usize);
                 format!("{}{}", "&".repeat(depth), pair)
@@ -14411,6 +14416,15 @@ fn same_expr(a: &Expr, b: &Expr) -> bool {
         (ExprKind::TupleIndex { recv: r1, index: i1 }, ExprKind::TupleIndex { recv: r2, index: i2 }) => i1 == i2 && same_expr(r1, r2),
         _ => false,
     }
+}
+
+/// For `unused.rs`: whether a statement, or an expression, reads `name`.
+pub fn stmt_mentions_pub(s: &Stmt, name: &str) -> bool {
+    stmt_mentions(s, name)
+}
+
+pub fn expr_mentions_pub(e: &Expr, name: &str) -> bool {
+    expr_mentions(e, name)
 }
 
 fn stmt_mentions(s: &Stmt, name: &str) -> bool {

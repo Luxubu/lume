@@ -24,7 +24,7 @@ import suite
 import suite.Check
 import suite.Verdict
 
-COMPILER_FILES = ["codegen.rs", "parser.rs", "lexer.rs", "loader.rs", "manifest.rs", "fetch.rs", "main.rs"]
+COMPILER_FILES = ["codegen.rs", "parser.rs", "lexer.rs", "loader.rs", "manifest.rs", "fetch.rs", "main.rs", "unused.rs"]
 
 # What a flag such as `-j 8` was given, or `fallback`.
 def flag(args: [Str], name: Str, fallback: Int) -> Int:
@@ -36,7 +36,7 @@ def docs_files -> [Str] or Error:
   Ok(Dir.walk("docs")?.filter { |p| p.ends_with?(".md") }.sort)
 
 # Every example, numbered so each runs in a folder of its own.
-def examples(scratch: Str) -> [(Int, Str, fences.Block)] or Error:
+def examples -> [(Int, Str, fences.Block)] or Error:
   var out: [(Int, Str, fences.Block)] = []
   for path in docs_files()?:
     var program: [Str] = []
@@ -75,9 +75,9 @@ async def docs(args: [Str]) -> Int or Error:
   verbose = args.contains?("-v")
   workers = flag(args, "-j", 8).max(1)
   scratch = Path.join(Env.get("TMPDIR").or("/tmp"), "lumecheck-#{Time.now_ms}")
-  all = examples(scratch)?
+  all = examples()?
   # they finish in any order; the outcomes are put back in the docs' order
-  var outcomes = block_outcomes(lume, all, scratch, workers).to_list.sort_by { |i, o| i }.map { |i, o| o }.to_list
+  var outcomes = block_outcomes(lume, all, scratch, workers).to_list.sort_by { |i, _| i }.map { |_, o| o }.to_list
   # the multi-file examples: a folder under docs/ with main.lume and main.expected
   root = Env.get("PWD").or(".")
   for path in docs_files_all()?:
@@ -146,7 +146,7 @@ async def run_suite(args: [Str]) -> Int or Error:
   fail_fast = args.contains?("-x")
   verbose = args.contains?("-v")
   numbered = checks.enumerate.to_list
-  (timed, rest) = numbered.partition { |i, c| c.steps.any? { |s| plan.TIMED.contains?(s.name) } }
+  (timed, rest) = numbered.partition { |_, c| c.steps.any? { |s| plan.TIMED.contains?(s.name) } }
   var pass = 0
   # what failed, with its place in the plan, to be listed in that order
   var failures: [(Int, Str)] = []
@@ -165,7 +165,7 @@ async def run_suite(args: [Str]) -> Int or Error:
       # letting go of the sequence ends it: no more checks are started
       break if fail_fast and not failures.empty?
     break if fail_fast and not failures.empty?
-  var failed = failures.sort_by { |i, n| i }.map { |i, n| n }.to_list
+  var failed = failures.sort_by { |i, _| i }.map { |_, n| n }.to_list
   if fail_fast and not failed.empty?:
     clean_builds()?
     Dir.remove(scratch)? if Dir.exists?(scratch)

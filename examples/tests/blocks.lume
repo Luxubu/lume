@@ -45,9 +45,9 @@ test "the block decides the result type":
 
 test "a block that keeps or drops":
   assert keep([1, 2, 3, 4]) { |n| n % 2 == 0 } == [2, 4]
-  assert keep([1, 2, 3]) { |n| false } == []
+  assert keep([1, 2, 3]) { |_| false } == []
   none: [Int] = []
-  assert keep(none) { |n| true } == []
+  assert keep(none) { |_| true } == []
 
 test "folding with the accumulator first":
   assert fold_all([1, 2, 3], 0) { |a, n| a + n } == 6
@@ -69,7 +69,7 @@ test "retry stops at the first success":
     i == 2
   assert ok
   assert tried == 3
-  assert not retry(2) { |i| false }
+  assert not retry(2) { |_| false }
 
 test "a block can end the search early":
   assert first_where([1, 5, 9]) { |n| n > 4 } == Some(5)

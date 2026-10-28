@@ -163,7 +163,7 @@ async def main:
   shared var served = 0
   # a task whose body ends with a statement gives back nothing, `()`
   var waiters: [Task[()]] = []
-  for table in 1..20:
+  for _ in 1..20:
     w = spawn:
       served += 1
     waiters.push(w)

@@ -10,6 +10,12 @@ warning: `log` is `shared var`: every use of it takes a lock, so tasks change it
 39 |   shared var log: [Str] = []
    |   ^
   help: fine for a store or a counter; keep the work done while it is locked short
+warning: block parameter `n` is never used
+  --> corpus/m42/c07_jobs/main.lume:59:51
+   |
+59 |   total_of: ([(Str, Int)]) -> Int = { |rs| rs.map { |n, v| v }.sum }
+   |                                                   ^
+  help: name it `_n`, or `_` alone
 triple: 21
 bump: 42
 both: 60

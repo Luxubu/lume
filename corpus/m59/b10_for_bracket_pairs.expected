@@ -1,3 +1,9 @@
+warning: `k` is never used in the loop
+  --> corpus/m59/b10_for_bracket_pairs.lume:39:3
+   |
+39 |   for (k, v) in sizes:
+   |   ^
+  help: name it `_k`, or write `for _ in ...` when only the count matters
 0 ant
 1 bee
 2 cat

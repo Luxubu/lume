@@ -1,3 +1,9 @@
+warning: block parameter `h` is never used
+  --> corpus/m63/c01_logs/main.lume:82:22
+   |
+82 |   top = hours.max_by { |h, c| c }
+   |                      ^
+  help: name it `_h`, or `_` alone
 13 lines, 9 read, 4 refused
   line 8: expected `,` or `}` at position 46
   line 9: `04/03/2024 11:21` does not match `%Y-%m-%d %H:%M:%S`: expected `-` at position 2

@@ -1,0 +1,55 @@
+warning: parameter `cents` is never used
+  --> examples/unused_names.lume:12:11
+   |
+12 |   def off(cents: Int, qty: Int) -> Int = 0
+   |           ^
+  help: name it `_cents` if it is there only to fit a signature, as an interface's method may be
+warning: parameter `qty` is never used
+  --> examples/unused_names.lume:12:23
+   |
+12 |   def off(cents: Int, qty: Int) -> Int = 0
+   |                       ^
+  help: name it `_qty` if it is there only to fit a signature, as an interface's method may be
+warning: `tax` is given a value but never used
+  --> examples/unused_names.lume:19:3
+   |
+19 |   tax = 0
+   |   ^
+  help: use it, or name it `_tax` to say it is not meant to be
+warning: `name` is never used in the loop
+  --> examples/unused_names.lume:21:3
+   |
+21 |   for name, cents in prices:
+   |   ^
+  help: name it `_name`, or write `for _ in ...` when only the count matters
+warning: block parameter `name` is never used
+  --> examples/unused_names.lume:28:22
+   |
+28 |   puts prices.filter { |name, cents| cents > 300 }
+   |                      ^
+  help: name it `_name`, or `_` alone
+warning: `i` is never used in the loop
+  --> examples/unused_names.lume:30:3
+   |
+30 |   for i in 0..2:
+   |   ^
+  help: name it `_i`, or write `for _ in ...` when only the count matters
+warning: `cents` is bound by the pattern but never used
+  --> examples/unused_names.lume:35:10
+   |
+35 |     Some(cents) -> puts "tea is on the menu"
+   |          ^
+  help: write `_` in its place, or name it `_cents`
+650
+{"pie": 400}
+{"pie": 400}
+tick
+tick
+tick
+tock
+tock
+tock
+tea is on the menu
+tea, again
+50
+0

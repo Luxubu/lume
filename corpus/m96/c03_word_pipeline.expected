@@ -1,3 +1,21 @@
+warning: block parameter `w` is never used
+  --> corpus/m96/c03_word_pipeline.lume:74:23
+   |
+74 |   total = counted.map { |w, n| n }.sum
+   |                       ^
+  help: name it `_w`, or `_` alone
+warning: block parameter `w` is never used
+  --> corpus/m96/c03_word_pipeline.lume:78:25
+   |
+78 |   once = counted.filter { |w, n| n == 1 }.map { |w, n| w }.to_set
+   |                         ^
+  help: name it `_w`, or `_` alone
+warning: block parameter `n` is never used
+  --> corpus/m96/c03_word_pipeline.lume:78:47
+   |
+78 |   once = counted.filter { |w, n| n == 1 }.map { |w, n| w }.to_set
+   |                                               ^
+  help: name it `_n`, or `_` alone
 lower -> words: 3 lines
 words -> sort: 17 lines
 11 distinct words, 17 in all

@@ -1,3 +1,9 @@
+warning: block parameter `v` is never used
+  --> corpus/m53/c07_report/main.lume:52:28
+   |
+52 |   regions = regions.filter { |k, v| k != "?" }
+   |                            ^
+  help: name it `_v`, or `_` alone
 north pen     3
 south ink     12
 north pad     1

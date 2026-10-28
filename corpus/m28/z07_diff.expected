@@ -1,3 +1,15 @@
+warning: `ri` is never used in the loop
+  --> corpus/m28/z07_diff.lume:69:3
+   |
+69 |   for ri in 0..n:
+   |   ^
+  help: name it `_ri`, or write `for _ in ...` when only the count matters
+warning: `ci` is never used in the loop
+  --> corpus/m28/z07_diff.lume:71:5
+   |
+71 |     for ci in 0..m:
+   |     ^
+  help: name it `_ci`, or write `for _ in ...` when only the count matters
 --- old
 +++ new
   def main:

@@ -1,3 +1,9 @@
+warning: block parameter `k` is never used
+  --> corpus/m18/s22_anagrams.lume:20:27
+   |
+20 |   singles = groups.filter { |k, g| g.len == 1 }
+   |                           ^
+  help: name it `_k`, or `_` alone
 3
 eilnst: enlist inlets listen silent tinsel
 eggloo: gogole google

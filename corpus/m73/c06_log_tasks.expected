@@ -1,3 +1,9 @@
+warning: block parameter `k` is never used
+  --> corpus/m73/c06_log_tasks.lume:109:23
+    |
+109 |   puts per_min.max_by { |k, v| v }
+    |                       ^
+  help: name it `_k`, or `_` alone
 line 5: expected at least 4 fields, found 1
 line 10: unknown level `TRACE`
 10 records from 3 services

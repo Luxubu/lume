@@ -1,3 +1,9 @@
+warning: block parameter `w` is never used
+  --> corpus/m26/b04_methods.lume:72:14
+   |
+72 |   words.each { |w| seen += 1 }
+   |              ^
+  help: name it `_w`, or `_` alone
 odd 1
 odd 3
 odd 5

@@ -57,7 +57,7 @@ pub def to_html(md: Str) -> Str:
       close_list(out, list)
       para = []
       list = []
-      level = line.chars.take_while { |c| c == "#" }.count { |c| true }
+      level = line.chars.take_while { |c| c == "#" }.count { |_| true }
       text = line[level...line.len].trim
       out.push("<h#{level}>#{inline(text)}</h#{level}>")
       next

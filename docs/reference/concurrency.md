@@ -437,7 +437,7 @@ works on the same one.**
 async def main:
   shared var hits = 0
   var workers: [Task[()]] = []
-  for i in 1..100:
+  for _ in 1..100:
     w = spawn:
       hits += 1
     workers.push(w)

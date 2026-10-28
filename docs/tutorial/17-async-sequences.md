@@ -144,7 +144,7 @@ async def main:
   puts orders().find { |d| d.starts_with?("s") }  #=> Some("soup")
   puts ticket_numbers().any? { |n| n % 50 == 0 }  #=> true
   var served = 0
-  orders().each { |d| served += 1 }
+  orders().each { |_| served += 1 }
   puts served                                     #=> 4
 ```
 

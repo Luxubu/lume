@@ -1,2 +1,8 @@
+warning: block parameter `s` is never used
+  --> corpus/m18/s04b_filter_tuple_literal.lume:3:36
+  |
+3 |   puts {(1, "a"), (2, "b")}.filter { |n, s| n == 1 }
+  |                                    ^
+  help: name it `_s`, or `_` alone
 {(1, "a")}
 exit: 0

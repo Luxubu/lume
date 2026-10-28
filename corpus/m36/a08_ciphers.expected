@@ -1,3 +1,9 @@
+warning: block parameter `c` is never used
+  --> corpus/m36/a08_ciphers.lume:74:34
+   |
+74 |   ranked = tally.to_list.sort_by { |c, n| 0 - n }
+   |                                  ^
+  help: name it `_c`, or `_` alone
 Khoor, Zruog!
 Hello, World!
 `ab

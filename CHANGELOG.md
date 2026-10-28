@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **Unused names are warned about**, as Rust's `unused_variables` lint
+  does: a local given a value and never read, a parameter, a `for`
+  variable, a block's parameter, a name a pattern binds. A name beginning
+  with `_` says it is meant, and `_` may now stand in a block's parameters,
+  a `for`, or a function's parameters more than once (`{ |_, v| v }`,
+  `for _, x, _ in rows`). Warnings never stop a program; Lume's own
+  examples and docs have none.
+- **Fixed**: `lume fmt` wrote `{ |_| x }`, a block that ignores its item, as the shorthand `(x)`, which means something else.
+- **Fixed**: a program with a type of its own named `Fn` hid Rust's `Fn`
+  trait from the code Lume writes, and reached rustc. The test in
+  `examples/sets.lume`, which nothing ran, had not compiled.
+
 - **Tested on Windows**: the suite runs on Windows too, for every push.
   What it found is fixed: a built program is `name.exe`, as Windows wants;
   messages write paths with `/` on every system; a missing file is told in

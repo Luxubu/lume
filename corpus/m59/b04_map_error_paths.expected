@@ -1,3 +1,9 @@
+warning: block parameter `e` is never used
+  --> corpus/m59/b04_map_error_paths.lume:21:55
+   |
+21 |   (code, out, _) = Process.run(program, []).map_error { |e| Error("step failed to start: #{program}") }?
+   |                                                       ^
+  help: name it `_e`, or `_` alone
 Ok(3)
 Error("retries: `x` is not an integer")
 Ok("0:")

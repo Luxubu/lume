@@ -4,6 +4,24 @@ warning: `things` holds values of different types behind `Walkable`, so calls on
 83 |   things: [Walkable] = [root, Doc("notes.txt", 50), {"a.txt": 3, "b.txt": 40}]
    |   ^
   help: fine for most code; use a single concrete type or an enum if this is a hot loop
+warning: block parameter `path` is never used
+  --> corpus/m45/a04_folder_walker.lume:27:10
+   |
+27 |     walk { |path, size| n += 1 }
+   |          ^
+  help: name it `_path`, or `_` alone
+warning: block parameter `size` is never used
+  --> corpus/m45/a04_folder_walker.lume:27:10
+   |
+27 |     walk { |path, size| n += 1 }
+   |          ^
+  help: name it `_size`, or `_` alone
+warning: block parameter `path` is never used
+  --> corpus/m45/a04_folder_walker.lume:32:10
+   |
+32 |     walk { |path, size| t += size }
+   |          ^
+  help: name it `_path`, or `_` alone
   1200  src/main.lume
    300  src/util.lume
    800  src/lib/text.lume

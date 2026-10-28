@@ -31,7 +31,7 @@ pub enum Json:
   # `j.get("name")`: the value under a key of an object
   def get(key: Str) -> Json?:
     match self:
-      Obj(pairs) -> pairs.find { |k, v| k == key }.map { |kv| kv.1 }
+      Obj(pairs) -> pairs.find { |k, _| k == key }.map { |kv| kv.1 }
       _ -> None
 
   # `j.at(0)`: an item of an array
@@ -89,7 +89,7 @@ pub enum Json:
       Obj(ps) -> ps
       _ -> []
 
-  def keys -> [Str] = pairs.map { |k, v| k }.to_list
+  def keys -> [Str] = pairs.map { |k, _| k }.to_list
 
   # ---- decoding: each gives an `Error` that says what was wrong
 
@@ -441,7 +441,7 @@ def walk(j: Json, depth: Int, var s: Stats):
   match j:
     Obj(pairs) ->
       s.objects += 1
-      for k, v in pairs:
+      for _, v in pairs:
         walk(v, depth + 1, s)
     Arr(items) ->
       s.arrays += 1

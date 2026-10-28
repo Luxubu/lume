@@ -118,7 +118,7 @@ def main -> () or Error:
   puts "--- fib(21) = #{out[0].or("?")} in #{Time.now_ms - t0} ms"
 
 test "the samples all run":
-  for name, src in samples():
+  for _, src in samples():
     match eval.run(src):
       Ok(lines) -> assert not lines.empty?
       Error(_)  -> assert false

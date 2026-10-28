@@ -4,6 +4,30 @@ warning: `sources` holds values of different types behind `Source`, so calls on 
 127 |   sources: [Source] = [tea, retry, bus]
     |   ^
   help: fine for most code; use a single concrete type or an enum if this is a hot loop
+warning: parameter `n` is never used
+  --> corpus/m78/c04_scheduler.lume:66:11
+   |
+66 |   def gap(n: Int) -> Int = step
+   |           ^
+  help: name it `_n` if it is there only to fit a signature, as an interface's method may be
+warning: block parameter `who` is never used
+  --> corpus/m78/c04_scheduler.lume:133:76
+    |
+133 |   timeline = merge(merge(tea.events, retry.events), bus.events).take_while { |t, who| t <= 20 }.to_list
+    |                                                                            ^
+  help: name it `_who`, or `_` alone
+warning: block parameter `k` is never used
+  --> corpus/m78/c04_scheduler.lume:139:23
+    |
+139 |   best = slots.max_by { |k, whos| whos.to_set.len }.map { |pair| pair.0 }.or(0 - 1)
+    |                       ^
+  help: name it `_k`, or `_` alone
+warning: `t` is never used in the loop
+  --> corpus/m78/c04_scheduler.lume:143:3
+    |
+143 |   for t, who in timeline:
+    |   ^
+  help: name it `_t`, or write `for _ in ...` when only the count matters
 Every(name: "tea", first: 0, step: 5)
 cake every x from 1: `x` is not an integer
 nap at noon: cannot read `nap at noon`

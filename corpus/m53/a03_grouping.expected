@@ -1,3 +1,27 @@
+warning: block parameter `k` is never used
+  --> corpus/m53/a03_grouping.lume:43:26
+   |
+43 |   totals = totals.filter { |k, v| v >= 50 }
+   |                          ^
+  help: name it `_k`, or `_` alone
+warning: block parameter `k` is never used
+  --> corpus/m53/a03_grouping.lume:45:23
+   |
+45 |   big = totals.filter { |k, v| v > 100 }
+   |                       ^
+  help: name it `_k`, or `_` alone
+warning: block parameter `c` is never used
+  --> corpus/m53/a03_grouping.lume:50:26
+   |
+50 |   cities = cities.filter { |c, who| who.len > 1 or who.contains?("cy") }
+   |                          ^
+  help: name it `_c`, or `_` alone
+warning: block parameter `k` is never used
+  --> corpus/m53/a03_grouping.lume:53:27
+   |
+53 |   ranked = totals.sort_by { |k, v| 0 - v }
+   |                           ^
+  help: name it `_k`, or `_` alone
 oslo: 3 orders, 185
 rome: 2 orders, 55
 lima: 1 orders, 300

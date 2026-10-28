@@ -1,3 +1,9 @@
+warning: parameter `n` is never used
+  --> corpus/m26/g01_generic_fns.lume:53:14
+   |
+53 | def blank[T](n: Int) -> [T]:
+   |              ^
+  help: name it `_n` if it is there only to fit a signature, as an interface's method may be
 3
 ada
 true

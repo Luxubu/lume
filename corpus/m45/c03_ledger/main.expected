@@ -4,6 +4,12 @@ warning: `book` is `shared var`: every use of it takes a lock, so tasks change i
 29 |   shared var book = account.opening
    |   ^
   help: fine for a store or a counter; keep the work done while it is locked short
+warning: `who` is given a value but never used
+  --> corpus/m45/c03_ledger/main.lume:55:5
+   |
+55 |     (who, cents) = rules.parse_move("nobody")?
+   |     ^
+  help: use it, or name it `_who` to say it is not meant to be
 ana -200
 cy 50
 refused: bo would go below zero

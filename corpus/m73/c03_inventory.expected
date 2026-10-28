@@ -1,3 +1,9 @@
+warning: block parameter `k` is never used
+  --> corpus/m73/c03_inventory.lume:168:37
+    |
+168 |   for sku, ps in seen.places.filter { |k, v| v.len > 1 }:
+    |                                     ^
+  help: name it `_k`, or `_` alone
 ledger: 5 items, counted: 5 skus
 ledger value: $151.25
 A100  ok      120

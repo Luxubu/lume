@@ -1,3 +1,15 @@
+warning: block parameter `n` is never used
+  --> corpus/m53/a05_wordcount.lume:48:26
+   |
+48 |   counts = counts.reject { |w, n| STOP.contains?(w) }
+   |                          ^
+  help: name it `_n`, or `_` alone
+warning: block parameter `w` is never used
+  --> corpus/m53/a05_wordcount.lume:51:27
+   |
+51 |   singles = counts.filter { |w, n| n == 1 }.keys.to_set
+   |                           ^
+  help: name it `_w`, or `_` alone
 14
 {"cat", "hat", "bat", "end"}
 {"cat"}

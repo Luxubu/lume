@@ -1229,7 +1229,8 @@ impl Parser {
             }
             while self.eat_sym(",") {
                 let (v, vl, vc) = self.ident("a loop variable")?;
-                if vars.contains(&v) {
+                // `_` says "not this one", as often as it is needed, as in Rust
+                if v != "_" && vars.contains(&v) {
                     return Err(LumeError::new(vl, vc, format!("loop variable `{}` is listed twice", v)));
                 }
                 vars.push(v);
@@ -2035,7 +2036,7 @@ impl Parser {
         let mut params = Vec::new();
         loop {
             let (p, l, c) = self.ident("a block parameter")?;
-            if params.contains(&p) {
+            if p != "_" && params.contains(&p) {
                 return Err(LumeError::new(l, c, format!("block parameter `{}` is listed twice", p)));
             }
             params.push(p);

@@ -4,6 +4,30 @@ warning: `queries` holds values of different types behind `Query`, so calls on i
 77 |   queries: [Query] = [ByAuthor(name: "Austen"), Tagged(tag: "sea")]
    |   ^
   help: fine for most code; use a single concrete type or an enum if this is a hot loop
+warning: block parameter `t` is never used
+  --> corpus/m78/c06_catalogue_fail.lume:75:27
+   |
+75 |   puts cat.by_year.filter { |y, t, a| y < 1900 }.map { |y, t, a| t }.to_list
+   |                           ^
+  help: name it `_t`, or `_` alone
+warning: block parameter `a` is never used
+  --> corpus/m78/c06_catalogue_fail.lume:75:27
+   |
+75 |   puts cat.by_year.filter { |y, t, a| y < 1900 }.map { |y, t, a| t }.to_list
+   |                           ^
+  help: name it `_a`, or `_` alone
+warning: block parameter `y` is never used
+  --> corpus/m78/c06_catalogue_fail.lume:75:54
+   |
+75 |   puts cat.by_year.filter { |y, t, a| y < 1900 }.map { |y, t, a| t }.to_list
+   |                                                      ^
+  help: name it `_y`, or `_` alone
+warning: block parameter `a` is never used
+  --> corpus/m78/c06_catalogue_fail.lume:75:54
+   |
+75 |   puts cat.by_year.filter { |y, t, a| y < 1900 }.map { |y, t, a| t }.to_list
+   |                                                      ^
+  help: name it `_a`, or `_` alone
 1815 Emma       Austen
 1817 Persuasion Austen
 1961 Solaris    Lem

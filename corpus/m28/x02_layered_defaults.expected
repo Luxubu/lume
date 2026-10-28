@@ -1,3 +1,9 @@
+warning: `x` is never used in the loop
+  --> corpus/m28/x02_layered_defaults.lume:55:3
+   |
+55 |   for x in xs:
+   |   ^
+  help: name it `_x`, or write `for _ in ...` when only the count matters
 == moves: 3 entries ==
 == MOVES: 3 ENTRIES ==
 == none: empty ==

@@ -1,3 +1,9 @@
+warning: parameter `xs` is never used
+  --> corpus/edge/g03_str_fn_name.lume:1:9
+  |
+1 | def len(xs: [Int]) -> Int = 42
+  |         ^
+  help: name it `_xs` if it is there only to fit a signature, as an interface's method may be
 42
 3
 1

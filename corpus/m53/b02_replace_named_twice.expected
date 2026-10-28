@@ -1,3 +1,9 @@
+warning: block parameter `k` is never used
+  --> corpus/m53/b02_replace_named_twice.lume:44:16
+   |
+44 |   m = m.filter { |k, v| v > m.len - 1 }
+   |                ^
+  help: name it `_k`, or `_` alone
 ["2:a", "2:b"]
 ["2:a2", "2:b2"]
 ["2:a2", "2:b2", "2:A2", "2:B2"]

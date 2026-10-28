@@ -771,12 +771,12 @@ impl Fmt {
 
     /// A `{ |x| ... }` or `do |x|` block (not a `_` shorthand).
     fn is_block_lambda(&self, e: &Expr) -> bool {
-        matches!(&e.kind, ExprKind::Lambda { params, .. } if params.as_slice() != ["_"])
+        matches!(&e.kind, ExprKind::Lambda { .. }) && !is_shorthand(e)
     }
 
     fn lambda_text(&mut self, e: &Expr) -> String {
         if let ExprKind::Lambda { params, body } = &e.kind {
-            if params.as_slice() == ["_"] {
+            if is_shorthand(e) {
                 if let Some(Stmt::Expr(x)) = body.stmts.first() {
                     return self.expr(x);
                 }
@@ -1218,5 +1218,17 @@ fn pattern_str(p: &Pattern) -> String {
             }
             format!("[{}]", parts.join(", "))
         }
+    }
+}
+
+/// `_.upcase` as the parser keeps it: a block whose one parameter is `_`,
+/// and whose body reads it. `{ |_| 0 }`, which ignores its item, is a block
+/// written out, and stays one.
+fn is_shorthand(e: &Expr) -> bool {
+    match &e.kind {
+        ExprKind::Lambda { params, body } => {
+            params.as_slice() == ["_"] && body.stmts.len() == 1 && body.stmts.iter().any(|s| crate::codegen::stmt_mentions_pub(s, "_"))
+        }
+        _ => false,
     }
 }

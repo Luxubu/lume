@@ -1,3 +1,9 @@
+warning: block parameter `region` is never used
+  --> corpus/m81/a01_csv_report.lume:90:26
+   |
+90 |   firsts = by_region.map { |region, ss| ss.at(0).rep }
+   |                          ^
+  help: name it `_region`, or `_` alone
 {"region": 0, "rep": 1, "units": 2, "price": 3}
 5 sales, 2 skipped
 region reps     units  revenue

@@ -1,3 +1,9 @@
+warning: block parameter `r` is never used
+  --> corpus/m73/a01_sales_report.lume:90:37
+   |
+90 |   for rep, units in per_rep.sort_by { |r, u| 0 - u }:
+   |                                     ^
+  help: name it `_r`, or `_` alone
 columns: region | rep | units | price
 line 3: `x` is not an integer
 line 7: expected 4 fields, found 2

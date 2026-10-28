@@ -1,3 +1,51 @@
+warning: block parameter `n` is never used
+  --> corpus/m78/c01_file_tree.lume:117:21
+    |
+117 |   root.files.filter { |n, s| s > over }.map { |n, s| n }
+    |                     ^
+  help: name it `_n`, or `_` alone
+warning: block parameter `s` is never used
+  --> corpus/m78/c01_file_tree.lume:117:45
+    |
+117 |   root.files.filter { |n, s| s > over }.map { |n, s| n }
+    |                                             ^
+  help: name it `_s`, or `_` alone
+warning: block parameter `d` is never used
+  --> corpus/m78/c01_file_tree.lume:139:29
+    |
+139 |   big = root.walk(0).filter { |d, t, s| t.ends_with?("/") and s > 1000 }.map { |d, t, s| t }.to_list
+    |                             ^
+  help: name it `_d`, or `_` alone
+warning: block parameter `d` is never used
+  --> corpus/m78/c01_file_tree.lume:139:78
+    |
+139 |   big = root.walk(0).filter { |d, t, s| t.ends_with?("/") and s > 1000 }.map { |d, t, s| t }.to_list
+    |                                                                              ^
+  help: name it `_d`, or `_` alone
+warning: block parameter `s` is never used
+  --> corpus/m78/c01_file_tree.lume:139:78
+    |
+139 |   big = root.walk(0).filter { |d, t, s| t.ends_with?("/") and s > 1000 }.map { |d, t, s| t }.to_list
+    |                                                                              ^
+  help: name it `_s`, or `_` alone
+warning: block parameter `n` is never used
+  --> corpus/m78/c01_file_tree.lume:141:26
+    |
+141 |   puts root.files.max_by { |n, s| s }
+    |                          ^
+  help: name it `_n`, or `_` alone
+warning: block parameter `s` is never used
+  --> corpus/m78/c01_file_tree.lume:142:23
+    |
+142 |   puts root.files.map { |n, s| ext(n) }.to_set
+    |                       ^
+  help: name it `_s`, or `_` alone
+warning: block parameter `e` is never used
+  --> corpus/m78/c01_file_tree.lume:149:22
+    |
+149 |   puts by_ext.max_by { |e, b| b }
+    |                      ^
+  help: name it `_e`, or `_` alone
 total 5306 bytes
 home/
 home/notes.txt

@@ -24,7 +24,7 @@ def parse_all(text: Str) -> [User] or Error:
   users
 
 def average_age(users: [User]) -> Float or Error:
-  first = users.first.or_error("no users to average")?
+  _ = users.first.or_error("no users to average")?
   total = users.sum(_.age)
   total.to_float / users.len.to_float
 

@@ -1,3 +1,45 @@
+warning: block parameter `k` is never used
+  --> corpus/m17/r18_map_methods.lume:8:27
+  |
+8 |   in_stock = stock.filter { |k, v| v > 0 }
+  |                           ^
+  help: name it `_k`, or `_` alone
+warning: block parameter `v` is never used
+  --> corpus/m17/r18_map_methods.lume:10:21
+   |
+10 |   puts stock.reject { |k, v| k.len > 3 }
+   |                     ^
+  help: name it `_v`, or `_` alone
+warning: block parameter `k` is never used
+  --> corpus/m17/r18_map_methods.lume:14:16
+   |
+14 |   doubled.each { |k, v| total += v }
+   |                ^
+  help: name it `_k`, or `_` alone
+warning: block parameter `v` is never used
+  --> corpus/m17/r18_map_methods.lume:19:22
+   |
+19 |   puts prices.filter { |k, v| stock.contains?(k) }.map_values { |p| p * 100.0 }
+   |                      ^
+  help: name it `_v`, or `_` alone
+warning: block parameter `k` is never used
+  --> corpus/m17/r18_map_methods.lume:21:21
+   |
+21 |   puts stock.filter { |k, v| v > 100 }.len
+   |                     ^
+  help: name it `_k`, or `_` alone
+warning: block parameter `k` is never used
+  --> corpus/m17/r18_map_methods.lume:23:24
+   |
+23 |   names = stock.filter { |k, v| v.odd? }.keys.map(_.upcase).to_list
+   |                        ^
+  help: name it `_k`, or `_` alone
+warning: block parameter `k` is never used
+  --> corpus/m17/r18_map_methods.lume:26:54
+   |
+26 |   puts stock.map_values { |v| v.clamp(1, 5) }.reject { |k, v| v == 5 }
+   |                                                      ^
+  help: name it `_k`, or `_` alone
 {"apple": 3, "pear": 5, "fig": 7, "plum": 1}
 {"apple": 3, "pear": 0, "fig": 7}
 ["apple", "fig"]

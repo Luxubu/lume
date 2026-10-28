@@ -1,3 +1,9 @@
+warning: block parameter `k` is never used
+  --> corpus/m90/c06_index.lume:59:30
+   |
+59 |     for w, n in self.sort_by { |k, v| 0 - v }:
+   |                              ^
+  help: name it `_k`, or `_` alone
 problem: cannot read `/tmp/lume-review-c/c06/d.txt`: No such file or directory (os error 2)
 problem: e.txt is empty
 loaded: ["a.txt", "b.txt", "c.txt"]

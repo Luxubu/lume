@@ -1,3 +1,15 @@
+warning: block parameter `w` is never used
+  --> corpus/m26/b09_maps_sets_strings.lume:40:23
+   |
+40 |   big = counts.filter { |w, n| n > 1 }
+   |                       ^
+  help: name it `_w`, or `_` alone
+warning: block parameter `w` is never used
+  --> corpus/m26/b09_maps_sets_strings.lume:42:25
+   |
+42 |   small = counts.reject { |w, n| n > 1 }
+   |                         ^
+  help: name it `_w`, or `_` alone
 6
 the,cat,sat,on,mat,end
 8

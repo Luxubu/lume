@@ -1,3 +1,9 @@
+warning: block parameter `k` is never used
+  --> corpus/m86/a03_job_runner.lume:72:21
+   |
+72 |   puts codes.filter { |k, v| v != 0 }.keys
+   |                     ^
+  help: name it `_k`, or `_` alone
 write   ok
 sort    ok: apple | fig | pear
 list    ok: fruit.txt | sorted.txt

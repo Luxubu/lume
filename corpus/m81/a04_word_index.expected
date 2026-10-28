@@ -1,3 +1,15 @@
+warning: block parameter `k` is never used
+  --> corpus/m81/a04_word_index.lume:58:22
+   |
+58 |   puts counts.max_by { |k, v| v }
+   |                      ^
+  help: name it `_k`, or `_` alone
+warning: block parameter `k` is never used
+  --> corpus/m81/a04_word_index.lume:59:22
+   |
+59 |   puts counts.filter { |k, v| v == 1 }.keys
+   |                      ^
+  help: name it `_k`, or `_` alone
 a     2
 cat   1,2
 dog   2

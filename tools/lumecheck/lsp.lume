@@ -52,7 +52,7 @@ pub def quoted(s: Str) -> Str:
 
 pub def dumped(j: Json) -> Str:
   match j:
-    Obj(pairs) -> "{" + pairs.sort_by { |k, v| k }.map { |k, v| quoted(k) + ": " + dumped(v) }.join(", ") + "}"
+    Obj(pairs) -> "{" + pairs.sort_by { |k, _| k }.map { |k, v| quoted(k) + ": " + dumped(v) }.join(", ") + "}"
     Arr(items) -> "[" + items.map { |x| dumped(x) }.join(", ") + "]"
     Str(s) -> quoted(s)
     _ -> json.show(j)

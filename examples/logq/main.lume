@@ -66,7 +66,7 @@ def summary(seq: Iterator[Entry]):
   puts "p95       #{percentile(times, 95)}ms"
   puts "slowest   #{times.last.or(0)}ms"
   by_minute = entries.group_by { |e| Time.format(e.at, "%H:%M") }
-  match by_minute.max_by { |m, es| es.len }:
+  match by_minute.max_by { |_, es| es.len }:
     Some((m, es)) -> puts "busiest   #{m} (#{es.len} requests)"
     None -> puts "busiest   -"
 

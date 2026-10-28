@@ -1,3 +1,57 @@
+warning: block parameter `p` is never used
+  --> corpus/m69/a07_disk_tree.lume:57:17
+   |
+57 |   puts disk.sum { |p, s| s }
+   |                 ^
+  help: name it `_p`, or `_` alone
+warning: block parameter `s` is never used
+  --> corpus/m69/a07_disk_tree.lume:58:20
+   |
+58 |   puts disk.filter { |p, s| p.ends_with?(".md") }.map { |p, s| p }.to_list
+   |                    ^
+  help: name it `_s`, or `_` alone
+warning: block parameter `s` is never used
+  --> corpus/m69/a07_disk_tree.lume:58:55
+   |
+58 |   puts disk.filter { |p, s| p.ends_with?(".md") }.map { |p, s| p }.to_list
+   |                                                       ^
+  help: name it `_s`, or `_` alone
+warning: block parameter `p` is never used
+  --> corpus/m69/a07_disk_tree.lume:59:20
+   |
+59 |   puts disk.max_by { |p, s| s }
+   |                    ^
+  help: name it `_p`, or `_` alone
+warning: block parameter `p` is never used
+  --> corpus/m69/a07_disk_tree.lume:60:21
+   |
+60 |   puts disk.sort_by { |p, s| s }.map { |p, s| s }.to_list
+   |                     ^
+  help: name it `_p`, or `_` alone
+warning: block parameter `p` is never used
+  --> corpus/m69/a07_disk_tree.lume:60:38
+   |
+60 |   puts disk.sort_by { |p, s| s }.map { |p, s| s }.to_list
+   |                                      ^
+  help: name it `_p`, or `_` alone
+warning: block parameter `p` is never used
+  --> corpus/m69/a07_disk_tree.lume:61:19
+   |
+61 |   match disk.find { |p, s| s > 100 }:
+   |                   ^
+  help: name it `_p`, or `_` alone
+warning: `s` is bound by the pattern but never used
+  --> corpus/m69/a07_disk_tree.lume:62:14
+   |
+62 |     Some((p, s)) -> puts "first big: #{p}"
+   |              ^
+  help: write `_` in its place, or name it `_s`
+warning: block parameter `s` is never used
+  --> corpus/m69/a07_disk_tree.lume:64:22
+   |
+64 |   puts disk.group_by { |p, s| p.split("/").at(1) }.map_values { |v| v.len }
+   |                      ^
+  help: name it `_s`, or `_` alone
   120 /src/main.lume
    40 /src/util.lume
     8 /README

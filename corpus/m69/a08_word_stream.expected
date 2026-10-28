@@ -1,3 +1,33 @@
+warning: block parameter `w` is never used
+  --> corpus/m69/a08_word_stream.lume:55:30
+   |
+55 |   for w, n in counts.sort_by { |w, n| 0 - n }.take(2):
+   |                              ^
+  help: name it `_w`, or `_` alone
+warning: block parameter `i` is never used
+  --> corpus/m69/a08_word_stream.lume:60:28
+   |
+60 |   puts ws.enumerate.filter { |i, w| w == "the" }.map { |i, w| i }.to_list
+   |                            ^
+  help: name it `_i`, or `_` alone
+warning: block parameter `w` is never used
+  --> corpus/m69/a08_word_stream.lume:60:54
+   |
+60 |   puts ws.enumerate.filter { |i, w| w == "the" }.map { |i, w| i }.to_list
+   |                                                      ^
+  help: name it `_w`, or `_` alone
+warning: block parameter `b` is never used
+  --> corpus/m69/a08_word_stream.lume:63:44
+   |
+63 |   puts all.zip(all.skip(1).to_list).filter { |a, b| a == "the" }.map { |a, b| b }.to_list
+   |                                            ^
+  help: name it `_b`, or `_` alone
+warning: block parameter `a` is never used
+  --> corpus/m69/a08_word_stream.lume:63:70
+   |
+63 |   puts all.zip(all.skip(1).to_list).filter { |a, b| a == "the" }.map { |a, b| b }.to_list
+   |                                                                      ^
+  help: name it `_a`, or `_` alone
 10
 the cat sat the
 {"the": 3, "cat": 1, "sat": 2, "dog": 1, "too": 1, "and": 1, "end": 1}

@@ -1,3 +1,9 @@
+warning: block parameter `r` is never used
+  --> corpus/p1_report.lume:26:36
+   |
+26 |   rows = by_region.to_list.sort_by { |r, t| -t }
+   |                                    ^
+  help: name it `_r`, or `_` alone
 Region   Total   Count
    north 17.75   3
    south 13.5   2

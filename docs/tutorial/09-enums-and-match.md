@@ -145,7 +145,11 @@ def main:
   puts Cash.fee(200)                   #=> 0
 ```
 
-`Card(_)` matches any card: `_` means "a value I do not need".
+`Card(_)` matches any card: `_` means "a value I do not need". Writing a
+name there instead, `Card(n)`, and never using `n`, works, but Lume warns
+that `n` is never used — as it does for any name given a value and not read:
+a local, a parameter, a `for` variable, a block's parameter. `_` says you
+meant it, and so does a name that starts with `_`, such as `_n`.
 
 ## 9.5 Matching other values
 

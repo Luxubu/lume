@@ -1,3 +1,9 @@
+warning: parameter `xs` is never used
+  --> corpus/m49/b07_extend_through_dep/app/tally.lume:4:15
+  |
+4 | pub def total(xs: [Int]) -> Int = 100
+  |               ^
+  help: name it `_xs` if it is there only to fit a signature, as an interface's method may be
 3
 false
 3

@@ -294,6 +294,41 @@ def main:
 
 `?` is the only mark a name can end with. There is no `!`.
 
+## A name that is never used
+
+**A name given a value and never read gets a warning**, as Rust's
+`unused_variables` lint gives one: a local, a parameter, a `for` variable,
+a block's parameter, a name a pattern binds. The program still runs. Say
+that it is meant with `_` in its place, as often as needed, or with a name
+that starts with `_`:
+
+```lume
+interface Discount:
+  def off(cents: Int, qty: Int) -> Int
+
+struct Bulk:
+  # the interface asks for `cents`; this discount does not need it
+  def off(_cents: Int, qty: Int) -> Int = if qty >= 10: 50 else: 0
+
+def main:
+  prices = {"tea": 250, "pie": 400}
+  puts prices.filter { |_, cents| cents > 300 }    #=> {"pie": 400}
+  for _ in 1..2:
+    puts "tick"                                    #=> tick
+                                                   #=> tick
+  match prices["tea"]:
+    Some(_) -> puts "tea is on the menu"           #=> tea is on the menu
+    None -> puts "no tea"
+  puts Bulk().off(100, 12)                         #=> 50
+```
+
+Written with names instead — `{ |name, cents| ... }`, `for i in`,
+`Some(cents)`, `off(cents: Int, ...)` — it prints the same, and the compiler
+warns about each, as ``warning: block parameter `name` is never used``,
+with the `_` that quiets it. A
+`var` or `shared var` parameter changed in place is used: the caller sees
+the change. See `examples/unused_names.lume`.
+
 ## Binding a name again
 
 **A name without `var` is bound once. The one exception is a

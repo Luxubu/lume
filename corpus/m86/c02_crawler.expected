@@ -1,3 +1,9 @@
+warning: `v` is never used in the loop
+  --> corpus/m86/c02_crawler.lume:81:3
+   |
+81 |   for v in crawl("/", 3):
+   |   ^
+  help: name it `_v`, or write `for _ in ...` when only the count matters
 start at / (depth 0, 2 links)
 depth 1: /about /blog
 depth 2: /team /blog/1 /blog/2

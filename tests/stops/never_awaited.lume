@@ -3,6 +3,6 @@
 async def seat(i: Int) -> Str = ["window"].at(i)
 
 async def main:
-  t = spawn: await seat(4)
+  _t = spawn: await seat(4)
   await Time.sleep(20)
   puts "the program goes on"

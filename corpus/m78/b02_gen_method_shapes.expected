@@ -1,3 +1,15 @@
+warning: `i` is never used in the loop
+  --> corpus/m78/b02_gen_method_shapes.lume:26:5
+   |
+26 |     for i in 0...times:
+   |     ^
+  help: name it `_i`, or write `for _ in ...` when only the count matters
+warning: block parameter `y` is never used
+  --> corpus/m78/b02_gen_method_shapes.lume:75:26
+   |
+75 |   puts Dot.corners.count { |x, y| x == 0 }
+   |                          ^
+  help: name it `_y`, or `_` alone
 [1, 2, 1, 2]
 ababab
 0,0

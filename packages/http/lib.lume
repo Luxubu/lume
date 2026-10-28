@@ -34,7 +34,7 @@ pub struct Response:
   # a header's value; the name in any case
   def header(name: Str) -> Str?:
     n = name.downcase
-    headers.find { |k, v| k == n }.map { |kv| kv.1 }
+    headers.find { |k, _| k == n }.map { |kv| kv.1 }
 
   # the body, parsed as JSON
   def json -> Json or Error = json.parse(body).map_error { |e| Error("the body is not JSON: #{e.message}") }
@@ -132,7 +132,7 @@ pub struct Opened:
 
   def header(name: Str) -> Str?:
     n = name.downcase
-    headers.find { |k, v| k == n }.map { |kv| kv.1 }
+    headers.find { |k, _| k == n }.map { |kv| kv.1 }
 
   # the body a line at a time, without line endings, as it arrives
   def lines -> async Iterator[Str]:

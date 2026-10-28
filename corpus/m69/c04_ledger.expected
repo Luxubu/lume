@@ -4,6 +4,30 @@ warning: `all` holds values of different types behind `Account`, so calls on its
 122 |   var all: [Account] = []
     |   ^
   help: fine for most code; use a single concrete type or an enum if this is a hot loop
+warning: block parameter `k` is never used
+  --> corpus/m69/c04_ledger.lume:111:53
+    |
+111 |   def items -> [(Str, Int)] = lines.to_list.sort_by { |k, v| 0 - v }
+    |                                                     ^
+  help: name it `_k`, or `_` alone
+warning: block parameter `who` is never used
+  --> corpus/m69/c04_ledger.lume:142:35
+    |
+142 |   puts "#{st.len} names, #{st.map { |who, n| n }.sum} failures"
+    |                                   ^
+  help: name it `_who`, or `_` alone
+warning: block parameter `who` is never used
+  --> corpus/m69/c04_ledger.lume:143:18
+    |
+143 |   puts st.filter { |who, n| n > 1 }.map { |who, n| who }.to_list
+    |                  ^
+  help: name it `_who`, or `_` alone
+warning: block parameter `n` is never used
+  --> corpus/m69/c04_ledger.lume:143:41
+    |
+143 |   puts st.filter { |who, n| n > 1 }.map { |who, n| who }.to_list
+    |                                         ^
+  help: name it `_n`, or `_` alone
 []
 ["cy: no more withdrawals"]
 cy           7.50

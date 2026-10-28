@@ -1,3 +1,9 @@
+warning: block parameter `thing` is never used
+  --> corpus/m73/c05_adventure.lume:140:26
+    |
+140 |     stuff = floor.filter { |thing, place| place == at }.keys
+    |                          ^
+  help: name it `_thing`, or `_` alone
 4 rooms, 4 items, 1 lock
 > look
   hall: exits north east; you see lamp

@@ -1,3 +1,9 @@
+warning: block parameter `i` is never used
+  --> corpus/m69/c05_workqueue.lume:75:22
+   |
+75 |     w = loads.min_by { |i, l| l }.map { |p| p.0 }.or(0)
+   |                      ^
+  help: name it `_i`, or `_` alone
 [9, 6, 5, 5, 5, 4, 3, 3, 2, 1, 1]
 [[9, 4, 2], [6, 5, 3, 1], [5, 5, 3, 1]]
 [[10], [1, 1]]

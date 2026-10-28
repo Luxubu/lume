@@ -1,3 +1,9 @@
+warning: block parameter `v` is never used
+  --> corpus/m90/a04_report_extend.lume:75:23
+   |
+75 |   puts stock.rows.map { |k, v| k.upcase }.to_list
+   |                       ^
+  help: name it `_v`, or `_` alone
 apples      3
 pears      12
 total      15

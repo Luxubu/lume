@@ -146,9 +146,9 @@ def main:
   puts retry(2) { |attempt| attempt == 3 }
 
   time_it("nothing much") do
-    var sum = 0
+    var _sum = 0
     for i in 1..1000:
-      sum += i
+      _sum += i
 
   repeat do
     puts "tick"

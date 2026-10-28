@@ -1,3 +1,9 @@
+warning: block parameter `r` is never used
+  --> corpus/m53/a01_report.lume:69:23
+   |
+69 |   top = totals.max_by { |r, c| c }
+   |                       ^
+  help: name it `_r`, or `_` alone
 REGION  ITEM  QTY    TOTAL
 north   pen    10    15.00
 south   pad     3    12.75

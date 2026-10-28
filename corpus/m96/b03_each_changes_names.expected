@@ -1,3 +1,9 @@
+warning: block parameter `w` is never used
+  --> corpus/m96/b03_each_changes_names.lume:42:18
+   |
+42 |   words([]).each { |w| hits += 1 }
+   |                  ^
+  help: name it `_w`, or `_` alone
 12
 ["FIG", "APPLE", "KIWI"]
 abcd

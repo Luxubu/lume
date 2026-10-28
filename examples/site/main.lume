@@ -134,7 +134,7 @@ def main -> () or Error:
         failed += 1
   File.write(Path.join(out_dir, "all.html"), index_page(built, out_dir))?
 
-  words = built.map { |b| b.page.body.split.count { |w| true } }.sum
+  words = built.map { |b| b.page.body.split.count { |_| true } }.sum
   puts "#{built.len - skipped} built, #{skipped} unchanged, #{words} words, #{failed} failed"
   if failed > 0:
     Env.exit(1)

@@ -7,7 +7,7 @@ pub def compiler_keywords(lexer_src: Str) -> [Str]:
   block = lexer_src.slice(start, lexer_src.len)
   list = block.slice(0, block.index_of("];").or(block.len))
   # the words are every other piece between quotes
-  list.split("\"").enumerate.filter { |i, piece| i % 2 == 1 }.map { |i, piece| piece }.to_list
+  list.split("\"").enumerate.filter { |i, _| i % 2 == 1 }.map { |_, piece| piece }.to_list
 
 # Whether `w` appears in `text` as a whole word.
 def word_in?(text: Str, w: Str) -> Bool:

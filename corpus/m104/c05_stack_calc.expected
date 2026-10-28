@@ -1,3 +1,45 @@
+warning: parameter `arg` is never used
+  --> corpus/m104/c05_stack_calc.lume:35:27
+   |
+35 |   def apply(stack: [Int], arg: Int) -> [Int] = binary(stack) { |a, b| a + b }
+   |                           ^
+  help: name it `_arg` if it is there only to fit a signature, as an interface's method may be
+warning: parameter `arg` is never used
+  --> corpus/m104/c05_stack_calc.lume:39:27
+   |
+39 |   def apply(stack: [Int], arg: Int) -> [Int] = binary(stack) { |a, b| a - b }
+   |                           ^
+  help: name it `_arg` if it is there only to fit a signature, as an interface's method may be
+warning: parameter `arg` is never used
+  --> corpus/m104/c05_stack_calc.lume:43:27
+   |
+43 |   def apply(stack: [Int], arg: Int) -> [Int] = binary(stack) { |a, b| a * b }
+   |                           ^
+  help: name it `_arg` if it is there only to fit a signature, as an interface's method may be
+warning: parameter `arg` is never used
+  --> corpus/m104/c05_stack_calc.lume:47:27
+   |
+47 |   def apply(stack: [Int], arg: Int) -> [Int] = stack + [stack.at(stack.len - 1)]
+   |                           ^
+  help: name it `_arg` if it is there only to fit a signature, as an interface's method may be
+warning: parameter `arg` is never used
+  --> corpus/m104/c05_stack_calc.lume:51:27
+   |
+51 |   def apply(stack: [Int], arg: Int) -> [Int]:
+   |                           ^
+  help: name it `_arg` if it is there only to fit a signature, as an interface's method may be
+warning: block parameter `c` is never used
+  --> corpus/m104/c05_stack_calc.lume:102:14
+    |
+102 |     .sort_by { |name, c| name }
+    |              ^
+  help: name it `_c`, or `_` alone
+warning: block parameter `s` is never used
+  --> corpus/m104/c05_stack_calc.lume:130:10
+    |
+130 |     .map { |s| 1 }
+    |          ^
+  help: name it `_s`, or `_` alone
 commands: add/2 dup/1 mul/2 push/0 sub/2 swap/2
 arities used: [0, 1, 2]
 push 3  [3]

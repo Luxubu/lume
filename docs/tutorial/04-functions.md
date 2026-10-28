@@ -69,11 +69,11 @@ The `if` there picks one of two values; [lunch 5](05-making-decisions.md) is abo
 order does not matter:
 
 ```lume
-def price(dish: Str, count: Int) -> Int = count * 4
+def price(dish: Str, count: Int) -> Int = count * (if dish == "soup": 4 else: 3)
 
 def main:
   puts price(dish: "soup", count: 2)    #=> 8
-  puts price(count: 3, dish: "tea")     #=> 12
+  puts price(count: 3, dish: "tea")     #=> 9
 ```
 
 Names make a call easier to read when the values alone would not say what

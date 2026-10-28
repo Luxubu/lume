@@ -1,3 +1,9 @@
+warning: block parameter `c` is never used
+  --> corpus/m36/a05_logparse.lume:83:48
+   |
+83 |   puts "busiest: #{by_component.to_list.max_by { |c, n| n }}"
+   |                                                ^
+  help: name it `_c`, or `_` alone
 6 entries, skipped: ["garbage line"]
 ERROR   2
 WARN    1

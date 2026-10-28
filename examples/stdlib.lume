@@ -62,8 +62,8 @@ def main:
   # maps
   m = {"a": 1, "b": 2, "c": 3}
   puts m.merge({"c": 30, "d": 4})
-  puts m.filter { |k, v| v > 1 }
-  puts m.reject { |k, v| k == "a" }
+  puts m.filter { |_, v| v > 1 }
+  puts m.reject { |k, _| k == "a" }
   puts m.map_values { |v| v * 100 }
   m.each { |k, v| puts "#{k}: #{v > 1}" }
   # option / result

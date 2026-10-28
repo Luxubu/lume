@@ -1,3 +1,9 @@
+warning: block parameter `w` is never used
+  --> corpus/m73/a05_word_freq.lume:55:24
+   |
+55 |   once = counts.filter { |w, n| n == 1 }.keys.sort
+   |                        ^
+  help: name it `_w`, or `_` alone
 21 words, 10 kept
 cat  **** 4
 sat  ** 2

@@ -258,8 +258,8 @@ puts fs.max        #=> Some(2.5)
 puts fs.min        #=> Some(0.5)
 puts 1.5 < 2.0     #=> true
 temps = [("mon", 21.5), ("tue", 18.0), ("wed", 21.5)]
-puts temps.max_by { |day, t| t }      #=> Some(("mon", 21.5))
-puts temps.sort_by { |day, t| t }     #=> [("tue", 18.0), ("mon", 21.5), ("wed", 21.5)]
+puts temps.max_by { |_, t| t }      #=> Some(("mon", 21.5))
+puts temps.sort_by { |_, t| t }     #=> [("tue", 18.0), ("mon", 21.5), ("wed", 21.5)]
 ```
 
 On a tie, `max_by` and `min_by` give the first item, and `sort_by` keeps

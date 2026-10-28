@@ -1,3 +1,9 @@
+warning: block parameter `m` is never used
+  --> corpus/m81/a02_log_summary.lume:70:56
+   |
+70 |   match evs.group_by { |e| e.time.slice(0, 5) }.max_by { |m, es| es.len }:
+   |                                                        ^
+  help: name it `_m`, or `_` alone
 7 events from 8 lines
 Event(time: "09:00:01", level: "INFO", source: "auth", text: "login ann")
 INFO  3

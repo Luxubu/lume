@@ -1,3 +1,9 @@
+warning: block parameter `day` is never used
+  --> corpus/m63/a04_event_log/main.lume:71:23
+   |
+71 |   match groups.max_by { |day, evs| evs.len }:
+   |                       ^
+  help: name it `_day`, or `_` alone
 skipped incident closed: `2024-03-10 11:02:45` does not match `%Y-%m-%dT%H:%M:%S`: expected `T` at position 10
 6 events over 3 days
 Saturday 09 March

@@ -1,3 +1,21 @@
+warning: parameter `cents` is never used
+  --> corpus/m104/c01_pricing.lume:34:11
+   |
+34 |   def off(cents: Int, qty: Int) -> Int = 0
+   |           ^
+  help: name it `_cents` if it is there only to fit a signature, as an interface's method may be
+warning: parameter `qty` is never used
+  --> corpus/m104/c01_pricing.lume:34:23
+   |
+34 |   def off(cents: Int, qty: Int) -> Int = 0
+   |                       ^
+  help: name it `_qty` if it is there only to fit a signature, as an interface's method may be
+warning: block parameter `sku` is never used
+  --> corpus/m104/c01_pricing.lume:91:14
+   |
+91 |     .sort_by { |sku, n| -n }
+   |              ^
+  help: name it `_sku`, or `_` alone
 order 1: 10% discount, $19.80
 order 2: bulk discount, $22.98
 order 3: no discount, $24.00

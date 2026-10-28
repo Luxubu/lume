@@ -1,3 +1,9 @@
+warning: block parameter `k` is never used
+  --> corpus/m36/a07_shopping.lume:42:27
+   |
+42 |   doubled = counts.filter { |k, n| n > 1 }.keys.join(" and ")
+   |                           ^
+  help: name it `_k`, or `_` alone
 as written: ["eggs", "Milk", "bread", "apples", "milk", "Butter"]
 sorted: ["Butter", "Milk", "apples", "bread", "eggs", "milk"]
 sorted for people: apples, bread, Butter, eggs, Milk, milk

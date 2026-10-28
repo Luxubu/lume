@@ -1,3 +1,27 @@
+warning: block parameter `n` is never used
+  --> corpus/m45/c10_scores/stats/top.lume:8:23
+  |
+8 |   match scored.max_by { |n, s| s }:
+  |                       ^
+  help: name it `_n`, or `_` alone
+warning: block parameter `n` is never used
+  --> corpus/m45/c10_scores/main.lume:33:29
+   |
+33 |     passing = scored.filter { |n, s| ok(s) }.map { |n, s| n }.to_list
+   |                             ^
+  help: name it `_n`, or `_` alone
+warning: block parameter `s` is never used
+  --> corpus/m45/c10_scores/main.lume:33:50
+   |
+33 |     passing = scored.filter { |n, s| ok(s) }.map { |n, s| n }.to_list
+   |                                                  ^
+  help: name it `_s`, or `_` alone
+warning: block parameter `n` is never used
+  --> corpus/m45/c10_scores/main.lume:37:28
+   |
+37 |   flags = await scored.map { |n, s| spawn: best(s) }.to_list
+   |                            ^
+  help: name it `_n`, or `_` alone
 [("ada", 91), ("bo", 47), ("cyd", 78)]
 ada leads with 91
 pass: ["ada", "cyd"]

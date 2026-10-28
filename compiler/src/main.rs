@@ -29,6 +29,7 @@ mod lexer;
 mod loader;
 mod manifest;
 mod parser;
+mod unused;
 
 use std::env;
 use std::fs;

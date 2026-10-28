@@ -1,3 +1,21 @@
+warning: block parameter `r` is never used
+  --> corpus/m78/a03_seat_map.lume:57:26
+   |
+57 |   taken = g.spots.filter { |r, c, s| s == "#" }.map { |r, c, s| "(#{r},#{c})" }.join(" ")
+   |                          ^
+  help: name it `_r`, or `_` alone
+warning: block parameter `c` is never used
+  --> corpus/m78/a03_seat_map.lume:57:26
+   |
+57 |   taken = g.spots.filter { |r, c, s| s == "#" }.map { |r, c, s| "(#{r},#{c})" }.join(" ")
+   |                          ^
+  help: name it `_c`, or `_` alone
+warning: block parameter `s` is never used
+  --> corpus/m78/a03_seat_map.lume:57:53
+   |
+57 |   taken = g.spots.filter { |r, c, s| s == "#" }.map { |r, c, s| "(#{r},#{c})" }.join(" ")
+   |                                                     ^
+  help: name it `_s`, or `_` alone
 4x3
 #..#
 .##.

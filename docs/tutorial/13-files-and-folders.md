@@ -59,7 +59,7 @@ the file:
 def main:
   match File.read("/tmp/lume-lunch-13-no-such-file.txt"):
     Ok(text) -> puts text
-    Error(e) -> puts "could not read it"    #=> could not read it
+    Error(_) -> puts "could not read it"    #=> could not read it
 ```
 
 When a missing file is normal — the first run of a program, say — ask

@@ -4,6 +4,12 @@ warning: `styles` holds values of different types behind `Style`, so calls on it
 194 |   styles: [Style] = [Plain(w: 8), Shout(w: 6)]
     |   ^
   help: fine for most code; use a single concrete type or an enum if this is a hot loop
+warning: block parameter `w` is never used
+  --> corpus/m78/c03_document.lume:191:28
+    |
+191 |   for w, n in freq.sort_by { |w, n| 0 - n }.take(3):
+    |                            ^
+  help: name it `_w`, or `_` alone
 skipped: unknown kind `x`
 skipped: no kind in `no colon here`
 skipped: a quote needs `text | who`, got `just text`
