@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **Tested on Windows**: the suite runs on Windows too, for every push.
+  What it found is fixed: a built program is `name.exe`, as Windows wants;
+  messages write paths with `/` on every system; a missing file is told in
+  the same words everywhere, `No such file or directory (os error 2)`;
+  `kill` makes a program give `-1` on Windows too; fetching a package from
+  git no longer fails on the `\\?\` Windows puts in front of a path; the
+  language server writes and reads Windows paths as `file:///C:/...`; the
+  build cache is found without `HOME`; and `http` says "timed out" in
+  Windows' case too. Nine checks that need Unix programs as only Unix has
+  them are left out on Windows, and the suite says so.
+
 ## 0.6.0 — kinder when it breaks
 
 Eight milestones after 0.5.0 (98–105). Lume got ready to be taught: a

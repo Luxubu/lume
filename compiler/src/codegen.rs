@@ -619,7 +619,13 @@ fn lume_pipe<R: std::io::Read + Send + 'static>(mut r: R) -> LumePipeRef {
     std::thread::spawn(move || {
         let mut chunk = [0u8; 8192];
         loop {
-            let n = r.read(&mut chunk).unwrap_or(0);
+            // a read that was only interrupted is tried again, not taken for the end
+            let n = loop {
+                match r.read(&mut chunk) {
+                    Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                    other => break other.unwrap_or(0),
+                }
+            };
             let mut g = q.lock().unwrap();
             if n == 0 { g.done = true; } else { g.buf.extend_from_slice(&chunk[..n]); }
             if let Some(w) = g.waker.take() { w.wake(); }
