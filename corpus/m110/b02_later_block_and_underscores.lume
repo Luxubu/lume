@@ -1,0 +1,36 @@
+# b02 — names that are used, though not where they are made: read only in
+# a later `for` body, only inside a block, a `var` parameter changed in
+# place (the caller sees it), `_` twice among a block's names and twice
+# among a `for`'s names, and the `_.x` shorthand, which has no parameter
+# name to warn about. Nothing here should be warned about.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# item 3
+# item 6
+# item 15
+# item 15
+# {"a": 1, "b": 2}
+# pair
+# pair
+# ["X", "Y"]
+# ["x!", "y!"]
+
+def add_twice(var xs: [Int], n: Int):
+  xs.push(n)
+  xs.push(n)
+
+def main:
+  factor = 3
+  label = "item"
+  var nums = [1, 2]
+  add_twice(nums, 5)
+  for n in nums:
+    puts "#{label} #{n * factor}"
+  pairs = {"a": 1, "b": 2}
+  puts pairs.filter { |_, _| true }
+  for _, _ in pairs:
+    puts "pair"
+  words = ["x", "y"]
+  puts words.map(_.upcase).to_list
+  suffix = "!"
+  puts words.map { |w| w + suffix }.to_list

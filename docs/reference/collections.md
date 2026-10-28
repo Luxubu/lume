@@ -386,7 +386,8 @@ def main:
 - **`async def` with `yield`** is an async generator; see below.
 - **In an `extend`** a method may be one, on a built-in type too; see
   [Interfaces](interfaces.md#an-interfaces-own-methods-may-use-interfaces).
-- **Not yet:** an `async` generator in an interface.
+- **An interface may require an async generator**, though not give a
+  default one; see below.
 - **Speed:** `bench/b7_generators.lume` is `b6` as a generator; it runs at
   about 1.3 times the hand-written Rust iterator.
 - **More:** `examples/generators.lume` shows each of these.

@@ -1,0 +1,150 @@
+# c02: a plugin system. `Plugin` requires an async generator, `async def
+# items(n: Int) -> Iterator[Str]`, and a plain method; four types fit it in
+# four ways: an async generator method, one walking a field with a sleep
+# between items, an `extend` of the built-in `[Str]`, and a plain `def`
+# that hands on a chain, written `-> async Iterator[Str]`. A driver takes
+# each as the interface value, collects its items in a task, and merges
+# them round-robin; a second merge interleaves two async sequences item by
+# item with `next`. A generic interface `Scores[T]`, written with the other
+# spelling, is fitted by a struct and by an `extend`, and summed by
+# functions that take the interface value.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# plugin counter, plugin words, plugin list, plugin evens
+# counter  c1
+# words    red
+# list     x
+# evens    e0
+# counter  c2
+# words    green
+# list     y
+# evens    e2
+# counter  c3
+# words    blue
+# 10 items from 4 plugins
+# ["A", "B"]
+# ["k1", "one", "k2", "two", "k3"]
+# 11
+# 6
+# true
+# false
+
+interface Plugin:
+  def name -> Str
+  async def items(n: Int) -> Iterator[Str]
+
+  def banner -> Str = "plugin #{name}"
+
+interface Scores[T]:
+  def scores -> async Iterator[T]
+
+struct Counter:
+  prefix: Str
+
+  def name -> Str = "counter"
+
+  async def items(n: Int) -> Iterator[Str]:
+    for i in 1..n:
+      yield "#{prefix}#{i}"
+
+struct Words:
+  text: Str
+
+  def name -> Str = "words"
+
+  async def items(n: Int) -> Iterator[Str]:
+    for w in text.split.take(n):
+      await Time.sleep(1)
+      yield w
+
+extend [Str] with Plugin:
+  def name -> Str = "list"
+
+  async def items(n: Int) -> Iterator[Str]:
+    for s in self.take(n):
+      yield s
+
+async def naturals -> Iterator[Int]:
+  var n = 0
+  while true:
+    yield n
+    n += 1
+
+struct Evens:
+  def name -> Str = "evens"
+
+  def items(n: Int) -> async Iterator[Str] = naturals().filter { |x| x % 2 == 0 }.map { |x| "e#{x}" }.take(n)
+
+struct Dice:
+  rolls: [Int]
+
+  async def scores -> Iterator[Int]:
+    for r in rolls:
+      await Time.sleep(1)
+      yield r
+
+struct Tally:
+  marks: Str
+
+extend Tally with Scores[Int]:
+  async def scores -> Iterator[Int]:
+    for group in marks.split(" "):
+      yield group.len
+
+# the driver: what it asks of a plugin, through the interface only
+async def gather(p: Plugin, n: Int) -> [(Str, Str)]:
+  tag = p.name
+  p.items(n).map { |x| (tag, x) }.to_list
+
+def loud(p: Plugin, n: Int) -> async Iterator[Str] = p.items(n).map(_.upcase)
+
+def interleave(lists: [[(Str, Str)]]) -> [(Str, Str)]:
+  var out: [(Str, Str)] = []
+  longest = lists.map { |l| l.len }.max.or(0)
+  for i in 0...longest:
+    for l in lists:
+      match l[i]:
+        Some(item) -> out.push(item)
+        None -> ()
+  out
+
+# one item from each in turn, as they arrive; neither is asked again
+# once it has ended
+async def zipper(a: async Iterator[Str], b: async Iterator[Str]) -> Iterator[Str]:
+  var xs = a
+  var ys = b
+  var a_on = true
+  var b_on = true
+  while a_on or b_on:
+    if a_on:
+      match xs.next:
+        Some(v) -> yield v
+        None -> a_on = false
+    if b_on:
+      match ys.next:
+        Some(v) -> yield v
+        None -> b_on = false
+
+async def total(s: Scores[Int]) -> Int = s.scores.sum
+
+async def any_over(s: Scores[Int], limit: Int) -> Bool = s.scores.any? { |x| x > limit }
+
+async def main:
+  puts [Counter(prefix: "c").banner, Words(text: "").banner, ["z"].banner, Evens().banner].join(", ")
+  tasks = [
+    spawn: await gather(Counter(prefix: "c"), 3),
+    spawn: await gather(Words(text: "red green blue gold"), 3),
+    spawn: await gather(["x", "y"], 5),
+    spawn: await gather(Evens(), 2),
+  ]
+  results = await tasks
+  merged = interleave(results)
+  for tag, item in merged:
+    puts "#{tag.pad_right(8)} #{item}"
+  puts "#{merged.len} items from #{results.len} plugins"
+  puts loud(Words(text: "a b"), 9).to_list
+  puts zipper(Counter(prefix: "k").items(3), Words(text: "one two").items(5)).to_list
+  puts await total(Dice(rolls: [4, 6, 1]))
+  puts await total(Tally(marks: "||| | ||"))
+  puts await any_over(Dice(rolls: [4, 6, 1]), 5)
+  puts await any_over(Tally(marks: "| ||"), 2)

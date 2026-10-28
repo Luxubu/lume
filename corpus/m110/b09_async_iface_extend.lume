@@ -1,0 +1,42 @@
+# b09 — an interface requiring an async generator, given to built-in types
+# with `extend`: a generic `Feed[T]` given to `Int` as `Feed[Int]`, with a
+# parameter on the generator (`items(n)`), walking `self`; and `Named`, in
+# the `-> async Iterator[Str]` form, given to `[Str]` with an
+# `async def ... -> Iterator[Str]`. Called through functions that take the
+# interface, and directly on the values; `first` on an empty one, `count`
+# with no block.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 30
+# [2, 4, 6, 8]
+# Some("KIM")
+# None
+# 2
+
+interface Feed[T]:
+  async def items(n: Int) -> Iterator[T]
+
+interface Named:
+  def names -> async Iterator[Str]
+
+extend Int with Feed[Int]:
+  async def items(n: Int) -> Iterator[Int]:
+    for i in 1..n:
+      yield self * i
+
+extend [Str] with Named:
+  async def names -> Iterator[Str]:
+    for s in self:
+      yield s.upcase
+
+async def total(f: Feed[Int], n: Int) -> Int = f.items(n).sum
+
+async def first_name(x: Named) -> Str? = x.names.first
+
+async def main:
+  puts await total(5, 3)
+  puts 2.items(4).to_list
+  puts await first_name(["kim", "lu"])
+  empty: [Str] = []
+  puts await first_name(empty)
+  puts ["a", "b"].names.count

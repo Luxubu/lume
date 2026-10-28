@@ -1,0 +1,25 @@
+# b10 — an interface cannot give a default async generator. The message in
+# examples/errors names the method `items` in its help; here the method is
+# `posts`, to see that the help names the method it is about.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `posts` is an async generator written in an interface, which Lume cannot compile yet
+#   --> corpus/m110/b10_async_iface_default.lume:16:3
+#    |
+# 16 |   async def posts -> Iterator[Str]:
+#    |   ^
+#   help: leave it a requirement, `async def posts(...) -> Iterator[T]`, for each type to write; or make it an `async def` function that takes the interface value
+
+interface Blog:
+  def title -> Str
+
+  async def posts -> Iterator[Str]:
+    yield title
+
+struct Diary:
+  name: Str
+
+  def title -> Str = name
+
+async def main:
+  puts Diary(name: "d").posts.to_list

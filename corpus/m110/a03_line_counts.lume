@@ -1,0 +1,43 @@
+# a03: counting the lines of a few files with `wc -l`, run through `sh -c`
+# by `Process.run`. Two names a first draft leaves unread: the standard
+# error taken out of the tuple, and the name in a map's `filter` block.
+# Both are warnings; the program runs.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# notes.txt: 3
+# todo.txt: 1
+# empty.txt: 0
+# 4 lines in all
+# {"notes.txt": 3}
+# EXPECTED STDERR:
+# warning: `err` is given a value but never used
+#   --> corpus/m110/a03_line_counts.lume:34:17
+#    |
+# 34 |     (code, out, err) = Process.run("sh", ["-c", "wc -l < #{path}"])?
+#    |                 ^
+#   help: use it, or name it `_err` to say it is not meant to be
+# warning: block parameter `name` is never used
+#   --> corpus/m110/a03_line_counts.lume:40:23
+#    |
+# 40 |   busy = sizes.filter { |name, n| n > 1 }
+#    |                       ^
+#   help: name it `_name`, or `_` alone
+
+def main -> () or Error:
+  dir = "/tmp/lume-review-a/a03"
+  Dir.make(dir)?
+  files = {"notes.txt": "one\ntwo\nthree\n", "todo.txt": "milk\n", "empty.txt": ""}
+  var sizes: {Str: Int} = {}
+  for name, text in files:
+    path = Path.join(dir, name)
+    File.write(path, text)?
+    (code, out, err) = Process.run("sh", ["-c", "wc -l < #{path}"])?
+    if code == 0:
+      sizes[name] = out.trim.to_int.or(0)
+  for name, n in sizes:
+    puts "#{name}: #{n}"
+  puts "#{sizes.values.sum} lines in all"
+  busy = sizes.filter { |name, n| n > 1 }
+  puts busy
+  Dir.remove(dir)?
+  ()

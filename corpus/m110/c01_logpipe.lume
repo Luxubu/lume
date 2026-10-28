@@ -1,0 +1,112 @@
+# c01: a log pipeline built on `Process.spawn`. Log lines are fed through
+# `sort`, `uniq`, `wc`, `tr` and `cat`, each a `Child` written to with
+# `write`, finished with `close_input`, and read back with `lines` (as a
+# list, and through async chains: `map`, `filter`, `enumerate`, `sum`),
+# `error_lines` and `read_line`; `wait` gives each exit code. A stage that
+# fails comes back as an `Error` the pipeline reports.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# sorted: 8 lines
+#   1  error disk full
+#   3  error net down
+#   1  info boot ok
+#   1  info user login
+#   2  warn disk 91
+# distinct: 5
+# calm levels: ["info", "info", "warn"]
+# errors: ["1. error disk full", "2. error net down"]
+# split exited with 0
+# ["[INFO]", "[WARN]"]
+# 0
+# total: 8
+# words: 24
+# None
+# wc exited with 0
+# failed: `sh` exited with 4
+
+LOG = [
+  "warn disk 91",
+  "error net down",
+  "info boot ok",
+  "error net down",
+  "warn disk 91",
+  "info user login",
+  "error disk full",
+  "error net down",
+]
+
+# errors go to standard error, everything else to standard output
+SPLIT = r"""
+  while read l; do
+    case "$l" in
+      error*) echo "$l" >&2 ;;
+      *) echo "$l" ;;
+    esac
+  done
+  """
+
+# one stage: every line written, the input closed, every line read back
+async def through(program: Str, args: [Str], input: [Str]) -> [Str] or Error:
+  c = Process.spawn(program, args)?
+  for line in input:
+    c.write(line + "\n")?
+  c.close_input
+  out = c.lines.to_list
+  code = await c.wait
+  if code != 0:
+    return Error("`#{program}` exited with #{code}")
+  out
+
+async def main -> () or Error:
+  # sort, then uniq: the counts are worked out here, not by `uniq -c`,
+  # whose column width differs between systems
+  sorted = await through("sort", [], LOG)?
+  puts "sorted: #{sorted.len} lines"
+  unique = await through("uniq", [], sorted)?
+  for u in unique:
+    n = sorted.count { |l| l == u }
+    puts "#{n.pad(3)}  #{u}"
+
+  # `wc -l` pads its number on some systems, so it is trimmed
+  wc = await through("wc", ["-l"], unique)?
+  puts "distinct: #{wc.first.or("0").trim.to_int.or(0)}"
+
+  # both outputs of one program, each read on its own
+  s = Process.spawn("sh", ["-c", SPLIT])?
+  for line in unique:
+    s.write(line + "\n")?
+  s.close_input
+  calm = s.lines.map { |l| l.split(" ").at(0) }.to_list
+  loud = s.error_lines.enumerate.map { |i, l| "#{i + 1}. #{l}" }.to_list
+  puts "calm levels: #{calm}"
+  puts "errors: #{loud}"
+  puts "split exited with #{await s.wait}"
+
+  # the levels in capitals, through `tr`
+  t = Process.spawn("tr", ["a-z", "A-Z"])?
+  t.write(calm.uniq.join("\n") + "\n")?
+  t.close_input
+  puts t.lines.map { |l| "[#{l}]" }.to_list
+  puts await t.wait
+
+  # the counts back through `cat`, summed as they arrive
+  nums = Process.spawn("cat", [])?
+  for u in unique:
+    times = sorted.count { |l| l == u }
+    nums.write("#{times}\n")?
+  nums.close_input
+  puts "total: #{nums.lines.map { |l| l.to_int.or(0) }.sum}"
+
+  # one line read by hand; after it, the output has ended
+  w = Process.spawn("wc", ["-w"])?
+  w.write(LOG.join(" ") + "\n")?
+  w.close_input
+  words = (await w.read_line).or("0").trim.to_int.or(0)
+  puts "words: #{words}"
+  puts await w.read_line
+  puts "wc exited with #{await w.wait}"
+
+  # a stage that fails: it reads everything, then exits with 4
+  match await through("sh", ["-c", "cat > /dev/null; exit 4"], LOG):
+    Ok(lines) -> puts "unexpected: #{lines}"
+    Error(e) -> puts "failed: #{e.message}"

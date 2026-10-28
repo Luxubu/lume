@@ -1,0 +1,107 @@
+# c04: a job runner whose jobs are interface values. `Job` asks for a name
+# and a `run`, and gives a default `kind`; a shell job, a fixed answer, the
+# built-in `Str` (by `extend`) and a job holding two other jobs in fields
+# all fit it. The jobs are kept in a `[Job]` binding (warned about, once),
+# each is run in a task of its own, the results come back in the order
+# the tasks were started, and a function taking `Job` writes the report.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ok      shell  greet                hello
+# ok      job    say tea              tea
+# ok      shell  sorted               apple fig pear
+# FAIL 3  shell  broken               out of tea
+# ok      job    skipped              nothing to do
+# ok      either missing or fallback  used the fallback
+# 5 of 6 jobs passed
+# failed: broken
+# EXPECTED STDERR:
+# warning: `jobs` holds values of different types behind `Job`, so calls on its items go through a pointer
+#   --> corpus/m110/c04_jobs.lume:88:3
+#    |
+# 88 |   jobs: [Job] = [
+#    |   ^
+#   help: fine for most code; use a single concrete type or an enum if this is a hot loop
+
+interface Job:
+  def name -> Str
+  def run -> (Int, Str)
+
+  def kind -> Str = "job"
+
+# a command for `sh`; what it says on success, or its error output
+struct Shell:
+  label: Str
+  command: Str
+
+  def name -> Str = label
+  def kind -> Str = "shell"
+
+  def run -> (Int, Str):
+    (code, out, err) = Process.run("sh", ["-c", command]).or((127, "", "cannot start sh"))
+    if code == 0: (code, out.trim) else: (code, err.trim)
+
+# an answer known in advance
+struct Fixed:
+  label: Str
+  code: Int
+  note: Str
+
+  def name -> Str = label
+
+  def run -> (Int, Str) = (code, note)
+
+# a word is a job too: it is echoed
+extend Str with Job:
+  def name -> Str = "say #{self}"
+
+  def run -> (Int, Str):
+    (code, out, _) = Process.run("echo", [self]).or((127, "", ""))
+    (code, out.trim)
+
+# two jobs in fields: the second runs only when the first fails
+struct Either:
+  first: Job
+  second: Job
+
+  def name -> Str = "#{first.name} or #{second.name}"
+  def kind -> Str = "either"
+
+  def run -> (Int, Str):
+    (code, out) = first.run
+    if code == 0:
+      return (code, out)
+    second.run
+
+SORTED = r"printf 'pear\napple\nfig\n' | sort | tr '\n' ' '"
+
+def line_for(j: Job, code: Int, out: Str) -> Str:
+  status = if code == 0: "ok" else: "FAIL #{code}"
+  "#{status.pad_right(7)} #{j.kind.pad_right(6)} #{j.name.pad_right(20)} #{out}"
+
+def failures(jobs: [Job], outcomes: [(Int, Str)]) -> [Str]:
+  var names: [Str] = []
+  for i, j in jobs.enumerate:
+    names.push(j.name) if outcomes.at(i).0 != 0
+  names
+
+async def main:
+  jobs: [Job] = [
+    Shell(label: "greet", command: "echo hello"),
+    "tea",
+    Shell(label: "sorted", command: SORTED),
+    Shell(label: "broken", command: "echo starting; echo out of tea >&2; exit 3"),
+    Fixed(label: "skipped", code: 0, note: "nothing to do"),
+    Either(
+      first: Shell(label: "missing", command: "exit 1"),
+      second: Fixed(label: "fallback", code: 0, note: "used the fallback"),
+    ),
+  ]
+  # each job in a task of its own; the results in the order started
+  tasks = jobs.map { |j| spawn: j.run }.to_list
+  outcomes = await tasks
+  for i, j in jobs.enumerate:
+    (code, out) = outcomes.at(i)
+    puts line_for(j, code, out)
+  passed = outcomes.count { |code, _| code == 0 }
+  puts "#{passed} of #{jobs.len} jobs passed"
+  puts "failed: #{failures(jobs, outcomes).join(", ")}"

@@ -1,0 +1,19 @@
+> upper hello world
+< HELLO WORLD
+> count abcdef
+< 6
+> menu
+< soup
+< pie
+< tea
+> echo two words
+< two words
+> fly away
+< unknown command: fly
+5 replies, 53 bytes of body
+goodbye: bye
+None
+None
+server exited with 0
+cannot write to `sh`: its input is closed
+exit: 0

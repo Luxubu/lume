@@ -1,0 +1,42 @@
+# b01 — a name read only through `x?` or `x!` is read, so it is not warned
+# about as unused; `x!` still gets the `!` warning. A local never read
+# (`spare`) sits on the line BEFORE the `!`, so the order of the two kinds
+# of warning shows whether they come in source order or by kind.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 8
+# Ok(5)
+# Error("`x` is not an integer")
+# Some(5)
+# None
+# EXPECTED STDERR:
+# warning: `!` stops the program if the value is missing or an error
+#   --> corpus/m110/b01_read_through_try_bang.lume:38:13
+#    |
+# 38 |   puts maybe!
+#    |             ^
+#   help: fine in tests and quick scripts; elsewhere use `match`, `?` or `.or(default)`
+# warning: `spare` is given a value but never used
+#   --> corpus/m110/b01_read_through_try_bang.lume:37:3
+#    |
+# 37 |   spare = 3
+#    |   ^
+#   help: use it, or name it `_spare` to say it is not meant to be
+
+def half(text: Str) -> Int or Error:
+  parsed = text.to_int
+  value = parsed?
+  value / 2
+
+def head_plus(xs: [Int]) -> Int?:
+  first = xs.first
+  first? + 1
+
+def main:
+  maybe = "8".to_int
+  spare = 3
+  puts maybe!
+  puts half("10")
+  puts half("x")
+  puts head_plus([4])
+  puts head_plus([])

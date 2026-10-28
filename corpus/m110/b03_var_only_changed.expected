@@ -1,0 +1,9 @@
+warning: `count` is given a value but never used
+  --> corpus/m110/b03_var_only_changed.lume:25:3
+   |
+25 |   var count = 0
+   |   ^
+  help: use it, or name it `_count` to say it is not meant to be
+1
+done
+exit: 0

@@ -1,0 +1,27 @@
+# b11 — an interface requiring an async generator (`def names -> async
+# Iterator[Str]`) is not fitted by a struct's own PLAIN generator
+# `def names -> Iterator[Str]`. examples/errors shows this for `extend`
+# (reported at the `extend` line); for a struct's own method it should be
+# told where the struct is used as the interface, as any mismatch is.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `Shelf` is used as a `Named`, but its `names` is `-> Iterator[Str]` and `Named` needs `-> async Iterator[Str]`
+#   --> corpus/m110/b11_async_iface_plain_generator.lume:27:26
+#    |
+# 27 |   puts await count_names(Shelf(stock: ["jam"]))
+#    |                          ^
+
+interface Named:
+  def names -> async Iterator[Str]
+
+struct Shelf:
+  stock: [Str]
+
+  def names -> Iterator[Str]:
+    for s in stock:
+      yield s
+
+async def count_names(n: Named) -> Int = n.names.count
+
+async def main:
+  puts await count_names(Shelf(stock: ["jam"]))

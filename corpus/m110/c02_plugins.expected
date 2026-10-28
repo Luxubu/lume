@@ -1,0 +1,19 @@
+plugin counter, plugin words, plugin list, plugin evens
+counter  c1
+words    red
+list     x
+evens    e0
+counter  c2
+words    green
+list     y
+evens    e2
+counter  c3
+words    blue
+10 items from 4 plugins
+["A", "B"]
+["k1", "one", "k2", "two", "k3"]
+11
+6
+true
+false
+exit: 0

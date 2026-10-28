@@ -1,0 +1,6 @@
+error: loop variable `k` is listed twice
+  --> corpus/m110/b06_loop_name_twice.lume:18:10
+   |
+18 |   for k, k in pairs:
+   |          ^
+exit: 1

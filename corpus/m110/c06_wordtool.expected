@@ -1,0 +1,40 @@
+warning: parameter `times` is never used
+  --> corpus/m110/c06_wordtool.lume:56:22
+   |
+56 | def shout(word: Str, times: Int) -> Str = word.upcase + "!"
+   |                      ^
+  help: name it `_times` if it is there only to fit a signature, as an interface's method may be
+warning: `limit` is given a value but never used
+  --> corpus/m110/c06_wordtool.lume:64:3
+   |
+64 |   limit = 3
+   |   ^
+  help: use it, or name it `_limit` to say it is not meant to be
+warning: `i` is never used in the loop
+  --> corpus/m110/c06_wordtool.lume:66:3
+   |
+66 |   for i, line in text.lines.enumerate:
+   |   ^
+  help: name it `_i`, or write `for _ in ...` when only the count matters
+warning: block parameter `n` is never used
+  --> corpus/m110/c06_wordtool.lume:71:62
+   |
+71 | def lengths(counts: {Str: Int}) -> [(Str, Int)] = counts.map { |w, n| (w, w.len) }
+   |                                                              ^
+  help: name it `_n`, or `_` alone
+warning: `first` is bound by the pattern but never used
+  --> corpus/m110/c06_wordtool.lume:75:10
+   |
+75 |     Some(first) -> "has words"
+   |          ^
+  help: write `_` in its place, or name it `_first`
+10 distinct words, 14 in all
+{"the": 3, "cat": 2, "a": 2}
+thex3 catx2 ax2
+Some(("the", 3))
+THE!
+["the", "cat", "sat", "mat", "not", "hat", "end"]
+has words
+empty
+7
+exit: 0

@@ -1,0 +1,39 @@
+# a09: three `wc -c` programs at once, each in its own task, results printed
+# in the order the jobs were listed. `_` stands twice in one block over
+# triples, which is no warning; a block written `{ |name, text| ... }` that
+# never reads `name` is one warning.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# soup: 9 bytes
+# pie: 10 bytes
+# tea: 4 bytes
+# 23 bytes in all
+# ["soup", "tea"]
+# EXPECTED STDERR:
+# warning: block parameter `name` is never used
+#   --> corpus/m110/a09_byte_counts.lume:30:20
+#    |
+# 30 |   tasks = jobs.map { |name, text| spawn: await count_bytes(text) }.to_list
+#    |                    ^
+#   help: name it `_name`, or `_` alone
+
+async def count_bytes(text: Str) -> Int or Error:
+  c = Process.spawn("wc", ["-c"])?
+  c.write(text)?
+  c.close_input
+  (await c.read_line).or("0").trim.to_int
+
+async def main -> () or Error:
+  jobs = [("soup", "hot soup\n"), ("pie", "apple pie\n"), ("tea", "tea\n")]
+  hot = [("soup", "hot soup\n", true), ("pie", "apple pie\n", false), ("tea", "tea\n", true)]
+  names = jobs.map { |name, _| name }.to_list
+  tasks = jobs.map { |name, text| spawn: await count_bytes(text) }.to_list
+  counts = await tasks
+  var total = 0
+  for i, name in names.enumerate:
+    n = counts.at(i).or(0)
+    total += n
+    puts "#{name}: #{n} bytes"
+  puts "#{total} bytes in all"
+  puts hot.filter { |_, _, warm| warm }.map { |name, _, _| name }.to_list
+  ()

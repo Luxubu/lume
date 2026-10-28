@@ -1,0 +1,103 @@
+# c03: a REPL-like client for a small server, a `sh` loop that answers
+# each command line with a length-prefixed reply: the length on a line of
+# its own, then exactly that many bytes with no line ending after them.
+# The client keeps the `Child` in a struct field and reads each reply with
+# `read_line` for the header and `read(n)` for the body, which may hold
+# line breaks. At the end the server says goodbye with a header that
+# claims more bytes than it sends, then exits: `read(n)` gives what is
+# left; after that `read_line` and `read` give `None`, `wait` gives the
+# exit code, and `write` after `wait` is an `Error`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# > upper hello world
+# < HELLO WORLD
+# > count abcdef
+# < 6
+# > menu
+# < soup
+# < pie
+# < tea
+# > echo two words
+# < two words
+# > fly away
+# < unknown command: fly
+# 5 replies, 53 bytes of body
+# goodbye: bye
+# None
+# None
+# server exited with 0
+# cannot write to `sh`: its input is closed
+
+# the server: one reply per command; `quit` claims 9 bytes and sends 3
+SERVER = r"""
+  while read cmd arg; do
+    case "$cmd" in
+      upper) out=$(printf '%s' "$arg" | tr a-z A-Z) ;;
+      count) out=${#arg} ;;
+      menu) out=$(printf 'soup\npie\ntea') ;;
+      echo) out="$arg" ;;
+      quit) printf '9\nbye'; exit 0 ;;
+      *) out="unknown command: $cmd" ;;
+    esac
+    printf '%s\n%s' "${#out}" "$out"
+  done
+  """
+
+struct Client:
+  child: Child
+
+  def send(line: Str) -> () or Error = child.write(line + "\n")
+
+  # one reply: a header line with the length, then the body by size
+  async def receive -> Str or Error:
+    header = (await child.read_line).or_error("the server hung up")?
+    size = header.trim.to_int?
+    (await child.read(size)).or_error("the server stopped in a reply")
+
+  async def ask(line: Str) -> Str or Error:
+    send(line)?
+    await receive
+
+struct Stats:
+  replies: Int
+  bytes: Int
+
+  def add(var self, reply: Str):
+    replies += 1
+    bytes += reply.len
+
+  def show -> Str = "#{replies} replies, #{bytes} bytes of body"
+
+def show_reply(question: Str, reply: Str):
+  puts "> #{question}"
+  for part in reply.lines:
+    puts "< #{part}"
+
+async def main -> () or Error:
+  c = Client(child: Process.spawn("sh", ["-c", SERVER])?)
+  var stats = Stats(replies: 0, bytes: 0)
+  questions = [
+    "upper hello world",
+    "count abcdef",
+    "menu",
+    "echo two words",
+    "fly away",
+  ]
+  for q in questions:
+    reply = await c.ask(q)?
+    stats.add(reply)
+    show_reply(q, reply)
+  puts stats.show
+
+  # goodbye: the header says 9, the server sends 3 and ends
+  c.send("quit")?
+  bye = await c.receive?
+  puts "goodbye: #{bye}"
+  puts await c.child.read_line
+  puts await c.child.read(4)
+  puts "server exited with #{await c.child.wait}"
+
+  # the input was closed by `wait`, so a late command cannot be sent
+  match c.send("upper late"):
+    Ok(_) -> puts "sent after the end?"
+    Error(e) -> puts e.message

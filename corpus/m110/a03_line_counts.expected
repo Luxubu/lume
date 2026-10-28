@@ -1,0 +1,18 @@
+warning: `err` is given a value but never used
+  --> corpus/m110/a03_line_counts.lume:34:17
+   |
+34 |     (code, out, err) = Process.run("sh", ["-c", "wc -l < #{path}"])?
+   |                 ^
+  help: use it, or name it `_err` to say it is not meant to be
+warning: block parameter `name` is never used
+  --> corpus/m110/a03_line_counts.lume:40:23
+   |
+40 |   busy = sizes.filter { |name, n| n > 1 }
+   |                       ^
+  help: name it `_name`, or `_` alone
+notes.txt: 3
+todo.txt: 1
+empty.txt: 0
+4 lines in all
+{"notes.txt": 3}
+exit: 0

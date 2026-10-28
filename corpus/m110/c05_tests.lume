@@ -1,0 +1,93 @@
+# c05: a small library of async helpers with its own tests, plain and
+# `async test`: awaiting an `async def`, tasks awaited as a list, an async
+# generator walked and chained, a `Child` talked to in turns and one fed
+# through `sort`. Three fail on purpose: a comparison (both sides shown,
+# each worked out once), an `assert` that is not a comparison (the line
+# only), and a test that stops inside a helper (the helper's line).
+# Run with `lume test corpus/m110/c05_tests.lume`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# test the mean of three ... ok
+# test the mean of nothing ... FAILED
+#     corpus/m110/c05_tests.lume:38: stopped: division by zero
+# test upper, awaited ... ok
+# test tasks come back in the order started ... ok
+# test an async sequence, summed and chained ... ok
+# test a count that is wrong on purpose ... FAILED
+#     corpus/m110/c05_tests.lume:70: assert numbers(3).count == 2
+#       left:  3
+#       right: 2
+# test sorted through a child ... ok
+# test a line out, a line back ... ok
+# test nothing is left over ... FAILED
+#     corpus/m110/c05_tests.lume:87: assert leftover.empty?
+# test after the failures, the rest still run ... ok
+#
+# 10 tests: 7 passed, 3 failed
+# EXPECTED EXIT: 1
+
+async def slow_upper(s: Str) -> Str:
+  await Time.sleep(2)
+  s.upcase
+
+async def numbers(upto: Int) -> Iterator[Int]:
+  for i in 1..upto:
+    await Time.sleep(1)
+    yield i
+
+def mean(xs: [Int]) -> Int = xs.sum / xs.len
+
+# every word through `sort`, read back as a list
+async def sorted_by_sort(words: [Str]) -> [Str] or Error:
+  c = Process.spawn("sort", [])?
+  for w in words:
+    c.write(w + "\n")?
+  c.close_input
+  out = c.lines.to_list
+  _ = await c.wait
+  out
+
+test "the mean of three":
+  assert mean([1, 2, 3]) == 2
+
+test "the mean of nothing":
+  assert mean([]) == 0
+
+async test "upper, awaited":
+  assert await slow_upper("pie") == "PIE"
+
+async test "tasks come back in the order started":
+  slow = spawn: await slow_upper("slow")
+  quick = spawn: "quick".upcase
+  assert await [slow, quick] == ["SLOW", "QUICK"]
+
+async test "an async sequence, summed and chained":
+  assert numbers(4).sum == 10
+  assert numbers(6).filter { |n| n % 2 == 0 }.map { |n| n * 10 }.to_list == [20, 40, 60]
+  assert numbers(100).find { |n| n * n > 50 } == Some(8)
+
+async test "a count that is wrong on purpose":
+  assert numbers(3).count == 2
+
+async test "sorted through a child":
+  got = (await sorted_by_sort(["pear", "fig", "apple"])).or([])
+  assert got == ["apple", "fig", "pear"]
+
+async test "a line out, a line back":
+  c = Process.spawn("sh", ["-c", "while read x; do echo \"got $x\"; done"]).ok
+  match c:
+    Some(child) ->
+      _ = child.write("tea\n")
+      assert await child.read_line == Some("got tea")
+      assert await child.wait == 0
+    None -> assert false
+
+async test "nothing is left over":
+  leftover = numbers(2).map { |n| "#{n}" }.to_list
+  assert leftover.empty?
+
+test "after the failures, the rest still run":
+  assert mean([10, 20]) == 15
+
+async def main:
+  puts await slow_upper("main")

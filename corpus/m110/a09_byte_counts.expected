@@ -1,0 +1,12 @@
+warning: block parameter `name` is never used
+  --> corpus/m110/a09_byte_counts.lume:30:20
+   |
+30 |   tasks = jobs.map { |name, text| spawn: await count_bytes(text) }.to_list
+   |                    ^
+  help: name it `_name`, or `_` alone
+soup: 9 bytes
+pie: 10 bytes
+tea: 4 bytes
+23 bytes in all
+["soup", "tea"]
+exit: 0

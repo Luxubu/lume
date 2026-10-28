@@ -1,0 +1,55 @@
+# a01: a word tally built from two programs running alongside: `tr` lowers
+# the text and puts one word on a line, `sort` orders the words, and Lume
+# counts them. Written as a first draft is written, it keeps the exit code
+# of `tr` in a name it never reads, and a parameter it never uses: two
+# warnings, in the order they appear in the file.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# == words ==
+# a   1
+# cat 2
+# dog 2
+# saw 2
+# the 3
+# EXPECTED STDERR:
+# warning: parameter `width` is never used
+#   --> corpus/m110/a01_word_tally.lume:28:25
+#    |
+# 28 | def heading(title: Str, width: Int) -> Str = "== #{title} =="
+#    |                         ^
+#   help: name it `_width` if it is there only to fit a signature, as an interface's method may be
+# warning: `code` is given a value but never used
+#   --> corpus/m110/a01_word_tally.lume:36:3
+#    |
+# 36 |   code = await tr.wait
+#    |   ^
+#   help: use it, or name it `_code` to say it is not meant to be
+
+def heading(title: Str, width: Int) -> Str = "== #{title} =="
+
+# one word to a line, in lower case
+async def split_words(text: Str) -> [Str] or Error:
+  tr = Process.spawn("tr", ["A-Z ", "a-z\n"])?
+  tr.write(text)?
+  tr.close_input
+  words = tr.lines.reject { |w| w.empty? }.to_list
+  code = await tr.wait
+  words
+
+async def sorted(words: [Str]) -> [Str] or Error:
+  s = Process.spawn("sort", [])?
+  for w in words:
+    s.write(w + "\n")?
+  s.close_input
+  s.lines.to_list
+
+async def main -> () or Error:
+  text = "The cat saw the dog\nthe dog saw a cat\n"
+  words = await sorted(await split_words(text)?)?
+  var counts: {Str: Int} = {}
+  for w in words:
+    counts[w] = counts[w].or(0) + 1
+  puts heading("words", 20)
+  for word, n in counts:
+    puts "#{word.pad_right(4)}#{n}"
+  ()

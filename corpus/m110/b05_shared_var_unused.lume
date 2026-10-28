@@ -1,0 +1,42 @@
+# b05 — `shared var`: a `shared var` parameter only changed in place is
+# used (no warning for `n`); a `shared var` local that the tasks only add to
+# (`misses`) and nobody reads gets the `shared var` warning, and also the
+# unused one (as a `var` only added to would); `hits`, passed on and
+# printed, gets only the `shared var` warning. `for _` gets nothing.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 3
+# EXPECTED STDERR:
+# warning: `hits` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+#   --> corpus/m110/b05_shared_var_unused.lume:33:3
+#    |
+# 33 |   shared var hits = 0
+#    |   ^
+#   help: fine for a store or a counter; keep the work done while it is locked short
+# warning: `misses` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+#   --> corpus/m110/b05_shared_var_unused.lume:34:3
+#    |
+# 34 |   shared var misses = 0
+#    |   ^
+#   help: fine for a store or a counter; keep the work done while it is locked short
+# warning: `misses` is given a value but never used
+#   --> corpus/m110/b05_shared_var_unused.lume:34:3
+#    |
+# 34 |   shared var misses = 0
+#    |   ^
+#   help: use it, or name it `_misses` to say it is not meant to be
+
+def bump(n: shared var Int):
+  n += 1
+
+async def main:
+  shared var hits = 0
+  shared var misses = 0
+  var tasks: [Task[()]] = []
+  for _ in 1..3:
+    t = spawn:
+      bump(hits)
+      misses += 1
+    tasks.push(t)
+  await tasks
+  puts hits

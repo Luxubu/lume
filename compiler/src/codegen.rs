@@ -1778,7 +1778,7 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, module_id: &str
     };
     // names given a value and never read, as Rust's `unused_variables` has them
     let mut warnings = g.warnings;
-    warnings.extend(crate::unused::warnings(program));
+    warnings.extend(crate::unused::warnings(program, src));
     Ok((Output { rust, warnings, deps: rust_deps, has_rust_blocks: g.has_rust_blocks }, exports))
 }
 
@@ -2269,7 +2269,7 @@ impl Gen {
         match t {
             Type::Var(n) => n == name,
             Type::App(_, args) | Type::Tuple(args) => args.iter().any(|a| Self::mentions_var(a, name)),
-            Type::List(i) | Type::Option(i) | Type::Set(i) | Type::Task(i) | Type::Future(i) | Type::Iter(i, _) | Type::Shared(i, _) => Self::mentions_var(i, name),
+            Type::List(i) | Type::Option(i) | Type::Set(i) | Type::Task(i) | Type::Future(i) | Type::Iter(i, _) | Type::Shared(i, _) | Type::Gen(i) | Type::AsyncGen(i) => Self::mentions_var(i, name),
             Type::Result(a, b) | Type::Map(a, b) => Self::mentions_var(a, name) || Self::mentions_var(b, name),
             Type::Fn(ps, r) => ps.iter().any(|x| Self::mentions_var(x, name)) || Self::mentions_var(r, name),
             _ => false,
@@ -5209,7 +5209,15 @@ impl Gen {
             ExprKind::Await(x) => x,
             _ => return None,
         };
-        match self.split_ident_try(x)?.kind {
+        // `await t?`, `await c.receive?` and `await f(x)?`: the `?` belongs
+        // to the `await`, whichever way the `?` was read
+        let split = match &x.kind {
+            ExprKind::Try(_) => Some((**x).clone()),
+            ExprKind::Ident(_) | ExprKind::Call { .. } => self.split_ident_try(x),
+            ExprKind::Method { .. } => self.split_trailing_try(x),
+            _ => None,
+        };
+        match split?.kind {
             ExprKind::Try(inner) => {
                 let aw = Expr::new(ExprKind::Await(inner), e.line, e.col);
                 Some(Expr::new(ExprKind::Try(Box::new(aw)), x.line, x.col))
@@ -7724,8 +7732,33 @@ impl Gen {
         }
         self.tail_of_fn = true;
         if unit_result {
-            self.block_body(&f.body, false)?;
-            self.line("Ok(())");
+            // the last statement is the result when it gives a `() or E`
+            // itself — `= child.write(line)` — as any other type's last
+            // expression is; otherwise the function ends with `Ok(())`
+            // (the statements go one by one, as `block_body` takes them, so
+            // what each later one reads still counts as read)
+            let stmts = &f.body.stmts;
+            let n = stmts.len();
+            let mut gives_result = false;
+            for (i, st) in stmts.iter().enumerate() {
+                if i + 1 == n {
+                    gives_result = match st {
+                        Stmt::Expr(e) if !matches!(e.kind, ExprKind::If { .. } | ExprKind::Match { .. }) => {
+                            matches!(self.ty_of(e).materialized(), Type::Result(ok, _) if *ok == Type::Unit)
+                        }
+                        _ => false,
+                    };
+                }
+                self.rest_stack.push(stmts[i + 1..].to_vec());
+                self.stmt_stack.push(st.clone());
+                let r = self.stmt(st, i + 1 == n && gives_result);
+                self.stmt_stack.pop();
+                self.rest_stack.pop();
+                r?;
+            }
+            if !gives_result {
+                self.line("Ok(())");
+            }
         } else {
             self.block_body(&f.body, want_value)?;
         }

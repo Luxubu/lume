@@ -1,0 +1,27 @@
+# a08: an interface that requires `dishes` and tries to give every type a
+# default async generator made from it. interfaces.md says an interface
+# cannot give a default one; the message should say so and point to the
+# two ways out (leave it a requirement, or write an `async def` function
+# that takes the interface value).
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `served` is an async generator written in an interface, which Lume cannot compile yet
+#   --> corpus/m110/a08_default_feed.lume:18:3
+#    |
+# 18 |   async def served -> Iterator[Str]:
+#    |   ^
+#   help: leave it a requirement, `async def served(...) -> Iterator[T]`, for each type to write; or make it an `async def` function that takes the interface value
+
+interface Menu:
+  def dishes -> [Str]
+
+  async def served -> Iterator[Str]:
+    for d in dishes():
+      await Time.sleep(1)
+      yield d
+
+struct Lunch:
+  def dishes -> [Str] = ["soup", "bread"]
+
+async def main:
+  puts Lunch().served.to_list

@@ -1,0 +1,24 @@
+# b07 — every alternative of `|` must bind the same names. A name that
+# starts with `_` (`_r`) is still a name: `Circle(r) | Square(_r)` binds `r`
+# in one and `_r` in the other, so it is refused, as `side` would be.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: every alternative of `|` must bind the same names
+#   --> corpus/m110/b07_or_alternative_underscore_name.lume:20:17
+#    |
+# 20 |     Circle(r) | Square(_r) -> r
+#    |                 ^
+#   help: the first alternative binds `r`, this one binds `_r`
+
+enum Shape:
+  Circle(r: Float)
+  Square(side: Float)
+  Dot
+
+def size(s: Shape) -> Float:
+  match s:
+    Circle(r) | Square(_r) -> r
+    Dot -> 0.0
+
+def main:
+  puts size(Dot)

@@ -262,7 +262,7 @@ same messages as `Process.run`.
 | `c.lines` | `async Iterator[Str]` | what it writes to standard output, a line at a time, without the line ending |
 | `c.error_lines` | `async Iterator[Str]` | the same, for standard error |
 | `await c.read_line` | `Str?` | the next line of its output; `None` once it has ended |
-| `await c.read(n)` | `Str?` | the next `n` bytes of its output, and the rest of a character the `n`th byte would cut in two — a character is never split; what is left when it ends first |
+| `await c.read(n)` | `Str?` | the next `n` bytes of its output, and the rest of a character the `n`th byte would cut in two — a character is never split; what is left when it ends first, and `None` once nothing is |
 | `c.write(text)` | `() or Error` | writes `text` to its standard input; ``cannot write to `sort`: its input is closed`` after `close_input` or `wait`, or once it has ended |
 | `c.close_input` | `()` | closes its standard input, so a program reading to the end can finish |
 | `await c.wait` | `Int` | its exit code, once it ends — `-1` when ended by a signal; the same code each time it is asked. Its input is closed first, as Rust's `Child::wait` does |

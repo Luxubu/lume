@@ -1,0 +1,7 @@
+error: every alternative of `|` must bind the same names
+  --> corpus/m110/b07_or_alternative_underscore_name.lume:20:17
+   |
+20 |     Circle(r) | Square(_r) -> r
+   |                 ^
+  help: the first alternative binds `r`, this one binds `_r`
+exit: 1

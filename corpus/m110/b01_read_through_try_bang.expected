@@ -1,0 +1,18 @@
+warning: `!` stops the program if the value is missing or an error
+  --> corpus/m110/b01_read_through_try_bang.lume:38:13
+   |
+38 |   puts maybe!
+   |             ^
+  help: fine in tests and quick scripts; elsewhere use `match`, `?` or `.or(default)`
+warning: `spare` is given a value but never used
+  --> corpus/m110/b01_read_through_try_bang.lume:37:3
+   |
+37 |   spare = 3
+   |   ^
+  help: use it, or name it `_spare` to say it is not meant to be
+8
+Ok(5)
+Error("`x` is not an integer")
+Some(5)
+None
+exit: 0

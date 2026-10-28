@@ -1,0 +1,23 @@
+warning: `size` is bound by the pattern but never used
+  --> corpus/m110/b04_patterns_or_tuple.lume:39:12
+   |
+39 |     Circle(size) | Square(size) -> "has a size"
+   |            ^
+  help: write `_` in its place, or name it `_size`
+warning: `rest` is given a value but never used
+  --> corpus/m110/b04_patterns_or_tuple.lume:43:11
+   |
+43 |   (whole, rest) = (7, 2)
+   |           ^
+  help: use it, or name it `_rest` to say it is not meant to be
+warning: `word` is bound by the pattern but never used
+  --> corpus/m110/b04_patterns_or_tuple.lume:48:9
+   |
+48 |     (n, word) -> puts n
+   |         ^
+  help: write `_` in its place, or name it `_word`
+7
+has a size
+a dot
+1
+exit: 0

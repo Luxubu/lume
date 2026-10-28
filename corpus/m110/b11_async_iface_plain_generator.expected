@@ -1,0 +1,6 @@
+error: `Shelf` is used as a `Named`, but its `names` is `-> Iterator[Str]` and `Named` needs `-> async Iterator[Str]`
+  --> corpus/m110/b11_async_iface_plain_generator.lume:27:26
+   |
+27 |   puts await count_names(Shelf(stock: ["jam"]))
+   |                          ^
+exit: 1

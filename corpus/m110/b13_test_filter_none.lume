@@ -1,0 +1,20 @@
+# b13 — `lume test FILE NAME` where NAME matches no test. The reference
+# says only that it "says so, and is not a failure"; the summary line is
+# worked out from the form it gives for a filter that matches some
+# (`1 test: 0 passed, 1 failed (1 not matching `rounded`)`).
+# Run with `lume test corpus/m110/b13_test_filter_none.lume zzz`
+# Meant to RUN.
+# EXPECTED OUTPUT:
+#
+# 0 tests: 0 passed, 0 failed (2 not matching `zzz`)
+
+def double(n: Int) -> Int = n * 2
+
+test "doubles a small number":
+  assert double(2) == 4
+
+test "doubles zero":
+  assert double(0) == 0
+
+def main:
+  puts double(21)

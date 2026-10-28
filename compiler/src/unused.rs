@@ -12,8 +12,8 @@ use crate::ast::*;
 use crate::error::LumeError;
 use std::collections::HashSet;
 
-pub fn warnings(program: &[Item]) -> Vec<LumeError> {
-    let mut w = Walker { out: Vec::new(), scopes: Vec::new() };
+pub fn warnings(program: &[Item], src: &str) -> Vec<LumeError> {
+    let mut w = Walker { out: Vec::new(), scopes: Vec::new(), lines: src.lines().map(|l| l.to_string()).collect() };
     let fields_of = |name: &str| -> Vec<String> {
         program
             .iter()
@@ -68,6 +68,8 @@ struct Walker {
     /// The names in scope, innermost last: a `name = value` of one of them
     /// changes it, and binds nothing new.
     scopes: Vec<HashSet<String>>,
+    /// The file's lines, to point at one name of `(a, b) = ...`.
+    lines: Vec<String>,
 }
 
 fn quiet(name: &str) -> bool {
@@ -101,6 +103,24 @@ impl Walker {
         if let Some(s) = self.scopes.last_mut() {
             s.insert(name.to_string());
         }
+    }
+
+    /// The column of `name` as a whole word on `line`, at or after `col`.
+    fn name_col(&self, line: usize, col: usize, name: &str) -> Option<usize> {
+        let text = self.lines.get(line.checked_sub(1)?)?;
+        let chars: Vec<char> = text.chars().collect();
+        let want: Vec<char> = name.chars().collect();
+        let word = |c: char| c.is_alphanumeric() || c == '_' || c == '?';
+        let mut i = col.saturating_sub(1);
+        while i + want.len() <= chars.len() {
+            let before = i == 0 || !word(chars[i - 1]);
+            let after = i + want.len() == chars.len() || !word(chars[i + want.len()]);
+            if before && after && chars[i..i + want.len()] == want[..] {
+                return Some(i + 1);
+            }
+            i += 1;
+        }
+        None
     }
 
     fn function(&mut self, f: &FnDef, fields: &[String]) {
@@ -155,7 +175,9 @@ impl Walker {
                 self.expr(value, deeper);
                 for n in names {
                     if n != "_" {
-                        self.new_name(n, *line, *col, rest, outer);
+                        // the caret on the name itself, inside the parentheses
+                        let at = self.name_col(*line, *col, n).unwrap_or(*col);
+                        self.new_name(n, *line, at, rest, outer);
                     }
                 }
             }

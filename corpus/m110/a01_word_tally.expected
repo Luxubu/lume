@@ -1,0 +1,19 @@
+warning: parameter `width` is never used
+  --> corpus/m110/a01_word_tally.lume:28:25
+   |
+28 | def heading(title: Str, width: Int) -> Str = "== #{title} =="
+   |                         ^
+  help: name it `_width` if it is there only to fit a signature, as an interface's method may be
+warning: `code` is given a value but never used
+  --> corpus/m110/a01_word_tally.lume:36:3
+   |
+36 |   code = await tr.wait
+   |   ^
+  help: use it, or name it `_code` to say it is not meant to be
+== words ==
+a   1
+cat 2
+dog 2
+saw 2
+the 3
+exit: 0

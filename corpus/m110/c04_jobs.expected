@@ -1,0 +1,15 @@
+warning: `jobs` holds values of different types behind `Job`, so calls on its items go through a pointer
+  --> corpus/m110/c04_jobs.lume:88:3
+   |
+88 |   jobs: [Job] = [
+   |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
+ok      shell  greet                hello
+ok      job    say tea              tea
+ok      shell  sorted               apple fig pear
+FAIL 3  shell  broken               out of tea
+ok      job    skipped              nothing to do
+ok      either missing or fallback  used the fallback
+5 of 6 jobs passed
+failed: broken
+exit: 0

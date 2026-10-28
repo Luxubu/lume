@@ -1,0 +1,7 @@
+error: `wait` waits for the program to end: its result arrives later
+  --> corpus/m110/b14_child_wait_again.lume:16:14
+   |
+16 |   again = kid.wait
+   |              ^
+  help: write `await` in front of the call to wait for it, or `spawn:` to run it alongside other work
+exit: 1

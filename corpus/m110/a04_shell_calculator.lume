@@ -1,0 +1,47 @@
+# a04: a `sh` loop kept in a struct's field and asked questions in turns,
+# then the edges io.md states: `read_line` gives `None` once the output has
+# ended, `wait` gives the same code each time, writing after `wait` is an
+# `Error` naming the program, `kill` makes `wait` give -1, and `kill` on a
+# program that has ended keeps the code it ended with.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 3 4 -> 12
+# 10 10 -> 100
+# 7 6 -> 42
+# None
+# 0
+# 0
+# cannot write to `sh`: its input is closed
+# killed: -1
+# ended: 4
+# after kill: 4
+
+struct Calc:
+  child: Child
+
+  async def ask(q: Str) -> Str or Error:
+    child.write(q + "\n")?
+    (await child.read_line).or_error("no answer to #{q}")
+
+async def main -> () or Error:
+  calc = Calc(child: Process.spawn("sh", ["-c", "while read a b; do echo $((a * b)); done"])?)
+  for q in ["3 4", "10 10", "7 6"]:
+    answer = await calc.ask(q)?
+    puts "#{q} -> #{answer}"
+  calc.child.close_input
+  puts await calc.child.read_line
+  puts await calc.child.wait
+  puts await calc.child.wait
+  match calc.child.write("1 1\n"):
+    Ok(_) -> puts "written after the end?"
+    Error(e) -> puts e.message
+
+  slow = Process.spawn("sleep", ["30"])?
+  slow.kill
+  puts "killed: #{await slow.wait}"
+
+  quick = Process.spawn("sh", ["-c", "exit 4"])?
+  puts "ended: #{await quick.wait}"
+  quick.kill
+  puts "after kill: #{await quick.wait}"
+  ()

@@ -1,0 +1,32 @@
+# a06: scores come back from `printf` through `Process.run`; the standard
+# error is dropped with `_`, which is no warning. Lume sorts the rows and
+# prints a podium, then asks for a fourth place the list does not have:
+# `.at(3)` on three items stops the program, after what it printed.
+# Meant to STOP.
+# EXPECTED OUTPUT:
+# 3 rows, exit 0
+# 1. bo 5
+# 2. cy 4
+# 3. ann 3
+# gold: bo
+# EXPECTED STDERR:
+# error: no item at 3 — the list has 3
+#   --> corpus/m110/a06_podium.lume:31
+#    |
+# 31 |     puts "fourth: #{podium.at(3)}"
+# EXPECTED EXIT: 101
+
+def main -> () or Error:
+  (code, out, _) = Process.run("printf", ["ann 3\nbo 5\ncy 4\n"])?
+  rows = out.lines.map { |l| l.split(" ").to_list }.to_list
+  puts "#{rows.len} rows, exit #{code}"
+  ranked = rows
+    .sort_by { |r| r.at(1).to_int.or(0) }
+    .reverse
+  for i, row in ranked.enumerate:
+    puts "#{i + 1}. #{row.at(0)} #{row.at(1)}"
+  podium = ranked.map { |r| r.at(0) }.to_list
+  puts "gold: #{podium.at(0)}"
+  if podium.len >= 3:
+    puts "fourth: #{podium.at(3)}"
+  ()

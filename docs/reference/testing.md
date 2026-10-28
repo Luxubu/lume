@@ -135,7 +135,9 @@ test rounded to the nearest ... FAILED
 1 test: 0 passed, 1 failed (1 not matching `rounded`)
 ```
 
-A name that matches no test says so, and is not a failure.
+A name that matches no test says so — ``none of the 2 tests has `zzz` in
+its name`` — and is not a failure: `lume test` exits with 0, as `cargo
+test` does.
 
 ## Testing async code: `async test`
 

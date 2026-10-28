@@ -1,0 +1,63 @@
+# a02: a generic interface that requires an async generator, written
+# `async def items -> Iterator[T]`; one type writes it in its own body, one
+# in an `extend` with the other spelling, `def ... -> async Iterator[T]`
+# in the interface. Functions take the interface value: one waits for a
+# total, one hands on a chain, one counts. No unused names, so no warnings.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# countdown from 4
+# 0: 4
+# 1: 3
+# 2: 2
+# 3: 1
+# 10
+# ["JAM", "AND", "TOAST"]
+# words of 5 letters: 3 items
+# Some("b")
+
+interface Source[T]:
+  def items -> async Iterator[T]
+  def label -> Str
+
+struct Countdown:
+  from: Int
+
+  async def items -> Iterator[Int]:
+    var n = from
+    while n > 0:
+      await Time.sleep(1)
+      yield n
+      n -= 1
+
+  def label -> Str = "countdown from #{from}"
+
+struct Words:
+  text: Str
+
+extend Words with Source[Str]:
+  async def items -> Iterator[Str]:
+    for w in text.split:
+      await Time.sleep(1)
+      yield w
+
+  def label -> Str = "words of #{text.len} letters"
+
+async def total(s: Source[Int]) -> Int = s.items.sum
+
+def shouted(s: Source[Str]) -> async Iterator[Str] = s.items.map { |w| w.upcase }
+
+async def describe(s: Source[Str]) -> Str:
+  n = s.items.count
+  "#{s.label}: #{n} items"
+
+async def second(s: Source[Str]) -> Str? = s.items.skip(1).first
+
+async def main:
+  c = Countdown(from: 4)
+  puts c.label
+  for i, n in c.items.enumerate:
+    puts "#{i}: #{n}"
+  puts await total(Countdown(from: 4))
+  puts shouted(Words(text: "jam and toast")).to_list
+  puts await describe(Words(text: "a b c"))
+  puts await second(Words(text: "a b c"))

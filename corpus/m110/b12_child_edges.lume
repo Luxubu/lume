@@ -1,0 +1,47 @@
+# b12 — the edges of `Child` the reference states. `read(2)` where the 2nd
+# byte is the first of `é` (printf makes its two bytes from `\303\251`, so
+# the argument is plain ASCII) gives `a` and the whole `é`; `read(5)` near
+# the end gives what is left; `read` once nothing is left. `wait` twice gives
+# the same code. `kill` on a program that has ended and been waited for
+# keeps its code; `write` after the end is an Error naming the program.
+# `close_input` twice; `write` after `close_input`; `read_line` on a program
+# that wrote nothing.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# Some("aé")
+# Some("b")
+# Some("c")
+# None
+# 0
+# 0
+# 4
+# 4
+# cannot write to `sh`: its input is closed
+# true
+# None
+# 0
+
+async def main -> () or Error:
+  b = Process.spawn("printf", ["a\\303\\251bc"])?
+  puts await b.read(2)
+  puts await b.read(1)
+  puts await b.read(5)
+  puts await b.read(1)
+  puts await b.wait
+  puts await b.wait
+
+  done = Process.spawn("sh", ["-c", "exit 4"])?
+  puts await done.wait
+  done.kill
+  puts await done.wait
+  match done.write("late\n"):
+    Ok(_) -> puts "written"
+    Error(e) -> puts e.message
+
+  c = Process.spawn("cat", [])?
+  c.close_input
+  c.close_input
+  puts c.write("x").error?
+  puts await c.read_line
+  puts await c.wait
+  ()

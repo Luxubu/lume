@@ -1,0 +1,18 @@
+sorted: 8 lines
+  1  error disk full
+  3  error net down
+  1  info boot ok
+  1  info user login
+  2  warn disk 91
+distinct: 5
+calm levels: ["info", "info", "warn"]
+errors: ["1. error disk full", "2. error net down"]
+split exited with 0
+["[INFO]", "[WARN]"]
+0
+total: 8
+words: 24
+None
+wc exited with 0
+failed: `sh` exited with 4
+exit: 0

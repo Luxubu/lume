@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **Review round twenty-two** (`corpus/m110/`): thirty programs by three
+  reviewers from the docs alone; no wrong answer and no rustc error, all
+  seven refusals predicted word for word.
+- **Fixed**: a generic interface whose `T` appears only in `async
+  Iterator[T]` was refused as never using it; a `() or Error` function
+  could not end with a call giving `() or Error`, as `= child.write(...)`;
+  `await c.receive?` was refused, where the `?` belongs to the `await`; a
+  program with a generator could not `extend [Str]` with an `items` of its
+  own, as Lume's own `Iterable` was given lists unasked.
+- **The warning for an unused name in `(a, b) = pair` points at the name.**
+
 - **`Process.spawn`, `Child` and `async test` are settled**, covered by the
   promise in `docs/stability.md`; lunch 18 is no longer a preview. Before
   settling, each of `Child`'s edges was tried and is now written down:

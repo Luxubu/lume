@@ -325,7 +325,10 @@ def main:
 Written with names instead — `{ |name, cents| ... }`, `for i in`,
 `Some(cents)`, `off(cents: Int, ...)` — it prints the same, and the compiler
 warns about each, as ``warning: block parameter `name` is never used``,
-with the `_` that quiets it. A
+with the `_` that quiets it; the caret is on the name, even one of several
+in `(a, b) = pair`. **Reading a name is any use of it** — calling a method
+on it, `xs.push(3)` included, as Rust counts it — so a list that is only
+pushed to gets no warning, while a `var` only added to with `+=` does. A
 `var` or `shared var` parameter changed in place is used: the caller sees
 the change. See `examples/unused_names.lume`.
 

@@ -1,0 +1,105 @@
+# c06: a word-count tool written the way a first draft is, with names left
+# over: a parameter, a local, a `for` variable, a block parameter and a
+# name a pattern binds, each never read, and each warned about in the
+# order it is written. Beside them, what must NOT warn: `_name`, `_` used
+# twice in one block and in one `for`, a `var` parameter only changed in
+# place, and a `for` variable read only by its `where`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 10 distinct words, 14 in all
+# {"the": 3, "cat": 2, "a": 2}
+# thex3 catx2 ax2
+# Some(("the", 3))
+# THE!
+# ["the", "cat", "sat", "mat", "not", "hat", "end"]
+# has words
+# empty
+# 7
+# EXPECTED STDERR:
+# warning: parameter `times` is never used
+#   --> corpus/m110/c06_wordtool.lume:56:22
+#    |
+# 56 | def shout(word: Str, times: Int) -> Str = word.upcase + "!"
+#    |                      ^
+#   help: name it `_times` if it is there only to fit a signature, as an interface's method may be
+# warning: `limit` is given a value but never used
+#   --> corpus/m110/c06_wordtool.lume:64:3
+#    |
+# 64 |   limit = 3
+#    |   ^
+#   help: use it, or name it `_limit` to say it is not meant to be
+# warning: `i` is never used in the loop
+#   --> corpus/m110/c06_wordtool.lume:66:3
+#    |
+# 66 |   for i, line in text.lines.enumerate:
+#    |   ^
+#   help: name it `_i`, or write `for _ in ...` when only the count matters
+# warning: block parameter `n` is never used
+#   --> corpus/m110/c06_wordtool.lume:71:62
+#    |
+# 71 | def lengths(counts: {Str: Int}) -> [(Str, Int)] = counts.map { |w, n| (w, w.len) }
+#    |                                                              ^
+#   help: name it `_n`, or `_` alone
+# warning: `first` is bound by the pattern but never used
+#   --> corpus/m110/c06_wordtool.lume:75:10
+#    |
+# 75 |     Some(first) -> "has words"
+#    |          ^
+#   help: write `_` in its place, or name it `_first`
+
+TEXT = r"""
+  the cat sat on the mat
+  a cat is not a hat
+  the end
+  """
+
+def shout(word: Str, times: Int) -> Str = word.upcase + "!"
+
+def pick(_why: Str, w: Str) -> Str = w
+
+def keep(var kept: [Str], w: Str):
+  kept.push(w)
+
+def tally(text: Str) -> {Str: Int}:
+  limit = 3
+  var counts: {Str: Int} = {}
+  for i, line in text.lines.enumerate:
+    for w in line.split:
+      counts[w] = counts[w].or(0) + 1
+  counts
+
+def lengths(counts: {Str: Int}) -> [(Str, Int)] = counts.map { |w, n| (w, w.len) }
+
+def verdict(words: [Str]) -> Str:
+  match words.first:
+    Some(first) -> "has words"
+    None -> "empty"
+
+def triples(counts: {Str: Int}) -> [(Str, Int, Bool)] = counts.map { |w, n| (w, n, n > 1) }
+
+def entries(counts: {Str: Int}) -> Int:
+  var n = 0
+  for _, _ in counts:
+    n += 1
+  n
+
+def long_count(words: [Str]) -> Int:
+  var c = 0
+  for w in words where w.len > 2:
+    c += 1
+  c
+
+def main:
+  counts = tally(TEXT)
+  puts "#{entries(counts)} distinct words, #{counts.values.sum} in all"
+  puts counts.filter { |_, n| n > 1 }
+  puts triples(counts).filter { |_, _, many| many }.map { |w, n, _| "#{w}x#{n}" }.join(" ")
+  puts lengths(counts).max_by { |_, len| len }
+  puts shout(pick("the first word", counts.keys.first.or("")), 2)
+  var kept: [Str] = []
+  for w in counts.keys where w.len == 3:
+    keep(kept, w)
+  puts kept
+  puts verdict(kept)
+  puts verdict([])
+  puts long_count(counts.keys)

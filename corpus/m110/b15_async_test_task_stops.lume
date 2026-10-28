@@ -1,0 +1,35 @@
+# b15 — `async test` with a task that stops: `xs.at(5)` on a list of three,
+# inside a plain function a spawned task calls, awaited in the test. The
+# failure is told at the line where it stopped (inside `pick`), as
+# "stopped: ...", and the tests after it still run. Exit status 1.
+# Run with `lume test corpus/m110/b15_async_test_task_stops.lume`
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# test a task that finishes ... ok
+# test a task that stops ... FAILED
+#     corpus/m110/b15_async_test_task_stops.lume:16: stopped: no item at 5 — the list has 3
+# test after the stop ... ok
+#
+# 3 tests: 2 passed, 1 failed
+# EXPECTED EXIT: 1
+
+def pick(xs: [Str], i: Int) -> Str = xs.at(i)
+
+async def fetch(xs: [Str], i: Int) -> Str:
+  await Time.sleep(1)
+  pick(xs, i)
+
+async test "a task that finishes":
+  t = spawn: await fetch(["a", "b"], 1)
+  assert await t == "b"
+
+async test "a task that stops":
+  t = spawn: await fetch(["a", "b", "c"], 5)
+  got = await t
+  assert got == "c"
+
+async test "after the stop":
+  assert await fetch(["z"], 0) == "z"
+
+async def main:
+  puts await fetch(["x"], 0)

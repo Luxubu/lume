@@ -1,0 +1,19 @@
+# b14 — `wait` may be asked twice and gives the same code, but each asking
+# is awaited: the second `kid.wait`, with no `await`, is refused even
+# though the program has already ended by then.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `wait` waits for the program to end: its result arrives later
+#   --> corpus/m110/b14_child_wait_again.lume:16:14
+#    |
+# 16 |   again = kid.wait
+#    |              ^
+#   help: write `await` in front of the call to wait for it, or `spawn:` to run it alongside other work
+
+async def main -> () or Error:
+  kid = Process.spawn("sh", ["-c", "exit 2"])?
+  first = await kid.wait
+  again = kid.wait
+  puts first
+  puts again
+  ()

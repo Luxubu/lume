@@ -1,0 +1,7 @@
+error: `posts` is an async generator written in an interface, which Lume cannot compile yet
+  --> corpus/m110/b10_async_iface_default.lume:16:3
+   |
+16 |   async def posts -> Iterator[Str]:
+   |   ^
+  help: leave it a requirement, `async def posts(...) -> Iterator[T]`, for each type to write; or make it an `async def` function that takes the interface value
+exit: 1

@@ -1,0 +1,33 @@
+# b03 — a `var` that is only added to (`count += x`) and a `var` list that
+# is only pushed to are given values and never read: the reference says a
+# `var` PARAMETER changed in place counts as used because the caller sees
+# it, so a local changed in place, which nobody sees, should not. A `var`
+# changed and then printed (`shown`) is used.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 1
+# done
+# EXPECTED STDERR:
+# warning: `count` is given a value but never used
+#   --> corpus/m110/b03_var_only_changed.lume:25:3
+#    |
+# 25 |   var count = 0
+#    |   ^
+#   help: use it, or name it `_count` to say it is not meant to be
+# warning: `seen` is given a value but never used
+#   --> corpus/m110/b03_var_only_changed.lume:26:3
+#    |
+# 26 |   var seen: [Int] = []
+#    |   ^
+#   help: use it, or name it `_seen` to say it is not meant to be
+
+def main:
+  var count = 0
+  var seen: [Int] = []
+  for x in [4, 5]:
+    count += x
+    seen.push(x)
+  var shown = 0
+  shown += 1
+  puts shown
+  puts "done"

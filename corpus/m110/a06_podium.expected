@@ -1,0 +1,10 @@
+3 rows, exit 0
+1. bo 5
+2. cy 4
+3. ann 3
+gold: bo
+error: no item at 3 — the list has 3
+  --> corpus/m110/a06_podium.lume:31
+   |
+31 |     puts "fourth: #{podium.at(3)}"
+exit: 101

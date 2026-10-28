@@ -1,0 +1,49 @@
+# a05: `async test` around programs running alongside, and `lume test FILE
+# NAME`. A helper pipes lines through a program and gives back its lines;
+# three async tests have `sort` in their name, one fails on purpose (a
+# plain `sort` compares text, so "10" comes before "2"); a plain test and
+# an async test with other names are left out by the filter.
+# Run with `lume test corpus/m110/a05_sort_tests.lume sort`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# test sort puts words in order ... ok
+# test sort -r reverses ... ok
+# test sort without -n compares text ... FAILED
+#     corpus/m110/a05_sort_tests.lume:38: assert lines == ["2", "10", "33"]
+#       left:  ["10", "2", "33"]
+#       right: ["2", "10", "33"]
+#
+# 3 tests: 2 passed, 1 failed (2 not matching `sort`)
+# EXPECTED EXIT: 1
+
+async def through(program: Str, args: [Str], input: [Str]) -> [Str] or Error:
+  c = Process.spawn(program, args)?
+  for line in input:
+    c.write(line + "\n")?
+  c.close_input
+  c.lines.to_list
+
+def menu -> [Str] = ["stew", "pie", "soup"]
+
+async test "sort puts words in order":
+  lines = (await through("sort", [], menu())).or([])
+  assert lines == ["pie", "soup", "stew"]
+
+async test "sort -r reverses":
+  lines = (await through("sort", ["-r"], menu())).or([])
+  assert lines == ["stew", "soup", "pie"]
+
+async test "sort without -n compares text":
+  lines = (await through("sort", [], ["33", "2", "10"])).or([])
+  assert lines == ["2", "10", "33"]
+
+async test "tr shouts":
+  lines = (await through("tr", ["a-z", "A-Z"], menu())).or([])
+  assert lines == ["STEW", "PIE", "SOUP"]
+
+test "the menu has three dishes":
+  assert menu().len == 3
+
+async def main -> () or Error:
+  puts await through("sort", [], menu())?
+  ()

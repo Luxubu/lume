@@ -1,0 +1,26 @@
+# a07: an interface requires an async generator, and a type writes a plain
+# generator in its place: same name, same item type, no `async`. A first-week
+# mistake; the type does not fit, and the message should say what it has
+# and what the interface needs, where the type is used as the interface.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `Fixed` is used as a `Feed`, but its `items` is `-> Iterator[Str]` and `Feed` needs `-> async Iterator[Str]`
+#   --> corpus/m110/a07_plain_for_async.lume:26:19
+#    |
+# 26 |   puts await show(Fixed(words: ["a", "b"]))
+#    |                   ^
+
+interface Feed:
+  async def items -> Iterator[Str]
+
+struct Fixed:
+  words: [Str]
+
+  def items -> Iterator[Str]:
+    for w in words:
+      yield w
+
+async def show(f: Feed) -> [Str] = f.items.to_list
+
+async def main:
+  puts await show(Fixed(words: ["a", "b"]))

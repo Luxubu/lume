@@ -399,22 +399,28 @@ impl Loader {
     }
 }
 
-/// Lume's `Iterable[T]`, written in Lume: what a bound `[C: Iterable[T]]`
-/// asks for, and lists and sets having it. `for` and the chain methods over a
-/// type with `items` need none of this; it is loaded only for a program that
-/// names `Iterable`, and every file then sees it by that name.
+/// Lume's `Iterable[T]` and `Iterator[T]`, written in Lume: what a bound
+/// `[C: Iterable[T]]` asks for, and lists and sets having it. `for` and the
+/// chain methods over a type with `items` need none of this; it is loaded
+/// only for a program that names `Iterable` or `Iterator`, and every file
+/// then sees them by those names.
 const ITERABLE_SRC: &str = "\
 pub interface Iterable[T]:
   def items -> [T]
 
+pub interface Iterator[T]:
+  def next(var self) -> T?
+";
+
+/// Lists and sets as `Iterable[T]`, for a program that names `Iterable`
+/// only: elsewhere they would give lists an `items` the program never asked
+/// for, which its own `extend [Str] with Plugin` could not then give.
+const ITERABLE_EXTENDS: &str = "
 extend [T] with Iterable[T]:
   def items -> [T] = self
 
 extend {T} with Iterable[T]:
   def items -> [T] = self.to_list
-
-pub interface Iterator[T]:
-  def next(var self) -> T?
 ";
 
 fn add_iterable(modules: &mut Vec<Module>) -> Result<(), String> {
@@ -423,8 +429,10 @@ fn add_iterable(modules: &mut Vec<Module>) -> Result<(), String> {
         return Ok(());
     }
     let path = PathBuf::from("<lume>/iterable.lume");
-    let toks = lexer::lex(ITERABLE_SRC).map_err(|e| render(&e, &path, ITERABLE_SRC))?;
-    let items = parser::parse_program(toks).map_err(|e| render(&e, &path, ITERABLE_SRC))?;
+    let named_iterable = modules.iter().any(|m| m.src.contains("Iterable"));
+    let src = if named_iterable { format!("{}{}", ITERABLE_SRC, ITERABLE_EXTENDS) } else { ITERABLE_SRC.to_string() };
+    let toks = lexer::lex(&src).map_err(|e| render(&e, &path, &src))?;
+    let items = parser::parse_program(toks).map_err(|e| render(&e, &path, &src))?;
     for m in modules.iter_mut() {
         for name in ["Iterable", "Iterator"] {
             // a file with one of its own, or one it imports, keeps it
@@ -435,6 +443,6 @@ fn add_iterable(modules: &mut Vec<Module>) -> Result<(), String> {
             }
         }
     }
-    modules.insert(0, Module { id: "lume".into(), path, src: ITERABLE_SRC.into(), items, imports: Vec::new(), package: None, from_dependency: false });
+    modules.insert(0, Module { id: "lume".into(), path, src, items, imports: Vec::new(), package: None, from_dependency: false });
     Ok(())
 }

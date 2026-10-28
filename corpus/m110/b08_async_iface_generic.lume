@@ -1,0 +1,46 @@
+# b08 — a generic interface requiring an async generator, written in the
+# `def items -> async Iterator[T]` form. One type fits it with its own
+# `async def items -> Iterator[Str]` (said to be the same thing); another
+# fits it with a `def ... -> async Iterator[Int]` that hands on an async
+# generator it did not write itself, with no `yield`. Functions take
+# `Source[Str]` and `Source[Int]`; one hands a chain on; a type's own
+# `items` is walked with `for` directly.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# red-green-blue
+# 4
+# ["A", "B"]
+# 2
+# 1
+
+interface Source[T]:
+  def items -> async Iterator[T]
+
+struct Words:
+  text: Str
+
+  async def items -> Iterator[Str]:
+    for w in text.split(" "):
+      yield w
+
+async def count_down(n: Int) -> Iterator[Int]:
+  for i in 0..n - 1:
+    yield n - i
+
+struct Countdown:
+  from: Int
+
+  def items -> async Iterator[Int] = count_down(from)
+
+async def joined(s: Source[Str]) -> Str = s.items.to_list.join("-")
+
+async def biggest(s: Source[Int]) -> Int = s.items.fold(0) { |m, x| if x > m: x else: m }
+
+def loud(s: Source[Str]) -> async Iterator[Str] = s.items.map(_.upcase)
+
+async def main:
+  puts await joined(Words(text: "red green blue"))
+  puts await biggest(Countdown(from: 4))
+  puts loud(Words(text: "a b")).to_list
+  for n in Countdown(from: 2).items:
+    puts n

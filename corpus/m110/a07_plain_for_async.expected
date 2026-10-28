@@ -1,0 +1,6 @@
+error: `Fixed` is used as a `Feed`, but its `items` is `-> Iterator[Str]` and `Feed` needs `-> async Iterator[Str]`
+  --> corpus/m110/a07_plain_for_async.lume:26:19
+   |
+26 |   puts await show(Fixed(words: ["a", "b"]))
+   |                   ^
+exit: 1

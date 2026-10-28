@@ -1,0 +1,19 @@
+# b06 — `_` may stand twice among a `for`'s names (`for _, _ in pairs`),
+# but a real name may not (`for k, k`). The file also has a local that is
+# never read (`spare`): with an error in the file, only the error is
+# printed, no warning.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: loop variable `k` is listed twice
+#   --> corpus/m110/b06_loop_name_twice.lume:18:10
+#    |
+# 18 |   for k, k in pairs:
+#    |          ^
+
+def main:
+  spare = 1
+  pairs = {"a": 1}
+  for _, _ in pairs:
+    puts "ok"
+  for k, k in pairs:
+    puts k
