@@ -1,8 +1,5 @@
 # Lunch 18: Programs alongside
 
-> **A preview.** This lunch teaches one of Lume's newest parts. It works
-> as shown — every example is checked — but details may change before 1.0.
-
 **In this lunch you will:**
 
 - start a program and carry on while it runs;
@@ -107,7 +104,8 @@ async def main -> () or Error:
 Many protocols send a message as a header that says how long the message
 is, then the message itself, which may hold anything — even new lines.
 Language servers, which editors talk to, work this way. **`await c.read(n)`
-reads exactly the next `n` bytes** of output, so a header read with
+reads the next `n` bytes** of output — never cutting a character in two:
+one the `n`th byte would split comes whole — so a header read with
 `read_line` and a body read with `read(n)` take such messages apart:
 
 ```lume

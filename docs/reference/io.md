@@ -262,11 +262,11 @@ same messages as `Process.run`.
 | `c.lines` | `async Iterator[Str]` | what it writes to standard output, a line at a time, without the line ending |
 | `c.error_lines` | `async Iterator[Str]` | the same, for standard error |
 | `await c.read_line` | `Str?` | the next line of its output; `None` once it has ended |
-| `await c.read(n)` | `Str?` | the next `n` bytes of its output, or what is left when it ends first |
-| `c.write(text)` | `() or Error` | writes `text` to its standard input; ``cannot write to `sort`: its input is closed`` after `close_input` or `wait` |
+| `await c.read(n)` | `Str?` | the next `n` bytes of its output, and the rest of a character the `n`th byte would cut in two — a character is never split; what is left when it ends first |
+| `c.write(text)` | `() or Error` | writes `text` to its standard input; ``cannot write to `sort`: its input is closed`` after `close_input` or `wait`, or once it has ended |
 | `c.close_input` | `()` | closes its standard input, so a program reading to the end can finish |
-| `await c.wait` | `Int` | its exit code, once it ends — `-1` when ended by a signal. Its input is closed first, as Rust's `Child::wait` does |
-| `c.kill` | `()` | stops it; `await c.wait` then gives `-1`, on every system |
+| `await c.wait` | `Int` | its exit code, once it ends — `-1` when ended by a signal; the same code each time it is asked. Its input is closed first, as Rust's `Child::wait` does |
+| `c.kill` | `()` | stops it; `await c.wait` then gives `-1`, on every system. A program that has ended already keeps the code it ended with |
 
 `lines`, `read_line`, `read` and `wait` wait for the program, so they go in
 async code. Each output is read by a thread of its own and kept until it is
@@ -274,7 +274,9 @@ asked for, so a program that writes to both never stalls on the one not
 being read. `lines` is an async sequence, with the chains and methods of
 [Async generators](collections.md#async-generators-async-def-with-yield).
 A `Child` can be kept in a list or a field and handed to tasks; a program's
-own type named `Child` takes the name instead.
+own type named `Child` takes the name instead. **Letting go of a `Child`
+does not stop its program**, as in Rust: it runs on, to its end or past
+the end of yours. `kill` it, or `wait` for it, when that matters.
 
 ```lume
 async def main -> () or Error:

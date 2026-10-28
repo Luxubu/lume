@@ -603,10 +603,22 @@ impl LumePipe {
         }
         self.rest()
     }
-    /// The next `n` bytes, or what is left when the output ends first.
+    /// The next `n` bytes, and the rest of a character the `n`th byte cuts
+    /// in two, so no character is ever split; or what is left when the
+    /// output ends first.
     fn bytes(&mut self, n: usize) -> Option<Option<String>> {
         if self.buf.len() >= n {
-            let b: Vec<u8> = self.buf.drain(..n).collect();
+            let mut end = n;
+            while end < self.buf.len() && (self.buf[end] & 0xC0) == 0x80 {
+                end += 1;
+            }
+            // the last character's other bytes may still be on their way
+            if let Err(e) = std::str::from_utf8(&self.buf[..end]) {
+                if e.error_len().is_none() && !self.done && end == self.buf.len() {
+                    return None;
+                }
+            }
+            let b: Vec<u8> = self.buf.drain(..end).collect();
             return Some(Some(String::from_utf8_lossy(&b).into_owned()));
         }
         self.rest()

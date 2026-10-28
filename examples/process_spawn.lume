@@ -55,6 +55,19 @@ async def main -> () or Error:
   slow.kill
   puts "killed: #{await slow.wait}"
 
+  # by size, never cutting a character: `é` is two bytes, and comes whole
+  # (`printf` makes the two bytes of `é` from `\303\251`, so the argument
+  # itself is plain ASCII on every system)
+  bytes = Process.spawn("printf", ["\\303\\251!"])?
+  puts await bytes.read(1)
+  puts await bytes.read(5)
+
+  # waited for again, the same code; written to after its end, an Error
+  done = Process.spawn("sh", ["-c", "exit 3"])?
+  puts await done.wait
+  puts await done.wait
+  puts done.write("late\n").error?
+
   # starting one can fail; once running, it has run
   match Process.spawn("no-such-program", []):
     Ok(_) -> puts "started?"

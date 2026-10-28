@@ -1,8 +1,9 @@
 # Lunch 24: Talking to a language server
 
-> **A preview.** This lunch is built on `Process.spawn` (lunch 18), one of
-> Lume's newest parts. It works as shown — every example is checked — but details may
-> change before 1.0. See [what is settled](../stability.md).
+> **A preview.** This lunch talks to `lume lsp`, Lume's language server,
+> whose answers are a preview: it works as shown — every example is checked
+> — but what it says may change before 1.0. See [what is
+> settled](../stability.md).
 
 **In this lunch you will build `lspeek`**, a small program that drives a
 **language server** — the program behind an editor's error underlines and
@@ -11,8 +12,7 @@ own, `lume lsp`. The last lunch puts nearly everything together: a program
 running alongside (lunch 18), messages framed by their length, JSON from a
 package, structs, `?`, and async code.
 
-> Lunch 18's `Process.spawn` is a preview, so this lunch is too. Its
-> program needs `lume` on your `PATH`, which the test suite cannot assume,
+> This lunch's program needs `lume` on your `PATH`, which the test suite cannot assume,
 > so it was run by hand. Lume's own suite drives `lume lsp` the same way,
 > with a longer version of this program: `tools/lumecheck/lsp.lume`.
 

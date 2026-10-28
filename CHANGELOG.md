@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **`Process.spawn`, `Child` and `async test` are settled**, covered by the
+  promise in `docs/stability.md`; lunch 18 is no longer a preview. Before
+  settling, each of `Child`'s edges was tried and is now written down:
+  writing after the program ended is an `Error`; `wait` gives the same code
+  each time; `kill` after the end keeps the code it ended with; letting go
+  of a `Child` does not stop its program, as in Rust.
+- **`await c.read(n)` never cuts a character in two**: one the `n`th byte
+  would split comes whole, where both halves came out as `�` and the
+  character was lost.
+
 - **Async sequences are settled**: async generators, their chains and the
   methods that wait for their items, and `async Iterator[T]` are covered by
   the promise in `docs/stability.md` from this release, and lunch 17 is no
