@@ -31,7 +31,7 @@ lume run examples/fib.lume
 **Where it is tested.** The whole test suite runs on Linux (Ubuntu), macOS
 and Windows for every push, with the newest stable Rust
 (`.github/workflows/test.yml`). On Windows, run `install.sh` and the suite
-from Git's bash; nine checks that drive Unix programs as only Unix has them
+from Git's bash; ten checks that drive Unix programs as only Unix has them
 are left out there, and the suite says so (`tools/lumecheck/plan.lume`,
 `UNIX_ONLY`). [Input and output](reference/io.md#process) says how running a
 program differs on Windows. A program that

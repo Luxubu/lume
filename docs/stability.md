@@ -1,6 +1,6 @@
 # What is settled, and what may change
 
-Lume is at 0.6, and still growing. This page says which parts of it you can
+Lume is at 0.7, and still growing. This page says which parts of it you can
 build on today — write programs in, teach, write tutorials about — and
 which are previews that may still change. It also says how a settled part
 is allowed to change, so that what you write keeps working.

@@ -34,7 +34,7 @@ name = "pages"
 version = "0.1.0"
 
 [dependencies]
-http = { git = "https://github.com/Luxubu/lume", tag = "v0.6.0" }
+http = { git = "https://github.com/Luxubu/lume", tag = "v0.7.0" }
 ```
 
 Lume fetches the package the first time you run the program. From then on

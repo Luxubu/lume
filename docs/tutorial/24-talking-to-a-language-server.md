@@ -49,7 +49,7 @@ name = "lspeek"
 version = "0.1.0"
 
 [dependencies]
-json = { git = "https://github.com/Luxubu/lume", tag = "v0.6.0" }
+json = { git = "https://github.com/Luxubu/lume", tag = "v0.7.0" }
 ```
 
 `json.obj([...])` makes a JSON object from pairs, `x.to_json` turns a
@@ -202,7 +202,7 @@ lume run
 ```
 
 ```text
-talking to lume 0.6.0
+talking to lume 0.7.0
 line 4: `+` cannot combine an `Int` and a `Str`
 no problems
 hover: def double(n: Int) -> Int

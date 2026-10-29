@@ -10,7 +10,7 @@ output checked against what the page shows. If a release changes how
 something works, the suite fails until the page is fixed, so what you read
 here is what Lume does — for the version below.
 
-Written for **Lume 0.6**. You need Lume installed; [install.md](../install.md)
+Written for **Lume 0.7**. You need Lume installed; [install.md](../install.md)
 says how. No Rust is needed to follow along, though each chapter ends with a
 short *Underneath, in Rust* box for readers who know Rust or are curious about
 it.

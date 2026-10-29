@@ -60,6 +60,8 @@ pub UNIX_ONLY = [
   "corpus/m96/b13_child_kept",
   "corpus/m96/c01_build_steps",
   "corpus/m96/c03_word_pipeline",
+  # passes `tr` an argument with a newline in it
+  "corpus/m110/a01_word_tally",
 ]
 
 pub def checks -> [Check] or Error:

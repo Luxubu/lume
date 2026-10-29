@@ -2,60 +2,99 @@
 
 ## Unreleased
 
-- **Review round twenty-two** (`corpus/m110/`): thirty programs by three
-  reviewers from the docs alone; no wrong answer and no rustc error, all
-  seven refusals predicted word for word.
-- **Fixed**: a generic interface whose `T` appears only in `async
-  Iterator[T]` was refused as never using it; a `() or Error` function
-  could not end with a call giving `() or Error`, as `= child.write(...)`;
-  `await c.receive?` was refused, where the `?` belongs to the `await`; a
-  program with a generator could not `extend [Str]` with an `items` of its
-  own, as Lume's own `Iterable` was given lists unasked.
-- **The warning for an unused name in `(a, b) = pair` points at the name.**
+## 0.7.0 — settling
 
-- **`Process.spawn`, `Child` and `async test` are settled**, covered by the
-  promise in `docs/stability.md`; lunch 18 is no longer a preview. Before
-  settling, each of `Child`'s edges was tried and is now written down:
-  writing after the program ended is an `Error`; `wait` gives the same code
-  each time; `kill` after the end keeps the code it ended with; letting go
-  of a `Child` does not stop its program, as in Rust.
-- **`await c.read(n)` never cuts a character in two**: one the `n`th byte
-  would split comes whole, where both halves came out as `�` and the
-  character was lost.
+Six milestones after 0.6.0 (106–111). Lume runs on Windows now, warns
+about names it is given and never reads, and settles what 0.5 introduced:
+async sequences — which an interface may now require — and programs run
+alongside, with `Child`'s edges tried and written down. A review round,
+the twenty-second, checked it all.
 
-- **Async sequences are settled**: async generators, their chains and the
-  methods that wait for their items, and `async Iterator[T]` are covered by
-  the promise in `docs/stability.md` from this release, and lunch 17 is no
-  longer a preview. Nothing in their shape changed.
+### Install
+
+```sh
+git clone https://github.com/Luxubu/lume && cd lume && git checkout v0.7.0
+./install.sh
+lume run examples/async_interfaces.lume
+```
+
+It needs a Rust toolchain (<https://rustup.rs>). On Windows, run it from
+Git's bash. See `docs/install.md`.
+
+### Settled
+
+`docs/stability.md` promises that a settled part does not break a working
+program without a warning release first. Settled in this release, with
+nothing in their shape changed:
+
+- **Async sequences**: async generators, their chains and the methods that
+  wait for their items, and `async Iterator[T]`. Lunch 17 is no longer a
+  preview.
+- **`Process.spawn`, `Process.spawn_in` and `Child`**, after each of
+  `Child`'s edges was tried and written down: a write after the program
+  ended is an `Error`; `wait` gives the same code each time; `kill` after
+  the end keeps the code it ended with; a `Child` let go of runs on, as in
+  Rust. Lunch 18 is no longer a preview.
+- **`async test`.**
+
+What is left a preview: the `http` package, the Rust bridge, and editor
+support.
+
+### What is new
+
+- **Tested on Windows**: the suite runs on Linux, macOS and Windows for
+  every push. Ten checks that need Unix programs as only Unix has them —
+  Windows' own `sort` comes first, it has no signals, and Git's tools drop
+  a newline inside an argument — are left out on Windows, and the suite
+  says so.
+- **Unused names are warned about**, as Rust's `unused_variables` lint
+  does: a local given a value and never read, a parameter, a `for`
+  variable, a block's parameter, a name a pattern binds. A name beginning
+  with `_` says it is meant, and `_` may stand more than once among a
+  block's, a `for`'s or a function's names (`{ |_, v| v }`). Warnings never
+  stop a program; Lume's own examples and docs have none.
 - **An interface may require an async generator**: `async def items ->
   Iterator[T]`, or `def items -> async Iterator[T]`, written by each type
   that fits — the gap 0.5.0 listed. A default one written in the interface
   is refused, with what to write instead.
-- **Fixed**: a type with an async generator method did not fit a generic
-  interface requiring one (`Feed[Int]`), and reached rustc.
+- **`await c.read(n)` never cuts a character in two.**
 
-- **Unused names are warned about**, as Rust's `unused_variables` lint
-  does: a local given a value and never read, a parameter, a `for`
-  variable, a block's parameter, a name a pattern binds. A name beginning
-  with `_` says it is meant, and `_` may now stand in a block's parameters,
-  a `for`, or a function's parameters more than once (`{ |_, v| v }`,
-  `for _, x, _ in rows`). Warnings never stop a program; Lume's own
-  examples and docs have none.
-- **Fixed**: `lume fmt` wrote `{ |_| x }`, a block that ignores its item, as the shorthand `(x)`, which means something else.
-- **Fixed**: a program with a type of its own named `Fn` hid Rust's `Fn`
-  trait from the code Lume writes, and reached rustc. The test in
-  `examples/sets.lume`, which nothing ran, had not compiled.
+### Fixed
 
-- **Tested on Windows**: the suite runs on Windows too, for every push.
-  What it found is fixed: a built program is `name.exe`, as Windows wants;
-  messages write paths with `/` on every system; a missing file is told in
-  the same words everywhere, `No such file or directory (os error 2)`;
-  `kill` makes a program give `-1` on Windows too; fetching a package from
-  git no longer fails on the `\\?\` Windows puts in front of a path; the
-  language server writes and reads Windows paths as `file:///C:/...`; the
-  build cache is found without `HOME`; and `http` says "timed out" in
-  Windows' case too. Nine checks that need Unix programs as only Unix has
-  them are left out on Windows, and the suite says so.
+- On Windows: a built program is `name.exe`; messages write paths with
+  `/`; a missing file is told in the same words as elsewhere, `No such
+  file or directory (os error 2)`; `kill` makes a program give `-1`;
+  fetching a package from git no longer fails on the `\\?\` Windows puts
+  before a path; the language server reads and writes `file:///C:/...`;
+  the build cache is found without `HOME`; `http` says "timed out".
+- A pipe read that was only interrupted ended a program's output.
+- A type with an async generator method did not fit a generic interface
+  requiring one, and reached rustc; a generic interface whose `T` appears
+  only in `async Iterator[T]` was refused as never using it.
+- A `() or Error` function could not end with a call giving `() or Error`,
+  as `= child.write(...)`.
+- `await c.receive?` was refused, where the `?` belongs to the `await`.
+- A program with a generator could not `extend [Str]` with an `items` of
+  its own: Lume's own `Iterable` was given to lists unasked.
+- `lume fmt` wrote `{ |_| x }`, a block that ignores its item, as the
+  shorthand `(x)`, which means something else.
+- A program with its own type named `Fn` hid Rust's `Fn` trait from the
+  code Lume writes, and reached rustc.
+
+### How it was checked
+
+- **The suite**: `tests/run.sh`, 1307 checks and 695 docs examples, byte
+  for byte, on Linux, macOS and Windows.
+- **Review round twenty-two** (`corpus/m110/`): thirty programs by three
+  reviewers from the docs alone, with nothing run; no wrong answer, no
+  rustc error, all seven refusals predicted word for word, and 27 of 30
+  as predicted after the fixes.
+- Installed from a clean checkout and run.
+
+### Previews
+
+No preview changed shape. Settling moved three out of the list; the
+`http` package, the Rust bridge and editor support remain.
 
 ## 0.6.0 — kinder when it breaks
 
