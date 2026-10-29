@@ -73,6 +73,7 @@ fn read_message(input: &mut impl BufRead) -> Result<Value, Read> {
             Err(e) => return Err(Read::End(format!("reading a header: {}", e))),
         }
         let line = line.trim_end();
+        log(&format!("header line: {:?}", line));
         if line.is_empty() {
             // blank lines before a header are no message yet
             if len.is_some() {
@@ -205,6 +206,7 @@ impl Server {
     /// Checks the program `path` belongs to and publishes its diagnostics.
     fn check(&mut self, path: &Path) {
         let entry = entry_for(path);
+        log(&format!("checking {}", entry.shown()));
         let run = std::panic::catch_unwind(|| diag::indexed(|| diag::collecting(|| crate::compile_to_rust(&entry, true))));
         let mut ds: Vec<diag::Diagnostic> = Vec::new();
         match run {
@@ -251,6 +253,7 @@ impl Server {
         for (uri, list) in by_uri {
             publish(&uri, list);
         }
+        log(&format!("checked {}", entry.shown()));
         self.published.insert(entry, now);
     }
 }
