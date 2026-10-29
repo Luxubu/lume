@@ -23,34 +23,73 @@ pub fn serve() {
     let mut server = Server { open: HashMap::new(), published: HashMap::new(), index: HashMap::new(), shutting_down: false };
     loop {
         let msg = match read_message(&mut input) {
-            Some(m) => m,
-            None => return,
+            Ok(m) => m,
+            // the editor has gone: nothing more will come
+            Err(Read::End(why)) => {
+                log(&format!("stopping: {}", why));
+                return;
+            }
+            // one message that cannot be read is passed over, as the
+            // protocol asks; the next may be fine
+            Err(Read::Bad(why)) => {
+                log(&format!("passed over a message: {}", why));
+                continue;
+            }
         };
+        log(&format!("got {}", msg.get("method").and_then(|m| m.as_str()).unwrap_or("a reply")));
         if let Some(code) = server.handle(&msg) {
+            log(&format!("exiting with {}", code));
             std::process::exit(code);
         }
     }
 }
 
+/// Why a message could not be read: the input ended, or this one was bad.
+enum Read {
+    End(String),
+    Bad(String),
+}
+
+/// `LUME_LSP_LOG=<file>`: each message the server reads, and why it stops,
+/// appended to that file — for finding out what an editor and the server
+/// said to each other.
+fn log(line: &str) {
+    if let Ok(path) = std::env::var("LUME_LSP_LOG") {
+        use std::io::Write;
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+            let _ = writeln!(f, "{}", line);
+        }
+    }
+}
+
 /// One message: `Content-Length: n`, a blank line, then `n` bytes of JSON.
-fn read_message(input: &mut impl BufRead) -> Option<Value> {
+fn read_message(input: &mut impl BufRead) -> Result<Value, Read> {
     let mut len: Option<usize> = None;
     loop {
         let mut line = String::new();
-        if input.read_line(&mut line).ok()? == 0 {
-            return None;
+        match input.read_line(&mut line) {
+            Ok(0) => return Err(Read::End("the input ended".into())),
+            Ok(_) => {}
+            Err(e) => return Err(Read::End(format!("reading a header: {}", e))),
         }
         let line = line.trim_end();
         if line.is_empty() {
-            break;
+            // blank lines before a header are no message yet
+            if len.is_some() {
+                break;
+            }
+            continue;
         }
         if let Some(v) = line.strip_prefix("Content-Length:") {
             len = v.trim().parse().ok();
         }
     }
-    let mut buf = vec![0u8; len?];
-    input.read_exact(&mut buf).ok()?;
-    serde_json::from_slice(&buf).ok()
+    let n = len.unwrap_or(0);
+    let mut buf = vec![0u8; n];
+    if let Err(e) = input.read_exact(&mut buf) {
+        return Err(Read::End(format!("reading a body of {} bytes: {}", n, e)));
+    }
+    serde_json::from_slice(&buf).map_err(|e| Read::Bad(format!("a body of {} bytes is not JSON ({}): {}", n, e, String::from_utf8_lossy(&buf).chars().take(200).collect::<String>())))
 }
 
 fn send(msg: &Value) {
