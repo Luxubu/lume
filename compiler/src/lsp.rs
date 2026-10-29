@@ -73,7 +73,6 @@ fn read_message(input: &mut impl BufRead) -> Result<Value, Read> {
             Err(e) => return Err(Read::End(format!("reading a header: {}", e))),
         }
         let line = line.trim_end();
-        log(&format!("header line: {:?}", line));
         if line.is_empty() {
             // blank lines before a header are no message yet
             if len.is_some() {
@@ -238,7 +237,7 @@ impl Server {
             };
             let file = crate::canonical(&file).unwrap_or(file);
             let text = diag::read_source(&file).unwrap_or_default();
-            by_uri.entry(path_to_uri(&file)).or_default().push(to_lsp(d, &text));
+            by_uri.entry(self.uri_for(&file)).or_default().push(to_lsp(d, &text));
         }
         let now: HashSet<String> = by_uri.keys().cloned().collect();
         let before = self.published.remove(&entry).unwrap_or_default();
@@ -246,7 +245,7 @@ impl Server {
             publish(stale, Vec::new());
         }
         // the edited file is always published, so a fix clears it at once
-        let here = path_to_uri(&crate::canonical(path).unwrap_or(path.to_path_buf()));
+        let here = self.uri_for(&crate::canonical(path).unwrap_or(path.to_path_buf()));
         if !now.contains(&here) && !before.contains(&here) {
             publish(&here, Vec::new());
         }
@@ -294,6 +293,21 @@ fn to_lsp(d: &diag::Diagnostic, text: &str) -> Value {
 }
 
 impl Server {
+    /// The uri to name a file by: the editor's own for a document it has
+    /// open — `file:///d%3A/x.lume` from VS Code on Windows, say — so it
+    /// knows the file again; one of the server's making for any other.
+    fn uri_for(&self, file: &Path) -> String {
+        // (in a fixed order: a file open under two uris always gets the same)
+        let mut open: Vec<(&String, &PathBuf)> = self.open.iter().collect();
+        open.sort();
+        for (uri, p) in open {
+            if crate::canonical(p).ok().as_deref() == Some(file) || p.as_path() == file {
+                return uri.clone();
+            }
+        }
+        path_to_uri(file)
+    }
+
     /// Hover or definition at a position: the name under the cursor, looked
     /// up among the names the last check of its program resolved.
     fn answer(&mut self, method: &str, path: &Path, line: usize, character: usize) -> Value {
@@ -341,7 +355,7 @@ impl Server {
             find_word(l, &word).unwrap_or(0)
         };
         let dl = dline.saturating_sub(1);
-        json!({ "uri": path_to_uri(&target), "range": {
+        json!({ "uri": self.uri_for(&target), "range": {
             "start": { "line": dl, "character": utf16_col(&dtext, dl, dstart) },
             "end": { "line": dl, "character": utf16_col(&dtext, dl, dstart + word.chars().count()) }
         }})

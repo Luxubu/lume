@@ -10,7 +10,10 @@
 {"jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": {"diagnostics": [], "uri": "<tmp>/pkg/util.lume"}}
 --- the module fixed again
 {"jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": {"diagnostics": [], "uri": "<tmp>/mods/helper.lume"}}
+--- a file named by the editor's own uri, which the answer keeps
+{"jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": {"diagnostics": [{"message": "unknown name `oops`\nhelp: names must be bound with `name = value` or `var name = value` before use", "range": {"end": {"character": 11, "line": 1}, "start": {"character": 7, "line": 1}}, "severity": 1, "source": "lume"}], "uri": "<tmp>/own/w%6Frld.lume"}}
 --- hover and go to definition
+{"jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": {"diagnostics": [], "uri": "<tmp>/own/w%6Frld.lume"}}
 {"jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": {"diagnostics": [], "uri": "<tmp>/mods/nav.lume"}}
 a local                        hover "ann: Person" | definition <tmp>/mods/nav.lume:12:3
 a var                          hover "var later: Person" | definition <tmp>/mods/nav.lume:13:7

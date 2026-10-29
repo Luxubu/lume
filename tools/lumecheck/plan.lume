@@ -47,11 +47,6 @@ def corpus -> [Check] or Error:
 # a newline inside an argument, which these pass to `printf` and `sh`. The
 # suite says how many it left out.
 pub UNIX_ONLY = [
-  # the server itself answers on Windows — open, change, diagnostics, as a
-  # session run by hand in CI showed — but this test's client sees the
-  # server's output end after the first change there, which is not yet
-  # understood (milestone 106)
-  "lume lsp",
   "corpus/m96/a02_pipes",
   "corpus/m96/a04_errors_and_codes",
   "corpus/m96/a05_programs_in_tasks",
