@@ -50,6 +50,7 @@ new one, as Rust's `reqwest::RequestBuilder` does:
 |---|---|
 | `.header(name, value)` | one more header |
 | `.with_body(text, content_type)` | a body, with its `Content-Type` |
+| `.with_file(path, content_type)` | a file as the body, read as it is sent, never held whole; its length goes first, as `Content-Length` |
 | `.timeout(ms)` | how long to wait for an answer, in milliseconds |
 
 and then one of:
@@ -59,6 +60,7 @@ and then one of:
 | `req.send` | `Response or Error` | waits for the whole answer |
 | `await req.fetch` | `Response or Error` | the same, in async code, as other tasks go on |
 | `req.open` | `Opened or Error` | the status and headers as soon as they arrive; the body after, as it arrives |
+| `req.send_parts(parts)` | `Response or Error` | a body of the parts of an `Iterator[T]` of `Str`, each sent as the sequence makes it, then waits for the whole answer |
 
 ```lume-skip
 r = http.request("GET", url).header("Accept", "text/plain").timeout(5000).send?
@@ -100,6 +102,32 @@ async def main -> () or Error:
   ()
 ```
 
+## A body sent as it is made
+
+**`.with_file(path, content_type)` sends a file as it is read**, so a
+large one is never held whole; a file that is not there is an `Error`,
+``cannot read `/no/such/file`: No such file or directory (os error 2)``.
+**`req.send_parts(parts)` sends a body made of a sequence's parts**, each
+as the sequence makes it — a generator's, say — in chunks, as HTTP/1.1
+sends a body whose length is not known yet, the way Rust's `reqwest` sends
+a body from a stream:
+
+```lume-skip
+def rows(n: Int) -> Iterator[Str]:
+  for i in 1..n:
+    yield "row #{i}\n"
+
+def main -> () or Error:
+  up = http.request("PUT", "https://example.com/upload").with_file("big.csv", "text/csv").send?
+  puts up.status
+  made = http.request("POST", "https://example.com/rows").header("Content-Type", "text/plain").send_parts(rows(10000))?
+  puts made.status
+  ()
+```
+
+`send_parts` takes the parts by move, as any `Iterator[T]` parameter does,
+and sets aside a body `with_body` or `with_file` gave.
+
 ## Many requests at once
 
 A request waits for its answer. To make many at once, `await req.fetch`
@@ -108,8 +136,10 @@ awaits nothing, and it runs on a pool of its own (see
 [Concurrency](concurrency.md#a-task-that-waits-without-await)).
 `examples/healthcheck/` does this, and `examples/http_demo/` does both.
 
-## Not yet
+## Not in it yet
 
-- **A body sent as it is made:** a request's own body is text, sent whole.
+Each of these could come later without changing what is here:
+
 - **Encoding and cookies:** there are no form or URL helpers and no
   cookies. Build the body as text, and send headers with `send`.
+- **Serving HTTP:** the package makes requests; it does not answer them.

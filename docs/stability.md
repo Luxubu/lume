@@ -39,13 +39,13 @@ a release says so; from then on the promise above covers it.
 | Tests: `test` blocks, `assert`, `lume test` and its name filter, `async test` (settled in 0.7) | [Tests](reference/testing.md), lunch 12 |
 | Packages: `lume.toml`, dependencies by path and git, `lume.lock` | [Packages](reference/packages.md) |
 | The `json` package | [JSON](reference/json.md) |
+| The `http` package — settled in 0.8. A `Request` and an `Opened` may gain fields, so build a request with `http.request` and its steps, not by naming its fields, and do not depend on how one prints; `Opened.body_id`, the number a body not yet read is kept under, is Lume's own | [HTTP](reference/http.md), lunch 19 |
 | The commands: `lume run`, `build`, `check`, `test`, `fmt`, `new`, `clean`, `update` | [Install](install.md#the-commands) |
 
 ## Previews
 
 | part | since | where it is described |
 |---|---|---|
-| The `http` package | 0.2, streamed in 0.5 | [HTTP](reference/http.md), lunch 19 |
 | The Rust bridge: `import rust.crate`, `rust:` blocks, `[rust]` in `lume.toml`, `lume crate` | 0.1 | [Rust crates](reference/crates.md) |
 | Editor support: `lume lsp`, `lume check --json`, the VS Code extension | 0.1 | [Install](install.md#editors) |
 

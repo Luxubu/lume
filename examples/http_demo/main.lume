@@ -9,6 +9,11 @@
 import http
 import json
 
+# lines made one at a time, as an upload is
+def numbered(n: Int) -> Iterator[Str]:
+  for i in 1..n:
+    yield "part #{i}\n"
+
 async def main -> () or Error:
   base = Env.args.first.or("http://127.0.0.1:8765")
 
@@ -43,6 +48,18 @@ async def main -> () or Error:
   # from tasks, waited for as other work goes on
   statuses = await ["hello.json", "nope", "hello.json"].map { |p| spawn: await http.request("GET", "#{base}/#{p}").fetch }.to_list
   puts "three at once: #{statuses.map { |r| r.map { |x| x.status }.or(0) }.to_list}"
+
+  # a body sent as it is made: a file read as it goes, then a generator's parts
+  path = "/tmp/lume-http-demo-upload.txt"
+  File.write(path, (1..1000).map { |n| "line #{n}" }.join("\n") + "\n")?
+  up = http.request("PUT", "#{base}/upload").with_file(path, "text/plain").send?
+  puts "PUT a file: #{up.body}"
+  File.remove(path)?
+  made = http.request("PUT", "#{base}/upload").header("Content-Type", "text/plain").send_parts(numbered(500))?
+  puts "PUT the parts: #{made.body}"
+  match http.request("PUT", "#{base}/upload").with_file("/no/such/file", "text/plain").send:
+    Ok(_) -> puts "sent a file that is not there?"
+    Error(e) -> puts "a file that is not there: #{e.message}"
 
   # nothing listens on port 9: a request that cannot be made is an Error
   match http.get("http://127.0.0.1:9/"):

@@ -4,5 +4,6 @@ async def seat(i: Int) -> Str = ["window"].at(i)
 
 async def main:
   _t = spawn: await seat(4)
-  await Time.sleep(20)
+  # long enough for the task to stop first, on a slow machine too
+  await Time.sleep(500)
   puts "the program goes on"

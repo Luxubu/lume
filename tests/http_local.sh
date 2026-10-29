@@ -29,6 +29,19 @@ class H(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         n = int(self.headers.get("Content-Length", 0)); body = self.rfile.read(n).decode()
         self.send(200, json.dumps({"type": self.headers.get("Content-Type"), "body": json.loads(body)}), "application/json")
+    def do_PUT(self):
+        # a body by its length, or in chunks, as a body sent as it is made comes
+        if self.headers.get("Transfer-Encoding", "").lower() == "chunked":
+            how, data = "chunked", b""
+            while True:
+                n = int(self.rfile.readline().strip(), 16)
+                if n == 0:
+                    self.rfile.readline(); break
+                data += self.rfile.read(n); self.rfile.readline()
+        else:
+            how = "length"; data = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+        text = data.decode()
+        self.send(200, json.dumps({"how": how, "bytes": len(data), "lines": len(text.splitlines()), "last": text.splitlines()[-1] if text else ""}), "application/json")
 # a thread per request, so the slow one holds up no other
 class S(socketserver.ThreadingTCPServer):
     request_queue_size = 64

@@ -9,7 +9,7 @@ plan line 8: `colour=blue` is not an option
 plan line 9: `GET` needs a method and a path
 3 requests planned
 0 30000 / 1 250
-Request(method: "GET", url: "http://127.0.0.1:9/a", headers: [("X-Trace", "on")], body: "", timeout_ms: 250)
+Request(method: "GET", url: "http://127.0.0.1:9/a", headers: [("X-Trace", "on")], body: "", timeout_ms: 250, body_file: "")
 GET http://127.0.0.1:9/items: no answer, an Error naming it: true
 POST http://127.0.0.1:9/items: no answer, an Error naming it: true
 DELETE http://127.0.0.1:9/items/7: no answer, an Error naming it: true

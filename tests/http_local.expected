@@ -10,5 +10,8 @@ GET /lines: 200, text/plain
   the same in pieces: 3 lines
 GET /slow, 300 ms: an Error that says it timed out: true
 three at once: [200, 404, 200]
+PUT a file: {"how": "length", "bytes": 8893, "lines": 1000, "last": "line 1000"}
+PUT the parts: {"how": "chunked", "bytes": 4392, "lines": 500, "last": "part 500"}
+a file that is not there: cannot read `/no/such/file`: No such file or directory (os error 2)
 port 9: no connection, an Error
 exit: 0

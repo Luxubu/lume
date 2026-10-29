@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **The `http` package is settled**, covered by the promise in
+  `docs/stability.md`; lunches 19 and 23 are no longer previews.
+- **A body sent as it is made**: `.with_file(path, content_type)` sends a
+  file as it is read, never held whole, its length first; `req.send_parts(
+  parts)` sends a sequence's parts as it makes them, in chunks — the gap
+  the HTTP page listed.
+- **Fixed**: a check in the suite of a task never awaited gave its task
+  20 ms to stop, and on a slow Windows machine that was too little.
+
 ## 0.7.0 — settling
 
 Six milestones after 0.6.0 (106–111). Lume runs on Windows now, warns

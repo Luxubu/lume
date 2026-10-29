@@ -47,13 +47,18 @@ pub struct Request:
   body: Str
   # how long to wait for an answer, in milliseconds
   timeout_ms: Int
+  # a file to send as the body, read as it is sent; "" for none
+  body_file: Str
 
-  def header(name: Str, value: Str) -> Request = Request(method: method, url: url, headers: headers + [(name, value)], body: body, timeout_ms: timeout_ms)
+  def header(name: Str, value: Str) -> Request = Request(method: method, url: url, headers: headers + [(name, value)], body: body, timeout_ms: timeout_ms, body_file: body_file)
 
   # a body, and what it is
-  def with_body(text: Str, content_type: Str) -> Request = Request(method: method, url: url, headers: headers + [("Content-Type", content_type)], body: text, timeout_ms: timeout_ms)
+  def with_body(text: Str, content_type: Str) -> Request = Request(method: method, url: url, headers: headers + [("Content-Type", content_type)], body: text, timeout_ms: timeout_ms, body_file: "")
 
-  def timeout(ms: Int) -> Request = Request(method: method, url: url, headers: headers, body: body, timeout_ms: ms)
+  # a file as the body, read as it is sent rather than held whole
+  def with_file(path: Str, content_type: Str) -> Request = Request(method: method, url: url, headers: headers + [("Content-Type", content_type)], body: "", timeout_ms: timeout_ms, body_file: path)
+
+  def timeout(ms: Int) -> Request = Request(method: method, url: url, headers: headers, body: body, timeout_ms: ms, body_file: body_file)
 
   # Makes it and waits for the whole answer.
   def send -> Response or Error:
@@ -75,9 +80,54 @@ pub struct Request:
 
   # The same as `send`, waited for in async code: other tasks go on.
   async def fetch -> Response or Error:
-    req = Request(method: method, url: url, headers: headers, body: body, timeout_ms: timeout_ms)
+    req = Request(method: method, url: url, headers: headers, body: body, timeout_ms: timeout_ms, body_file: body_file)
     t = spawn: req.send
     await t
+
+  # Makes it with a body of `parts`, each sent as the sequence makes it —
+  # in chunks, as HTTP/1.1 sends a body whose length is not known — and
+  # waits for the whole answer. `with_body` and `with_file` are set aside.
+  def send_parts(parts: Iterator[Str]) -> Response or Error:
+    m = method
+    u = url
+    hs = headers
+    ms = timeout_ms
+    raw: (Int, [(Str, Str)], Str) or Error = rust:
+      {
+        // the parts, read as bytes as ureq asks for them
+        struct Parts<I: Iterator<Item = String>> { it: I, cur: Vec<u8>, at: usize }
+        impl<I: Iterator<Item = String>> std::io::Read for Parts<I> {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                while self.at >= self.cur.len() {
+                    match self.it.next() {
+                        Some(p) => { self.cur = p.into_bytes(); self.at = 0; }
+                        None => return Ok(0),
+                    }
+                }
+                let n = buf.len().min(self.cur.len() - self.at);
+                buf[..n].copy_from_slice(&self.cur[self.at..self.at + n]);
+                self.at += n;
+                Ok(n)
+            }
+        }
+        let mut req = ureq::request(&m, &u).timeout(std::time::Duration::from_millis(ms.max(0) as u64));
+        for (k, v) in hs.iter() {
+            req = req.set(k, v);
+        }
+        match req.set("Transfer-Encoding", "chunked").send(Parts { it: parts, cur: Vec::new(), at: 0 }) {
+            Ok(r) | Err(ureq::Error::Status(_, r)) => {
+                let status = r.status() as i64;
+                let names: Vec<(String, String)> = r.headers_names().iter().filter_map(|n| r.header(n).map(|v| (n.to_lowercase(), v.to_string()))).collect();
+                match r.into_string() {
+                    Ok(text) => Ok((status, names, text)),
+                    Err(e) => Err(Error { message: format!("reading the body from {}: {}", u, e) }),
+                }
+            }
+            Err(e) => Err(Error { message: format!("{} {}: {}", m, u, e) }),
+        }
+      }
+    (status, got, text) = raw?
+    Response(status: status, headers: got, body: text)
 
   # Makes it and gives the status and headers once they arrive; the body
   # comes after, as it arrives, through `lines` or `chunks`.
@@ -87,6 +137,7 @@ pub struct Request:
     u = url
     hs = headers
     b = body
+    f = body_file
     ms = timeout_ms
     raw: (Int, [(Str, Str)], Int) or Error = rust:
       {
@@ -94,7 +145,16 @@ pub struct Request:
         for (k, v) in hs.iter() {
             req = req.set(k, v);
         }
-        let got = if b.is_empty() { req.call() } else { req.send_string(&b) };
+        let got = if !f.is_empty() {
+            // the file goes as it is read, with its length said first
+            match std::fs::File::open(&f) {
+                Ok(file) => {
+                    let len = file.metadata().map(|md| md.len()).unwrap_or(0);
+                    req.set("Content-Length", &len.to_string()).send(file)
+                }
+                Err(e) => return Err(Error { message: format!("cannot read `{}`: {}", f, lume_io(&e)) }),
+            }
+        } else if b.is_empty() { req.call() } else { req.send_string(&b) };
         match got {
             Ok(r) | Err(ureq::Error::Status(_, r)) => {
                 let status = r.status() as i64;
@@ -150,7 +210,7 @@ pub struct Opened:
 
 # A request to make: `http.request("GET", url)`, then `.header`, `.with_body`
 # and `.timeout` as needed.
-pub def request(method: Str, url: Str) -> Request = Request(method: method, url: url, headers: [], body: "", timeout_ms: 30000)
+pub def request(method: Str, url: Str) -> Request = Request(method: method, url: url, headers: [], body: "", timeout_ms: 30000, body_file: "")
 
 pub def get(url: Str) -> Response or Error = request("GET", url).send
 
@@ -166,7 +226,7 @@ pub def post_json(url: Str, doc: Json) -> Response or Error = post(url, json.sho
 
 # Any method, headers of your own, and a body ("" for none).
 pub def send(method: Str, url: Str, headers: [(Str, Str)], body: Str) -> Response or Error:
-  Request(method: method, url: url, headers: headers, body: body, timeout_ms: 30000).send
+  Request(method: method, url: url, headers: headers, body: body, timeout_ms: 30000, body_file: "").send
 
 test "a request that cannot be made is an Error":
   r = get("not a url")

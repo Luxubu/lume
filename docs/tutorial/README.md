@@ -42,7 +42,7 @@ it.
 | 16 | [Tasks](16-tasks.md) | many things at once, with `spawn:` and `await`; `shared var` |
 | 17 | [Async sequences](17-async-sequences.md) | items that arrive later: async generators and their methods |
 | 18 | [Programs alongside](18-programs-alongside.md) | `Process.spawn`: talk to a program while it runs |
-| 19 | [HTTP](19-http.md) *(preview)* | requests, and bodies read as they arrive |
+| 19 | [HTTP](19-http.md) | requests, and bodies read as they arrive |
 
 The chapters marked *preview* teach the newest parts of Lume, which may
 still change before 1.0; the others teach parts that are settled. [What is
@@ -59,7 +59,7 @@ marked *new here* where it is used.
 | 20 | [A CSV query tool](20-a-csv-query-tool.md) | reading a table, and answering questions about it |
 | 21 | [A log analyser](21-a-log-analyser.md) | a large file, read fast |
 | 22 | [A job runner](22-a-job-runner.md) | programs run in tasks, and their results gathered |
-| 23 | [A health checker](23-a-health-checker.md) *(preview)* | many web pages at once, with retries |
+| 23 | [A health checker](23-a-health-checker.md) | many web pages at once, with retries |
 | 24 | [Talking to a language server](24-talking-to-a-language-server.md) *(preview)* | a program that drives another, message by message |
 
 ## How the chapters are written

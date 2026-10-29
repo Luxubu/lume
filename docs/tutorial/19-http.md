@@ -1,10 +1,8 @@
 # Lunch 19: HTTP
 
-> **A preview.** This lunch teaches one of Lume's newest parts. It works
-> as shown, but details may change before 1.0. Most of its examples talk to
-> a real web server, so the test suite cannot run them on every change; they
-> were run by hand, against `example.com`, a site kept for examples like
-> these. The ones that need no network are in `docs/tutorial/http-requests/`,
+> Most of this lunch's examples talk to a real web server, so the test
+> suite cannot run them on every change; they were run by hand, against
+> `example.com`, a site kept for examples like these. The ones that need no network are in `docs/tutorial/http-requests/`,
 > which the suite does run.
 
 **In this lunch you will:**
