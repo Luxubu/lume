@@ -106,7 +106,10 @@ struct Server:
       m = (await recv)?
       show(m)
       match m.path("params.uri"):
-        Some(u) -> return Ok(()) if u.str == Some(uri(target))
+        Some(u) ->
+          return Ok(()) if u.str == Some(uri(target))
+          # TEMPORARY (milestone 113): why it is not the one waited for
+          warn "waiting for #{quoted(uri(target))}, got #{quoted(u.str.or("?"))}"
         None -> ()
     ()
 
