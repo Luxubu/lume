@@ -256,6 +256,7 @@ impl Server {
 }
 
 fn publish(uri: &str, diagnostics: Vec<Value>) {
+    log(&format!("publishing {} for {}", diagnostics.len(), uri));
     send(&json!({ "jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": { "uri": uri, "diagnostics": diagnostics } }));
 }
 

@@ -66,4 +66,4 @@ jobs:
           export LUME_UNIX_BIN="$(cygpath -m /usr/bin)" LUME_ROOT="$(pwd -W)" TMPDIR="$(cygpath -m "${TMPDIR:-/tmp}")"
           export LUME_LSP_LOG="$(cygpath -m /tmp)/lsp.log"
           timeout 120 compiler/target/lumecheck lsp "$(pwd -W)/compiler/target/release/lume.exe" 2>&1 | head -30 | cut -c1-200 || true
-          echo "--- the server's log"; cat "$(cygpath -m /tmp)/lsp.log" | cut -c1-400 || true
+          sleep 3; echo "--- the server's log"; cat "$(cygpath -m /tmp)/lsp.log" | cut -c1-400 || true
