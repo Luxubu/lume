@@ -41,13 +41,14 @@ a release says so; from then on the promise above covers it.
 | The `json` package | [JSON](reference/json.md) |
 | The `http` package — settled in 0.8. A `Request` and an `Opened` may gain fields, so build a request with `http.request` and its steps, not by naming its fields, and do not depend on how one prints; `Opened.body_id`, the number a body not yet read is kept under, is Lume's own | [HTTP](reference/http.md), lunch 19 |
 | The commands: `lume run`, `build`, `check`, `test`, `fmt`, `new`, `clean`, `update` | [Install](install.md#the-commands) |
+| For editors and tools: the fields of `lume check --json`, and the protocol `lume lsp` speaks — settled in 0.8; what a hover or a completion says is not, as no message's words are | [Install](install.md#editors) |
 
 ## Previews
 
 | part | since | where it is described |
 |---|---|---|
 | The Rust bridge: `import rust.crate`, `rust:` blocks, `[rust]` in `lume.toml`, `lume crate` | 0.1 | [Rust crates](reference/crates.md) |
-| Editor support: `lume lsp`, `lume check --json`, the VS Code extension | 0.1 | [Install](install.md#editors) |
+| The VS Code extension, in `editors/vscode/` | 0.1 | [Install](install.md#editors) |
 
 The previews work, and every documented example of them is checked on
 every change, as the settled parts' are. What is not settled is their

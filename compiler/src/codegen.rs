@@ -631,11 +631,16 @@ fn lume_pipe<R: std::io::Read + Send + 'static>(mut r: R) -> LumePipeRef {
     std::thread::spawn(move || {
         let mut chunk = [0u8; 8192];
         loop {
-            // a read that was only interrupted is tried again, not taken for the end
+            // a read that was only interrupted is tried again; one that
+            // failed ends the output, and says why rather than pass for an end
             let n = loop {
                 match r.read(&mut chunk) {
                     Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
-                    other => break other.unwrap_or(0),
+                    Err(e) => {
+                        eprintln!("warning: reading from a program failed, so its output ends here: {}", e);
+                        break 0;
+                    }
+                    Ok(n) => break n,
                 }
             };
             let mut g = q.lock().unwrap();

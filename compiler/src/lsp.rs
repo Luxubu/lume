@@ -23,34 +23,73 @@ pub fn serve() {
     let mut server = Server { open: HashMap::new(), published: HashMap::new(), index: HashMap::new(), shutting_down: false };
     loop {
         let msg = match read_message(&mut input) {
-            Some(m) => m,
-            None => return,
+            Ok(m) => m,
+            // the editor has gone: nothing more will come
+            Err(Read::End(why)) => {
+                log(&format!("stopping: {}", why));
+                return;
+            }
+            // one message that cannot be read is passed over, as the
+            // protocol asks; the next may be fine
+            Err(Read::Bad(why)) => {
+                log(&format!("passed over a message: {}", why));
+                continue;
+            }
         };
+        log(&format!("got {}", msg.get("method").and_then(|m| m.as_str()).unwrap_or("a reply")));
         if let Some(code) = server.handle(&msg) {
+            log(&format!("exiting with {}", code));
             std::process::exit(code);
         }
     }
 }
 
+/// Why a message could not be read: the input ended, or this one was bad.
+enum Read {
+    End(String),
+    Bad(String),
+}
+
+/// `LUME_LSP_LOG=<file>`: each message the server reads, and why it stops,
+/// appended to that file — for finding out what an editor and the server
+/// said to each other.
+fn log(line: &str) {
+    if let Ok(path) = std::env::var("LUME_LSP_LOG") {
+        use std::io::Write;
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+            let _ = writeln!(f, "{}", line);
+        }
+    }
+}
+
 /// One message: `Content-Length: n`, a blank line, then `n` bytes of JSON.
-fn read_message(input: &mut impl BufRead) -> Option<Value> {
+fn read_message(input: &mut impl BufRead) -> Result<Value, Read> {
     let mut len: Option<usize> = None;
     loop {
         let mut line = String::new();
-        if input.read_line(&mut line).ok()? == 0 {
-            return None;
+        match input.read_line(&mut line) {
+            Ok(0) => return Err(Read::End("the input ended".into())),
+            Ok(_) => {}
+            Err(e) => return Err(Read::End(format!("reading a header: {}", e))),
         }
         let line = line.trim_end();
         if line.is_empty() {
-            break;
+            // blank lines before a header are no message yet
+            if len.is_some() {
+                break;
+            }
+            continue;
         }
         if let Some(v) = line.strip_prefix("Content-Length:") {
             len = v.trim().parse().ok();
         }
     }
-    let mut buf = vec![0u8; len?];
-    input.read_exact(&mut buf).ok()?;
-    serde_json::from_slice(&buf).ok()
+    let n = len.unwrap_or(0);
+    let mut buf = vec![0u8; n];
+    if let Err(e) = input.read_exact(&mut buf) {
+        return Err(Read::End(format!("reading a body of {} bytes: {}", n, e)));
+    }
+    serde_json::from_slice(&buf).map_err(|e| Read::Bad(format!("a body of {} bytes is not JSON ({}): {}", n, e, String::from_utf8_lossy(&buf).chars().take(200).collect::<String>())))
 }
 
 fn send(msg: &Value) {
@@ -166,6 +205,7 @@ impl Server {
     /// Checks the program `path` belongs to and publishes its diagnostics.
     fn check(&mut self, path: &Path) {
         let entry = entry_for(path);
+        log(&format!("checking {}", entry.shown()));
         let run = std::panic::catch_unwind(|| diag::indexed(|| diag::collecting(|| crate::compile_to_rust(&entry, true))));
         let mut ds: Vec<diag::Diagnostic> = Vec::new();
         match run {
@@ -197,7 +237,7 @@ impl Server {
             };
             let file = crate::canonical(&file).unwrap_or(file);
             let text = diag::read_source(&file).unwrap_or_default();
-            by_uri.entry(path_to_uri(&file)).or_default().push(to_lsp(d, &text));
+            by_uri.entry(self.uri_for(&file)).or_default().push(to_lsp(d, &text));
         }
         let now: HashSet<String> = by_uri.keys().cloned().collect();
         let before = self.published.remove(&entry).unwrap_or_default();
@@ -205,18 +245,20 @@ impl Server {
             publish(stale, Vec::new());
         }
         // the edited file is always published, so a fix clears it at once
-        let here = path_to_uri(&crate::canonical(path).unwrap_or(path.to_path_buf()));
+        let here = self.uri_for(&crate::canonical(path).unwrap_or(path.to_path_buf()));
         if !now.contains(&here) && !before.contains(&here) {
             publish(&here, Vec::new());
         }
         for (uri, list) in by_uri {
             publish(&uri, list);
         }
+        log(&format!("checked {}", entry.shown()));
         self.published.insert(entry, now);
     }
 }
 
 fn publish(uri: &str, diagnostics: Vec<Value>) {
+    log(&format!("publishing {} for {}", diagnostics.len(), uri));
     send(&json!({ "jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": { "uri": uri, "diagnostics": diagnostics } }));
 }
 
@@ -251,6 +293,21 @@ fn to_lsp(d: &diag::Diagnostic, text: &str) -> Value {
 }
 
 impl Server {
+    /// The uri to name a file by: the editor's own for a document it has
+    /// open — `file:///d%3A/x.lume` from VS Code on Windows, say — so it
+    /// knows the file again; one of the server's making for any other.
+    fn uri_for(&self, file: &Path) -> String {
+        // (in a fixed order: a file open under two uris always gets the same)
+        let mut open: Vec<(&String, &PathBuf)> = self.open.iter().collect();
+        open.sort();
+        for (uri, p) in open {
+            if crate::canonical(p).ok().as_deref() == Some(file) || p.as_path() == file {
+                return uri.clone();
+            }
+        }
+        path_to_uri(file)
+    }
+
     /// Hover or definition at a position: the name under the cursor, looked
     /// up among the names the last check of its program resolved.
     fn answer(&mut self, method: &str, path: &Path, line: usize, character: usize) -> Value {
@@ -298,7 +355,7 @@ impl Server {
             find_word(l, &word).unwrap_or(0)
         };
         let dl = dline.saturating_sub(1);
-        json!({ "uri": path_to_uri(&target), "range": {
+        json!({ "uri": self.uri_for(&target), "range": {
             "start": { "line": dl, "character": utf16_col(&dtext, dl, dstart) },
             "end": { "line": dl, "character": utf16_col(&dtext, dl, dstart + word.chars().count()) }
         }})

@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- **For editors and tools, settled**: the fields of `lume check --json`,
+  now written down field by field, and the protocol `lume lsp` speaks.
+  What a hover or a completion says is not promised. The VS Code extension
+  stays a preview.
+- **Fixed, on Windows**: `lume lsp` published diagnostics under a uri of its
+  own making, not the one the editor opened the file by (`file:///d%3A/...`
+  from VS Code), so an editor could fail to match them to the file; it uses
+  the editor's own now, for every file the editor has open. This is what
+  stopped the suite's language-server test on Windows, which runs there
+  again.
+- **`lume lsp` passes over a message it cannot read**, as the protocol asks,
+  where it stopped; and `LUME_LSP_LOG=<file>` makes it write what it reads,
+  checks and publishes, and why it stops, to that file.
+- **A program's output that fails to be read says so**, as a warning, where
+  it ended as if the program had.
+
 - **The `http` package is settled**, covered by the promise in
   `docs/stability.md`; lunches 19 and 23 are no longer previews.
 - **A body sent as it is made**: `.with_file(path, content_type)` sends a

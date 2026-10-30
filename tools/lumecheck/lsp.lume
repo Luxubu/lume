@@ -93,7 +93,7 @@ struct Server:
       line = match await child.read_line:
         Some(l) -> l
         # what it said on its way out, which is why it stopped
-        None -> return Error("the server stopped: " + child.error_lines.to_list.join("\n"))
+        None -> return Error("the server stopped, with #{await child.wait}: " + child.error_lines.to_list.join("\n"))
       break if line.trim == ""
       if line.starts_with?("Content-Length:"):
         n = line.split(":").at(1).trim.to_int.or(0)
@@ -223,7 +223,8 @@ pub async def run(lume_arg: Str) -> Int or Error:
   # (on Windows the folder is named as Windows names it already, `C:/...`,
   # and Git's `pwd` would give it as `/c/...`)
   (_, real, _) = Process.run_in(made, suite.unix("pwd"), ["-P"])?
-  tmp = if suite.on_windows?(): made else: real.trim
+  # (and with `/`: the folder given may hold a `\`, as `D:\tmp` does)
+  tmp = if suite.on_windows?(): made.replace("\\", "/") else: real.trim
   one = write_file(tmp, "one/hello.lume", "def main:\n  puts 1\n")?
   helper = write_file(tmp, "mods/helper.lume", "pub def twice(n: Int) -> Int = n * 2\n")?
   _ = write_file(tmp, "mods/main.lume", "import helper\n\ndef main:\n  puts helper.twice(2)\n")?
@@ -256,6 +257,16 @@ pub async def run(lume_arg: Str) -> Int or Error:
   puts "--- the module fixed again"
   s.send("textDocument/didChange", changed(s.uri(helper), 2, "pub def twice(n: Int) -> Int = n * 2\n"), None)?
   await s.diagnostics_until(helper)?
+
+  puts "--- a file named by the editor's own uri, which the answer keeps"
+  _ = write_file(tmp, "own/world.lume", "def main:\n  puts 1\n")?
+  own = s.uri(tmp) + "/own/w%6Frld.lume"
+  s.send("textDocument/didOpen", opened(own, "def main:\n  puts oops\n"), None)?
+  while true:
+    m = (await s.recv)?
+    s.show(m)
+    break if text_at(m, "params.uri") == Some(own)
+  s.send("textDocument/didClose", json.obj([("textDocument", doc(own))]), None)?
 
   puts "--- hover and go to definition"
   nav_text = NAV_TEXT + "\n"

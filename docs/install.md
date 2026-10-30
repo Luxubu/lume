@@ -133,6 +133,28 @@ lume check --json main.lume
 
 The exit status is 1 when there is an error, as with `lume check`.
 
+What a tool may rely on, as [what is settled](stability.md) promises:
+
+| field | is |
+|---|---|
+| `ok` | `true` when there is no error; warnings alone leave it `true` |
+| `diagnostics` | every error and warning, in the order `lume check` prints them |
+| `severity` | `"error"` or `"warning"` |
+| `file` | the file, as `lume check` names it: as given, or found from it |
+| `line`, `col` | where, counted from 1; a column counts characters, not bytes |
+| `message`, `help` | the text, and the help or `null` |
+
+Fields may be added; those above keep their names and meaning. The words of
+`message` and `help` are not promised, as no message's are. Warnings come
+only when the program compiles, so a file with an error shows its errors.
+
+`lume lsp` speaks the protocol's own messages — `initialize`,
+`textDocument/didOpen`, `didChange`, `didSave` and `didClose`,
+`publishDiagnostics`, `hover`, `definition` and `completion` — and those
+are settled as the protocol defines them. What a hover or a completion
+says is not, as no message's words are. `LUME_LSP_LOG=<file>` makes the
+server write each message it reads, and why it stops, to that file.
+
 ## What to read next
 
 - [A tour of Lume](tour.md) — half an hour, start to finish.
