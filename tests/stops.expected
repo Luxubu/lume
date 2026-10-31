@@ -44,6 +44,12 @@ error: no item at 3 — the list has 2
   |
 3 |   [5, 6].at(i)
 exit: 101
+Some(1)
+error: -1 does not fit in the Rust `usize` the crate asks for
+  --> tests/stops/crate_int.lume:8
+  |
+8 |   puts re.find_at("abc", -1).map { |m| m.start }
+exit: 101
 test halves ... ok
 test a wrong answer ... FAILED
     tests/stops/tests.lume:8: assert half(9) == 5

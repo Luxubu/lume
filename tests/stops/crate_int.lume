@@ -1,0 +1,9 @@
+# an `Int` a crate's narrower integer cannot hold stops the program, as
+# Rust's `TryFrom` does, rather than turning into another number
+import rust.regex = "1"
+
+def main -> () or Error:
+  re = regex.Regex.new("b")?
+  puts re.find_at("abc", 1).map { |m| m.start }
+  puts re.find_at("abc", -1).map { |m| m.start }
+  ()

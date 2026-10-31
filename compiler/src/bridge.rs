@@ -113,6 +113,9 @@ impl Conv {
             Conv::None => e.to_string(),
             Conv::ToString => format!("({}).to_string()", e),
             Conv::IntoOwned => format!("({}).into_owned()", e),
+            // a wider integer to an `Int` is checked, as Rust's `TryFrom` is:
+            // a `u64` past `Int`'s largest stops the program, not wraps
+            Conv::Cast("i64") => format!("lume_int_from({})", e),
             Conv::Cast(t) => format!("(({}) as {})", e, t),
             Conv::ToVec => format!("({}).to_vec()", e),
             Conv::Clone => format!("({}).clone()", e),

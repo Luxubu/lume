@@ -41,13 +41,13 @@ a release says so; from then on the promise above covers it.
 | The `json` package | [JSON](reference/json.md) |
 | The `http` package — settled in 0.8. A `Request` and an `Opened` may gain fields, so build a request with `http.request` and its steps, not by naming its fields, and do not depend on how one prints; `Opened.body_id`, the number a body not yet read is kept under, is Lume's own | [HTTP](reference/http.md), lunch 19 |
 | The commands: `lume run`, `build`, `check`, `test`, `fmt`, `new`, `clean`, `update` | [Install](install.md#the-commands) |
+| Rust crates: `import rust.<crate>`, `[rust]` in `lume.toml`, how a crate's types are read, builders — settled in 0.8 | [Rust crates](reference/crates.md) |
 | For editors and tools: the fields of `lume check --json`, and the protocol `lume lsp` speaks — settled in 0.8; what a hover or a completion says is not, as no message's words are | [Install](install.md#editors) |
 
 ## Previews
 
 | part | since | where it is described |
 |---|---|---|
-| The Rust bridge: `import rust.crate`, `rust:` blocks, `[rust]` in `lume.toml`, `lume crate` | 0.1 | [Rust crates](reference/crates.md) |
 | The VS Code extension, in `editors/vscode/` | 0.1 | [Install](install.md#editors) |
 
 The previews work, and every documented example of them is checked on
@@ -63,8 +63,11 @@ and then.
   programs compile is covered, so a program Lume accepted is not refused
   without warning first.
 - **The Rust that Lume writes.** `lume emit` shows it, and it changes
-  freely; nothing should depend on its names or shape. A `rust:` block is
-  a preview for this reason.
+  freely; nothing should depend on its names or shape. **A `rust:` block**
+  sits next to it, and so stays outside the promise for good, as Rust keeps
+  `unsafe` code and its nightly features apart from what it promises; the
+  helpers a `rust:` block may call, such as `lume_park`, are outside it
+  with the block.
 - **Speed.** Lume tries never to get slower, and the benchmarks in
   `bench/` guard that, but a program's exact speed is not a promise.
 - **Bugs.** A program that leaked an error from rustc, or did something

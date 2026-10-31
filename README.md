@@ -70,15 +70,15 @@ names the fix — `examples/errors/` is 394 programs kept around to prove it.
 
 **Where it is.** Version 0.7. The language, the collections, files and
 folders, running programs and talking to them as they run, tasks and async
-sequences, tests, packages and the commands are settled:
+sequences, tests, packages and the commands are settled, and so are the
+`http` package, Rust crates through `import rust.<crate>`, and what `lume
+lsp` and `lume check --json` give editors and tools:
 [docs/stability.md](docs/stability.md) promises that a working program does
-not break without a warning release first, and so are the `http`
-package and what `lume lsp` and `lume check --json` give editors and tools.
-The Rust bridge and the VS Code extension work, and are previews whose
-shape may still change. Packages depend on one another by path or by git, through
-`lume.toml`; there is no package registry. Rust crates are reachable through
-`import rust.<crate>`, which is most of what a young standard library would
-otherwise be for.
+not break without a warning release first. The VS Code extension works, and
+is a preview whose shape may still change; a `rust:` block of Rust written
+by hand stays outside the promise. Packages depend on one another by path
+or by git, through `lume.toml`; there is no package registry. Rust crates
+are most of what a young standard library would otherwise be for.
 
 [HISTORY.md](HISTORY.md) is the record of how it got here, milestone by
 milestone, and the [design document](https://claude.ai/code/artifact/1872fe63-1816-4b1e-9983-dec2774382fb)

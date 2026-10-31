@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **Rust crates are settled**: `import rust.<crate>`, `[rust]` in
+  `lume.toml`, how a crate's types are read — now a table in
+  `docs/reference/crates.md` — and the rules for builders. A `rust:` block
+  stays outside the promise for good, as the Rust Lume writes does.
+- **Fixed**: an `Int` handed to a crate that asks for a narrower integer
+  was cast, so 300 for a `u8` became 44 and -1 for a `usize` a number
+  larger than any list; it is checked now, as Rust's `TryFrom` checks, and
+  a value that does not fit stops the program with its line. A `u64` past
+  the largest `Int` coming back is checked the same way.
+
 - **For editors and tools, settled**: the fields of `lume check --json`,
   now written down field by field, and the protocol `lume lsp` speaks.
   What a hover or a completion says is not promised. The VS Code extension

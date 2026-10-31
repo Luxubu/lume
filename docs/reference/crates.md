@@ -27,6 +27,40 @@ and says why for anything Lume cannot call yet: a parameter of a type Lume
 has no word for, a generic bound it cannot meet, an `unsafe` or `async`
 function.
 
+## How a crate's types are read
+
+| Rust | Lume |
+|---|---|
+| `&str`, `String`, `Cow<str>` | `Str` |
+| `bool` | `Bool` |
+| `i64`; `i8`–`i32`, `u8`–`u64`, `isize`, `usize` | `Int`, converted with a check: an `Int` the crate's type cannot hold stops the program — ``-1 does not fit in the Rust `usize` the crate asks for`` — as Rust's `TryFrom` would, and so does a `u64` past the largest `Int` coming back |
+| `f64`; `f32` | `Float` |
+| `()` | nothing |
+| `Vec<T>`, `&[T]` | `[T]` |
+| `Option<T>` | `T?` |
+| `Result<T, E>` | `T or Error`, with the crate's error as the message |
+| a tuple | a tuple |
+| a type of the crate | that type, by the crate's name, as `regex.Regex`; one that iterates is a lazy chain of its items |
+| `Box<T>` | `T` |
+
+A borrowed parameter, `&T`, is lent; `&mut T` is lent to change, for a
+crate's type, a `String` or a `Vec`. A function whose parameter or result
+is none of these — a generic Lume cannot meet, a closure, `dyn Trait`, a
+fixed-size array, an `unsafe` or `async` function — is not offered, and
+`lume crate` says which and why.
+
+## What is promised
+
+`import rust.<crate>`, the `[rust]` table of `lume.toml`, the table above
+and the rules for builders below are settled in 0.8 ([what is
+settled](../stability.md)): a crate function Lume offers keeps being
+offered, in the same Lume types, for the same crate version. What a crate
+itself does, and which of its functions a newer version of it has, are the
+crate's. **A `rust:` block is outside the promise, and will stay so**: it is
+Rust that Lume puts into the program as it is, next to the Rust Lume writes,
+whose names and shape change freely — as Rust keeps `unsafe` code and its
+nightly features apart from what it promises.
+
 ## Builders: methods that use their value up
 
 Most Rust builders take `self` by value. Each step uses the value up and
@@ -46,9 +80,10 @@ Rust would:
   after it``. Make it the last use, or make a new value where one is needed
   again.
 
-## When the bridge cannot
+## When the bridge cannot: `rust:`
 
-A `rust:` block holds Rust that Lume puts into the program as it is. Its
+A `rust:` block — outside the promise, as above — holds Rust that Lume puts
+into the program as it is. Its
 value takes the type written where it goes, and Lume's names are visible
 inside it:
 

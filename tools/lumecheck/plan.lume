@@ -95,7 +95,7 @@ rm -rf "$tmpo" tests/.lume"""
   all.push(script("overflow by build mode", overflow, "tests/overflow.expected"))
 
   # a program that stops says where, in Lume: the file, the line and its text
-  stops = """for f in list_at in_a_method in_a_block in_a_generator in_a_task never_awaited assert shop/main; do
+  stops = """for f in list_at in_a_method in_a_block in_a_generator in_a_task never_awaited assert shop/main crate_int; do
   "$LUME" run tests/stops/$f.lume; echo "exit: $?"
 done
 "$LUME" test tests/stops/tests.lume; echo "exit: $?"

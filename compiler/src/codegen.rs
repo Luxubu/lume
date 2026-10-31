@@ -449,6 +449,24 @@ fn lume_io(e: &std::io::Error) -> String {
     }
     e.to_string()
 }
+/// An `Int` handed to a crate that asks for a narrower integer.
+#[allow(dead_code)]
+#[track_caller]
+fn lume_int_to<T: TryFrom<i64>>(x: i64, ty: &str) -> T {
+    match T::try_from(x) {
+        Ok(v) => v,
+        Err(_) => panic!("{} does not fit in the Rust `{}` the crate asks for", x, ty),
+    }
+}
+/// A crate's integer, given back as an `Int`.
+#[allow(dead_code)]
+#[track_caller]
+fn lume_int_from<T: TryInto<i64> + Copy + std::fmt::Display>(x: T) -> i64 {
+    match x.try_into() {
+        Ok(v) => v,
+        Err(_) => panic!("the crate gave {}, which is past the largest `Int`", x),
+    }
+}
 /// Run-time failures speak Lume: no Rust file paths, no "attempt to".
 #[allow(dead_code)]
 fn lume_install_panic_hook() {
@@ -3133,12 +3151,14 @@ impl Gen {
                 }
             }
             Pass::Owned => self.expr_owned(a)?,
-            Pass::IntCast(w) => format!("(({}) as {})", self.expr_val(a)?, w),
+            // an `Int` into a narrower integer is checked, as `TryFrom` is:
+            // 300 for a `u8` stops the program rather than turning into 44
+            Pass::IntCast(w) => format!("lume_int_to::<{}>({}, \"{}\")", w, self.expr_val(a)?, w),
             Pass::F32 => format!("(({}) as f32)", self.expr_val(a)?),
             Pass::Option(inner) => {
                 let v = self.expr_owned(a)?;
                 match &**inner {
-                    Pass::IntCast(w) => format!("({}).map(|lume_x| lume_x as {})", v, w),
+                    Pass::IntCast(w) => format!("({}).map(|lume_x| lume_int_to::<{}>(lume_x, \"{}\"))", v, w, w),
                     Pass::F32 => format!("({}).map(|lume_x| lume_x as f32)", v),
                     _ => v,
                 }
