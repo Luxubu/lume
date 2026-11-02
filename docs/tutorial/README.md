@@ -44,9 +44,9 @@ it.
 | 18 | [Programs alongside](18-programs-alongside.md) | `Process.spawn`: talk to a program while it runs |
 | 19 | [HTTP](19-http.md) | requests, and bodies read as they arrive |
 
-The chapters marked *preview* teach the newest parts of Lume, which may
-still change before 1.0; the others teach parts that are settled. [What is
-settled](../stability.md) says which is which, and what each promises.
+Every chapter teaches parts of Lume that are settled ([what is
+settled](../stability.md) says what that promises). Lunch 24 prints what a
+language server answers, whose words may change, as no message's do.
 
 ## Part 3: building things
 
@@ -60,7 +60,7 @@ marked *new here* where it is used.
 | 21 | [A log analyser](21-a-log-analyser.md) | a large file, read fast |
 | 22 | [A job runner](22-a-job-runner.md) | programs run in tasks, and their results gathered |
 | 23 | [A health checker](23-a-health-checker.md) | many web pages at once, with retries |
-| 24 | [Talking to a language server](24-talking-to-a-language-server.md) *(preview)* | a program that drives another, message by message |
+| 24 | [Talking to a language server](24-talking-to-a-language-server.md) | a program that drives another, message by message |
 
 ## How the chapters are written
 

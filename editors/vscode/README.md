@@ -1,5 +1,9 @@
 # Lume for VS Code
 
+It is a tool beside Lume, outside [the promise](../../docs/stability.md):
+what it offers may change in any release. What it is built on — the
+protocol `lume lsp` speaks — is settled.
+
 Highlighting for `.lume` files, and Lume's own errors and warnings in the
 editor as you type: the extension starts `lume lsp`, which checks the
 program a file belongs to — the package's `main.lume`, the program whose

@@ -68,15 +68,15 @@ above, or `.trim` it.
 
 ```lume
 def main -> () or Error:
-  root = "/tmp/lume-docs-io"
+  root = "/tmp/lume-docs-io-walk"
   Dir.make(Path.join(root, "notes/old"))?
   File.write(Path.join(root, "notes/a.txt"), "a")?
   File.write(Path.join(root, "notes/old/b.md"), "b")?
 
   puts Dir.list(Path.join(root, "notes"))?  #=> ["a.txt", "old"]
   for path in Dir.walk(root)?:
-    puts path     #=> /tmp/lume-docs-io/notes/a.txt
-                  #=> /tmp/lume-docs-io/notes/old/b.md
+    puts path     #=> /tmp/lume-docs-io-walk/notes/a.txt
+                  #=> /tmp/lume-docs-io-walk/notes/old/b.md
 
   puts Dir.exists?(Path.join(root, "notes"))        #=> true
   puts Dir.exists?(Path.join(root, "notes/a.txt"))  #=> false

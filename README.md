@@ -37,7 +37,8 @@ Then:
 - **[Installing](docs/install.md)** — and what each command does.
 - **[Changes](CHANGELOG.md)** — what each release holds; 0.8.0 is the latest.
 - **[What is settled](docs/stability.md)** — the parts you can build on, the
-  previews that may still change, and how a settled part is allowed to.
+  what the promise does not cover, and how a settled part is allowed to
+  change.
 
 Every example in the documentation is compiled, run, and checked against the
 output it claims, by `tests/docs.sh`. An answer that stops being true fails
@@ -74,9 +75,9 @@ sequences, tests, packages and the commands are settled, and so are the
 `http` package, Rust crates through `import rust.<crate>`, and what `lume
 lsp` and `lume check --json` give editors and tools:
 [docs/stability.md](docs/stability.md) promises that a working program does
-not break without a warning release first. The VS Code extension works, and
-is a preview whose shape may still change; a `rust:` block of Rust written
-by hand stays outside the promise. Packages depend on one another by path
+not break without a warning release first. The VS Code extension, a tool
+beside the language, and a `rust:` block of Rust written by hand are
+outside the promise. Packages depend on one another by path
 or by git, through `lume.toml`; there is no package registry. Rust crates
 are most of what a young standard library would otherwise be for.
 

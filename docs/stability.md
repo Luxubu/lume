@@ -2,8 +2,8 @@
 
 Lume is at 0.8, and still growing. This page says which parts of it you can
 build on today — write programs in, teach, write tutorials about — and
-which are previews that may still change. It also says how a settled part
-is allowed to change, so that what you write keeps working.
+what the promise does not cover. It also says how a settled part is allowed
+to change, so that what you write keeps working.
 
 It follows the spirit of Rust's own promise, *stability without
 stagnation*: the language keeps getting better, and a program that works
@@ -46,18 +46,18 @@ a release says so; from then on the promise above covers it.
 
 ## Previews
 
-| part | since | where it is described |
-|---|---|---|
-| The VS Code extension, in `editors/vscode/` | 0.1 | [Install](install.md#editors) |
-
-The previews work, and every documented example of them is checked on
-every change, as the settled parts' are. What is not settled is their
-*shape*: a method's name, what a call gives back, how a request is built.
-Use them freely in your own programs; expect to update those programs now
-and then.
+There are none: since 0.8, every part of Lume is settled or, below, outside
+the promise. A part added before it has been used enough to be sure of its
+shape may be a preview again; this table then lists it, and its changes
+are listed under **Preview:**.
 
 ## Not covered by the promise
 
+- **The VS Code extension**, in `editors/vscode/`: a tool beside Lume,
+  versioned with it, as Rust's editor extensions are beside Rust. It is
+  built on what `lume lsp` speaks, which is settled; what the extension
+  itself offers — its settings, how it shows things — may change in any
+  release.
 - **The wording of messages.** Errors and warnings are improved all the
   time, and a better message is never a breaking change — though which
   programs compile is covered, so a program Lume accepted is not refused
@@ -87,5 +87,5 @@ and its `CHANGELOG.md` entry, by the rules in `CONTRIBUTING.md`.
 
 ## Towards 1.0
 
-At 1.0, each preview above will be settled or taken out, and the promise
-will last across every 1.x release, as Rust's has since its 1.0.
+At 1.0 the promise will last across every 1.x release, as Rust's has since
+its 1.0.

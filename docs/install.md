@@ -38,8 +38,9 @@ program differs on Windows. A program that
 uses `async` or a Rust crate downloads and builds those crates the first
 time — tokio for `async` — which takes a few seconds once.
 
-**What you can build on.** Most of Lume is settled; a few newer parts are
-previews that may still change. [What is settled](stability.md) lists both.
+**What you can build on.** Every part of Lume is settled; a few things
+beside it — the VS Code extension, a `rust:` block, the Rust Lume writes —
+are outside the promise. [What is settled](stability.md) says which.
 
 ## Without installing
 

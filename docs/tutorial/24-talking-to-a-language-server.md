@@ -1,9 +1,9 @@
 # Lunch 24: Talking to a language server
 
-> **A preview.** This lunch talks to `lume lsp`, Lume's language server.
-> The protocol it speaks is settled, but what its answers say — a hover's
-> words, a completion's order — is not, as no message's words are, so what
-> this lunch prints may change. See [what is settled](../stability.md).
+> This lunch talks to `lume lsp`, Lume's language server. The protocol it
+> speaks is settled, but what its answers say — a hover's words, a
+> completion's order — is not, as no message's words are, so what this
+> lunch prints may change. See [what is settled](../stability.md).
 
 **In this lunch you will build `lspeek`**, a small program that drives a
 **language server** — the program behind an editor's error underlines and

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **No previews are left.** The VS Code extension, the last, is outside the
+  promise: a tool beside Lume, versioned with it, built on the protocol
+  `lume lsp` speaks, which is settled. Lunch 24 is no longer a preview; it
+  says that the server's answers, which it prints, are not promised word
+  for word.
+- **Fixed**: two examples in the I/O reference used one folder, and the
+  docs check, which runs examples side by side, could have one remove it
+  while the other read it — as 0.8.0's own check on Linux did.
+
 ## 0.8.0 — the last previews
 
 Six milestones after 0.7.0 (112–117). Every part of Lume that was a
