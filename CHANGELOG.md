@@ -2,62 +2,91 @@
 
 ## Unreleased
 
-- **Review round twenty-three** (`corpus/m116/`): thirty programs by three
-  reviewers from the docs alone; no wrong answer; three reached rustc,
-  from two causes, both fixed.
-- **Fixed**: a list given to a crate that asks for bytes (`&[u8]`) reached
-  rustc; each item is converted and checked now. `xs == []` with a list of
-  `Str` reached rustc. `lume check --json main.lume`, the file after the
-  option, said there was no file. `.uniq` on an async sequence said it
-  could not be printed, not that it has no `uniq`. `lume fmt` moved a
-  comment at the end of a chain step onto a line of its own.
-- **`http`**: a body step takes the place of an earlier one's
-  `Content-Type`, where two were sent; a missing file's `Error` names the
-  method and URL, as every request's does.
-- **Warnings come in the order they are written**, whatever found them, and
-  an unused block parameter is pointed at by name.
+## 0.8.0 — the last previews
 
-- **An async sequence has `join`, `max`, `min`, `max_by`, `min_by`,
-  `sort`, `sort_by`, `last` and `reverse`**, which need every item before
-  they can answer: they keep the items, as `.to_list` would, and give what
-  a list's would. Rust's `StreamExt` has none of them.
-- **Fixed**: `lume fmt` moved a comment between two steps of a chain over
-  lines to before the statement; it stays between them.
+Six milestones after 0.7.0 (112–117). Every part of Lume that was a
+preview is settled now but one, the VS Code extension: the `http` package,
+Rust crates, and what `lume lsp` and `lume check --json` give editors and
+tools. On the way the language server learned to answer an editor on
+Windows by the editor's own names for its files, integers crossing to a
+crate learned to be checked, and a review round, the twenty-third, checked
+it all.
 
-- **Rust crates are settled**: `import rust.<crate>`, `[rust]` in
-  `lume.toml`, how a crate's types are read — now a table in
-  `docs/reference/crates.md` — and the rules for builders. A `rust:` block
-  stays outside the promise for good, as the Rust Lume writes does.
-- **Fixed**: an `Int` handed to a crate that asks for a narrower integer
-  was cast, so 300 for a `u8` became 44 and -1 for a `usize` a number
-  larger than any list; it is checked now, as Rust's `TryFrom` checks, and
-  a value that does not fit stops the program with its line. A `u64` past
-  the largest `Int` coming back is checked the same way.
+### Install
 
-- **For editors and tools, settled**: the fields of `lume check --json`,
-  now written down field by field, and the protocol `lume lsp` speaks.
-  What a hover or a completion says is not promised. The VS Code extension
-  stays a preview.
-- **Fixed, on Windows**: `lume lsp` published diagnostics under a uri of its
-  own making, not the one the editor opened the file by (`file:///d%3A/...`
-  from VS Code), so an editor could fail to match them to the file; it uses
-  the editor's own now, for every file the editor has open. This is what
-  stopped the suite's language-server test on Windows, which runs there
-  again.
-- **`lume lsp` passes over a message it cannot read**, as the protocol asks,
-  where it stopped; and `LUME_LSP_LOG=<file>` makes it write what it reads,
-  checks and publishes, and why it stops, to that file.
-- **A program's output that fails to be read says so**, as a warning, where
-  it ended as if the program had.
+```sh
+git clone https://github.com/Luxubu/lume && cd lume && git checkout v0.8.0
+./install.sh
+lume run examples/process_spawn.lume
+```
 
-- **The `http` package is settled**, covered by the promise in
-  `docs/stability.md`; lunches 19 and 23 are no longer previews.
+It needs a Rust toolchain (<https://rustup.rs>). On Windows, run it from
+Git's bash. See `docs/install.md`.
+
+### Settled
+
+`docs/stability.md` promises that a settled part does not break a working
+program without a warning release first. Settled in this release:
+
+- **The `http` package.** A `Request` and an `Opened` may gain fields: read
+  them, but build a request with `http.request` and its steps.
+- **Rust crates**: `import rust.<crate>`, `[rust]` in `lume.toml`, how a
+  crate's types are read — now a table in `docs/reference/crates.md` —
+  builders, and `lume crate`. **A `rust:` block stays outside the promise
+  for good**, as the Rust Lume writes does.
+- **For editors and tools**: the fields of `lume check --json`, written down
+  field by field, and the protocol `lume lsp` speaks. What a hover or a
+  completion says is not promised, as no message's words are.
+
+Lunches 19 and 23 are no longer previews. The one preview left is the VS
+Code extension.
+
+### What is new
+
 - **A body sent as it is made**: `.with_file(path, content_type)` sends a
-  file as it is read, never held whole, its length first; `req.send_parts(
-  parts)` sends a sequence's parts as it makes them, in chunks — the gap
-  the HTTP page listed.
-- **Fixed**: a check in the suite of a task never awaited gave its task
-  20 ms to stop, and on a slow Windows machine that was too little.
+  file as it is read, never held whole; `req.send_parts(parts)` sends a
+  sequence's parts in chunks as it makes them.
+- **An async sequence has `join`, `max`, `min`, `max_by`, `min_by`, `sort`,
+  `sort_by`, `last` and `reverse`**: what needs every item keeps them, as
+  `.to_list` would, and gives what a list's would.
+- **`LUME_LSP_LOG=<file>`** makes the language server write what it reads,
+  checks and publishes, and why it stops.
+- **Warnings come in the order they are written**, whatever found them.
+
+### Fixed
+
+- On Windows, `lume lsp` published diagnostics under a uri of its own
+  making, not the one the editor opened a file by (`file:///d%3A/...` from
+  VS Code); it answers by the editor's own now. This is what kept the
+  suite's language-server test off Windows, which runs there again.
+- An `Int` handed to a crate's narrower integer was cast — 300 for a `u8`
+  became 44 — and a returned `u64` past `Int`'s largest wrapped; both are
+  checked now, as Rust's `TryFrom` is, a list of them item by item, and a
+  value that does not fit stops the program on its line.
+- `xs == []` with a list of `Str` reached rustc.
+- `lume check --json main.lume`, the file after the option, said there was
+  no file.
+- A request given two bodies sent two `Content-Type` headers; a missing
+  file's `Error` did not name the method and URL.
+- `lume lsp` stopped at a message it could not read; it passes over it.
+- A program's output whose reading failed ended without a word.
+- `lume fmt` moved a comment between or after a chain's steps.
+- `.uniq` on an async sequence said it could not be printed, not that it
+  has no `uniq`.
+
+### How it was checked
+
+- **The suite**: `tests/run.sh`, 1338 checks and 696 docs examples, byte
+  for byte, on Linux, macOS and Windows.
+- **Review round twenty-three** (`corpus/m116/`): thirty programs by three
+  reviewers from the docs alone, with nothing run; no wrong answer, and
+  what reached rustc fixed.
+- Installed from a clean checkout and run.
+
+### Previews
+
+No preview changed shape. Three were settled; the VS Code extension
+remains.
 
 ## 0.7.0 — settling
 

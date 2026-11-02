@@ -23,7 +23,7 @@ async test "the orders, in order":
   assert orders().count { |d| d.len == 3 } == 2
 
 async test "the first that is done":
-  var running = [spawn: await cook("slow", 30), spawn: await cook("quick", 1)]
+  var running = [spawn: await cook("slow", 500), spawn: await cook("quick", 1)]
   assert await running.next_done == Some("quick is ready")
 
 test "a plain test runs as before":
