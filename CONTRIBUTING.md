@@ -25,10 +25,15 @@ unless there is a reason written down not to.
 **A change to a settled part** — one listed as settled in
 [docs/stability.md](docs/stability.md) — that would stop a working program
 compiling, or change what it does, is made in two releases. The first adds a
-warning wherever the old form is used, saying what to write instead, with an
-example in `examples/errors/` and a `CHANGELOG.md` item beginning
-**Changing:**; the old form keeps working. The next release may then make
-the change. Fixing a program that reached rustc, or that did something other
+warning wherever the old form is used, saying what to write instead, and a
+`CHANGELOG.md` item beginning **Changing:**; the old form keeps working. For
+a method or a namespace's function renamed, that warning is one line in
+`compiler/src/deprecated.rs` — the type or namespace, the old name, the new
+one, and the release the old goes in — and a program under
+`tests/deprecated/` showing it; the call of the old name is the call of the
+new, and the warning says so wherever it is written. Any other change
+writes its warning by hand, with an example beside that one. The next
+release may then make the change, and take the line away. Fixing a program that reached rustc, or that did something other
 than the docs say, is a bug fix and needs no warning release. A change to a
 preview needs only a `CHANGELOG.md` item beginning **Preview:**. Settling a
 preview, or adding a new one, updates the lists in `docs/stability.md`.

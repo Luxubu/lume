@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Deprecation warnings, ready before they are needed**: a method or a
+  namespace's function on its way out is one line in
+  `compiler/src/deprecated.rs`; while it is listed, a call of it works as
+  the call of its new name and is warned about wherever it is written, with
+  what to write and the release it goes in. Nothing is listed: nothing is
+  going. The suite checks the warning with a test form.
+
 - **No previews are left.** The VS Code extension, the last, is outside the
   promise: a tool beside Lume, versioned with it, built on the protocol
   `lume lsp` speaks, which is settled. Lunch 24 is no longer a preview; it

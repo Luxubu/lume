@@ -1,0 +1,14 @@
+# A form on its way out still works, and says so wherever it is used: run
+# with `LUME_DEPRECATION_TEST=1`, which lists `Str.shout` as going, for
+# `upcase`, and `File.slurp`, for `read`. Nothing real is going yet; this
+# is how it will look.
+def loud(s: Str) -> Str = s.shout
+
+def main -> () or Error:
+  puts "tea".shout
+  puts loud("pie")
+  puts ["a", "b"].map { |w| w.shout }.to_list
+  File.write("/tmp/lume-deprecated-test.txt", "soup")?
+  puts File.slurp("/tmp/lume-deprecated-test.txt")?
+  File.remove("/tmp/lume-deprecated-test.txt")?
+  ()

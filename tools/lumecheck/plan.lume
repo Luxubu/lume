@@ -102,6 +102,10 @@ done
 rm -rf tests/stops/.lume tests/stops/shop/.lume"""
   all.push(script("runtime stops name the Lume line", stops, "tests/stops.expected"))
 
+  # a form on its way out warns and still works; the suite turns on the
+  # test forms, as the table of real ones is empty
+  all.push(script("deprecation warnings", "LUME_DEPRECATION_TEST=1 \"$LUME\" run tests/deprecated/shout.lume; echo \"exit: $?\"; rm -rf tests/deprecated/.lume", "tests/deprecated/shout.expected"))
+
   # editors: diagnostics as JSON, and the language server driven as an editor would
   all.push(script("check --json", "\"$LUME\" check examples/errors/arity.lume --json; echo \"exit: $?\"; \"$LUME\" check examples/fib.lume --json; echo \"exit: $?\"", "examples/check_json.expected"))
   # the editor's side is tools/lumecheck/lsp.lume, the suite's own binary

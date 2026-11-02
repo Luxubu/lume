@@ -19,6 +19,21 @@ instead; the old form keeps working for at least that one release. The
 `CHANGELOG.md` entry for each of those releases says so, in an item that
 begins **Changing:**.
 
+Such a warning looks like this, and the program still runs:
+
+```
+warning: `Str.shout` is going away in Lume 1.2: write `upcase`
+  --> menu.lume:4:28
+  |
+4 | def loud(s: Str) -> Str = s.shout
+  |                            ^
+  help: it still works until then, as `upcase` does; `CHANGELOG.md` says why, under **Changing:**
+```
+
+(`shout` is made up: nothing is going yet. `tests/deprecated/` shows the
+warning with a test form, so the means of keeping the promise is checked
+before it is needed.)
+
 **A preview may change in any release**, with no warning release. Every
 change to one is listed in that release's `CHANGELOG.md` entry, in an item
 that begins **Preview:**, so you can see what to update. A preview becomes settled when

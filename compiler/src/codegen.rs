@@ -1587,6 +1587,8 @@ pub struct Gen {
     text_borrows: HashMap<String, (String, usize)>,
     /// The program uses async somewhere: tokio goes in the dependencies.
     uses_async: bool,
+    /// where a form on its way out was warned about already
+    going_warned: HashSet<(usize, usize)>,
     /// The Lume line the Rust being written now belongs to, for the marks
     /// a stop is looked up by.
     mark_line: usize,
@@ -1709,6 +1711,7 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, module_id: &str
         src_lines: src.lines().map(|l| l.to_string()).collect(),
         in_async: false,
         uses_async: false,
+        going_warned: HashSet::new(),
         mark_line: 0,
         map_items: false,
         or_default_is_str: false,
@@ -5300,6 +5303,9 @@ impl Gen {
     // ----- type inference ---------------------------------------------------
 
     fn ty_of(&mut self, e: &Expr) -> Type {
+        if let Some((_, renamed)) = self.going(e) {
+            return self.ty_of(&renamed);
+        }
         // `s.sort_by { .. }` on an async sequence is `s.to_list.sort_by { .. }`
         if let ExprKind::Method { recv, name, args } = &e.kind {
             if collects_items(name) {
@@ -11784,6 +11790,16 @@ impl Gen {
     }
 
     fn expr(&mut self, e: &Expr) -> Result<String> {
+        // a form on its way out: warned about, then compiled as its new one
+        if let Some((g, renamed)) = self.going(e) {
+            if self.going_warned.insert((e.line, e.col)) {
+                self.warnings.push(
+                    LumeError::new(e.line, e.col, format!("`{}.{}` is going away in Lume {}: write `{}`", g.on, g.old, g.until, g.new))
+                        .with_help(format!("it still works until then, as `{}` does; `CHANGELOG.md` says why, under **Changing:**", g.new)),
+                );
+            }
+            return self.expr(&renamed);
+        }
         // a step of a statement written on a later line — `.map { ... }`
         // under the line it continues — gets a line of the Rust of its own,
         // marked, so a stop inside it names its line, not the statement's
@@ -11802,6 +11818,31 @@ impl Gen {
             return r.map(|s| format!("\n/*@L{}*/{}\n/*@L{}*/", e.line, s, saved));
         }
         self.expr_here(e)
+    }
+
+    /// A call of a form `deprecated.rs` lists as going, and the same call
+    /// of its new form.
+    fn going(&mut self, e: &Expr) -> Option<(&'static crate::deprecated::Going, Expr)> {
+        let (recv, name, args) = match &e.kind {
+            ExprKind::Method { recv, name, args } if crate::deprecated::named(name) => (recv, name, args),
+            _ => return None,
+        };
+        let on: String = match &recv.kind {
+            ExprKind::Ident(n) if self.lookup(n).is_none() && matches!(n.as_str(), "Time" | "File" | "Dir" | "Path" | "Env" | "Process") => n.clone(),
+            _ => match self.ty_of(recv).materialized() {
+                Type::Str => "Str".into(),
+                Type::Int => "Int".into(),
+                Type::Float => "Float".into(),
+                Type::Bool => "Bool".into(),
+                Type::Char => "Char".into(),
+                Type::List(_) | Type::Iter(..) => "List".into(),
+                Type::Map(..) => "Map".into(),
+                Type::Set(_) => "Set".into(),
+                _ => return None,
+            },
+        };
+        let g = crate::deprecated::going(&on, name)?;
+        Some((g, Expr::new(ExprKind::Method { recv: recv.clone(), name: g.new.to_string(), args: args.clone() }, e.line, e.col)))
     }
 
     fn expr_here(&mut self, e: &Expr) -> Result<String> {

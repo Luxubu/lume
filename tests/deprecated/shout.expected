@@ -1,0 +1,29 @@
+warning: `Str.shout` is going away in Lume 9.9: write `upcase`
+  --> tests/deprecated/shout.lume:5:28
+  |
+5 | def loud(s: Str) -> Str = s.shout
+  |                            ^
+  help: it still works until then, as `upcase` does; `CHANGELOG.md` says why, under **Changing:**
+warning: `Str.shout` is going away in Lume 9.9: write `upcase`
+  --> tests/deprecated/shout.lume:8:13
+  |
+8 |   puts "tea".shout
+  |             ^
+  help: it still works until then, as `upcase` does; `CHANGELOG.md` says why, under **Changing:**
+warning: `Str.shout` is going away in Lume 9.9: write `upcase`
+  --> tests/deprecated/shout.lume:10:30
+   |
+10 |   puts ["a", "b"].map { |w| w.shout }.to_list
+   |                              ^
+  help: it still works until then, as `upcase` does; `CHANGELOG.md` says why, under **Changing:**
+warning: `File.slurp` is going away in Lume 9.9: write `read`
+  --> tests/deprecated/shout.lume:12:12
+   |
+12 |   puts File.slurp("/tmp/lume-deprecated-test.txt")?
+   |            ^
+  help: it still works until then, as `read` does; `CHANGELOG.md` says why, under **Changing:**
+TEA
+PIE
+["A", "B"]
+soup
+exit: 0

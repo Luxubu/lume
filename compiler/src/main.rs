@@ -20,6 +20,7 @@
 mod ast;
 mod bridge;
 mod codegen;
+mod deprecated;
 mod diag;
 mod lsp;
 mod error;
