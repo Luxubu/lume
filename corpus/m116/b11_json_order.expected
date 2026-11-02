@@ -1,0 +1,34 @@
+warning: `spare` is given a value but never used
+  --> corpus/m116/b11_json_order.lume:57:3
+   |
+57 |   spare = 1
+   |   ^
+  help: use it, or name it `_spare` to say it is not meant to be
+warning: `!` stops the program if the value is missing or an error
+  --> corpus/m116/b11_json_order.lume:58:17
+   |
+58 |   n = "4".to_int!
+   |                 ^
+  help: fine in tests and quick scripts; elsewhere use `match`, `?` or `.or(default)`
+warning: `i` is never used in the loop
+  --> corpus/m116/b11_json_order.lume:59:3
+   |
+59 |   for i in 1..2:
+   |   ^
+  help: name it `_i`, or write `for _ in ...` when only the count matters
+warning: block parameter `x` is never used
+  --> corpus/m116/b11_json_order.lume:61:24
+   |
+61 |   puts [1, 2].count { |x| true } + "5".to_int!
+   |                        ^
+  help: name it `_x`, or `_` alone
+warning: `!` stops the program if the value is missing or an error
+  --> corpus/m116/b11_json_order.lume:61:46
+   |
+61 |   puts [1, 2].count { |x| true } + "5".to_int!
+   |                                              ^
+  help: fine in tests and quick scripts; elsewhere use `match`, `?` or `.or(default)`
+4
+4
+7
+exit: 0

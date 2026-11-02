@@ -1,0 +1,10 @@
+["a ", " b 2027-01 c"]
+["a 2026-11 b 2027-01 c"]
+3
+Some("11")
+None
+error: -1 does not fit in the Rust `usize` the crate asks for
+  --> corpus/m116/b05_usize_stop.lume:33
+   |
+33 |       puts c.get(picks.at(2)).map { |m| m.as_str }
+exit: 101

@@ -1,20 +1,20 @@
 warning: block parameter `k` is never used
-  --> corpus/m17/r25_wordfreq.lume:8:20
+  --> corpus/m17/r25_wordfreq.lume:8:23
   |
 8 |   puts freq.filter { |k, v| v > 1 }
-  |                    ^
+  |                       ^
   help: name it `_k`, or `_` alone
 warning: block parameter `k` is never used
-  --> corpus/m17/r25_wordfreq.lume:17:24
+  --> corpus/m17/r25_wordfreq.lume:17:27
    |
 17 |   puts by_first.reject { |k, ws| ws.len > 1 }.keys
-   |                        ^
+   |                           ^
   help: name it `_k`, or `_` alone
 warning: block parameter `k` is never used
-  --> corpus/m17/r25_wordfreq.lume:22:20
+  --> corpus/m17/r25_wordfreq.lume:22:23
    |
 22 |   puts freq.reject { |k, v| v.odd? }.keys
-   |                    ^
+   |                       ^
   help: name it `_k`, or `_` alone
 {"the": 3, "cat": 1, "and": 2, "hat": 1, "bat": 1, "sat": 1}
 {"the": 3, "and": 2}

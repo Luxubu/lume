@@ -1,0 +1,11 @@
+09:14 GET /menu -> 200
+09:14 POST /order/42 -> 201
+09:15 GET /menu/tea -> 404
+09:16 GET /menu -> 500
+could not read 1 line
+slow: /order/42 (148 ms), /menu (1200 ms)
+errors: 2
+paths: /menu, /order/#, /menu/tea, /menu
+02/11/2026
+numbers in the log: 33
+exit: 0

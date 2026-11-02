@@ -416,8 +416,8 @@ error: no item at 5 — the list has 3
 ```
 
 Below the message come the file as it was named on the command line, the
-line, and the line itself. There is no column and no caret: the whole line
-is what ran. As in a compile error, the gutter is as wide as the line
+line, and the line itself: `  --> file:line`, two spaces in, as a compile
+error has it. There is no column and no caret: the whole line is what ran. As in a compile error, the gutter is as wide as the line
 number, so line 12 is shown as `12 | ...` under `   |`.
 
 The line is the one the failure happened on, which is not always the one

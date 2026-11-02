@@ -1,0 +1,29 @@
+# a07_alarm_chain — a method that filters an async sequence by one of its
+# struct's fields, written as a chain over lines with a comment between
+# the steps. The chain's block runs as items arrive, after the line, so it
+# cannot use a field; the error points at the block on its own step line.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: the block of `filter` runs as items arrive, after this line, so it cannot use `self` or its fields
+#   --> corpus/m116/a07_alarm_chain.lume:25:15
+#    |
+# 25 |       .filter { |r| r > limit }
+#    |               ^
+#   help: bind what it needs to a name before the chain, and use that
+
+async def readings -> Iterator[Int]:
+  for r in [12, 40, 7, 33]:
+    await Time.sleep(1)
+    yield r
+
+struct Alarm:
+  limit: Int
+
+  async def loud -> [Int]:
+    readings()
+      # only what is over the limit
+      .filter { |r| r > limit }
+      .to_list
+
+async def main:
+  puts await Alarm(limit: 30).loud

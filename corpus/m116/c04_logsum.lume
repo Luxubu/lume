@@ -1,0 +1,129 @@
+# c04_logsum — a log summariser whose long chains carry comments between
+# their steps: a comment at the steps' own indent, one deeper, a blank line
+# between two steps, a comment before the first step, steps inside a
+# call's parentheses, steps in a `for` header, steps after a `def`'s `=`,
+# and steps mixed with `|>` lines. Bad lines are reported with their line
+# numbers, and a three-way tie in `max_by` on pairs gives the first.
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# 10 requests, 2 bad lines
+#   skipped line 11: expected 5 fields, got 3
+#   skipped line 12: `fast` is not an integer
+# slowest answered: /order 140, /order 120, /menu 41
+#   /menu     4 hits, 30 ms on average
+#   /order    2 hits, 130 ms on average
+#   /order/9  2 hits, 454 ms on average
+#   /tables   2 hits, 356 ms on average
+# [2, 3, 4, 5]
+# worst minute: Some(("09:02", 1))
+# 3 changes: POST /order; POST /order; DELETE /order/9
+# failed: 09:02 /order/9 after 900 ms
+# failed: 09:05 /tables after 700 ms
+# busiest: /menu
+
+struct Entry:
+  minute: Str
+  method: Str
+  path: Str
+  status: Int
+  ms: Int
+
+LOG = """
+  09:00 GET /menu 200 35
+  09:01 POST /order 201 120
+  09:01 GET /menu 200 41
+  09:02 GET /order/9 500 900
+  09:02 GET /menu 304 5
+  09:03 POST /order 201 140
+  09:03 GET /tables 200 12
+  09:04 DELETE /order/9 403 8
+  09:04 GET /menu 200 39
+  09:05 GET /tables 500 700
+  09:05 GET /menu
+  09:06 GET /menu 200 fast
+  """
+
+def number(n: Int, text: Str) -> Int or Error =
+  text.to_int.map_error { |e| Error("line #{n}: #{e.message}") }
+
+def parse(n: Int, line: Str) -> Entry or Error:
+  match line.split(" "):
+    [minute, method, path, status, ms] ->
+      Entry(minute: minute, method: method, path: path, status: number(n, status)?, ms: number(n, ms)?)
+    _ -> Error("line #{n}: expected 5 fields, got #{line.split(" ").len}")
+
+def summary(changes: [Str]) -> Str = "#{changes.len} changes: #{changes.join("; ")}"
+
+# the busiest path, by a chain that starts on the line after `=`
+def busiest(entries: [Entry]) -> Str = entries
+  .map { |e| e.path }
+  # a path's hits, in the order the path was first seen
+  .group_by { |p| p }
+  .max_by { |_, hits| hits.len }
+  .map { |pair| pair.0 }
+  .or("none")
+
+def main:
+  var entries: [Entry] = []
+  var bad: [Str] = []
+  parsed = LOG
+    .lines
+    # number the lines from 1, as an editor does
+    .enumerate
+    .map { |i, line| parse(i + 1, line) }
+    .to_list
+  for r in parsed:
+    match r:
+      Ok(e) -> entries.push(e)
+      Error(e) -> bad.push(e.message)
+  puts "#{entries.len} requests, #{bad.len} bad lines"
+  for b in bad:
+    puts "  skipped #{b}"
+
+  slow = entries
+    # only what answered
+    .filter { |e| e.status < 500 }
+        # slowest first; a comment may sit deeper than the steps
+    .sort_by { |e| 0 - e.ms }
+
+    # a blank line above, and the chain goes on
+    .take(3)
+    .map { |e| "#{e.path} #{e.ms}" }
+    .join(", ")
+  puts "slowest answered: #{slow}"
+
+  averages = entries
+    .group_by { |e| e.path }
+    # each path's entries, as (path, hits, average)
+    .map { |path, es| (path, es.len, es.map { |e| e.ms }.sum / es.len) }
+  for path, n, avg in averages:
+    puts "  #{path.pad_right(9)} #{n} hits, #{avg} ms on average"
+
+  entries
+    .map { |e| e.status / 100 }
+    # 2xx, 3xx, 4xx, 5xx: each class once
+    .to_set
+    |> .sort
+    |> puts
+
+  worst = entries
+    .filter { |e| e.status >= 400 }
+    .group_by { |e| e.minute }
+    # minute -> how many failed in it; three minutes tie at one
+    .map { |m, es| (m, es.len) }
+    .max_by { |_, n| n }
+  puts "worst minute: #{worst}"
+
+  puts summary(entries
+    .filter { |e| e.method != "GET" }
+    # what changed something on the server
+    .map { |e| "#{e.method} #{e.path}" }
+    .to_list)
+
+  for e in entries
+    # the server's own failures, in order
+    .filter { |x| x.status >= 500 }:
+    puts "failed: #{e.minute} #{e.path} after #{e.ms} ms"
+
+  puts "busiest: #{busiest(entries)}"

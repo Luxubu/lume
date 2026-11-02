@@ -1,0 +1,9 @@
+group 0: cups=3
+group 1: cups
+group 2: 3
+group 3: -
+error: -1 does not fit in the Rust `usize` the crate asks for
+  --> corpus/m116/a05_capture_group.lume:22
+   |
+22 |     Some(c) -> c.get(group).map { |m| m.as_str }.or("-")
+exit: 101

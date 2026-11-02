@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- **Review round twenty-three** (`corpus/m116/`): thirty programs by three
+  reviewers from the docs alone; no wrong answer; three reached rustc,
+  from two causes, both fixed.
+- **Fixed**: a list given to a crate that asks for bytes (`&[u8]`) reached
+  rustc; each item is converted and checked now. `xs == []` with a list of
+  `Str` reached rustc. `lume check --json main.lume`, the file after the
+  option, said there was no file. `.uniq` on an async sequence said it
+  could not be printed, not that it has no `uniq`. `lume fmt` moved a
+  comment at the end of a chain step onto a line of its own.
+- **`http`**: a body step takes the place of an earlier one's
+  `Content-Type`, where two were sent; a missing file's `Error` names the
+  method and URL, as every request's does.
+- **Warnings come in the order they are written**, whatever found them, and
+  an unused block parameter is pointed at by name.
+
 - **An async sequence has `join`, `max`, `min`, `max_by`, `min_by`,
   `sort`, `sort_by`, `last` and `reverse`**, which need every item before
   they can answer: they keep the items, as `.to_list` would, and give what

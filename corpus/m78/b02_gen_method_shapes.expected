@@ -5,10 +5,10 @@ warning: `i` is never used in the loop
    |     ^
   help: name it `_i`, or write `for _ in ...` when only the count matters
 warning: block parameter `y` is never used
-  --> corpus/m78/b02_gen_method_shapes.lume:75:26
+  --> corpus/m78/b02_gen_method_shapes.lume:75:32
    |
 75 |   puts Dot.corners.count { |x, y| x == 0 }
-   |                          ^
+   |                                ^
   help: name it `_y`, or `_` alone
 [1, 2, 1, 2]
 ababab

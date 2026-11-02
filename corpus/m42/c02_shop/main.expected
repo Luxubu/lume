@@ -1,8 +1,8 @@
 warning: block parameter `i` is never used
-  --> corpus/m42/c02_shop/main.lume:42:32
+  --> corpus/m42/c02_shop/main.lume:42:35
    |
 42 |     Rule(name: "cap", applies: { |i| true }, adjust: cap),
-   |                                ^
+   |                                   ^
   help: name it `_i`, or `_` alone
 F-apple $2.50 -> $2.25
 T-saw $19.99 -> $15.00

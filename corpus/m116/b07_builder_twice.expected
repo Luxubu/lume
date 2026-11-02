@@ -1,0 +1,8 @@
+1 2 -
+["x-n", "accept"]
+loop a: ["x-k"]
+loop b: ["x-k"]
+[]
+GET last
+["accept", "x-last"]
+exit: 0

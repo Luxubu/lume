@@ -74,6 +74,9 @@ pub enum Pass {
     Option(Box<Pass>),
     /// `&mut T`: Lume needs a `var`
     MutBorrow,
+    /// `&[u8]` or `Vec<u8>` (any integer but `i64`): each item converted
+    /// and checked; `true` when the crate borrows the list
+    IntList(&'static str, bool),
 }
 
 /// How a Rust result becomes a Lume value.
@@ -816,6 +819,11 @@ impl<'a> Builder<'a> {
             RTy::Ref(inner, false) => match &**inner {
                 RTy::Str => (Type::Str, Pass::Borrow),
                 RTy::String => (Type::Str, Pass::Borrow),
+                // bytes, and other narrower integers: each item checked
+                RTy::Slice(e) | RTy::Vec(e) if matches!(**e, RTy::Int(w) if w != "i64") => match **e {
+                    RTy::Int(w) => (Type::List(Box::new(Type::Int)), Pass::IntList(w, true)),
+                    _ => unreachable!(),
+                },
                 RTy::Slice(e) | RTy::Vec(e) => (Type::List(Box::new(self.lume_type(e)?)), Pass::Borrow),
                 RTy::Local(..) | RTy::SelfTy => (self.lume_type(inner)?, Pass::Borrow),
                 RTy::Int(_) | RTy::Float(_) | RTy::Bool => return None,
@@ -825,7 +833,10 @@ impl<'a> Builder<'a> {
                 RTy::Local(..) | RTy::SelfTy | RTy::Vec(_) | RTy::String => (self.lume_type(inner)?, Pass::MutBorrow),
                 _ => return None,
             },
-            RTy::Vec(e) => (Type::List(Box::new(self.lume_type(e)?)), Pass::Owned),
+            RTy::Vec(e) => match **e {
+                RTy::Int(w) if w != "i64" => (Type::List(Box::new(Type::Int)), Pass::IntList(w, false)),
+                _ => (Type::List(Box::new(self.lume_type(e)?)), Pass::Owned),
+            },
             RTy::Option(inner) => {
                 let (t, p) = self.param(inner)?;
                 if p == Pass::Borrow {

@@ -57,7 +57,7 @@ lume run   file.lume [-- args...]   compile and run it
 lume build file.lume [-o binary]    compile it, fully optimised (--checked keeps overflow checks)
 lume test  file.lume [name]         run the file's `test` blocks (those with `name` in theirs)
 lume check file.lume                parse and type-check only
-lume fmt   file.lume                rewrite in the canonical layout
+lume fmt   file.lume [--stdout]     rewrite in the canonical layout (--stdout: print it instead)
 lume emit  file.lume                print the generated Rust
 lume crate file.lume <crate>        what a Rust crate offers, in Lume types
 lume clean file.lume                remove build output
@@ -138,7 +138,7 @@ What a tool may rely on, as [what is settled](stability.md) promises:
 | field | is |
 |---|---|
 | `ok` | `true` when there is no error; warnings alone leave it `true` |
-| `diagnostics` | every error and warning, in the order `lume check` prints them |
+| `diagnostics` | every error and warning, in the order `lume check` prints them: warnings by where they are written |
 | `severity` | `"error"` or `"warning"` |
 | `file` | the file, as `lume check` names it: as given, or found from it |
 | `line`, `col` | where, counted from 1; a column counts characters, not bytes |

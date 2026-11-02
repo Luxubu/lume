@@ -922,7 +922,12 @@ impl Fmt {
                     let r = self.expr_p(recv, 10);
                     let mut between = String::new();
                     while self.ci < self.comments.len() && self.comments[self.ci].line < e.line {
-                        between.push_str(&format!("\n{}#{}", ind(self.indent + 1), self.comments[self.ci].text));
+                        // one at the end of the step before stays at its end
+                        if self.comments[self.ci].line == recv.line && between.is_empty() {
+                            between.push_str(&format!("  #{}", self.comments[self.ci].text));
+                        } else {
+                            between.push_str(&format!("\n{}#{}", ind(self.indent + 1), self.comments[self.ci].text));
+                        }
                         self.last_line = self.comments[self.ci].line;
                         self.ci += 1;
                     }

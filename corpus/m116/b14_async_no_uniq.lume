@@ -1,0 +1,21 @@
+# b14 — async sequences: a list's method that an async sequence still does
+# not have, `uniq`, called after a chain (`map`). The refusal names the
+# chain's type as an async sequence of what `map` gives, and its help lists
+# every method it does have.
+# Run with `lume check corpus/m116/b14_async_no_uniq.lume`.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: an `async Iterator[Str]` has no `uniq` yet
+#   --> corpus/m116/b14_async_no_uniq.lume:21:33
+#    |
+# 21 |   puts nums().map { |n| n.to_s }.uniq
+#    |                                 ^
+#   help: it has the chains `map`, `filter`, `reject`, `take_while`, `take`, `skip` and `enumerate`; `first`, `count`, `sum`, `any?`, `all?`, `find`, `each` and `fold`; and, keeping every item first, `join`, `max`, `min`, `max_by`, `min_by`, `sort`, `sort_by`, `last` and `reverse`; for the rest, keep its items with `.to_list`
+# EXPECTED EXIT: 1
+
+async def nums -> Iterator[Int]:
+  yield 2
+  yield 2
+
+async def main:
+  puts nums().map { |n| n.to_s }.uniq

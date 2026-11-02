@@ -39,9 +39,9 @@ a release says so; from then on the promise above covers it.
 | Tests: `test` blocks, `assert`, `lume test` and its name filter, `async test` (settled in 0.7) | [Tests](reference/testing.md), lunch 12 |
 | Packages: `lume.toml`, dependencies by path and git, `lume.lock` | [Packages](reference/packages.md) |
 | The `json` package | [JSON](reference/json.md) |
-| The `http` package — settled in 0.8. A `Request` and an `Opened` may gain fields, so build a request with `http.request` and its steps, not by naming its fields, and do not depend on how one prints; `Opened.body_id`, the number a body not yet read is kept under, is Lume's own | [HTTP](reference/http.md), lunch 19 |
+| The `http` package — settled in 0.8. A `Request` and an `Opened` may gain fields: read them freely, but build a request with `http.request` and its steps rather than by naming every field, and do not depend on how one prints; `Opened.body_id`, the number a body not yet read is kept under, is Lume's own | [HTTP](reference/http.md), lunch 19 |
 | The commands: `lume run`, `build`, `check`, `test`, `fmt`, `new`, `clean`, `update` | [Install](install.md#the-commands) |
-| Rust crates: `import rust.<crate>`, `[rust]` in `lume.toml`, how a crate's types are read, builders — settled in 0.8 | [Rust crates](reference/crates.md) |
+| Rust crates: `import rust.<crate>`, `[rust]` in `lume.toml`, how a crate's types are read, builders, `lume crate` — settled in 0.8 | [Rust crates](reference/crates.md) |
 | For editors and tools: the fields of `lume check --json`, and the protocol `lume lsp` speaks — settled in 0.8; what a hover or a completion says is not, as no message's words are | [Install](install.md#editors) |
 
 ## Previews

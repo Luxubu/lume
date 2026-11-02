@@ -1,0 +1,51 @@
+# a06_async_laps — an async generator of lap times, and the methods that
+# keep every item before they answer: `join`, `max`, `min`, `max_by`,
+# `min_by` (the first on a tie), `sort`, `sort_by` (stable), `last` and
+# `reverse`; `min` of nothing; a chain over lines with a comment and a blank
+# line between its steps; and each runner's best lap worked out in a task.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 61 58 64 58
+# Some(64) Some(58)
+# None
+# Some((1, 58)) Some((2, 64))
+# [58, 58, 61, 64]
+# [(1, 58), (3, 58), (0, 61), (2, 64)]
+# Some(58)
+# [58, 64, 58, 61]
+# [65, 66, 69]
+# ann: 58
+# bo: 60
+# cy: 65
+
+async def laps(times: [Int]) -> Iterator[Int]:
+  for t in times:
+    await Time.sleep(1)
+    yield t
+
+async def best(times: [Int]) -> Int = laps(times).min.or(0)
+
+async def main:
+  ann = [61, 58, 64, 58]
+  puts laps(ann).join(" ")
+  puts "#{laps(ann).max} #{laps(ann).min}"
+  puts laps([]).min
+  puts "#{laps(ann).enumerate.min_by { |p| p.1 }} #{laps(ann).enumerate.max_by { |p| p.1 }}"
+  puts laps(ann).sort
+  puts laps(ann).enumerate.sort_by { |p| p.1 }
+  puts laps(ann).last
+  puts laps(ann).reverse
+
+  counted = laps([70, 66, 69, 65])
+    # the warm-up lap does not count
+    .skip(1)
+
+    # quickest first
+    .sort
+  puts counted
+
+  runners = [("ann", ann), ("bo", [62, 60]), ("cy", [70, 65])]
+  tasks = runners.map { |r| spawn: await best(r.1) }.to_list
+  bests = await tasks
+  for r, b in runners.zip(bests):
+    puts "#{r.0}: #{b}"

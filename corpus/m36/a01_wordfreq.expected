@@ -1,26 +1,26 @@
 warning: block parameter `n` is never used
-  --> corpus/m36/a01_wordfreq.lume:49:35
+  --> corpus/m36/a01_wordfreq.lume:49:41
    |
 49 |   ranked = counts.to_list.sort_by { |w, n| w }.sort_by { |w, n| 0 - n }
-   |                                   ^
+   |                                         ^
   help: name it `_n`, or `_` alone
 warning: block parameter `w` is never used
-  --> corpus/m36/a01_wordfreq.lume:49:56
+  --> corpus/m36/a01_wordfreq.lume:49:59
    |
 49 |   ranked = counts.to_list.sort_by { |w, n| w }.sort_by { |w, n| 0 - n }
-   |                                                        ^
+   |                                                           ^
   help: name it `_w`, or `_` alone
 warning: block parameter `w` is never used
-  --> corpus/m36/a01_wordfreq.lume:55:32
+  --> corpus/m36/a01_wordfreq.lume:55:35
    |
 55 |   once = counts.to_list.filter { |w, n| n == 1 }.map { |w, n| w }
-   |                                ^
+   |                                   ^
   help: name it `_w`, or `_` alone
 warning: block parameter `n` is never used
-  --> corpus/m36/a01_wordfreq.lume:55:54
+  --> corpus/m36/a01_wordfreq.lume:55:60
    |
 55 |   once = counts.to_list.filter { |w, n| n == 1 }.map { |w, n| w }
-   |                                                      ^
+   |                                                            ^
   help: name it `_n`, or `_` alone
 19 words, 10 distinct
 

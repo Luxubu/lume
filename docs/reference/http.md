@@ -51,6 +51,9 @@ new one, as Rust's `reqwest::RequestBuilder` does:
 | `.header(name, value)` | one more header |
 | `.with_body(text, content_type)` | a body, with its `Content-Type` |
 | `.with_file(path, content_type)` | a file as the body, read as it is sent, never held whole; its length goes first, as `Content-Length` |
+
+A body step sets the request's `Content-Type`, taking the place of one an
+earlier step gave; a later body step takes the place of an earlier body.
 | `.timeout(ms)` | how long to wait for an answer, in milliseconds |
 
 and then one of:
@@ -106,7 +109,9 @@ async def main -> () or Error:
 
 **`.with_file(path, content_type)` sends a file as it is read**, so a
 large one is never held whole; a file that is not there is an `Error`,
-``cannot read `/no/such/file`: No such file or directory (os error 2)``.
+named with its method and URL, as every request's `Error` is: ``PUT
+http://example.com/up: cannot read `/no/such/file`: No such file or
+directory (os error 2)``.
 **`req.send_parts(parts)` sends a body made of a sequence's parts**, each
 as the sequence makes it — a generator's, say — in chunks, as HTTP/1.1
 sends a body whose length is not known yet, the way Rust's `reqwest` sends

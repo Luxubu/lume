@@ -1,20 +1,20 @@
 warning: block parameter `title` is never used
-  --> corpus/m73/c04_schedule.lume:88:71
+  --> corpus/m73/c04_schedule.lume:88:77
    |
 88 |   items = agenda(working(days_from(start), off), meetings).take_while { |t, title| t < stop }.to_list
-   |                                                                       ^
+   |                                                                             ^
   help: name it `_title`, or `_` alone
 warning: block parameter `title` is never used
-  --> corpus/m73/c04_schedule.lume:92:27
+  --> corpus/m73/c04_schedule.lume:92:33
    |
 92 |   by_day = items.group_by { |t, title| Time.format(t, "%a") }
-   |                           ^
+   |                                 ^
   help: name it `_title`, or `_` alone
 warning: block parameter `title` is never used
-  --> corpus/m73/c04_schedule.lume:96:19
+  --> corpus/m73/c04_schedule.lume:96:25
    |
 96 |   puts items.any? { |t, title| t == appt }
-   |                   ^
+   |                         ^
   help: name it `_title`, or `_` alone
 Thursday 01 October 2026, day 274
 weekday 4, day of year 274, 14 days in the window

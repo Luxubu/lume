@@ -1,0 +1,59 @@
+# a03_access_log — the `regex` crate for a small real job: pull the fields
+# out of access-log lines with capture groups, count the lines that do not
+# parse, list the slow requests, mask numbers in paths, and reorder a date
+# with `$1`-style groups in `replace_all`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 09:14 GET /menu -> 200
+# 09:14 POST /order/42 -> 201
+# 09:15 GET /menu/tea -> 404
+# 09:16 GET /menu -> 500
+# could not read 1 line
+# slow: /order/42 (148 ms), /menu (1200 ms)
+# errors: 2
+# paths: /menu, /order/#, /menu/tea, /menu
+# 02/11/2026
+# numbers in the log: 33
+
+import rust.regex = "1"
+
+def main -> () or Error:
+  log = [
+    "2026-11-02 09:14:03 GET /menu 200 12ms",
+    "2026-11-02 09:14:05 POST /order/42 201 148ms",
+    "2026-11-02 09:15:40 GET /menu/tea 404 3ms",
+    "garbage line",
+    "2026-11-02 09:16:00 GET /menu 500 1200ms",
+  ]
+  line_re = regex.Regex.new(r"^\d{4}-\d{2}-\d{2} (\d{2}:\d{2}):\d{2} ([A-Z]+) (\S+) (\d{3}) (\d+)ms$")?
+  digits = regex.Regex.new(r"\d+")?
+
+  var slow: [Str] = []
+  var unread = 0
+  var errors = 0
+  var paths: [Str] = []
+  for line in log:
+    match line_re.captures(line):
+      Some(c) ->
+        clock = c.get(1).map { |m| m.as_str }.or("?")
+        method = c.get(2).map { |m| m.as_str }.or("?")
+        path = c.get(3).map { |m| m.as_str }.or("?")
+        status = c.get(4).map { |m| m.as_str }.or("0").to_int.or(0)
+        ms = c.get(5).map { |m| m.as_str }.or("0").to_int.or(0)
+        puts "#{clock} #{method} #{path} -> #{status}"
+        if ms > 100:
+          slow.push("#{path} (#{ms} ms)")
+        if status >= 400:
+          errors += 1
+        paths.push(digits.replace_all(path, "#"))
+      None -> unread += 1
+
+  puts "could not read #{unread} line"
+  puts "slow: #{slow.join(", ")}"
+  puts "errors: #{errors}"
+  puts "paths: #{paths.join(", ")}"
+
+  date = regex.Regex.new(r"(\d{4})-(\d{2})-(\d{2})")?
+  puts date.replace_all("2026-11-02", "$3/$2/$1")
+  whole = log.join("\n")
+  puts "numbers in the log: #{digits.find_iter(whole).len}"

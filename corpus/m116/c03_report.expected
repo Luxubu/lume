@@ -1,0 +1,21 @@
+north sold: tea, pie, cake, scone
+north takings: 250+400+400+180 = 1230
+dearest in the north: pie, cheapest: scone
+Some(Sale(store: "east", item: "soup", cents: 520))
+south, dearest first: soup 520; pie 400; tea 250; bun 250
+["bun", "pie", "soup", "tea"]
+south cents run from 250 to 520
+north backwards: ["scone", "cake", "pie", "tea"]
+top two in the south: ["soup", "pie"]
+1. south 1420
+2. north 1230
+3. east 1040
+by item: soup 1560, pie 800, tea 500
+best Some(("soup", 1560)), worst Some(("scone", 180))
+soups sold: 3
+first: Some(Sale(store: "north", item: "tea", cents: 250))
+last: Some(Sale(store: "east", item: "soup", cents: 520))
+least by name: Some("bun")
+who sold: nnnnssssee
+dear ones: north/cake north/pie south/pie south/soup east/soup east/soup
+exit: 0

@@ -1,0 +1,119 @@
+# c03_report — an async report generator: each store's till is an async
+# generator whose sales arrive one at a time, and the report ranks and
+# sums them with the methods of an async sequence that keep every item —
+# `join`, `max_by`, `min_by`, `sort_by`, `sort`, `max`, `min`, `last`,
+# `reverse` — next to those that do not (`fold`, `count`, `first`,
+# `each`), a chain (`map`, `filter`) before them, an async sequence handed
+# to an `async def`, and one walked in each of three tasks. Ties check that
+# `max_by` and `min_by` give the first and `sort_by` is stable, as a
+# list's do. Nothing is printed from inside a generator, so the output
+# does not depend on timing.
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# north sold: tea, pie, cake, scone
+# north takings: 250+400+400+180 = 1230
+# dearest in the north: pie, cheapest: scone
+# Some(Sale(store: "east", item: "soup", cents: 520))
+# south, dearest first: soup 520; pie 400; tea 250; bun 250
+# ["bun", "pie", "soup", "tea"]
+# south cents run from 250 to 520
+# north backwards: ["scone", "cake", "pie", "tea"]
+# top two in the south: ["soup", "pie"]
+# 1. south 1420
+# 2. north 1230
+# 3. east 1040
+# by item: soup 1560, pie 800, tea 500
+# best Some(("soup", 1560)), worst Some(("scone", 180))
+# soups sold: 3
+# first: Some(Sale(store: "north", item: "tea", cents: 250))
+# last: Some(Sale(store: "east", item: "soup", cents: 520))
+# least by name: Some("bun")
+# who sold: nnnnssssee
+# dear ones: north/cake north/pie south/pie south/soup east/soup east/soup
+
+struct Sale:
+  store: Str
+  item: Str
+  cents: Int
+
+NORTH = ["tea 250", "pie 400", "cake 400", "scone 180"]
+SOUTH = ["pie 400", "soup 520", "tea 250", "bun 250"]
+EAST = ["soup 520", "soup 520"]
+
+# a till's sales, each arriving a little after the one before
+async def till(store: Str, lines: [Str]) -> Iterator[Sale]:
+  for line in lines:
+    await Time.sleep(2)
+    parts = line.split(" ")
+    yield Sale(store: store, item: parts.at(0), cents: parts.at(1).to_int.or(0))
+
+# every store's sales, one store after another
+async def all_sales(stores: [(Str, [Str])]) -> Iterator[Sale]:
+  for name, lines in stores:
+    for s in till(name, lines):
+      yield s
+
+async def total(sales: async Iterator[Sale]) -> Int = sales.fold(0) { |acc, s| acc + s.cents }
+
+async def top(sales: async Iterator[Sale], n: Int) -> [Str]:
+  sales.sort_by { |s| 0 - s.cents }.take(n).map { |s| s.item }.to_list
+
+async def main:
+  stores = [("north", NORTH), ("south", SOUTH), ("east", EAST)]
+
+  sold = till("north", NORTH).map { |s| s.item }.join(", ")
+  puts "north sold: #{sold}"
+  sum = till("north", NORTH).map { |s| s.cents }.join("+")
+  north = await total(till("north", NORTH))
+  puts "north takings: #{sum} = #{north}"
+
+  # pie and cake tie at 400: the first is the answer, as for a list
+  dear = till("north", NORTH).max_by { |s| s.cents }.map { |s| s.item }.or("none")
+  cheap = till("north", NORTH).min_by { |s| s.cents }.map { |s| s.item }.or("none")
+  puts "dearest in the north: #{dear}, cheapest: #{cheap}"
+  puts till("east", EAST).max_by { |s| s.cents }
+
+  # tea and bun tie at 250: a stable sort keeps them as they came
+  ranked_south = till("south", SOUTH)
+    .sort_by { |s| 0 - s.cents }
+    .map { |s| "#{s.item} #{s.cents}" }
+    .join("; ")
+  puts "south, dearest first: #{ranked_south}"
+  puts till("south", SOUTH).map { |s| s.item }.sort
+  most = till("south", SOUTH).map { |s| s.cents }.max.or(0)
+  least = till("south", SOUTH).map { |s| s.cents }.min.or(0)
+  puts "south cents run from #{least} to #{most}"
+  backwards = till("north", NORTH).map { |s| s.item }.reverse
+  puts "north backwards: #{backwards}"
+  best_two = await top(till("south", SOUTH), 2)
+  puts "top two in the south: #{best_two}"
+
+  # one task per store; the results come back in the order they started
+  totals = await stores.map { |name, lines| spawn: await total(till(name, lines)) }.to_list
+  ranking = stores
+    .map { |name, _| name }
+    .zip(totals)
+    .sort_by { |_, t| 0 - t }
+  for place, pair in ranking.enumerate:
+    puts "#{place + 1}. #{pair.0} #{pair.1}"
+
+  var revenue: {Str: Int} = {}
+  all_sales(stores).each do |s|
+    revenue[s.item] = revenue[s.item].or(0) + s.cents
+  by_item = revenue.sort_by { |_, v| 0 - v }.take(3).map { |k, v| "#{k} #{v}" }.join(", ")
+  puts "by item: #{by_item}"
+  puts "best #{revenue.max_by { |_, v| v }}, worst #{revenue.min_by { |_, v| v }}"
+
+  puts "soups sold: #{all_sales(stores).count { |s| s.item == "soup" }}"
+  puts "first: #{all_sales(stores).first}"
+  puts "last: #{all_sales(stores).last}"
+  puts "least by name: #{all_sales(stores).map { |s| s.item }.min}"
+  who = all_sales(stores).map { |s| s.store.slice(0, 1) }.join("")
+  puts "who sold: #{who}"
+  dear_ones = all_sales(stores)
+    .filter { |s| s.cents >= 400 }
+    .sort_by { |s| s.item }
+    .map { |s| "#{s.store}/#{s.item}" }
+    .join(" ")
+  puts "dear ones: #{dear_ones}"

@@ -98,6 +98,7 @@ def main -> () or Error:
 |---|---|
 | `.header(name, value)` | a header to send |
 | `.with_body(text, content_type)` | a body, and what kind of text it is |
+| `.with_file(path, content_type)` | a file as the body, sent as it is read |
 | `.timeout(ms)` | how long to wait for an answer, in milliseconds |
 
 Without `.timeout`, a request waits up to 30 seconds. A server slower than

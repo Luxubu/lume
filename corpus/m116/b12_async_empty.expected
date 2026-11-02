@@ -1,0 +1,17 @@
+join: []
+max: None
+min: None
+max_by: None
+min_by: None
+sort: []
+sort_by: []
+last: None
+reverse: []
+filter then max: None
+take(0) then join: []
+skip(9) then sort: []
+take_while then last: None
+map then reverse: []
+enumerate then max_by: None
+count 0, sum 0
+exit: 0

@@ -1,0 +1,14 @@
+warning: `!` stops the program if the value is missing or an error
+  --> corpus/m116/b09_json_warnings_only.lume:30:17
+   |
+30 |   n = "7".to_int!
+   |                 ^
+  help: fine in tests and quick scripts; elsewhere use `match`, `?` or `.or(default)`
+warning: `spare` is given a value but never used
+  --> corpus/m116/b09_json_warnings_only.lume:31:3
+   |
+31 |   spare = n * 2
+   |   ^
+  help: use it, or name it `_spare` to say it is not meant to be
+7
+exit: 0

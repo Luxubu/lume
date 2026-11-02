@@ -1,0 +1,7 @@
+error: crate `hex` has no `dump`
+  --> corpus/m116/a09_hex_dump.lume:19:15
+   |
+19 |   dumped = hex.dump(token)
+   |               ^
+  help: `lume crate <file> hex` lists what the crate offers
+exit: 1

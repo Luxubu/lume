@@ -1,0 +1,7 @@
+error: an `async Iterator[Str]` has no `uniq` yet
+  --> corpus/m116/b14_async_no_uniq.lume:21:33
+   |
+21 |   puts nums().map { |n| n.to_s }.uniq
+   |                                 ^
+  help: it has the chains `map`, `filter`, `reject`, `take_while`, `take`, `skip` and `enumerate`; `first`, `count`, `sum`, `any?`, `all?`, `find`, `each` and `fold`; and, keeping every item first, `join`, `max`, `min`, `max_by`, `min_by`, `sort`, `sort_by`, `last` and `reverse`; for the rest, keep its items with `.to_list`
+exit: 1

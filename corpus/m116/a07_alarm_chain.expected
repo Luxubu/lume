@@ -1,0 +1,7 @@
+error: the block of `filter` runs as items arrive, after this line, so it cannot use `self` or its fields
+  --> corpus/m116/a07_alarm_chain.lume:25:15
+   |
+25 |       .filter { |r| r > limit }
+   |               ^
+  help: bind what it needs to a name before the chain, and use that
+exit: 1

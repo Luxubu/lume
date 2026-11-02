@@ -56,5 +56,6 @@ if ! python3 -c "import socket,sys; s=socket.create_connection(('127.0.0.1', int
   echo "skipped: no local connection allowed here"
   kill $pid 2>/dev/null; wait $pid 2>/dev/null; rm -rf "$tmp"; exit 0
 fi
-(cd examples/http_demo && "$LUME" run -- "http://127.0.0.1:$port" 2>&1 | grep -v "^warning\|^ *|\|^  -->\|^  help"; echo "exit: ${PIPESTATUS[0]}")
+# (the port changes from run to run: it is shown as PORT)
+(cd examples/http_demo && "$LUME" run -- "http://127.0.0.1:$port" 2>&1 | grep -v "^warning\|^ *|\|^  -->\|^  help" | sed "s/127.0.0.1:$port/127.0.0.1:PORT/g"; echo "exit: ${PIPESTATUS[0]}")
 kill $pid 2>/dev/null; wait $pid 2>/dev/null; rm -rf "$tmp" examples/http_demo/.lume

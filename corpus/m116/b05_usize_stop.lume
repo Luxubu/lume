@@ -1,0 +1,35 @@
+# b05 — Rust crates: an `Int` that crosses to a crate's `usize` is checked.
+# `Captures::get(usize)` and `Regex::splitn(_, usize)` with values that
+# fit, an index past the groups (`None`, the crate's answer), then a -1
+# that does not fit, which stops the program on the line of the call.
+# Run with `lume run corpus/m116/b05_usize_stop.lume`.
+# Meant to STOP.
+# EXPECTED OUTPUT:
+# ["a ", " b 2027-01 c"]
+# ["a 2026-11 b 2027-01 c"]
+# 3
+# Some("11")
+# None
+# EXPECTED STDERR:
+# error: -1 does not fit in the Rust `usize` the crate asks for
+#   --> corpus/m116/b05_usize_stop.lume:33
+#    |
+# 33 |       puts c.get(picks.at(2)).map { |m| m.as_str }
+# EXPECTED EXIT: 101
+
+import rust.regex = "1"
+
+def main -> () or Error:
+  date = regex.Regex.new("(\\d{4})-(\\d{2})")?
+  text = "a 2026-11 b 2027-01 c"
+  puts date.splitn(text, 2).to_list
+  puts date.splitn(text, 1).to_list
+  picks = [2, 7, 0 - 1]
+  match date.captures(text):
+    Some(c) ->
+      puts c.len
+      puts c.get(picks.at(0)).map { |m| m.as_str }
+      puts c.get(picks.at(1)).map { |m| m.as_str }
+      puts c.get(picks.at(2)).map { |m| m.as_str }
+    None -> puts "no date"
+  ()

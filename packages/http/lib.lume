@@ -7,6 +7,8 @@
 #   http.send("PUT", url, [("X-Key", k)], body)?
 #
 #   req = http.request("GET", url).header("Accept", "text/plain").timeout(5000)
+#   up = http.request("PUT", url).with_file("big.csv", "text/csv").send?
+#   made = http.request("POST", url).send_parts(rows())?    # a generator's parts
 #   resp = req.send?                          # the whole body, waited for
 #   resp = await req.fetch?                   # the same, as other tasks go on
 #   opened = req.open?                        # status and headers now ...
@@ -53,10 +55,14 @@ pub struct Request:
   def header(name: Str, value: Str) -> Request = Request(method: method, url: url, headers: headers + [(name, value)], body: body, timeout_ms: timeout_ms, body_file: body_file)
 
   # a body, and what it is
-  def with_body(text: Str, content_type: Str) -> Request = Request(method: method, url: url, headers: headers + [("Content-Type", content_type)], body: text, timeout_ms: timeout_ms, body_file: "")
+  # (a body's `Content-Type` takes the place of one an earlier body gave)
+  def with_body(text: Str, content_type: Str) -> Request = Request(method: method, url: url, headers: typed(content_type), body: text, timeout_ms: timeout_ms, body_file: "")
 
   # a file as the body, read as it is sent rather than held whole
-  def with_file(path: Str, content_type: Str) -> Request = Request(method: method, url: url, headers: headers + [("Content-Type", content_type)], body: "", timeout_ms: timeout_ms, body_file: path)
+  def with_file(path: Str, content_type: Str) -> Request = Request(method: method, url: url, headers: typed(content_type), body: "", timeout_ms: timeout_ms, body_file: path)
+
+  # the headers, with `Content-Type` said once, as `content_type`
+  def typed(content_type: Str) -> [(Str, Str)] = headers.reject { |h| h.0.downcase == "content-type" }.to_list + [("Content-Type", content_type)]
 
   def timeout(ms: Int) -> Request = Request(method: method, url: url, headers: headers, body: body, timeout_ms: ms, body_file: body_file)
 
@@ -152,7 +158,7 @@ pub struct Request:
                     let len = file.metadata().map(|md| md.len()).unwrap_or(0);
                     req.set("Content-Length", &len.to_string()).send(file)
                 }
-                Err(e) => return Err(Error { message: format!("cannot read `{}`: {}", f, lume_io(&e)) }),
+                Err(e) => return Err(Error { message: format!("{} {}: cannot read `{}`: {}", m, u, f, lume_io(&e)) }),
             }
         } else if b.is_empty() { req.call() } else { req.send_string(&b) };
         match got {

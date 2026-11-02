@@ -1,0 +1,15 @@
+warning: `!` stops the program if the value is missing or an error
+  --> corpus/m116/a08_check_json.lume:37:31
+   |
+37 |   back = urlencoding.decode(q)!
+   |                               ^
+  help: fine in tests and quick scripts; elsewhere use `match`, `?` or `.or(default)`
+warning: `!` stops the program if the value is missing or an error
+  --> corpus/m116/a08_check_json.lume:38:49
+   |
+38 |   drink = urlencoding.decode("café%20au%20lait")!
+   |                                                 ^
+  help: fine in tests and quick scripts; elsewhere use `match`, `?` or `.or(default)`
+https://example.com/search?q=fish%20%26%20chips%20caf%C3%A9
+29
+exit: 0

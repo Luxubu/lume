@@ -1,0 +1,56 @@
+# a01_requests — build `http` requests a step at a time and look at them
+# with no network: each step gives a new request and leaves the old one as
+# it was. A `Response` made by hand. Then every request is sent to port 9,
+# where nothing listens, and to a URL that does not parse: each is an
+# `Error` whose message starts with the method and the URL.
+# A package: run with `lume run corpus/m116/a01_requests/main.lume`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# [("Accept", "application/json")]
+# [("Accept", "application/json"), ("X-Trace", "a01")]
+# 30000 250
+# POST
+# name=tea&cups=2
+# Content-Type
+# 404 ok? false text/plain
+# not JSON: true
+# GET http://127.0.0.1:9/api/items: an Error that names it: true
+# GET http://127.0.0.1:9/api/items: an Error that names it: true
+# POST http://127.0.0.1:9/api/items: an Error that names it: true
+# not a url: true
+# DELETE with a header: true
+
+import http
+
+def main:
+  api = "http://127.0.0.1:9/api"
+  base = http.request("GET", "#{api}/items").header("Accept", "application/json")
+  traced = base.header("X-Trace", "a01").timeout(250)
+  posted = http.request("POST", "#{api}/items").with_body("name=tea&cups=2", "application/x-www-form-urlencoded")
+
+  # looking at what was built
+  puts base.headers
+  puts traced.headers
+  puts "#{base.timeout_ms} #{traced.timeout_ms}"
+  puts posted.method
+  puts posted.body
+  puts posted.headers.map { |h| h.0 }.join(", ")
+
+  # a response made by hand, as the package's own test makes one
+  gone = http.Response(status: 404, headers: [("content-type", "text/plain")], body: "gone")
+  puts "#{gone.status} ok? #{gone.ok?} #{gone.header("Content-Type").or("none")}"
+  puts "not JSON: #{gone.json.error?}"
+
+  # nothing listens on port 9
+  for r in [base, traced, posted]:
+    prefix = "#{r.method} #{r.url}"
+    match r.send:
+      Ok(resp) -> puts "#{prefix}: answered #{resp.status}?"
+      Error(e) -> puts "#{prefix}: an Error that names it: #{e.message.starts_with?(prefix)}"
+
+  match http.get("not a url"):
+    Ok(_) -> puts "fetched?"
+    Error(e) -> puts "not a url: #{e.message.starts_with?("GET not a url")}"
+
+  gone_too = http.send("DELETE", "#{api}/items/7", [("X-Key", "k1")], "")
+  puts "DELETE with a header: #{gone_too.error?}"

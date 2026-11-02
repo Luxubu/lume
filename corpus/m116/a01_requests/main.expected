@@ -1,0 +1,14 @@
+[("Accept", "application/json")]
+[("Accept", "application/json"), ("X-Trace", "a01")]
+30000 250
+POST
+name=tea&cups=2
+Content-Type
+404 ok? false text/plain
+not JSON: true
+GET http://127.0.0.1:9/api/items: an Error that names it: true
+GET http://127.0.0.1:9/api/items: an Error that names it: true
+POST http://127.0.0.1:9/api/items: an Error that names it: true
+not a url: true
+DELETE with a header: true
+exit: 0

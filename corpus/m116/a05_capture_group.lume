@@ -1,0 +1,30 @@
+# a05_capture_group — an `Int` handed to a crate is checked: `Captures.get`
+# asks for a Rust `usize`, so a group past the last is only `None`, but a
+# group of -1 ("the last one", as Python counts) does not fit, and stops the
+# program on the line that made the call.
+# Meant to STOP.
+# EXPECTED OUTPUT:
+# group 0: cups=3
+# group 1: cups
+# group 2: 3
+# group 3: -
+# EXPECTED STDERR:
+# error: -1 does not fit in the Rust `usize` the crate asks for
+#   --> corpus/m116/a05_capture_group.lume:22
+#    |
+# 22 |     Some(c) -> c.get(group).map { |m| m.as_str }.or("-")
+# EXPECTED EXIT: 101
+
+import rust.regex = "1"
+
+def field(re: regex.Regex, line: Str, group: Int) -> Str:
+  match re.captures(line):
+    Some(c) -> c.get(group).map { |m| m.as_str }.or("-")
+    None -> "no match"
+
+def main -> () or Error:
+  re = regex.Regex.new(r"(\w+)=(\d+)")?
+  line = "cups=3"
+  for g in 0..3:
+    puts "group #{g}: #{field(re, line, g)}"
+  puts "last group: #{field(re, line, -1)}"

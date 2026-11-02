@@ -1,0 +1,58 @@
+# b04 — Rust crates: a row of the type table each. A crate type in a field
+# (`regex.Regex`), an `Option` (`find`, `T?`), a `Vec<u8>` coming back
+# (`[Int]`, empty too), a `&[u8]` going in (an `[Int]` whose items fit),
+# a `Result` (`T or Error`, the crate's error as the message, and `?`),
+# a `usize` and an `Option<usize>` coming back, `Cow<str>` (`Str`), and a
+# crate iterator as a lazy chain.
+# Run with `lume run corpus/m116/b04_crate_types.lume`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# digits: 2026
+# digits: none
+# [76, 117, 109, 101]
+# []
+# Odd number of digits
+# Invalid character 'z' at position 0
+# Hi
+# %FF%00
+# 3
+# Some(3)
+# None
+# ["a", "b", "c"]
+# 3
+# a%20b
+
+import rust.regex = "1"
+import rust.hex = "0.4"
+import rust.urlencoding = "2"
+
+struct Finder:
+  label: Str
+  re: regex.Regex
+
+  def first(text: Str) -> Str?:
+    m = re.find(text)?
+    m.as_str
+
+def main -> () or Error:
+  f = Finder(label: "digits", re: regex.Regex.new("\\d+")?)
+  puts "#{f.label}: #{f.first("due 2026, or 2027").or("none")}"
+  puts "#{f.label}: #{f.first("no number here").or("none")}"
+  puts hex.decode("4c756d65")?
+  puts hex.decode("")?
+  match hex.decode("abc"):
+    Ok(b) -> puts b
+    Error(e) -> puts e.message
+  match hex.decode("zz"):
+    Ok(b) -> puts b
+    Error(e) -> puts e.message
+  puts urlencoding.encode_binary([72, 105])
+  puts urlencoding.encode_binary([255, 0])
+  date = regex.Regex.new("(\\d{4})-(\\d{2})")?
+  puts date.captures_len
+  puts date.static_captures_len
+  puts regex.Regex.new("(a)|b")?.static_captures_len
+  puts regex.Regex.new("\\d+")?.split("a1b22c").to_list
+  puts regex.Regex.new("\\d+")?.split("a1b22c").map(_.len).sum
+  puts urlencoding.encode("a b")
+  ()

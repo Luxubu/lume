@@ -1,0 +1,7 @@
+wrote 18 bytes
+PUT a file: an Error from the connection: true
+PUT http://127.0.0.1:9/upload: cannot read `/tmp/lume-review-a/not-there.csv`: No such file or directory (os error 2)
+POST the parts: an Error from the connection: true
+PUT parts over a missing file: true, mentions the file: false
+fetched in tasks: [true, true]
+exit: 0

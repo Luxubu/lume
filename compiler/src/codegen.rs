@@ -1802,6 +1802,8 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, module_id: &str
     // names given a value and never read, as Rust's `unused_variables` has them
     let mut warnings = g.warnings;
     warnings.extend(crate::unused::warnings(program, src));
+    // in the order they are written, whatever found them, as rustc gives its own
+    warnings.sort_by_key(|w| (w.line, w.col));
     Ok((Output { rust, warnings, deps: rust_deps, has_rust_blocks: g.has_rust_blocks }, exports))
 }
 
@@ -3164,6 +3166,13 @@ impl Gen {
                 }
             }
             Pass::MutBorrow => self.expr_var_arg(a, &p.name, callee)?,
+            // `[Int]` for a crate's `&[u8]` or `Vec<u8>`: each item checked
+            // as one `Int` is, so 256 for a byte stops the program
+            Pass::IntList(w, borrowed) => {
+                let s = self.expr(a)?;
+                let made = format!("({}).iter().map(|lume_x| lume_int_to::<{}>(*lume_x, \"{}\")).collect::<Vec<{}>>()", s, w, w, w);
+                if *borrowed { format!("&{}", made) } else { made }
+            }
         })
     }
 
@@ -9637,6 +9646,11 @@ impl Gen {
     fn expr_val(&mut self, e: &Expr) -> Result<String> {
         let t = self.ty_of(e);
         if let Type::AsyncGen(_) = t {
+            // a method it does not have says so first: `s.uniq` is no `uniq`,
+            // before it is a sequence that cannot be printed
+            if let ExprKind::Method { .. } = &e.kind {
+                self.expr(e)?;
+            }
             return Err(LumeError::new(e.line, e.col, "the items of an async sequence arrive later, so it is not a value to print or keep as it is")
                 .with_help("walk it with `for` in async code, or keep its items with `.to_list`"));
         }
@@ -12371,6 +12385,17 @@ impl Gen {
                     Some(t) if text_op => t,
                     _ => self.expr_val(rhs)?,
                 };
+                // `xs == []`: the empty side is of the other side's type, said,
+                // as Rust cannot tell which `==` a `Vec<String>` means otherwise
+                if matches!(*op, "==" | "!=") {
+                    let empty = |x: &Expr| matches!(&x.kind, ExprKind::List(i) if i.is_empty()) || matches!(&x.kind, ExprKind::MapLit(p) if p.is_empty());
+                    let rt_known = self.ty_of(rhs).materialized();
+                    if empty(rhs) && type_is_known(&lt) && matches!(lt, Type::List(_) | Type::Map(..) | Type::Set(_)) {
+                        r = format!("<{}>::new()", self.rt(&lt));
+                    } else if empty(lhs) && type_is_known(&rt_known) && matches!(rt_known, Type::List(_) | Type::Map(..) | Type::Set(_)) {
+                        l = format!("<{}>::new()", self.rt(&rt_known));
+                    }
+                }
                 let lb = self.is_borrowed_ident(lhs);
                 let rb = self.is_borrowed_ident(rhs);
                 // strings are formatted, never dereferenced (`&str` has no `*`)

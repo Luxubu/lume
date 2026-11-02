@@ -1,0 +1,64 @@
+# b12 — async sequences: the nine methods that keep every item, on a
+# sequence with no items — straight from an async generator given `[]`, and
+# after chains that let nothing through (`filter`, `take(0)`, `skip` past
+# the end, `take_while` that fails at once). Each gives what an empty list's
+# would: `""`, `None`, `[]`. `count` and `sum` on one, for comparison.
+# Run with `lume run corpus/m116/b12_async_empty.lume`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# join: []
+# max: None
+# min: None
+# max_by: None
+# min_by: None
+# sort: []
+# sort_by: []
+# last: None
+# reverse: []
+# filter then max: None
+# take(0) then join: []
+# skip(9) then sort: []
+# take_while then last: None
+# map then reverse: []
+# enumerate then max_by: None
+# count 0, sum 0
+
+async def items(xs: [Int]) -> Iterator[Int]:
+  for x in xs:
+    await Time.sleep(1)
+    yield x
+
+async def main:
+  r1 = items([]).join(",")
+  puts "join: [#{r1}]"
+  r2 = items([]).max
+  puts "max: #{r2}"
+  r3 = items([]).min
+  puts "min: #{r3}"
+  r4 = items([]).max_by { |n| 0 - n }
+  puts "max_by: #{r4}"
+  r5 = items([]).min_by { |n| 0 - n }
+  puts "min_by: #{r5}"
+  r6 = items([]).sort
+  puts "sort: #{r6}"
+  r7 = items([]).sort_by { |n| 0 - n }
+  puts "sort_by: #{r7}"
+  r8 = items([]).last
+  puts "last: #{r8}"
+  r9 = items([]).reverse
+  puts "reverse: #{r9}"
+  r10 = items([3, 1]).filter { |n| n > 5 }.max
+  puts "filter then max: #{r10}"
+  r11 = items([3, 1]).take(0).join(",")
+  puts "take(0) then join: [#{r11}]"
+  r12 = items([3, 1]).skip(9).sort
+  puts "skip(9) then sort: #{r12}"
+  r13 = items([3, 1]).take_while { |n| n > 5 }.last
+  puts "take_while then last: #{r13}"
+  r14 = items([]).map { |n| n * 2 }.reverse
+  puts "map then reverse: #{r14}"
+  r15 = items([]).enumerate.max_by { |_, n| n }
+  puts "enumerate then max_by: #{r15}"
+  r16 = items([]).count
+  r17 = items([]).sum
+  puts "count #{r16}, sum #{r17}"

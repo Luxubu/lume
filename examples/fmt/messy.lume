@@ -1,5 +1,5 @@
-# A badly spaced program. `lume fmt` has no options: this file's .expected
-# is the one layout every Lume program gets.
+# A badly spaced program. `lume fmt` has no style options: this file's
+# .expected is the one layout every Lume program gets.
 import   users.model   as   m
 struct Point:
     x:Int

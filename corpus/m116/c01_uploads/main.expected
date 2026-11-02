@@ -1,0 +1,25 @@
+wrote prices.csv: 26 bytes
+base [] 30000, careful [("Accept", "text/plain")] 500
+1. GET http://127.0.0.1:9/ping (no body)
+   headers [("X-Upload", "ping")], waits 2000 ms
+2. POST http://127.0.0.1:9/notes (text, 11 characters)
+   headers [("X-Upload", "note"), ("Content-Type", "text/plain")], waits 2000 ms
+3. PUT http://127.0.0.1:9/prices (the file prices.csv)
+   headers [("X-Upload", "prices"), ("Content-Type", "text/csv")], waits 2000 ms
+4. PUT http://127.0.0.1:9/lost (the file gone.csv)
+   headers [("X-Upload", "lost"), ("Content-Type", "text/csv")], waits 2000 ms
+5. POST http://127.0.0.1:9/rows (3 rows, made as they are sent)
+   headers [("X-Upload", "squares"), ("Content-Type", "text/csv")], waits 2000 ms
+squares would send: squares,1,1 | squares,2,4 | squares,3,9
+sent, all at once:
+  ping: no connection
+  note: no connection
+  prices: no connection
+  lost: no connection
+  squares: no connection
+fetch: no connection
+send_parts after with_file: no connection
+open: no connection
+not a url, named in the message: true
+cleaned up: true
+exit: 0

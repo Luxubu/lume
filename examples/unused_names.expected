@@ -23,10 +23,10 @@ warning: `name` is never used in the loop
    |   ^
   help: name it `_name`, or write `for _ in ...` when only the count matters
 warning: block parameter `name` is never used
-  --> examples/unused_names.lume:28:22
+  --> examples/unused_names.lume:28:25
    |
 28 |   puts prices.filter { |name, cents| cents > 300 }
-   |                      ^
+   |                         ^
   help: name it `_name`, or `_` alone
 warning: `i` is never used in the loop
   --> examples/unused_names.lume:30:3

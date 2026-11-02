@@ -1,8 +1,8 @@
 warning: block parameter `sku` is never used
-  --> corpus/m63/c02_shop/main.lume:110:21
+  --> corpus/m63/c02_shop/main.lume:110:24
     |
 110 |   match sold.max_by { |sku, n| n }:
-    |                     ^
+    |                        ^
   help: name it `_sku`, or `_` alone
 Corner Shop: 10 orders, 4 accepted
 refused:

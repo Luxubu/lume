@@ -1,0 +1,61 @@
+# b11 — `lume check --json` with several warnings of different kinds,
+# interleaved: an unused local, a `!`, an unused loop name, an unused block
+# parameter and a second `!`, two of them on one line. The diagnostics come
+# in the order `lume check` prints them, which is taken to be the order of
+# the source, line then column, whatever their kind.
+# Run with `lume check --json corpus/m116/b11_json_order.lume`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# {
+#   "diagnostics": [
+#     {
+#       "col": 3,
+#       "file": "corpus/m116/b11_json_order.lume",
+#       "help": "use it, or name it `_spare` to say it is not meant to be",
+#       "line": 57,
+#       "message": "`spare` is given a value but never used",
+#       "severity": "warning"
+#     },
+#     {
+#       "col": 17,
+#       "file": "corpus/m116/b11_json_order.lume",
+#       "help": "fine in tests and quick scripts; elsewhere use `match`, `?` or `.or(default)`",
+#       "line": 58,
+#       "message": "`!` stops the program if the value is missing or an error",
+#       "severity": "warning"
+#     },
+#     {
+#       "col": 3,
+#       "file": "corpus/m116/b11_json_order.lume",
+#       "help": "name it `_i`, or write `for _ in ...` when only the count matters",
+#       "line": 59,
+#       "message": "`i` is never used in the loop",
+#       "severity": "warning"
+#     },
+#     {
+#       "col": 21,
+#       "file": "corpus/m116/b11_json_order.lume",
+#       "help": "name it `_x`, or `_` alone",
+#       "line": 61,
+#       "message": "block parameter `x` is never used",
+#       "severity": "warning"
+#     },
+#     {
+#       "col": 46,
+#       "file": "corpus/m116/b11_json_order.lume",
+#       "help": "fine in tests and quick scripts; elsewhere use `match`, `?` or `.or(default)`",
+#       "line": 61,
+#       "message": "`!` stops the program if the value is missing or an error",
+#       "severity": "warning"
+#     }
+#   ],
+#   "ok": true
+# }
+# EXPECTED EXIT: 0
+
+def main:
+  spare = 1
+  n = "4".to_int!
+  for i in 1..2:
+    puts n
+  puts [1, 2].count { |x| true } + "5".to_int!

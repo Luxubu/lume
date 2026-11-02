@@ -1,0 +1,49 @@
+# b13 — async sequences: each of the nine methods that keep every item,
+# after a chain, with ties: `max_by` and `min_by` give the first on a tie,
+# `sort_by` keeps tied items in the order they came, `max` and `min` of
+# text, `last` after `take_while`, `reverse` after `reject`, and a chain of
+# four steps before `join`.
+# Run with `lume run corpus/m116/b13_async_after_chain.lume`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 10-6-16-6-2-16
+# Some(8)
+# Some(1)
+# Some((2, 8))
+# Some((4, 1))
+# [3, 3, 5, 8]
+# [2, 2, 2, 1, 0, 0]
+# Some(3)
+# [8, 1, 8, 5]
+# Some("n8") Some("n1")
+# 8,103
+
+async def nums -> Iterator[Int]:
+  for n in [5, 3, 8, 3, 1, 8]:
+    await Time.sleep(1)
+    yield n
+
+async def main:
+  joined = nums().map { |n| n * 2 }.join("-")
+  puts joined
+  big = nums().filter { |n| n > 2 }.max
+  puts big
+  small = nums().skip(1).min
+  puts small
+  most = nums().enumerate.max_by { |_, n| n }
+  puts most
+  least = nums().enumerate.min_by { |_, n| n }
+  puts least
+  sorted = nums().take(4).sort
+  puts sorted
+  by_rest = nums().map { |n| n % 3 }.sort_by { |r| 0 - r }
+  puts by_rest
+  until_one = nums().take_while { |n| n != 1 }.last
+  puts until_one
+  backwards = nums().reject { |n| n == 3 }.reverse
+  puts backwards
+  top = nums().map { |n| "n#{n}" }.max
+  bottom = nums().map { |n| "n#{n}" }.min
+  puts "#{top} #{bottom}"
+  four = nums().skip(2).take(2).enumerate.map { |i, n| i * 100 + n }.join(",")
+  puts four

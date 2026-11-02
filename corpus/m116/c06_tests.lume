@@ -1,0 +1,110 @@
+# c06_tests — a tag linker for a feed of posts, with the tests that cover
+# it: `regex` finds the tags, `hex` makes each a key, `urlencoding` makes
+# each a link, and the posts arrive as an async sequence that is ranked
+# with `sort_by`, `max_by`, `min_by`, `sort`, `reverse`, `last`, `max` and
+# `join`. Two tests fail on purpose: one compares a crate's `[Int]` and
+# shows both sides; one hands -1 to a crate function that takes a `usize`,
+# which stops it, and the line named is inside the helper that called the
+# crate, not the `assert`.
+# Probes: `test` and `async test` over crate calls and async sequences,
+# `!` silent in tests, what a failed and a stopped test print, the count.
+# Meant to RUN. Run with `lume test corpus/m116/c06_tests.lume`; it exits
+# with status 1, as two tests fail.
+#
+# EXPECTED OUTPUT:
+# test the regex finds each tag once ... ok
+# test keys go to hex and back ... ok
+# test a link is url-encoded ... ok
+# test what does not parse is an Error ... ok
+# test the feed, ranked by likes ... ok
+# test the feed's tags, sorted, reversed and last ... ok
+# test fails on purpose: a short word in hex ... FAILED
+#     corpus/m116/c06_tests.lume:105: assert hex.decode(key("ta"))! == [116, 98]
+#       left:  [116, 97]
+#       right: [116, 98]
+# test stops on purpose: capture -1 ... FAILED
+#     corpus/m116/c06_tests.lume:49: stopped: -1 does not fit in the Rust `usize` the crate asks for
+#
+# 8 tests: 6 passed, 2 failed
+
+import rust.regex = "1"
+import rust.hex = "0.4"
+import rust.urlencoding = "2"
+
+POSTS = [
+  (1, "fresh #bread and #tea", 5),
+  (2, "#tea time", 9),
+  (3, "no tags here", 2),
+  (4, "#bread #bread #jam", 9),
+]
+
+struct Post:
+  id: Int
+  text: Str
+  likes: Int
+
+# capture `n` of the first match, if there is one
+def part(re: regex.Regex, text: Str, n: Int) -> Str?:
+  c = re.captures(text)?
+  m = c.get(n)?
+  m.as_str
+
+# each tag of a text once, without its `#`, in the order they come
+def tags(re: regex.Regex, text: Str) -> [Str] =
+  re.find_iter(text).map { |m| m.as_str.slice(1, 50) }.to_list.uniq
+
+def key(tag: Str) -> Str = hex.encode(tag)
+
+def link(tag: Str) -> Str = "/tags/" + urlencoding.encode("##{tag}")
+
+# the posts, one at a time, as a server would send them
+async def feed(posts: [(Int, Str, Int)]) -> Iterator[Post]:
+  for id, text, likes in posts:
+    await Time.sleep(1)
+    yield Post(id: id, text: text, likes: likes)
+
+async def main -> () or Error:
+  re = regex.Regex.new(r"#[a-z]+")?
+  for p in feed(POSTS):
+    puts "#{p.id}: #{tags(re, p.text).map(link).join(" ")}"
+
+test "the regex finds each tag once":
+  re = regex.Regex.new(r"#[a-z]+")!
+  assert tags(re, "fresh #bread and #tea") == ["bread", "tea"]
+  assert tags(re, "#bread #bread #jam") == ["bread", "jam"]
+  assert tags(re, "no tags here") == []
+
+test "keys go to hex and back":
+  assert key("tea") == "746561"
+  assert hex.decode(key("jam"))! == [106, 97, 109]
+
+test "a link is url-encoded":
+  assert link("tea") == "/tags/%23tea"
+  assert urlencoding.decode("%23tea")! == "#tea"
+
+test "what does not parse is an Error":
+  assert regex.Regex.new("(").error?
+  assert hex.decode("abc").error?
+
+async test "the feed, ranked by likes":
+  ranked = feed(POSTS).sort_by { |p| 0 - p.likes }.map { |p| p.id }.to_list
+  assert ranked == [2, 4, 1, 3]
+  assert feed(POSTS).max_by { |p| p.likes }.map { |p| p.id } == Some(2)
+  assert feed(POSTS).min_by { |p| p.likes }.map { |p| p.id } == Some(3)
+
+async test "the feed's tags, sorted, reversed and last":
+  re = regex.Regex.new(r"#[a-z]+")!
+  all = feed(POSTS).map { |p| p.text }.join(" ")
+  assert tags(re, all) == ["bread", "tea", "jam"]
+  assert feed(POSTS).map { |p| p.likes }.sort == [2, 5, 9, 9]
+  assert feed(POSTS).map { |p| p.id }.reverse == [4, 3, 2, 1]
+  assert feed(POSTS).last.map { |p| p.text } == Some("#bread #bread #jam")
+  assert feed(POSTS).map { |p| p.likes }.max == Some(9)
+
+test "fails on purpose: a short word in hex":
+  assert hex.decode(key("ta"))! == [116, 98]
+
+test "stops on purpose: capture -1":
+  re = regex.Regex.new(r"(\d+)-(\d+)")!
+  assert part(re, "10-20", 2) == Some("20")
+  assert part(re, "10-20", 0 - 1) == None

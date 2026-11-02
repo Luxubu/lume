@@ -1,0 +1,46 @@
+# a04_query_and_hex — the `urlencoding` and `hex` crates for small real
+# jobs: build a query string from pairs and read it back, see bad UTF-8
+# refused, turn a colour into its bytes, and bytes back into text. A crate's
+# error is a Lume `Error` whose message is the crate's own.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# q=fish%20%26%20chips&max%20price=%C2%A35&tag=tea%2Fgreen
+# q = fish & chips
+# max price = £5
+# tag = tea/green
+# bad UTF-8 refused: true
+# rgb(42, 127, 255)
+# 4C756D65
+# Lume
+# abc: Odd number of digits
+
+import rust.hex = "0.4"
+import rust.urlencoding = "2"
+
+def query(pairs: [(Str, Str)]) -> Str = pairs.map { |k, v| "#{urlencoding.encode(k)}=#{urlencoding.encode(v)}" }.join("&")
+
+def parse(q: Str) -> [(Str, Str)] or Error:
+  var out: [(Str, Str)] = []
+  for part in q.split("&"):
+    kv = part.split("=")
+    k = urlencoding.decode(kv.at(0))?
+    v = urlencoding.decode(kv.at(1))?
+    out.push((k, v))
+  out
+
+def main -> () or Error:
+  q = query([("q", "fish & chips"), ("max price", "£5"), ("tag", "tea/green")])
+  puts q
+  for k, v in parse(q)?:
+    puts "#{k} = #{v}"
+  puts "bad UTF-8 refused: #{urlencoding.decode("%FF").error?}"
+
+  # a colour, as bytes
+  rgb = hex.decode("2a7fff")?
+  puts "rgb(#{rgb.join(", ")})"
+  puts hex.encode_upper("Lume")
+  word = hex.decode("4c756d65")?.map { |b| b.to_char.or("?") }.join("")
+  puts word
+  match hex.decode("abc"):
+    Ok(bytes) -> puts bytes
+    Error(e) -> puts "abc: #{e.message}"

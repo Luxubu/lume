@@ -1,0 +1,124 @@
+# c05_stock — a stocktake tool whose own mistakes are predicted as `lume
+# check --json` gives them to an editor or a tool. It compiles, so `ok` is
+# true, and every diagnostic is a warning, of seven kinds: a parameter never
+# used, a `shared var`, a local never used, `!` on a crate's result, a loop
+# variable never used, a block parameter never used, and a name a pattern
+# binds and never uses. The `!` sits after a pattern holding an en dash and
+# an em dash, three bytes each in UTF-8, so its column says whether it
+# counts characters, as install.md promises, or bytes.
+# Probes: the fields install.md settles (`ok`, `diagnostics`, `severity`,
+# `file`, `line`, `col`, `message`, `help`), their order on the page, the
+# order of the diagnostics, and the columns.
+# Meant to RUN. Run with `lume check --json corpus/m116/c05_stock.lume`;
+# its exit status is 0, as warnings alone leave `ok` true.
+#
+# EXPECTED OUTPUT:
+# {
+#   "diagnostics": [
+#     {
+#       "col": 22,
+#       "file": "corpus/m116/c05_stock.lume",
+#       "help": "name it `_width` if it is there only to fit a signature, as an interface's method may be",
+#       "line": 99,
+#       "message": "parameter `width` is never used",
+#       "severity": "warning"
+#     },
+#     {
+#       "col": 3,
+#       "file": "corpus/m116/c05_stock.lume",
+#       "help": "fine for a store or a counter; keep the work done while it is locked short",
+#       "line": 102,
+#       "message": "`sold` is `shared var`: every use of it takes a lock, so tasks change it one at a time",
+#       "severity": "warning"
+#     },
+#     {
+#       "col": 3,
+#       "file": "corpus/m116/c05_stock.lume",
+#       "help": "use it, or name it `_tax` to say it is not meant to be",
+#       "line": 107,
+#       "message": "`tax` is given a value but never used",
+#       "severity": "warning"
+#     },
+#     {
+#       "col": 33,
+#       "file": "corpus/m116/c05_stock.lume",
+#       "help": "fine in tests and quick scripts; elsewhere use `match`, `?` or `.or(default)`",
+#       "line": 109,
+#       "message": "`!` stops the program if the value is missing or an error",
+#       "severity": "warning"
+#     },
+#     {
+#       "col": 3,
+#       "file": "corpus/m116/c05_stock.lume",
+#       "help": "name it `_i`, or write `for _ in ...` when only the count matters",
+#       "line": 112,
+#       "message": "`i` is never used in the loop",
+#       "severity": "warning"
+#     },
+#     {
+#       "col": 23,
+#       "file": "corpus/m116/c05_stock.lume",
+#       "help": "name it `_item`, or `_` alone",
+#       "line": 115,
+#       "message": "block parameter `item` is never used",
+#       "severity": "warning"
+#     },
+#     {
+#       "col": 10,
+#       "file": "corpus/m116/c05_stock.lume",
+#       "help": "write `_` in its place, or name it `_gone`",
+#       "line": 119,
+#       "message": "`gone` is bound by the pattern but never used",
+#       "severity": "warning"
+#     }
+#   ],
+#   "ok": true
+# }
+
+import rust.regex = "1"
+
+SHELF = """
+  tea,250,12
+  pie,400,3
+  scone,180,0
+  """
+
+struct Item:
+  name: Str
+  cents: Int
+  qty: Int
+
+  def worth -> Int = cents * qty
+
+def parse(line: Str) -> Item or Error:
+  parts = line.split(",")
+  if parts.len != 3:
+    return Error("expected name,cents,qty: #{line}")
+  Item(name: parts.at(0), cents: parts.at(1).to_int?, qty: parts.at(2).to_int?)
+
+def label(name: Str, width: Int) -> Str = name.upcase
+
+def main -> () or Error:
+  shared var sold = 0
+  var items: [Item] = []
+  for line in SHELF.lines:
+    items.push(parse(line)?)
+  # meant for the totals, and forgotten
+  tax = 20
+  # an en dash or an em dash, as a spreadsheet writes them
+  dash = regex.Regex.new("[–—]")!
+  puts dash.replace_all("tea—pie–scone", ", ")
+  # counted twice, for luck
+  for i in 1..2:
+    puts "counting"
+  # nothing passes, on purpose
+  none = items.filter { |item| false }.to_list
+  puts none.len
+  # something that has run out
+  match items.find { |it| it.qty == 0 }:
+    Some(gone) -> puts "something has run out"
+    None -> puts "all in stock"
+  for it in items:
+    sold += it.qty
+    puts "#{label(it.name, 8)} #{it.worth}"
+  puts "#{sold} on the shelves"

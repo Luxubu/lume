@@ -1,0 +1,15 @@
+10 requests, 2 bad lines
+  skipped line 11: expected 5 fields, got 3
+  skipped line 12: `fast` is not an integer
+slowest answered: /order 140, /order 120, /menu 41
+  /menu     4 hits, 30 ms on average
+  /order    2 hits, 130 ms on average
+  /order/9  2 hits, 454 ms on average
+  /tables   2 hits, 356 ms on average
+[2, 3, 4, 5]
+worst minute: Some(("09:02", 1))
+3 changes: POST /order; POST /order; DELETE /order/9
+failed: 09:02 /order/9 after 900 ms
+failed: 09:05 /tables after 700 ms
+busiest: /menu
+exit: 0

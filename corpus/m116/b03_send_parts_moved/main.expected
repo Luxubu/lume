@@ -1,0 +1,7 @@
+error: `rows` is a generator, and it is used up here, so it cannot be used after
+  --> corpus/m116/b03_send_parts_moved/main.lume:22:66
+   |
+22 |   r = http.request("POST", "http://127.0.0.1:9/rows").send_parts(rows)
+   |                                                                  ^
+  help: a generator hands out each item once: to walk the items twice, keep them with `.to_list` first
+exit: 1

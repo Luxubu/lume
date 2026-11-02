@@ -1,0 +1,26 @@
+start: PUT http://127.0.0.1:9/up
+  headers []
+  body "" file "" timeout 30000
+file then body: PUT http://127.0.0.1:9/up
+  headers [("Content-Type", "text/plain")]
+  body "x=1" file "" timeout 30000
+body then file: PUT http://127.0.0.1:9/up
+  headers [("Content-Type", "text/csv")]
+  body "" file "/tmp/lume-review-b/data.csv" timeout 30000
+two bodies: PUT http://127.0.0.1:9/up
+  headers [("Content-Type", "application/json")]
+  body "{}" file "" timeout 30000
+timeout first: PUT http://127.0.0.1:9/up
+  headers [("X-A", "1"), ("Content-Type", "text/plain"), ("X-B", "2")]
+  body "hi" file "" timeout 250
+timeout last: PUT http://127.0.0.1:9/up
+  headers [("X-B", "2"), ("Content-Type", "text/plain"), ("X-A", "1")]
+  body "hi" file "" timeout 250
+negative: PUT http://127.0.0.1:9/up
+  headers [("Content-Type", "text/csv")]
+  body "" file "/tmp/lume-review-b/data.csv" timeout -5
+start again: PUT http://127.0.0.1:9/up
+  headers []
+  body "" file "" timeout 30000
+same twice: true
+exit: 0

@@ -1,14 +1,14 @@
 warning: block parameter `name` is never used
-  --> corpus/m63/a08_durations.lume:36:21
+  --> corpus/m63/a08_durations.lume:36:24
    |
 36 |   total = TASKS.map { |name, secs| secs }.sum
-   |                     ^
+   |                        ^
   help: name it `_name`, or `_` alone
 warning: block parameter `name` is never used
-  --> corpus/m63/a08_durations.lume:38:22
+  --> corpus/m63/a08_durations.lume:38:25
    |
 38 |   match TASKS.max_by { |name, secs| secs }:
-   |                      ^
+   |                         ^
   help: name it `_name`, or `_` alone
 build     2h 05m  02:05:30
 tests    12m 05s  00:12:05

@@ -1,0 +1,8 @@
+%00
+%FF
+Lume
+error: 256 does not fit in the Rust `u8` the crate asks for
+  --> corpus/m116/b06_u8_list_stop.lume:27
+   |
+27 |   puts urlencoding.encode_binary(wide)
+exit: 101

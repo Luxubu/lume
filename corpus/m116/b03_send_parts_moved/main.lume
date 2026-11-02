@@ -1,0 +1,24 @@
+# b03 — http: `send_parts` takes its parts by move, as any `Iterator[T]`
+# parameter does, so a generator handed to it cannot be walked afterwards.
+# Run with `lume check corpus/m116/b03_send_parts_moved/main.lume`.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `rows` is a generator, and it is given away here, so it cannot be used after
+#   --> corpus/m116/b03_send_parts_moved/main.lume:22:66
+#    |
+# 22 |   r = http.request("POST", "http://127.0.0.1:9/rows").send_parts(rows)
+#    |                                                                  ^
+#   help: a generator hands out each item once: to walk the items twice, keep them with `.to_list` first
+# EXPECTED EXIT: 1
+
+import http
+
+def numbered(n: Int) -> Iterator[Str]:
+  for i in 1..n:
+    yield "row #{i}\n"
+
+def main:
+  rows = numbered(3)
+  r = http.request("POST", "http://127.0.0.1:9/rows").send_parts(rows)
+  puts r.error?
+  puts rows.to_list

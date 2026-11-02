@@ -1,0 +1,6 @@
+error: `add` is missing an argument: b
+  --> corpus/m116/b10_json_column.lume:27:26
+   |
+27 |   puts ["é€", "ü"].len + add(1)
+   |                          ^
+exit: 1

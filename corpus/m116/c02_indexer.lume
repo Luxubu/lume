@@ -1,0 +1,115 @@
+# c02_indexer — a text indexer built on three Rust crates: `regex` pulls
+# the words and numbers out of each line, `hex` makes a key of each word
+# and turns one back into bytes, `urlencoding` makes a key of each line's
+# subject and body and decodes them back. Then it reads the fields of a
+# line's head by name, and asks for one it does not know: the -1 that
+# stands for "no such field" crosses to `Captures::get`, which takes a
+# `usize`, and the program stops, as crates.md says an `Int` the crate's
+# type cannot hold does.
+# Probes: crate types in signatures, a crate iterator as a lazy chain,
+# `Option` and `Result` from a crate, `T: AsRef<[u8]>` taking a `Str`,
+# `Vec<u8>` as `[Int]`, `Cow<str>` as `Str`, and the checked `usize`.
+# Meant to STOP.
+#
+# EXPECTED OUTPUT:
+# 3 lines, 8 words, 8 numbers
+# and -> 616e64 @ 1
+# order -> 6f72646572 @ 1,2
+# paid -> 70616964 @ 1,2
+# pies -> 70696573 @ 1,3
+# refund -> 726566756e64 @ 3
+# tea -> 746561 @ 2
+# teas -> 74656173 @ 1
+# toast -> 746f617374 @ 2
+# toast as bytes: [116, 111, 97, 115, 116], and back: toast
+# not hex: true
+# numbers: 1042 3 2 7.50 1043 4.25 1042 2
+# paid in all: 11.75
+# order numbers: 1042 1043
+# Order%201042 = 3%20teas%20and%202%20pies%2C%20paid%207.50
+# Order%201043 = tea%2C%20tea%20%26%20toast%3B%20paid%204.25
+# Refund%201042 = 2%20pies
+# every key decodes back: true
+# Order 1042
+# Order 1043
+# Refund 1042
+# asking for the total, a field it does not know
+# EXPECTED STDERR:
+# error: -1 does not fit in the Rust `usize` the crate asks for
+#   --> corpus/m116/c02_indexer.lume:66
+#    |
+# 66 |       match c.get(group):
+# EXPECTED EXIT: 101
+
+import rust.regex = "1"
+import rust.hex = "0.4"
+import rust.urlencoding = "2"
+
+TEXT = """
+  Order 1042: 3 teas and 2 pies, paid 7.50
+  Order 1043: tea, tea & toast; paid 4.25
+  Refund 1042: 2 pies
+  """
+
+FIELDS = ["kind", "id"]
+
+# the words of a line, lower case, each once, in the order they come
+def words_of(re: regex.Regex, line: Str) -> [Str]:
+  re.find_iter(line).map { |m| m.as_str.downcase }.to_list.uniq
+
+# a field of a line's head by name: group 1 is `kind`, group 2 is `id`,
+# and a name that is not there is -1
+def field(head: regex.Regex, line: Str, name: Str) -> Str:
+  group = FIELDS.index_of(name).map { |i| i + 1 }.or(0 - 1)
+  match head.captures(line):
+    Some(c) ->
+      match c.get(group):
+        Some(m) -> m.as_str
+        None -> "?"
+    None -> "-"
+
+def main -> () or Error:
+  word = regex.Regex.new("[A-Za-z]+")?
+  number = regex.Regex.new(r"\d+(?:\.\d+)?")?
+  head = regex.Regex.new(r"^(Order|Refund) (\d+):")?
+
+  var index: {Str: [Int]} = {}
+  var numbers: [Str] = []
+  lines = TEXT.lines.to_list
+  for i, line in lines.enumerate:
+    for w in words_of(word, line):
+      index[w].push(i + 1)
+    for m in number.find_iter(line):
+      numbers.push(m.as_str)
+  puts "#{lines.len} lines, #{index.len} words, #{numbers.len} numbers"
+
+  for w, at in index.to_list.sort_by { |k, _| k }:
+    puts "#{w} -> #{hex.encode(w)} @ #{at.join(",")}"
+  bytes = hex.decode(hex.encode("toast"))?
+  back = bytes.map { |b| b.to_char.or("?") }.join("")
+  puts "toast as bytes: #{bytes}, and back: #{back}"
+  puts "not hex: #{hex.decode("toast").error?}"
+
+  puts "numbers: #{numbers.join(" ")}"
+  cents = numbers
+    .filter { |n| n.contains?(".") }
+    .map { |n| (n.to_float.or(0.0) * 100.0).round.to_int }
+    .sum
+  puts "paid in all: #{(cents.to_float / 100.0).decimals(2)}"
+  ids = numbers.filter { |n| n.len == 4 and not n.contains?(".") }.to_list.uniq
+  puts "order numbers: #{ids.join(" ")}"
+
+  var all_back = true
+  for line in lines:
+    subject = line.split(":").at(0)
+    body = line.split(":").at(1).trim
+    key = urlencoding.encode(subject)
+    value = urlencoding.encode(body)
+    puts "#{key} = #{value}"
+    all_back = all_back and urlencoding.decode(key)? == subject and urlencoding.decode(value)? == body
+  puts "every key decodes back: #{all_back}"
+
+  for line in lines:
+    puts "#{field(head, line, "kind")} #{field(head, line, "id")}"
+  puts "asking for the total, a field it does not know"
+  puts field(head, lines.at(0), "total")

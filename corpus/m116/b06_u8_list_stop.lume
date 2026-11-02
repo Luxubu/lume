@@ -1,0 +1,28 @@
+# b06 — Rust crates: the check on a narrower integer reaches the items of a
+# list that crosses as a `&[u8]`. `urlencoding::encode_binary` with bytes
+# that fit (0 and 255, the two ends), then a list whose items are all past
+# 255, 256 first: the first item stops the program, after what it printed,
+# on the line of the call. "Lume" is 76, 117, 109, 101.
+# Run with `lume run corpus/m116/b06_u8_list_stop.lume`.
+# Meant to STOP.
+# EXPECTED OUTPUT:
+# %00
+# %FF
+# Lume
+# EXPECTED STDERR:
+# error: 256 does not fit in the Rust `u8` the crate asks for
+#   --> corpus/m116/b06_u8_list_stop.lume:27
+#    |
+# 27 |   puts urlencoding.encode_binary(wide)
+# EXPECTED EXIT: 101
+
+import rust.urlencoding = "2"
+
+def main:
+  puts urlencoding.encode_binary([0])
+  puts urlencoding.encode_binary([255])
+  bytes = [76, 117, 109, 101]
+  puts urlencoding.encode_binary(bytes)
+  wide = bytes.map { |b| b + 180 }.to_list
+  puts urlencoding.encode_binary(wide)
+  puts "not reached"

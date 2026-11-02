@@ -1,0 +1,32 @@
+# b07 — Rust crates: a builder whose steps use their value up, used more
+# than once. `base` is needed again, so each `.set` works on a copy: twice
+# in a row, then once each time round a loop (a block of code that runs
+# again), and once more after it, where nothing needs it afterwards.
+# ureq is the crate `examples/crate_builder.lume` and the http package
+# already use, so nothing new is fetched. Nothing is sent.
+# Run with `lume run corpus/m116/b07_builder_twice.lume`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 1 2 -
+# ["x-n", "accept"]
+# loop a: ["x-k"]
+# loop b: ["x-k"]
+# []
+# GET last
+# ["accept", "x-last"]
+
+import rust.ureq = "2"
+
+def main:
+  base = ureq.get("http://127.0.0.1:9/items")
+  one = base.set("X-N", "1")
+  two = base.set("X-N", "2").set("Accept", "text/plain")
+  puts "#{one.header("x-n").or("-")} #{two.header("X-N").or("-")} #{base.header("x-n").or("-")}"
+  puts two.header_names()
+  for k in ["a", "b"]:
+    one_k = base.set("X-K", k)
+    puts "loop #{one_k.header("x-k").or("-")}: #{one_k.header_names()}"
+  puts base.header_names()
+  ending = base.set("Accept", "*/*").set("X-Last", "yes")
+  puts "#{ending.method()} last"
+  puts ending.header_names()

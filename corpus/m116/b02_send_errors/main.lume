@@ -1,0 +1,53 @@
+# b02 — http: the Errors a request gives with no network. A file that is not
+# there fails before any connection, whichever of `send`, `open` and
+# `fetch` makes the request, and its message names no method or URL;
+# `with_body` after it sets the file aside, so the request goes to port 9
+# and fails there instead; `send_parts` sets the file aside too; a timeout
+# does not change a refused connection into a timeout; a URL that does not
+# parse names the method and the text given.
+# Run with `lume run corpus/m116/b02_send_errors/main.lume`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# send: cannot read `/tmp/lume-review-b/no-such-file.csv`: No such file or directory (os error 2)
+# open: cannot read `/tmp/lume-review-b/no-such-file.csv`: No such file or directory (os error 2)
+# fetch: cannot read `/tmp/lume-review-b/no-such-file.csv`: No such file or directory (os error 2)
+# body after file: port 9 true, file false
+# file after body: cannot read `/tmp/lume-review-b/no-such-file.csv`: No such file or directory (os error 2)
+# parts after file: port 9 true, file false
+# timeout 200: GET port 9 true, timed out false
+# bad url: true
+
+import http
+
+def port9(r: http.Response or Error, method: Str) -> Str:
+  prefix = method + " http://127.0.0.1:9/up: "
+  match r:
+    Ok(_) -> "answered?"
+    Error(e) -> "port 9 #{e.message.starts_with?(prefix)}, file #{e.message.contains?("cannot read")}"
+
+async def main:
+  missing = "/tmp/lume-review-b/no-such-file.csv"
+  url = "http://127.0.0.1:9/up"
+  req = http.request("PUT", url).with_file(missing, "text/csv")
+  match req.send:
+    Ok(_) -> puts "send: sent?"
+    Error(e) -> puts "send: #{e.message}"
+  match req.open:
+    Ok(_) -> puts "open: opened?"
+    Error(e) -> puts "open: #{e.message}"
+  fetched = await req.fetch
+  match fetched:
+    Ok(_) -> puts "fetch: fetched?"
+    Error(e) -> puts "fetch: #{e.message}"
+  puts "body after file: #{port9(req.with_body("x=1", "text/plain").send, "PUT")}"
+  match http.request("PUT", url).with_body("x=1", "text/plain").with_file(missing, "text/csv").send:
+    Ok(_) -> puts "file after body: sent?"
+    Error(e) -> puts "file after body: #{e.message}"
+  puts "parts after file: #{port9(req.send_parts(["a\n", "b\n"]), "PUT")}"
+  slow = await http.request("GET", "http://127.0.0.1:9/up").timeout(200).fetch
+  match slow:
+    Ok(_) -> puts "timeout 200: answered?"
+    Error(e) -> puts "timeout 200: GET port 9 #{e.message.starts_with?("GET http://127.0.0.1:9/up: ")}, timed out #{e.message.contains?("timed out")}"
+  match http.get("not a url"):
+    Ok(_) -> puts "bad url: answered?"
+    Error(e) -> puts "bad url: #{e.message.starts_with?("GET not a url: ")}"

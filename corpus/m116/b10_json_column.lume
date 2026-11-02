@@ -1,0 +1,27 @@
+# b10 — `lume check --json` on a file whose error comes after characters of
+# two and three bytes on its line (é, €, ü): `col` counts characters, not
+# bytes, so it is 26, not 30. The file also has a local never used, and a
+# file with an error shows only its errors, so no warning comes.
+# Run with `lume check --json corpus/m116/b10_json_column.lume`.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# {
+#   "diagnostics": [
+#     {
+#       "col": 26,
+#       "file": "corpus/m116/b10_json_column.lume",
+#       "help": null,
+#       "line": 27,
+#       "message": "`add` is missing an argument: b",
+#       "severity": "error"
+#     }
+#   ],
+#   "ok": false
+# }
+# EXPECTED EXIT: 1
+
+def add(a: Int, b: Int) -> Int = a + b
+
+def main:
+  spare = 1
+  puts ["é€", "ü"].len + add(1)

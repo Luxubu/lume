@@ -11,10 +11,10 @@ warning: parameter `qty` is never used
    |                       ^
   help: name it `_qty` if it is there only to fit a signature, as an interface's method may be
 warning: block parameter `sku` is never used
-  --> corpus/m104/c01_pricing.lume:91:14
+  --> corpus/m104/c01_pricing.lume:91:17
    |
 91 |     .sort_by { |sku, n| -n }
-   |              ^
+   |                 ^
   help: name it `_sku`, or `_` alone
 order 1: 10% discount, $19.80
 order 2: bulk discount, $22.98

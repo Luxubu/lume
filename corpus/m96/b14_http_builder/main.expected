@@ -7,7 +7,7 @@ true n=1
 POST http://example.com/items
 4
 ("x-one", "again")
-["X-One", "X-Two", "Content-Type", "Content-Type"]
+["X-One", "X-Two", "Content-Type"]
 second
 n=1
 -5 250

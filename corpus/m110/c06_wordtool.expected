@@ -17,10 +17,10 @@ warning: `i` is never used in the loop
    |   ^
   help: name it `_i`, or write `for _ in ...` when only the count matters
 warning: block parameter `n` is never used
-  --> corpus/m110/c06_wordtool.lume:71:62
+  --> corpus/m110/c06_wordtool.lume:71:68
    |
 71 | def lengths(counts: {Str: Int}) -> [(Str, Int)] = counts.map { |w, n| (w, w.len) }
-   |                                                              ^
+   |                                                                    ^
   help: name it `_n`, or `_` alone
 warning: `first` is bound by the pattern but never used
   --> corpus/m110/c06_wordtool.lume:75:10

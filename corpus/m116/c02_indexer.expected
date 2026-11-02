@@ -1,0 +1,27 @@
+3 lines, 8 words, 8 numbers
+and -> 616e64 @ 1
+order -> 6f72646572 @ 1,2
+paid -> 70616964 @ 1,2
+pies -> 70696573 @ 1,3
+refund -> 726566756e64 @ 3
+tea -> 746561 @ 2
+teas -> 74656173 @ 1
+toast -> 746f617374 @ 2
+toast as bytes: [116, 111, 97, 115, 116], and back: toast
+not hex: true
+numbers: 1042 3 2 7.50 1043 4.25 1042 2
+paid in all: 11.75
+order numbers: 1042 1043
+Order%201042 = 3%20teas%20and%202%20pies%2C%20paid%207.50
+Order%201043 = tea%2C%20tea%20%26%20toast%3B%20paid%204.25
+Refund%201042 = 2%20pies
+every key decodes back: true
+Order 1042
+Order 1043
+Refund 1042
+asking for the total, a field it does not know
+error: -1 does not fit in the Rust `usize` the crate asks for
+  --> corpus/m116/c02_indexer.lume:66
+   |
+66 |       match c.get(group):
+exit: 101

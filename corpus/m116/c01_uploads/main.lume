@@ -1,0 +1,150 @@
+# c01_uploads — an upload planner on the settled `http` package: plans
+# five uploads (no body, text, a file it writes under /tmp, a file that is
+# not there, rows from a generator), shows each request, sends them all
+# from tasks to http://127.0.0.1:9/, where nothing listens, and says why
+# each failed. Probes the builder steps, `with_file` both ways,
+# `send_parts` setting aside a `with_file` body, `send` in tasks, `await
+# fetch`, `open`, and a URL that does not parse.
+# Meant to RUN, as `lume run corpus/m116/c01_uploads/main.lume`.
+#
+# EXPECTED OUTPUT:
+# wrote prices.csv: 26 bytes
+# base [] 30000, careful [("Accept", "text/plain")] 500
+# 1. GET http://127.0.0.1:9/ping (no body)
+#    headers [("X-Upload", "ping")], waits 2000 ms
+# 2. POST http://127.0.0.1:9/notes (text, 11 characters)
+#    headers [("X-Upload", "note"), ("Content-Type", "text/plain")], waits 2000 ms
+# 3. PUT http://127.0.0.1:9/prices (the file prices.csv)
+#    headers [("X-Upload", "prices"), ("Content-Type", "text/csv")], waits 2000 ms
+# 4. PUT http://127.0.0.1:9/lost (the file gone.csv)
+#    headers [("X-Upload", "lost"), ("Content-Type", "text/csv")], waits 2000 ms
+# 5. POST http://127.0.0.1:9/rows (3 rows, made as they are sent)
+#    headers [("X-Upload", "squares"), ("Content-Type", "text/csv")], waits 2000 ms
+# squares would send: squares,1,1 | squares,2,4 | squares,3,9
+# sent, all at once:
+#   ping: no connection
+#   note: no connection
+#   prices: no connection
+#   lost: cannot read `/tmp/lume-review-c/gone.csv`: No such file or directory (os error 2)
+#   squares: no connection
+# fetch: no connection
+# send_parts after with_file: no connection
+# open: no connection
+# not a url, named in the message: true
+# cleaned up: true
+
+import http
+
+DIR = "/tmp/lume-review-c"
+BASE = "http://127.0.0.1:9"
+
+enum Body:
+  Empty
+  Text(text: Str)
+  FromFile(path: Str)
+  Rows(count: Int)
+
+struct Upload:
+  name: Str
+  method: Str
+  path: Str
+  body: Body
+
+  def url -> Str = "#{BASE}#{path}"
+
+  def kind -> Str = match body:
+    Empty -> "no body"
+    Text(t) -> "text, #{t.len} characters"
+    FromFile(p) -> "the file #{Path.base(p)}"
+    Rows(n) -> "#{n} rows, made as they are sent"
+
+# the rows of a CSV body, each made only when the sender asks for it
+def rows(name: Str, n: Int) -> Iterator[Str]:
+  for i in 1..n:
+    yield "#{name},#{i},#{i * i}\n"
+
+def build(u: Upload) -> http.Request:
+  base = http.request(u.method, u.url).header("X-Upload", u.name).timeout(2000)
+  match u.body:
+    Empty -> base
+    Text(t) -> base.with_body(t, "text/plain")
+    FromFile(p) -> base.with_file(p, "text/csv")
+    Rows(_) -> base.header("Content-Type", "text/csv")
+
+# why a request failed, in words that do not depend on the system
+def why(message: Str, method: Str, url: Str) -> Str:
+  if message.starts_with?("cannot read"):
+    message
+  elif message.starts_with?("#{method} #{url}: "):
+    "no connection"
+  else:
+    "something else: #{message}"
+
+def attempt(u: Upload) -> Str:
+  req = build(u)
+  sent = match u.body:
+    Rows(n) -> req.send_parts(rows(u.name, n))
+    _ -> req.send
+  match sent:
+    Ok(r) -> "#{u.name}: answered #{r.status}?"
+    Error(e) -> "#{u.name}: #{why(e.message, u.method, u.url)}"
+
+async def main -> () or Error:
+  Dir.make(DIR)?
+  prices = Path.join(DIR, "prices.csv")
+  gone = Path.join(DIR, "gone.csv")
+  File.write(prices, "sku,cents\ntea,250\npie,400\n")?
+  if File.exists?(gone):
+    File.remove(gone)?
+  size = File.size(prices)?
+  puts "wrote #{Path.base(prices)}: #{size} bytes"
+
+  # each step gives a new request and leaves the one it was called on
+  base = http.request("GET", "#{BASE}/menu")
+  careful = base.header("Accept", "text/plain").timeout(500)
+  puts "base #{base.headers} #{base.timeout_ms}, careful #{careful.headers} #{careful.timeout_ms}"
+
+  plan = [
+    Upload(name: "ping", method: "GET", path: "/ping", body: Empty),
+    Upload(name: "note", method: "POST", path: "/notes", body: Text("restock pie")),
+    Upload(name: "prices", method: "PUT", path: "/prices", body: FromFile(prices)),
+    Upload(name: "lost", method: "PUT", path: "/lost", body: FromFile(gone)),
+    Upload(name: "squares", method: "POST", path: "/rows", body: Rows(3)),
+  ]
+  for i, u in plan.enumerate:
+    req = build(u)
+    puts "#{i + 1}. #{u.method} #{u.url} (#{u.kind})"
+    puts "   headers #{req.headers}, waits #{req.timeout_ms} ms"
+  preview = rows("squares", 3).map { |r| r.trim }.join(" | ")
+  puts "squares would send: #{preview}"
+
+  # all at once: a task that awaits nothing runs on a pool of its own
+  results = await plan.map { |u| spawn: attempt(u) }.to_list
+  puts "sent, all at once:"
+  for line in results:
+    puts "  #{line}"
+  first = plan.at(0)
+  match await build(first).fetch:
+    Ok(r) -> puts "fetch: answered #{r.status}?"
+    Error(e) -> puts "fetch: #{why(e.message, first.method, first.url)}"
+
+  # `send_parts` sets aside the body `with_file` gave, so the missing file
+  # is never opened: what fails is the connection
+  rows_url = "#{BASE}/rows"
+  aside = http.request("POST", rows_url).with_file(gone, "text/csv").send_parts(rows("aside", 2))
+  match aside:
+    Ok(r) -> puts "send_parts after with_file: answered #{r.status}?"
+    Error(e) -> puts "send_parts after with_file: #{why(e.message, "POST", rows_url)}"
+
+  feed = "#{BASE}/feed"
+  match http.request("GET", feed).open:
+    Ok(o) -> puts "open: answered #{o.status}?"
+    Error(e) -> puts "open: #{why(e.message, "GET", feed)}"
+
+  match http.get("not a url"):
+    Ok(r) -> puts "not a url: answered #{r.status}?"
+    Error(e) -> puts "not a url, named in the message: #{e.message.starts_with?("GET not a url: ")}"
+
+  File.remove(prices)?
+  Dir.remove(DIR)?
+  puts "cleaned up: #{not Dir.exists?(DIR)}"

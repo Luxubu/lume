@@ -996,6 +996,18 @@ fn main() {
         }
         return;
     }
+    // `lume check --json main.lume`, the options first, means what
+    // `lume check main.lume --json` does: the file goes where it is read
+    let args = {
+        let mut a = args.clone();
+        if a.get(1).map(|x| x.starts_with('-')).unwrap_or(false) {
+            if let Some(at) = a.iter().skip(2).position(|x| x.ends_with(".lume")) {
+                let f = a.remove(at + 2);
+                a.insert(1, f);
+            }
+        }
+        a
+    };
     // A file, or — with none — the package the current folder is in.
     let named = args.get(1).filter(|f| !f.starts_with('-') && !(cmd == "crate" && !f.ends_with(".lume") && args.len() == 2) && !(cmd == "test" && !f.ends_with(".lume")));
     let (file, pkg_root, args): (PathBuf, Option<PathBuf>, Vec<String>) = match named {

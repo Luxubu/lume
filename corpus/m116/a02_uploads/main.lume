@@ -1,0 +1,59 @@
+# a02_uploads — a body sent as it is made, with nowhere to send it: a file
+# with `.with_file` (one that is there, and one that is not), the parts of
+# a generator with `send_parts` (which sets aside a `with_file` body), and
+# two `fetch`es in tasks. Port 9 has nothing listening, so every request is
+# an `Error`; the missing file is an `Error` before any connection.
+# A package: run with `lume run corpus/m116/a02_uploads/main.lume`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# wrote 18 bytes
+# PUT a file: an Error from the connection: true
+# cannot read `/tmp/lume-review-a/not-there.csv`: No such file or directory (os error 2)
+# POST the parts: an Error from the connection: true
+# PUT parts over a missing file: true, mentions the file: false
+# fetched in tasks: [true, true]
+
+import http
+
+# rows made one at a time, as an export would make them
+def rows(n: Int) -> Iterator[Str]:
+  for i in 1..n:
+    yield "row #{i}\n"
+
+async def main -> () or Error:
+  dir = "/tmp/lume-review-a"
+  Dir.make(dir)?
+  path = "#{dir}/a02-upload.csv"
+  missing = "#{dir}/not-there.csv"
+  _ = File.remove(missing)
+  File.write(path, rows(3).join(""))?
+  size = File.size(path)?
+  puts "wrote #{size} bytes"
+
+  up = "http://127.0.0.1:9/upload"
+  put_up = "PUT #{up}"
+  match http.request("PUT", up).with_file(path, "text/csv").send:
+    Ok(r) -> puts "PUT a file: answered #{r.status}?"
+    Error(e) -> puts "PUT a file: an Error from the connection: #{e.message.starts_with?(put_up)}"
+
+  match http.request("PUT", up).with_file(missing, "text/csv").send:
+    Ok(r) -> puts "PUT a missing file: answered #{r.status}?"
+    Error(e) -> puts e.message
+
+  made = http.request("POST", "http://127.0.0.1:9/rows").header("Content-Type", "text/plain").send_parts(rows(10000))
+  match made:
+    Ok(r) -> puts "POST the parts: answered #{r.status}?"
+    Error(e) -> puts "POST the parts: an Error from the connection: #{e.message.starts_with?("POST http://127.0.0.1:9/rows")}"
+
+  # `send_parts` sets aside the body `with_file` gave, so the missing file
+  # is never opened: the failure is the connection's
+  odd = http.request("PUT", up).with_file(missing, "text/csv").send_parts(["a\n", "b\n"])
+  match odd:
+    Ok(r) -> puts "PUT parts: answered #{r.status}?"
+    Error(e) -> puts "PUT parts over a missing file: #{e.message.starts_with?(put_up)}, mentions the file: #{e.message.contains?("not-there")}"
+
+  tasks = ["a", "b"].map { |p| spawn: await http.request("GET", "http://127.0.0.1:9/#{p}").fetch }.to_list
+  results = await tasks
+  puts "fetched in tasks: #{results.map { |r| r.error? }.to_list}"
+
+  File.remove(path)?

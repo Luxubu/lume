@@ -1,0 +1,52 @@
+warning: parameter `width` is never used
+  --> corpus/m116/c05_stock.lume:99:22
+   |
+99 | def label(name: Str, width: Int) -> Str = name.upcase
+   |                      ^
+  help: name it `_width` if it is there only to fit a signature, as an interface's method may be
+warning: `sold` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/m116/c05_stock.lume:102:3
+    |
+102 |   shared var sold = 0
+    |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+warning: `tax` is given a value but never used
+  --> corpus/m116/c05_stock.lume:107:3
+    |
+107 |   tax = 20
+    |   ^
+  help: use it, or name it `_tax` to say it is not meant to be
+warning: `!` stops the program if the value is missing or an error
+  --> corpus/m116/c05_stock.lume:109:33
+    |
+109 |   dash = regex.Regex.new("[–—]")!
+    |                                 ^
+  help: fine in tests and quick scripts; elsewhere use `match`, `?` or `.or(default)`
+warning: `i` is never used in the loop
+  --> corpus/m116/c05_stock.lume:112:3
+    |
+112 |   for i in 1..2:
+    |   ^
+  help: name it `_i`, or write `for _ in ...` when only the count matters
+warning: block parameter `item` is never used
+  --> corpus/m116/c05_stock.lume:115:26
+    |
+115 |   none = items.filter { |item| false }.to_list
+    |                          ^
+  help: name it `_item`, or `_` alone
+warning: `gone` is bound by the pattern but never used
+  --> corpus/m116/c05_stock.lume:119:10
+    |
+119 |     Some(gone) -> puts "something has run out"
+    |          ^
+  help: write `_` in its place, or name it `_gone`
+tea, pie, scone
+counting
+counting
+0
+something has run out
+TEA 3000
+PIE 1200
+SCONE 0
+15 on the shelves
+exit: 0

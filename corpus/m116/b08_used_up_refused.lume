@@ -1,0 +1,23 @@
+# b08 — Rust crates: a method that uses its value up, on a crate type that
+# cannot be cloned (ureq's `Response`, whose `into_string` takes `self`),
+# while the value is still needed after the call. The bridge cannot copy
+# it, so the call is refused. The program is only checked, never run.
+# Run with `lume check corpus/m116/b08_used_up_refused.lume`.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `into_string` uses up `r`, and `r` is still needed after it
+#   --> corpus/m116/b08_used_up_refused.lume:20:10
+#    |
+# 20 |   text = r.into_string()?
+#    |          ^
+#   help: make it the last use, or make a new value where one is needed again
+# EXPECTED EXIT: 1
+
+import rust.ureq = "2"
+
+def main -> () or Error:
+  r = ureq.get("http://127.0.0.1:9/").call()?
+  text = r.into_string()?
+  puts r.status()
+  puts text
+  ()

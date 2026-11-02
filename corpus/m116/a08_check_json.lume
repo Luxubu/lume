@@ -1,0 +1,39 @@
+# a08_check_json — `lume check --json` on a program that compiles but has
+# two warnings: `ok` stays true, each warning is a diagnostic with its
+# file, line, column (in characters: the `é` before the second `!` counts
+# as one), message, help and severity, in the order `lume check` gives them.
+# Run with `lume check --json corpus/m116/a08_check_json.lume`.
+# Meant to RUN (exit status 0).
+# EXPECTED OUTPUT:
+# {
+#   "diagnostics": [
+#     {
+#       "col": 31,
+#       "file": "corpus/m116/a08_check_json.lume",
+#       "help": "fine in tests and quick scripts; elsewhere use `match`, `?` or `.or(default)`",
+#       "line": 37,
+#       "message": "`!` stops the program if the value is missing or an error",
+#       "severity": "warning"
+#     },
+#     {
+#       "col": 49,
+#       "file": "corpus/m116/a08_check_json.lume",
+#       "help": "fine in tests and quick scripts; elsewhere use `match`, `?` or `.or(default)`",
+#       "line": 38,
+#       "message": "`!` stops the program if the value is missing or an error",
+#       "severity": "warning"
+#     }
+#   ],
+#   "ok": true
+# }
+
+import rust.urlencoding = "2"
+
+def main:
+  base = "https://example.com/search"
+  words = ["fish & chips", "café"]
+  q = urlencoding.encode(words.join(" "))
+  puts "#{base}?q=#{q}"
+  back = urlencoding.decode(q)!
+  drink = urlencoding.decode("café%20au%20lait")!
+  puts back.len + drink.len

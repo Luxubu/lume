@@ -1,0 +1,38 @@
+# b15 — `lume fmt --stdout` on chains over lines with comments between the
+# steps, everything indented oddly: steps and the comments between them at
+# 10, 6 and 3 spaces, a comment on a step's own line after three spaces, a
+# step with no spaces in its block, and a second chain whose first step is
+# on the statement's own line. Each comment stays where it was among the
+# steps; each step and comment goes two spaces in from its statement.
+# Run with `lume fmt --stdout corpus/m116/b15_fmt_chain_comments.lume`.
+# Meant to RUN.
+# EXPECTED OUTPUT: these 24 comment lines, each as it is, then:
+# def main:
+#   xs = [4, 1, 3]
+#   total = xs
+#     # keep the big ones
+#     .filter { |n| n > 1 }
+#     # doubled
+#     .map { |n| n * 2 }  # each one
+#     .sum
+#   puts total
+#   words = ["fig", "apple", "kiwi"].map(_.upcase)
+#     # longest first
+#     .sort_by { |w| 0 - w.len }
+#     .join(", ")
+#   puts words
+# Nothing is written to the file itself.
+def main:
+  xs = [4, 1, 3]
+  total = xs
+          # keep the big ones
+          .filter{|n| n>1}
+      # doubled
+      .map { |n| n * 2 }   # each one
+   .sum
+  puts total
+  words = ["fig", "apple", "kiwi"].map(_.upcase)
+            # longest first
+    .sort_by { |w| 0 - w.len }
+       .join(", ")
+  puts words

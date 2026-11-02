@@ -1,0 +1,56 @@
+# b01 — http: a request's builder steps in every order, read back field by
+# field (never printed whole: how a Request prints is not promised).
+# `with_body` after `with_file` and the reverse, two bodies, `timeout`
+# first and last, a negative timeout, and the request each step started
+# from left as it was. Nothing is sent.
+# Run with `lume run corpus/m116/b01_request_steps/main.lume`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# start: PUT http://127.0.0.1:9/up
+#   headers []
+#   body "" file "" timeout 30000
+# file then body: PUT http://127.0.0.1:9/up
+#   headers [("Content-Type", "text/csv"), ("Content-Type", "text/plain")]
+#   body "x=1" file "" timeout 30000
+# body then file: PUT http://127.0.0.1:9/up
+#   headers [("Content-Type", "text/plain"), ("Content-Type", "text/csv")]
+#   body "" file "/tmp/lume-review-b/data.csv" timeout 30000
+# two bodies: PUT http://127.0.0.1:9/up
+#   headers [("Content-Type", "text/plain"), ("Content-Type", "application/json")]
+#   body "{}" file "" timeout 30000
+# timeout first: PUT http://127.0.0.1:9/up
+#   headers [("X-A", "1"), ("Content-Type", "text/plain"), ("X-B", "2")]
+#   body "hi" file "" timeout 250
+# timeout last: PUT http://127.0.0.1:9/up
+#   headers [("X-B", "2"), ("Content-Type", "text/plain"), ("X-A", "1")]
+#   body "hi" file "" timeout 250
+# negative: PUT http://127.0.0.1:9/up
+#   headers [("Content-Type", "text/plain"), ("Content-Type", "text/csv")]
+#   body "" file "/tmp/lume-review-b/data.csv" timeout -5
+# start again: PUT http://127.0.0.1:9/up
+#   headers []
+#   body "" file "" timeout 30000
+# same twice: true
+
+import http
+
+def show(label: Str, r: http.Request):
+  puts "#{label}: #{r.method} #{r.url}"
+  puts "  headers #{r.headers}"
+  puts "  body \"#{r.body}\" file \"#{r.body_file}\" timeout #{r.timeout_ms}"
+
+def main:
+  path = "/tmp/lume-review-b/data.csv"
+  start = http.request("PUT", "http://127.0.0.1:9/up")
+  show("start", start)
+  show("file then body", start.with_file(path, "text/csv").with_body("x=1", "text/plain"))
+  later = start.with_body("x=1", "text/plain").with_file(path, "text/csv")
+  show("body then file", later)
+  show("two bodies", start.with_body("x=1", "text/plain").with_body("{}", "application/json"))
+  show("timeout first", start.timeout(250).header("X-A", "1").with_body("hi", "text/plain").header("X-B", "2"))
+  show("timeout last", start.header("X-B", "2").with_body("hi", "text/plain").header("X-A", "1").timeout(250))
+  show("negative", later.timeout(0 - 5))
+  show("start again", start)
+  a = start.header("X-A", "1")
+  b = start.header("X-A", "1")
+  puts "same twice: #{a.headers == b.headers and a.body == b.body}"

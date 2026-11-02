@@ -1,26 +1,26 @@
-warning: `sources` holds values of different types behind `Source`, so calls on its items go through a pointer
-  --> corpus/m78/c04_scheduler.lume:127:3
-    |
-127 |   sources: [Source] = [tea, retry, bus]
-    |   ^
-  help: fine for most code; use a single concrete type or an enum if this is a hot loop
 warning: parameter `n` is never used
   --> corpus/m78/c04_scheduler.lume:66:11
    |
 66 |   def gap(n: Int) -> Int = step
    |           ^
   help: name it `_n` if it is there only to fit a signature, as an interface's method may be
+warning: `sources` holds values of different types behind `Source`, so calls on its items go through a pointer
+  --> corpus/m78/c04_scheduler.lume:127:3
+    |
+127 |   sources: [Source] = [tea, retry, bus]
+    |   ^
+  help: fine for most code; use a single concrete type or an enum if this is a hot loop
 warning: block parameter `who` is never used
-  --> corpus/m78/c04_scheduler.lume:133:76
+  --> corpus/m78/c04_scheduler.lume:133:82
     |
 133 |   timeline = merge(merge(tea.events, retry.events), bus.events).take_while { |t, who| t <= 20 }.to_list
-    |                                                                            ^
+    |                                                                                  ^
   help: name it `_who`, or `_` alone
 warning: block parameter `k` is never used
-  --> corpus/m78/c04_scheduler.lume:139:23
+  --> corpus/m78/c04_scheduler.lume:139:26
     |
 139 |   best = slots.max_by { |k, whos| whos.to_set.len }.map { |pair| pair.0 }.or(0 - 1)
-    |                       ^
+    |                          ^
   help: name it `_k`, or `_` alone
 warning: `t` is never used in the loop
   --> corpus/m78/c04_scheduler.lume:143:3

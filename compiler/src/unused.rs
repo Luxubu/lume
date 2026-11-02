@@ -225,7 +225,9 @@ impl Walker {
             ExprKind::Lambda { params, body } => {
                 for p in params {
                     if !quiet(p) && !block_mentions(body, p) {
-                        self.out.push(LumeError::new(e.line, e.col, format!("block parameter `{}` is never used", p)).with_help(format!("name it `_{}`, or `_` alone", p)));
+                        // the caret on the name, in the block's `|...|`
+                        let at = self.name_col(e.line, e.col, p).unwrap_or(e.col);
+                        self.out.push(LumeError::new(e.line, at, format!("block parameter `{}` is never used", p)).with_help(format!("name it `_{}`, or `_` alone", p)));
                     }
                 }
                 self.scopes.push(params.iter().cloned().collect());

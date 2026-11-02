@@ -1,0 +1,7 @@
+error: `ureq.Response.into_string` uses up `r`, and `r` is still needed after it
+  --> corpus/m116/b08_used_up_refused.lume:20:11
+   |
+20 |   text = r.into_string()?
+   |           ^
+  help: a `ureq.Response` cannot be copied: make this its last use, or make a new one where it is needed again
+exit: 1
