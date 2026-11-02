@@ -917,8 +917,16 @@ impl Fmt {
                     let lhs = self.pipe_lhs(recv);
                     format!("{}.{}", self.pipe_prefix(e, lhs), name)
                 } else if self.shape.dots.contains(&(e.line, e.col)) {
-                    // a chain split over lines stays split, one step a line
-                    format!("{}\n{}.{}", self.expr_p(recv, 10), ind(self.indent + 1), name)
+                    // a chain split over lines stays split, one step a line,
+                    // and a comment between two steps stays between them
+                    let r = self.expr_p(recv, 10);
+                    let mut between = String::new();
+                    while self.ci < self.comments.len() && self.comments[self.ci].line < e.line {
+                        between.push_str(&format!("\n{}#{}", ind(self.indent + 1), self.comments[self.ci].text));
+                        self.last_line = self.comments[self.ci].line;
+                        self.ci += 1;
+                    }
+                    format!("{}{}\n{}.{}", r, between, ind(self.indent + 1), name)
                 } else {
                     format!("{}.{}", self.expr_p(recv, 10), name)
                 };

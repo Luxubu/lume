@@ -1,9 +1,9 @@
 # An async sequence has the chains and the methods Rust's `StreamExt` has;
-# the rest of a list's, like `join`, are for its items kept with `.to_list`.
+# the rest of a list's, like `zip`, are for its items kept with `.to_list`.
 
 async def words -> Iterator[Str]:
   yield "a"
   yield "b"
 
 async def main:
-  puts words().join(", ")
+  puts words().zip([1, 2])

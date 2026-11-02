@@ -5291,6 +5291,14 @@ impl Gen {
     // ----- type inference ---------------------------------------------------
 
     fn ty_of(&mut self, e: &Expr) -> Type {
+        // `s.sort_by { .. }` on an async sequence is `s.to_list.sort_by { .. }`
+        if let ExprKind::Method { recv, name, args } = &e.kind {
+            if collects_items(name) {
+                if let Type::AsyncGen(_) = self.ty_of(recv).materialized() {
+                    return self.ty_of(&collected(recv, name, args, e));
+                }
+            }
+        }
         let t = self.ty_of_inner(e);
         // a chain that starts by consuming its list hands out the items
         // themselves, not borrows of them
@@ -10107,7 +10115,7 @@ impl Gen {
                         None => err.with_help(format!("a type with `def items -> [T]` takes the list's methods too; give `{}` one", type_name(&other))),
                     },
                     // items that arrive later: no chain runs over them yet
-                    Type::AsyncGen(_) => err.with_help("it has the chains `map`, `filter`, `reject`, `take_while`, `take`, `skip` and `enumerate`, and `first`, `count`, `sum`, `any?`, `all?`, `find`, `each` and `fold`; for the rest, keep its items with `.to_list`"),
+                    Type::AsyncGen(_) => err.with_help("it has the chains `map`, `filter`, `reject`, `take_while`, `take`, `skip` and `enumerate`; `first`, `count`, `sum`, `any?`, `all?`, `find`, `each` and `fold`; and, keeping every item first, `join`, `max`, `min`, `max_by`, `min_by`, `sort`, `sort_by`, `last` and `reverse`; for the rest, keep its items with `.to_list`"),
                     _ => err,
                 })
             }
@@ -10532,8 +10540,14 @@ impl Gen {
             return Ok(format!("{{ let mut lume_s = {}; {} while let Some(lume_x) = lume_s.next().await {{ {} }} {} }}", r, pre, step, result));
         }
         if let Type::AsyncGen(_) = &rt {
+            if collects_items(name) {
+                // the call as written, its block among its arguments
+                if let ExprKind::Method { recv, args, .. } = &e.kind {
+                    return self.expr(&collected(recv, name, args, e));
+                }
+            }
             return Err(LumeError::new(e.line, e.col, format!("{} has no `{}` yet", a_type(&rt), name))
-                .with_help("it has the chains `map`, `filter`, `reject`, `take_while`, `take`, `skip` and `enumerate`, and `first`, `count`, `sum`, `any?`, `all?`, `find`, `each` and `fold`; for the rest, keep its items with `.to_list`"));
+                .with_help("it has the chains `map`, `filter`, `reject`, `take_while`, `take`, `skip` and `enumerate`; `first`, `count`, `sum`, `any?`, `all?`, `find`, `each` and `fold`; and, keeping every item first, `join`, `max`, `min`, `max_by`, `min_by`, `sort`, `sort_by`, `last` and `reverse`; for the rest, keep its items with `.to_list`"));
         }
         if name == "map_error" && !matches!(rt.materialized(), Type::Result(..)) {
             let e2 = LumeError::new(e.line, e.col, format!("`map_error` changes the failure of a `T or Error`, but this is {}", a_type(&rt.materialized())));
@@ -13062,9 +13076,12 @@ impl Gen {
                 }
                 // a list's method an async sequence does not have yet: said
                 // as a block-taking one says it
+                if matches!(rt, Type::AsyncGen(_)) && collects_items(name) {
+                    return self.expr(&collected(recv, name, args, e));
+                }
                 if matches!(rt, Type::AsyncGen(_)) && !builtin_applies(&rt, name) && builtins_for(&Type::List(Box::new(Type::Unknown))).contains(&name.as_str()) {
                     return Err(LumeError::new(e.line, e.col, format!("{} has no `{}` yet", a_type(&rt), name))
-                        .with_help("it has the chains `map`, `filter`, `reject`, `take_while`, `take`, `skip` and `enumerate`, and `first`, `count`, `sum`, `any?`, `all?`, `find`, `each` and `fold`; for the rest, keep its items with `.to_list`"));
+                        .with_help("it has the chains `map`, `filter`, `reject`, `take_while`, `take`, `skip` and `enumerate`; `first`, `count`, `sum`, `any?`, `all?`, `find`, `each` and `fold`; and, keeping every item first, `join`, `max`, `min`, `max_by`, `min_by`, `sort`, `sort_by`, `last` and `reverse`; for the rest, keep its items with `.to_list`"));
                 }
                 if rt != Type::Unknown && !builtin_applies(&rt, name) {
                     let err = LumeError::new(e.line, e.col, format!("`{}` values have no method `{}`", type_name(&rt), name));
@@ -14260,6 +14277,12 @@ fn builtin_method_type(recv: &Type, name: &str) -> Type {
     if let (Type::AsyncGen(item), "to_list") = (recv, name) {
         return Type::List(item.clone());
     }
+    // what needs every item works on them kept as a list
+    if let Type::AsyncGen(item) = recv {
+        if collects_items(name) {
+            return builtin_method_type(&Type::List(item.clone()), name);
+        }
+    }
     match (recv, name) {
         (Type::AsyncGen(_), "take" | "skip") => return recv.clone(),
         (Type::AsyncGen(_), "count") => return Type::Int,
@@ -15220,4 +15243,17 @@ fn assert_side_plain(e: &Expr) -> bool {
         ExprKind::Unary { expr, .. } => assert_side_plain(expr),
         _ => false,
     }
+}
+
+/// A list's method that needs every item of an async sequence before it can
+/// answer — Rust's `StreamExt` has none of these — and so works on the items
+/// kept with `.to_list` first.
+fn collects_items(name: &str) -> bool {
+    matches!(name, "join" | "max" | "min" | "max_by" | "min_by" | "sort" | "sort_by" | "last" | "reverse")
+}
+
+/// `s.max` on an async sequence, as `s.to_list.max`.
+fn collected(recv: &Expr, name: &str, args: &[Arg], e: &Expr) -> Expr {
+    let kept = Expr::new(ExprKind::Method { recv: Box::new(recv.clone()), name: "to_list".into(), args: Vec::new() }, e.line, e.col);
+    Expr::new(ExprKind::Method { recv: Box::new(kept), name: name.to_string(), args: args.to_vec() }, e.line, e.col)
 }

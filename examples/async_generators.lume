@@ -71,3 +71,7 @@ async def main:
   var heard: [Str] = []
   scores(["kim", "lu"]).each { |p| heard.push(p.0) }
   puts heard
+  # what needs every item keeps them first, as `.to_list` would
+  puts scores(["ann", "bob", "cy"]).map { |p| p.0 }.join("/")
+  puts scores(["ann", "bob", "cy"]).max_by { |p| p.1 }
+  puts scores(["ann", "bob", "cy"]).sort_by { |p| 0 - p.1 }.map { |p| p.0 }.to_list

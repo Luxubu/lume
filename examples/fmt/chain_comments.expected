@@ -1,0 +1,10 @@
+# Comments between the steps of a chain over lines stay between them.
+def main:
+  # before the statement
+  dishes = ["soup", "pie", "stew"]
+    # only the long ones
+    .filter { |d| d.len > 3 }
+    # and loud
+    .map(_.upcase)
+    .join(", ")
+  puts dishes

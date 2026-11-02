@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **An async sequence has `join`, `max`, `min`, `max_by`, `min_by`,
+  `sort`, `sort_by`, `last` and `reverse`**, which need every item before
+  they can answer: they keep the items, as `.to_list` would, and give what
+  a list's would. Rust's `StreamExt` has none of them.
+- **Fixed**: `lume fmt` moved a comment between two steps of a chain over
+  lines to before the statement; it stays between them.
+
 - **Rust crates are settled**: `import rust.<crate>`, `[rust]` in
   `lume.toml`, how a crate's types are read — now a table in
   `docs/reference/crates.md` — and the rules for builders. A `rust:` block

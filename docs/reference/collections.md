@@ -441,9 +441,9 @@ async def main:
   An interface cannot give a default one, as a Rust trait has no async
   generator either: write an `async def` function that takes the interface
   value instead (`examples/async_interfaces.lume`).
-- Of a list's methods it has those Rust's `StreamExt` has, below; for the
-  rest — `join`, `sort`, `max` — keep the items with `.to_list` and use the
-  list's.
+- Of a list's methods it has those Rust's `StreamExt` has, below, and
+  those that need every item before they can answer — `join`, `sort`,
+  `max` and the rest — which keep the items first.
 - **More:** `examples/async_generators.lume` shows each of these.
 
 #### Chains over an async sequence
@@ -538,6 +538,25 @@ async def main:
   var total = 0
   words().each { |w| total += w.len }
   puts total                                    #=> 12
+```
+
+**`join`, `max`, `min`, `max_by`, `min_by`, `sort`, `sort_by`, `last` and
+`reverse` need every item before they can answer**, so they wait for all of
+them, keep them, and give what a list's would — what `.to_list` and then
+the list's method give, which is how they work. They are for a sequence
+that ends:
+
+```lume
+async def words -> Iterator[Str]:
+  for w in ["fig", "apple", "kiwi"]:
+    await Time.sleep(1)
+    yield w
+
+async def main:
+  puts words().join(", ")                       #=> fig, apple, kiwi
+  puts words().max_by { |w| w.len }             #=> Some("apple")
+  puts words().sort                             #=> ["apple", "fig", "kiwi"]
+  puts words().last                             #=> Some("kiwi")
 ```
 
 ### Taking a sequence: `xs: Iterator[T]`
