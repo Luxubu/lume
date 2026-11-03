@@ -1,0 +1,30 @@
+["one", "two"]
+8
+["a", "b.txt"]
+/tmp/lume-review-b/io/a/b/c.txt
+/tmp/lume-review-b/io/a/z.txt
+/tmp/lume-review-b/io/b.txt
+true
+false
+cannot read `/tmp/lume-review-b/io/none.txt`: No such file or directory (os error 2)
+cannot write `/tmp/lume-review-b/io/no/dir/x.txt`: No such file or directory (os error 2)
+cannot remove `/tmp/lume-review-b/io/none.txt`: No such file or directory (os error 2)
+cannot list `/tmp/lume-review-b/io/none`: No such file or directory (os error 2)
+false
+[/]
+[]
+[]
+c
+Ok(-86400)
+1969-12-31 00:00:00 Wed
+2024-03-01 00:00:00 Fri
+2024-03-05 00:00:00 Tue
+2024-09-29 00:00:00 Sun
+1969-12-31 23:59:00 Wed
+`2024-13-01` does not match `%Y-%m-%d`: month 13 is not 1 to 12
+`2024-02-30` does not match `%Y-%m-%d`: February 2024 has days 1 to 29, not 30
+`2024-09-29 extra` does not match `%Y-%m-%d`: unexpected ` extra` at position 10
+`24:00` does not match `%H:%M`: 24:00:00 is not a time of day
+366 % December
+[]
+exit: 0

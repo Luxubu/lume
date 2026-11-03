@@ -1,0 +1,18 @@
+# b10_import_lib: Packages. The page says "`import lib` is refused in a
+# package that has a `lib.lume`" and quotes the message, but no example
+# program shows it. Here a package `pantry` with both `main.lume` and
+# `lib.lume` imports its library as `lib`.
+# Run with `lume check corpus/m120/b10_import_lib/main.lume`.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: import the library by its package's name: `import pantry`
+#   --> corpus/m120/b10_import_lib/main.lume:15:1
+#    |
+# 15 | import lib
+#    | ^
+#   help: `lib.lume` is the package itself, so it has the package's name
+
+import lib
+
+def main:
+  puts lib.count([1, 2])

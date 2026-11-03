@@ -1,0 +1,34 @@
+# convert.lume — the units `units` knows, and how many base units (grams
+# or millilitres) each one is. Passed on by lib.lume with `pub import`.
+
+pub enum Unit:
+  Grams
+  Kilos
+  Millis
+  Litres
+
+  def symbol -> Str:
+    match self:
+      Grams -> "g"
+      Kilos -> "kg"
+      Millis -> "ml"
+      Litres -> "l"
+
+  def factor -> Int:
+    match self:
+      Grams | Millis -> 1
+      Kilos | Litres -> 1000
+
+  def mass? -> Bool:
+    match self:
+      Grams | Kilos -> true
+      _ -> false
+
+# A unit from its symbol, in any case.
+pub def unit_of(symbol: Str) -> Unit or Error:
+  match symbol.downcase:
+    "g" -> Grams
+    "kg" -> Kilos
+    "ml" -> Millis
+    "l" -> Litres
+    other -> Error("unknown unit `#{other}`")

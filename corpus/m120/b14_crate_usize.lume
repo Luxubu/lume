@@ -1,0 +1,32 @@
+# b14_crate_usize: Rust crates (Rust crates, "How a crate's types are
+# read"). The page says a Rust `usize` is an `Int` "converted with a check:
+# an `Int` the crate's type cannot hold stops the program — ``-1 does not
+# fit in the Rust `usize` the crate asks for``". No example shows it. Here
+# regex's `Captures::get(i: usize)` is given 1, 7 and then -1; a `usize`
+# coming back (`captures_len`) is an `Int`.
+# Meant to STOP.
+# EXPECTED OUTPUT:
+# 3
+# 2026
+# -
+# EXPECTED STDERR:
+# error: -1 does not fit in the Rust `usize` the crate asks for
+#   --> corpus/m120/b14_crate_usize.lume:23
+#    |
+# 23 |     Some(c) -> c.get(i).map { |m| m.as_str }.or("-")
+# EXPECTED EXIT: 101
+
+import rust.regex = "1"
+
+def group(re: regex.Regex, text: Str, i: Int) -> Str:
+  match re.captures(text):
+    Some(c) -> c.get(i).map { |m| m.as_str }.or("-")
+    None -> "no match"
+
+def main -> () or Error:
+  date = regex.Regex.new("(\\d{4})-(\\d{2})")?
+  puts date.captures_len
+  puts group(date, "on 2026-11", 1)
+  puts group(date, "on 2026-11", 7)
+  puts group(date, "on 2026-11", 0 - 1)
+  puts "not reached"

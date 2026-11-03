@@ -89,8 +89,9 @@ async def main:
   puts await t                   #=> 16
 ```
 
-`await` covers everything to its right, so `await (1..3).map { … }.to_list`
-waits for the whole list. A `?` or `!` at the very end is the exception: it
+`await` covers the call and the method steps to its right, so `await
+(1..3).map { … }.to_list` waits for the whole list. An operator ends it:
+`await t + 1` adds one to what `t` gives, and `await t == 16` compares it. A `?` or `!` at the very end is the exception: it
 applies to what `await` gives back, so `await fetch(url)?` waits and then
 passes a failure on. To call a method on what comes back, put the `await` in
 brackets: `(await tasks).sort`.

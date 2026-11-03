@@ -1,0 +1,18 @@
+3
+1. buy bread
+2. call Ada
+3. water plants
+32
+["old", "today.txt"]
+last.txt in old
+today.txt in notes
+false
+cannot read `/tmp/lume-review-A/a04/nope.txt`: No such file or directory (os error 2)
+run 1
+run 2
+run 3
+false
+report.final
+txt
+false
+exit: 0

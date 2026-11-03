@@ -1,0 +1,14 @@
+ok: ada is 36
+bad: `x` is not an integer
+bad: age cannot be negative: -2
+bad: expected `name=age`, got `dee`
+ada and grace
+grace
+Error("expected `name=age`, got `oops`")
+Error("no guests")
+Ok(42)
+Error("age: `x` is not an integer")
+true
+42
+error: `oops` is not an integer
+exit: 1

@@ -230,7 +230,7 @@ def main:
 
 There is one more, `!`, written after the value — `"4".to_int!` — which
 takes the value and stops the whole program if there is none. Lume warns
-wherever you use it: it is for tests and quick scripts, never for code
+wherever you use it outside a test: it is for tests and quick scripts, never for code
 anyone relies on.
 
 ## Underneath, in Rust

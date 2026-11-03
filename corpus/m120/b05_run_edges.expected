@@ -1,0 +1,7 @@
+0 a.txt,b.txt
+cannot run `ls` in `/tmp/lume-review-b/run/nope`: no such folder
+-1
+[a b][$HOME][*]
+cannot run `no-such-program-b`: No such file or directory (os error 2)
+7|out|err
+exit: 0

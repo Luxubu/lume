@@ -1,0 +1,24 @@
+# b03_generator_printed: Generators (Collections, "Generators: yield").
+# The page says a generator "is used up as it is walked ... After
+# `for x in g`, `g.sum` or `puts g`, the name `g` is gone, and using it
+# again is refused." The examples show `g.sum` then `g.len`; none shows
+# that printing it, which gives its items, uses it up too.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `g` is a generator, and it is used up here, so it cannot be used after
+#   --> corpus/m120/b03_generator_printed.lume:23:8
+#    |
+# 23 |   puts g
+#    |        ^
+#   help: a generator hands out each item once: to walk the items twice, keep them with `.to_list` first
+
+def countdown(n: Int) -> Iterator[Int]:
+  var i = n
+  while i > 0:
+    yield i
+    i -= 1
+
+def main:
+  g = countdown(3)
+  puts g
+  puts g.len

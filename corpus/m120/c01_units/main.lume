@@ -1,0 +1,89 @@
+# c01_units — a library package and its tests. `lib.lume` is the library:
+# `pub struct Qty`, `pub def parse`, `total` and `scale`, and `pub import
+# convert`, which passes on the `Unit` enum and `unit_of`. This file
+# imports the library by the package's own name and tests it through what
+# it makes public, including an `async test` that parses in tasks.
+#
+# Run with `lume test corpus/m120/c01_units/main.lume`
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# test reads an amount ... ok
+# test a unit is read in any case ... ok
+# test a bad amount says where ... ok
+# test an unknown unit is an error ... ok
+# test a short text is an error ... ok
+# test shows whole or to two places ... ok
+# test adds the same kind ... ok
+# test refuses mass and volume together ... ok
+# test nothing to add ... ok
+# test sorts by amount ... ok
+# test scales every amount ... ok
+# test the units come with the library ... ok
+# test read in tasks, in order ... ok
+#
+# 13 tests: 13 passed, 0 failed
+
+import units
+import units.Qty
+
+test "reads an amount":
+  assert units.parse("250 g") == Ok(Qty(base: 250, unit: Grams))
+
+test "a unit is read in any case":
+  assert units.parse("2 KG").map { |q| q.base } == Ok(2000)
+
+test "a bad amount says where":
+  assert units.parse("lots g").error.map { |e| e.message } == Some("in `lots g`: `lots` is not an integer")
+
+test "an unknown unit is an error":
+  assert units.parse("3 cups").error.map { |e| e.message } == Some("unknown unit `cups`")
+
+test "a short text is an error":
+  assert units.parse("250").error.map { |e| e.message } == Some("expected `amount unit`, got `250`")
+
+test "shows whole or to two places":
+  assert Qty(base: 1500, unit: Kilos).show == "1.50 kg"
+  assert Qty(base: 2000, unit: Kilos).show == "2 kg"
+  assert units.parse("750 ml")!.in_unit(Litres).show == "0.75 l"
+
+test "adds the same kind":
+  assert units.total([units.parse("500 g")!, units.parse("1 kg")!]).map(_.show) == Ok("1500 g")
+
+test "refuses mass and volume together":
+  sum = units.total([units.parse("250 g")!, units.parse("1 l")!])
+  assert sum.error.map { |e| e.message } == Some("cannot add 1 l to 250 g")
+
+test "nothing to add":
+  assert units.total([]).error?
+
+test "sorts by amount":
+  qs = [units.parse("2 kg")!, units.parse("300 g")!, units.parse("1 l")!]
+  assert qs.sort.map(_.show).to_list == ["300 g", "1 l", "2 kg"]
+  assert qs.max.map(_.show) == Some("2 kg")
+
+test "scales every amount":
+  qs = [units.parse("2 kg")!, units.parse("300 g")!, units.parse("1 l")!]
+  assert units.scale(qs, 3).map(_.show).to_list == ["6 kg", "900 g", "3 l"]
+
+test "the units come with the library":
+  assert convert.unit_of("ML") == Ok(Millis)
+  assert convert.unit_of("l").map { |u| u.factor } == Ok(1000)
+  assert convert.unit_of("kg").map { |u| u.mass? } == Ok(true)
+
+async test "read in tasks, in order":
+  tasks = ["1 kg", "oops", "5 ml"].map { |t| spawn: units.parse(t) }.to_list
+  results = await tasks
+  assert results.map { |r| r.ok? }.to_list == [true, false, true]
+
+# The program itself: a basket added up. `lume test` does not run it.
+async def main:
+  var basket: [Qty] = []
+  for line in ["500 g", "1 kg", "250 g"]:
+    match units.parse(line):
+      Ok(q) -> basket.push(q)
+      Error(e) -> warn e.message
+  match units.total(basket):
+    Ok(t) -> puts "total #{t.in_unit(Kilos).show}"
+    Error(e) -> warn e.message

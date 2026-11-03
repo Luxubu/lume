@@ -1,0 +1,13 @@
+[2, 3, 5, 7, 11]
+["11^2=121", "13^2=169"]
+[2, 3, 5, 7, 11, 13, 17, 19]
+25 primes below 100
+49
+  making 1
+got 1
+  making 2
+  making 1
+Some(1)
+  making 2
+[2]
+exit: 0

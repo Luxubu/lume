@@ -1,0 +1,26 @@
+object
+object
+object
+3
+tea,pie,jam
+2
+[Item(name: "tea", qty: 2), Item(name: "pie", qty: 1), Item(name: "jam", qty: 1)]
+[{"name":"tea","qty":2},{"name":"pie","qty":1},{"name":"jam","qty":1}]
+{
+  "a": [
+    1,
+    {}
+  ],
+  "b": []
+}
+Error("expected `true` at position 3")
+Error("trailing characters at position 2")
+Error("expected `:`, found `1` at position 5")
+Error("unexpected end of input at position 0")
+Error("`size` is too large a number to be an `Int` exactly")
+Error("`n` is a number, not a whole number")
+Ok(None)
+"a\tb\u0007"
+"pie"
+none
+exit: 0

@@ -1,0 +1,7 @@
+error: `seen` inside `spawn:` is a copy, so changing it here would not be seen outside
+  --> corpus/m120/b07_task_pushes_copy.lume:19:5
+   |
+19 |     seen.push(1)
+   |     ^
+  help: declare it `shared var seen` before the `spawn:` if tasks are meant to change it, or bind a new name here
+exit: 1

@@ -1,0 +1,7 @@
+error: `count` is declared on line 18, outside this block; a new `count` here would hide it and be lost when the block ends
+  --> corpus/m120/a09_tea_count_fails.lume:21:7
+   |
+21 |       count = count + 1
+   |       ^
+  help: to change it from here, declare it `var count` on line 18; to make a separate value, give it another name
+exit: 1

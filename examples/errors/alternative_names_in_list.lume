@@ -1,0 +1,10 @@
+# Alternatives of `|` may each take a list apart, but not name what is in
+# it: each alternative's list is tested on its own, and the arm cannot
+# tell which one gave the name.
+def pick(p: ([Int], Str)) -> Int:
+  match p:
+    ([a], "x") | ([_, a], "y") -> a
+    _ -> 0
+
+def main:
+  puts pick(([7], "x"))

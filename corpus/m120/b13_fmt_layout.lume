@@ -1,0 +1,33 @@
+# b13_fmt_layout: The commands (Install, "The commands": `lume fmt`). Run
+# with `lume fmt --stdout corpus/m120/b13_fmt_layout.lume`. Promises made on
+# other pages about what `lume fmt` writes, none in examples/fmt/: "Rust's
+# spelling with brackets, `for (i, x) in xs.enumerate`, means the same, and
+# `lume fmt` writes it without them" (Control flow); "A comma after the last
+# item is fine, and `lume fmt` writes one" (Collections); chain steps are
+# indented under the line they continue, one a line (Collections);
+# `puts(x)` loses its brackets (examples/fmt/messy).
+# Meant to RUN.
+# EXPECTED OUTPUT: these header lines, as they are, then a blank line, then:
+# def main:
+#   words = [
+#     "pear",
+#     "fig",
+#   ]
+#   for i, w in words.enumerate:
+#     puts "#{i}: #{w}"
+#   loud = words
+#     .map(_.upcase)
+#     .join("+")
+#   puts loud
+
+def main:
+  words = [
+      "pear",
+      "fig"
+  ]
+  for (i,w) in words.enumerate:
+    puts "#{i}: #{w}"
+  loud = words
+        .map(_.upcase)
+            .join("+")
+  puts(loud)

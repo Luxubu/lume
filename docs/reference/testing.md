@@ -143,7 +143,8 @@ test` does.
 
 **A test that waits is an `async test`**, as `async def main` is the `main`
 that waits. It runs on its own tokio runtime, as Rust's `#[tokio::test]`
-does, and can `await` an `async def`, a task, or an async sequence:
+does, and can `await` an `async def`, a task, or an async sequence. It can
+start tasks with `spawn:` too, whatever kind of `main` the file has:
 
 ```lume
 async def cook(dish: Str, ms: Int) -> Str:
@@ -179,7 +180,8 @@ package — `main.lume` or `lib.lume` and the modules they import — and not
 the tests of its dependencies, as `cargo test` does. A test in a module is
 named with the module first, `menu: prices add up`, and the modules' tests
 run before the entry file's. `lume test prices` filters a package's tests
-by that whole name, so `lume test menu` runs every test of `menu`.
+by that whole name, so `lume test menu` runs every test of `menu`. Naming
+the package's `main.lume` or `lib.lume` runs the same tests as naming none.
 
 ## Underneath, in Rust
 

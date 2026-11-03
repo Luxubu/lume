@@ -263,7 +263,10 @@ It looks upward for a `lume.toml`, as Cargo does.
 | `lume fmt [--check]` | every `.lume` file in the package; a package kept in a folder inside it is left alone |
 | `lume update [name]` | moves git dependencies (all, or the one named) to the commits `lume.toml` asks for now, and rewrites `lume.lock` |
 
-Naming a file still works in a package: `lume run tools/report.lume`.
+Naming a file still works in a package: `lume run tools/report.lume`. The
+file finds the `lume.toml` in its own folder or above it, wherever the
+command is run from, so `lume run shop/main.lume` from outside `shop/` uses
+`shop`'s dependencies.
 
 ## Packages from git, and `lume.lock`
 

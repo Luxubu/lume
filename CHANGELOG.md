@@ -14,6 +14,20 @@
   `lume lsp` speaks, which is settled. Lunch 24 is no longer a preview; it
   says that the server's answers, which it prints, are not promised word
   for word.
+- **A list pattern goes inside any other pattern**, as `patterns.md` always
+  said: `Say([w])`, `Some([first, ..rest])`, `(cmd, ["hi" | "yo", ..])`,
+  `[[a, b], [c]]`. One did only when the list was matched on its own; inside
+  anything else it reached rustc. Alternatives of `|` that name nothing
+  may now differ in shape and hold literals, as `("a", _) | (_, 2)`.
+- **Fixed**, by the rule for bugs in `stability.md`: in a `-> () or Error`
+  function, an `Error(...)` on a line of its own that does not end the
+  function left it, unlike in every other function, where it is refused;
+  `errors.md` said it was thrown away. It is refused there too now, with
+  the same message and fix: `return Error(...)`. One that ends a branch at
+  the function's end is still its value.
+- **Fixed**: `xs.push(1)` inside `spawn:` on an outside `var` said `xs` was
+  not a `var`; it says, as `xs = ...` does, that the task changes its own
+  copy. A chain's list of methods in an error leaves out `at` no longer.
 - **Fixed**: two examples in the I/O reference used one folder, and the
   docs check, which runs examples side by side, could have one remove it
   while the other read it — as 0.8.0's own check on Linux did.

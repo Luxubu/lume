@@ -32,7 +32,7 @@ Then:
 - **[A tour of Lume](docs/tour.md)** — the language in half an hour.
 - **[The reference](docs/README.md)** — how a value prints, what `pad` fills,
   which methods a list has, the precedence table.
-- **[The examples](docs/examples.md)** — 5,000 lines of working programs, in a
+- **[The examples](docs/examples.md)** — 7,000 lines of working programs, in a
   reading order.
 - **[Installing](docs/install.md)** — and what each command does.
 - **[Changes](CHANGELOG.md)** — what each release holds; 0.8.0 is the latest.
@@ -62,12 +62,12 @@ def main:
     puts "#{zip}: #{people.map(_.name).join(", ")}"
 ```
 
-It is sound in a way that is meant to be load-bearing: twenty review rounds,
+It is sound in a way that is meant to be load-bearing: twenty-four review rounds,
 each by reviewers who had never seen the compiler, wrote programs from the docs
 alone and predicted their output by hand, and every problem they found was
-fixed — the 662 programs they left behind are run on every change and must
+fixed — the 782 programs they left behind are run on every change and must
 print what they print today. What Lume refuses, it refuses with a message that
-names the fix — `examples/errors/` is 394 programs kept around to prove it.
+names the fix — `examples/errors/` is 445 programs kept around to prove it.
 
 **Where it is.** Version 0.8. The language, the collections, files and
 folders, running programs and talking to them as they run, tasks and async
@@ -140,7 +140,6 @@ Two things worth knowing when you measure your own program:
 ```sh
 tests/run.sh      # every example's output and every error message, diffed
 tests/docs.sh     # every example in docs/, run and checked against its claims
-tests/corpus.sh   # the 283 independently-written review programs
 tests/bench.sh    # the benchmarks, against their budget
 ```
 
@@ -148,17 +147,8 @@ The suite also runs `lume test` on `examples/tests/`, `lume fmt` on
 `examples/fmt/`, checks that formatting every example is idempotent and leaves
 the generated Rust unchanged, and runs the review corpora (programs written by
 independent reviewers who did not know the compiler).
-`tests/corpus.sh` classifies the corpus (283 programs from seven review
-rounds: `corpus/` and `corpus/edge/` after milestone 14, `corpus/m17/` on the
-pattern and standard-method surface, `corpus/m18/` on sets and slicing,
-`corpus/m26/` on generics, parameterised interfaces and blocks, `corpus/m28/`
-on generic `extend`, the seams between features, and whole programs, and
-`corpus/m30/` on modules — thirty multi-file programs, each a directory with
-its own `main.lume` — and `corpus/m36/` on the documentation, thirty programs
-written from `docs/` alone): 217
-run, 66 stop with a Lume error (each a deliberate rule or a deliberate error
-test: no shadowing, no `Float / Int`, an unbounded `T` as a map key, ...),
-none leaks a rustc error. Each round has a `REPORT.md` beside its programs.
+Every review program is checked against the output it gives today, and
+none may leak a rustc error. Each round has a `REPORT.md` beside its programs.
 
 Tests in a Lume file:
 

@@ -1,0 +1,18 @@
+Entry(day: "2026-03-01", time: "09:14", level: "INFO", fields: {"user": "ada", "action": "login", "ip": "10.0.0.7"})
+{"INFO": 2, "WARN": 1, "ERROR": 2, "DEBUG": 1}
+ada  login, pay, logout
+bob  upload, pay
+cy   login
+busiest: ada
+not log lines: [5]
+2026-03-01 09:15 WARN user=bob action=upload size=4096 mail=<mail>
+2026-03-01 09:20 ERROR user=ada action=pay code=E42 mail=<mail>
+10\.0\.0\.
+["10.0.0.7", "10.0.0.9"]
+line 3: E42 at 48..51
+line 6: E17 at 48..51
+codes add up to 59
+pay: 2 lines
+broken: refused
+login: 2 lines
+exit: 0

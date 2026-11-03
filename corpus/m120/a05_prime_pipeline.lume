@@ -1,0 +1,77 @@
+# A generator pipeline, as lunch 14 builds one: an endless generator, steps
+# that take `Iterator[Int]` and yield on, a range handed where an
+# `Iterator[Int]` goes, `take` stopping an endless walk, a generator over
+# the lines of a triple-quoted text skipping with `next if`, chains on a
+# generator, the order of work shown by printing inside one, `break` in a
+# `for`, and `next` on a `var` followed by `to_list` carrying on.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# [2, 3, 5, 7, 11]
+# ["11^2=121", "13^2=169"]
+# [2, 3, 5, 7, 11, 13, 17, 19]
+# 25 primes below 100
+# 49
+#   making 1
+# got 1
+#   making 2
+#   making 1
+# Some(1)
+#   making 2
+# [2]
+
+def numbers_from(start: Int) -> Iterator[Int]:
+  var n = start
+  while true:
+    yield n
+    n += 1
+
+def is_prime(n: Int) -> Bool:
+  if n < 2:
+    return false
+  for d in 2...n:
+    if d * d > n:
+      break
+    if n % d == 0:
+      return false
+  true
+
+def primes(xs: Iterator[Int]) -> Iterator[Int]:
+  for x in xs:
+    yield x if is_prime(x)
+
+def squares_of(xs: Iterator[Int]) -> Iterator[Str]:
+  for x in xs:
+    yield "#{x}^2=#{x * x}"
+
+def wanted_lines(text: Str) -> Iterator[Str]:
+  for line in text.lines:
+    t = line.trim
+    next if t.empty? or t.starts_with?("#")
+    yield t
+
+def noisy(n: Int) -> Iterator[Int]:
+  for i in 1..n:
+    puts "  making #{i}"
+    yield i
+
+SCORES = """
+  # scores
+  12
+  7
+
+  30
+  # end
+  """
+
+def main:
+  puts primes(numbers_from(1)).take(5).to_list
+  puts squares_of(primes(numbers_from(10))).take(2).to_list
+  puts primes(1..20).to_list
+  puts "#{primes(1...100).to_list.len} primes below 100"
+  puts wanted_lines(SCORES).map { |l| l.to_int.or(0) }.sum
+  for x in noisy(3):
+    break if x == 2
+    puts "got #{x}"
+  var g = noisy(2)
+  puts g.next
+  puts g.to_list

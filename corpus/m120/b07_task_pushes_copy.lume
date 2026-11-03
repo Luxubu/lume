@@ -1,0 +1,21 @@
+# b07_task_pushes_copy: Tasks (Concurrency, "What a task sees: copies").
+# The page says "a task may not change an outside `var`: the change would be
+# made to its copy and lost". Its examples change the `var` with `=` and
+# `+=`; this one changes an outside list with a method, `push`, which the
+# page counts as changing it ("A `shared var` list or map is changed the
+# same way, with methods").
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `seen` inside `spawn:` is a copy, so changing it here would not be seen outside
+#   --> corpus/m120/b07_task_pushes_copy.lume:19:5
+#    |
+# 19 |     seen.push(1)
+#    |     ^
+#   help: declare it `shared var seen` before the `spawn:` if tasks are meant to change it, or bind a new name here
+
+async def main:
+  var seen: [Int] = []
+  t = spawn:
+    seen.push(1)
+  await t
+  puts seen

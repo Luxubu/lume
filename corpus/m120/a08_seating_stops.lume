@@ -1,0 +1,32 @@
+# A program that stops: `!` on a result (and the warning the compiler
+# gives for it, on standard error before the program's output), then
+# `.at(i)` past the end of a list inside a function called from a loop.
+# The stop names the line inside the function, not the line of the call.
+# Meant to STOP.
+# EXPECTED OUTPUT:
+# guests: 4
+# guest 0: window
+# guest 1: aisle
+# guest 2: middle
+# EXPECTED STDERR:
+# warning: `!` stops the program if the value is missing or an error
+#   --> corpus/m120/a08_seating_stops.lume:27:22
+#    |
+# 27 |   guests = "4".to_int!
+#    |                      ^
+#   help: fine in tests and quick scripts; elsewhere use `match`, `?` or `.or(default)`
+# error: no item at 3 — the list has 3
+#   --> corpus/m120/a08_seating_stops.lume:24
+#    |
+# 24 | def seat_for(guest: Int, seats: [Str]) -> Str = seats.at(guest)
+# EXPECTED EXIT: 101
+
+def seat_for(guest: Int, seats: [Str]) -> Str = seats.at(guest)
+
+def main:
+  guests = "4".to_int!
+  seats = ["window", "aisle", "middle"]
+  puts "guests: #{guests}"
+  for g in 0...guests:
+    puts "guest #{g}: #{seat_for(g, seats)}"
+  puts "all seated"

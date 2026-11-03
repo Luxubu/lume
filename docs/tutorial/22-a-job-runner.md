@@ -92,7 +92,7 @@ async def run_all(jobs: [Job], at_once: Int) -> [Outcome]:
     match await running.next_done:
       Some(result) -> done.push(result)
       None -> ()
-  done.sort_by { |i, o| i }.map { |i, o| o }.to_list
+  done.sort_by { |i, _| i }.map { |_, o| o }.to_list
 ```
 
 Three things to notice:

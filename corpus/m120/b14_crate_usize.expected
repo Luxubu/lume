@@ -1,0 +1,8 @@
+3
+2026
+-
+error: -1 does not fit in the Rust `usize` the crate asks for
+  --> corpus/m120/b14_crate_usize.lume:23
+   |
+23 |     Some(c) -> c.get(i).map { |m| m.as_str }.or("-")
+exit: 101

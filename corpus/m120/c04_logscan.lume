@@ -1,0 +1,123 @@
+# c04_logscan — a log scanner on the `regex` crate. A struct holds two
+# compiled `regex.Regex` values; `captures` and `get` take each line apart
+# (a `T?` chain with `?`), `find_iter` pulls out `key=value` pairs, a
+# generator numbers the lines, and maps tally what was found. Then
+# `replace_all` hides addresses, `regex.escape` builds a pattern from plain
+# text, `find` gives positions, and a pattern that does not compile is an
+# `Error` like any other.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# Entry(day: "2026-03-01", time: "09:14", level: "INFO", fields: {"user": "ada", "action": "login", "ip": "10.0.0.7"})
+# {"INFO": 2, "WARN": 1, "ERROR": 2, "DEBUG": 1}
+# ada  login, pay, logout
+# bob  upload, pay
+# cy   login
+# busiest: ada
+# not log lines: [5]
+# 2026-03-01 09:15 WARN user=bob action=upload size=4096 mail=<mail>
+# 2026-03-01 09:20 ERROR user=ada action=pay code=E42 mail=<mail>
+# 10\.0\.0\.
+# ["10.0.0.7", "10.0.0.9"]
+# line 3: E42 at 48..51
+# line 6: E17 at 48..51
+# codes add up to 59
+# pay: 2 lines
+# broken: refused
+# login: 2 lines
+
+import rust.regex = "1"
+
+TEXT = """
+  2026-03-01 09:14 INFO user=ada action=login ip=10.0.0.7
+  2026-03-01 09:15 WARN user=bob action=upload size=4096 mail=bob@example.org
+  2026-03-01 09:20 ERROR user=ada action=pay code=E42 mail=ada@site.net
+  2026-03-02 10:01 INFO user=cy action=login ip=10.0.0.9
+  not a log line at all
+  2026-03-02 10:05 ERROR user=bob action=pay code=E17
+  2026-03-02 10:07 DEBUG user=ada action=logout
+  """
+
+struct Entry:
+  day: Str
+  time: Str
+  level: Str
+  fields: {Str: Str}
+
+  def get(key: Str) -> Str = fields[key].or("-")
+
+struct Scanner:
+  line_re: regex.Regex
+  pair_re: regex.Regex
+
+  def self.build -> Scanner or Error:
+    lines_pat = regex.Regex.new(r"^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}) ([A-Z]+) (.*)$")?
+    pairs_pat = regex.Regex.new(r"(\w+)=(\S+)")?
+    Scanner(line_re: lines_pat, pair_re: pairs_pat)
+
+  # a line taken apart, or nothing when it is not a log line
+  def entry(line: Str) -> Entry?:
+    c = line_re.captures(line)?
+    var found: {Str: Str} = {}
+    for m in pair_re.find_iter(c.get(4)?.as_str):
+      match m.as_str.split("="):
+        [k, v] -> found[k] = v
+        _ -> ()
+    Entry(day: c.get(1)?.as_str, time: c.get(2)?.as_str, level: c.get(3)?.as_str, fields: found)
+
+# the lines that have something on them, numbered from 1
+def numbered(text: Str) -> Iterator[(Int, Str)]:
+  for i, line in text.lines.enumerate:
+    yield (i + 1, line) if not line.trim.empty?
+
+def main -> () or Error:
+  scan = Scanner.build()?
+  var by_level: {Str: Int} = {}
+  var by_user: {Str: [Str]} = {}
+  var odd: [Int] = []
+  var shown = false
+  for n, line in numbered(TEXT):
+    match scan.entry(line):
+      Some(e) ->
+        if not shown:
+          puts e
+          shown = true
+        by_level[e.level] = by_level[e.level].or(0) + 1
+        by_user[e.get("user")].push(e.get("action"))
+      None -> odd.push(n)
+  puts by_level
+  for user, actions in by_user:
+    puts "#{user.pad_right(4)} #{actions.join(", ")}"
+  busiest = by_user.max_by { |_, acts| acts.len }
+  puts "busiest: #{busiest.map { |p| p.0 }.or("nobody")}"
+  puts "not log lines: #{odd}"
+
+  # addresses hidden
+  mail = regex.Regex.new(r"[\w.]+@[\w.]+")?
+  for _, line in numbered(TEXT):
+    puts mail.replace_all(line, "<mail>") if mail.is_match(line)
+
+  # a pattern made from plain text: its dots are only dots
+  prefix = regex.escape("10.0.0.")
+  puts prefix
+  ip = regex.Regex.new(prefix + r"\d+")?
+  puts ip.find_iter(TEXT).map(_.as_str).to_list
+
+  # where each error code sits in its line, and what they add up to
+  code = regex.Regex.new(r"E(\d+)")?
+  var sum = 0
+  for n, line in numbered(TEXT):
+    match code.captures(line):
+      Some(c) ->
+        whole = code.find(line).or_error("found by captures, so found by find")?
+        puts "line #{n}: #{whole.as_str} at #{whole.start}..#{whole.end}"
+        sum += c.get(1).map { |m| m.as_str.to_int.or(0) }.or(0)
+      None -> ()
+  puts "codes add up to #{sum}"
+
+  # rules from text: one of them is not a pattern at all
+  for label, pattern in [("pay", r"action=pay"), ("broken", "("), ("login", r"action=log(in|on)\b")]:
+    match regex.Regex.new(pattern):
+      Ok(re) -> puts "#{label}: #{TEXT.lines.count { |l| re.is_match(l) }} lines"
+      Error(_) -> puts "#{label}: refused"

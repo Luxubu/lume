@@ -1,0 +1,72 @@
+# A first test file, as lunch 12 and the Tests reference show: `test`
+# blocks with `assert` on `==` and on a `Bool`, a function's name handed to
+# `map`, an empty list given to a typed parameter, an `async test` that
+# awaits an `async def`, and one test that fails on purpose with a `Str` on
+# each side, to show what `left` and `right` print for text.
+# Run with `lume test corpus/m120/a07_fizz_tests.lume`
+# Meant to RUN. One test fails on purpose, so `lume test` exits with status 1.
+# EXPECTED OUTPUT:
+# test fizz on multiples of three ... ok
+# test fizz on fifteen ... ok
+# test plain numbers stay numbers ... ok
+# test average of nothing is absent ... ok
+# test average of two ... ok
+# test initials of a full name ... ok
+# test shouting waits ... ok
+# test ten is not fizz, on purpose ... FAILED
+#     corpus/m120/a07_fizz_tests.lume:68: assert fizz(10) == "Fizz"
+#       left:  Buzz
+#       right: Fizz
+#
+# 8 tests: 7 passed, 1 failed
+# EXPECTED EXIT: 1
+
+def fizz(n: Int) -> Str:
+  if n % 15 == 0:
+    "FizzBuzz"
+  elif n % 3 == 0:
+    "Fizz"
+  elif n % 5 == 0:
+    "Buzz"
+  else:
+    n.to_s
+
+def average(xs: [Int]) -> Float?:
+  if xs.empty?:
+    return None
+  xs.sum.to_float / xs.len.to_float
+
+def initials(name: Str) -> Str = name.split.map { |w| w.slice(0, 1).upcase }.join("")
+
+async def shout(word: Str) -> Str:
+  await Time.sleep(1)
+  word.upcase
+
+test "fizz on multiples of three":
+  assert fizz(9) == "Fizz"
+
+test "fizz on fifteen":
+  assert fizz(15) == "FizzBuzz"
+
+test "plain numbers stay numbers":
+  assert [1, 2].map(fizz).to_list == ["1", "2"]
+
+test "average of nothing is absent":
+  assert average([]).none?
+
+test "average of two":
+  assert average([2, 4]).or(0.0) == 3.0
+
+test "initials of a full name":
+  assert initials("ada lovelace") == "AL"
+
+async test "shouting waits":
+  loud = await shout("hi")
+  assert loud == "HI"
+
+test "ten is not fizz, on purpose":
+  assert fizz(10) == "Fizz"
+
+async def main:
+  for n in 1..5:
+    puts fizz(n)

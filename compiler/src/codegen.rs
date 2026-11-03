@@ -1522,6 +1522,9 @@ pub struct Gen {
     /// True while emitting statements whose value is the function's result
     /// (so `T or E` returns get their implied `Ok`/`Err`).
     tail_of_fn: bool,
+    /// The pattern being compiled is matched against a slice: a list
+    /// pattern here is Rust's own. Anywhere deeper the list is a `Vec`.
+    slice_here: bool,
     /// Set just before emitting an if/match that sits in tail position.
     at_tail: bool,
     tmp: usize,
@@ -1689,6 +1692,7 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, module_id: &str
         loop_depth: 0,
         in_block: false,
         tail_of_fn: false,
+        slice_here: false,
         at_tail: false,
         tmp: 0,
         warnings: Vec::new(),
@@ -8991,11 +8995,15 @@ impl Gen {
                 } else {
                     let et0 = self.ty_of(e);
                     self.no_future(&et0, e)?;
-                    // In a `() or E` function a bare error value is an early return.
-                    if !self.in_block {
+                    // In a `() or E` function, an error that ends a branch at
+                    // the function's end is its value: the branch's way of
+                    // failing, as `Draft -> ...` beside `_ -> Error(...)`.
+                    // Anywhere else it is thrown away, and refused below.
+                    let ends_fn = self.tail_of_fn && self.rest_stack.last().map_or(false, |r| r.is_empty());
+                    if ends_fn && !self.in_block && !matches!(e.kind, ExprKind::If { .. } | ExprKind::Match { .. }) {
                         if let Type::Result(t, err_t) = self.current_ret.clone() {
                             if *t == Type::Unit {
-                                let et = self.ty_of(e).materialized();
+                                let et = et0.materialized();
                                 if et == *err_t && et != Type::Unknown {
                                     let v = self.expr_owned(e)?;
                                     self.line(&format!("return Err({});", v));
@@ -9004,7 +9012,13 @@ impl Gen {
                             }
                         }
                     }
-                    self.check_not_dropped(e, &et0)?;
+                    // an `if` or `match` ending the function keeps its branches
+                    // at the end too, and each is looked at there
+                    if ends_fn && matches!(e.kind, ExprKind::If { .. } | ExprKind::Match { .. }) {
+                        self.at_tail = true;
+                    } else {
+                        self.check_not_dropped(e, &et0)?;
+                    }
                     let v = self.expr_stmt(e)?;
                     self.line(&format!("{};", v));
                 }
@@ -10928,8 +10942,15 @@ impl Gen {
         let base = self.indent;
         self.out.push_str(&format!("match {} {{\n", scrut));
         self.indent += 1;
+        // a list inside a pattern is tested in a guard, which Rust does not
+        // count: Lume has found the arms whole, so what is left is not reached
+        let mut nested_lists = false;
         for arm in arms {
-            let cp = self.compile_pattern(&arm.pat, &st, by_ref)?;
+            self.slice_here = uses_list_pat;
+            let cp = self.compile_pattern(&arm.pat, &st, by_ref);
+            self.slice_here = false;
+            let cp = cp?;
+            nested_lists |= cp.guards.iter().any(|g| g.contains("matches!("));
             self.push_scope();
             let mut rebinds: Vec<String> = Vec::new();
             for (name, ty, kind) in &cp.binds {
@@ -10980,6 +11001,10 @@ impl Gen {
             self.line("}");
             self.pop_scope();
         }
+        if nested_lists {
+            self.line("#[allow(unreachable_patterns)]");
+            self.line("_ => unreachable!(),");
+        }
         self.indent -= 1;
         self.out.push_str(&"    ".repeat(base));
         self.out.push('}');
@@ -10994,6 +11019,7 @@ impl Gen {
     }
 
     fn compile_pat_into(&mut self, p: &Pattern, t: &Type, by_ref: bool, cp: &mut CompiledPat) -> Result<()> {
+        let at_slice = std::mem::replace(&mut self.slice_here, false);
         let text = match &p.kind {
             PatKind::Wild => "_".to_string(),
             PatKind::Or(alts) => {
@@ -11034,7 +11060,12 @@ impl Gen {
                     // `Some("a") | Some("e")` is one pattern with two tests
                     self.tmp = tmp_before;
                     let mut sub = CompiledPat { text: String::new(), guards: Vec::new(), binds: Vec::new(), lets: Vec::new() };
+                    self.slice_here = at_slice;
                     self.compile_pat_into(a, t, by_ref, &mut sub)?;
+                    if !sub.lets.is_empty() {
+                        return Err(LumeError::new(a.line, a.col, "an alternative of `|` cannot name what is inside a list or a recursive field")
+                            .with_help("give this alternative an arm of its own, or use `_` for the names inside it"));
+                    }
                     alt_guards.push(std::mem::take(&mut sub.guards));
                     let mut names: Vec<&String> = sub.binds.iter().map(|(n, _, _)| n).collect();
                     names.sort();
@@ -11070,6 +11101,22 @@ impl Gen {
                 if alt_guards.iter().any(|g| !g.is_empty()) {
                     // literals inside the alternatives: the shapes must agree,
                     // and the tests become one `||` guard
+                    if texts.iter().any(|t| *t != texts[0]) && cp.binds.is_empty() {
+                        // shapes that differ, naming nothing: test the whole
+                        // value against each alternative in the guard
+                        let tmp = self.fresh("alt");
+                        let r = if by_ref { "" } else { "&" };
+                        let tests: Vec<String> = texts
+                            .iter()
+                            .zip(&alt_guards)
+                            .map(|(t, g)| {
+                                let cond = if g.is_empty() { String::new() } else { format!(" if {}", g.join(" && ")) };
+                                format!("matches!({}{}, {}{})", r, rust_name(&tmp), t, cond)
+                            })
+                            .collect();
+                        cp.guards.push(format!("({})", tests.join(" || ")));
+                        return Ok(cp.text = rust_name(&tmp));
+                    }
                     if texts.iter().any(|t| *t != texts[0]) {
                         return Err(LumeError::new(p.line, p.col, "alternatives with a string or float inside must otherwise look the same")
                             .with_help("write `Some(\"a\") | Some(\"e\")` (same shape), or separate arms"));
@@ -11147,6 +11194,53 @@ impl Gen {
                 }
                 format!("({})", parts.join(", "))
             }
+            PatKind::List { .. } if !at_slice => {
+                if !matches!(t, Type::List(_)) {
+                    return Err(LumeError::new(p.line, p.col, format!("a list pattern cannot match a `{}`", type_name(t))));
+                }
+                // A list inside another pattern is a `Vec`, which Rust cannot
+                // take apart in place: bind it, test it as a slice in the
+                // guard, and take it apart at the top of the arm.
+                let tmp = self.fresh("ls");
+                let deref = if by_ref { "" } else { "&" };
+                self.slice_here = true;
+                let inner = self.compile_pattern(p, t, true);
+                self.slice_here = false;
+                let inner = inner?;
+                let cond = if inner.guards.is_empty() { String::new() } else { format!(" if {}", inner.guards.join(" && ")) };
+                cp.guards.push(format!("matches!({}{}.as_slice(), {}{})", deref, rust_name(&tmp), inner.text, cond));
+                if !inner.binds.is_empty() {
+                    let names: Vec<String> = inner.binds.iter().map(|(n, _, _)| rust_name(n)).collect();
+                    let values: Vec<String> = inner
+                        .binds
+                        .iter()
+                        .map(|(n, _, k)| match k {
+                            BindKind::Deref => format!("*{}", rust_name(n)),
+                            BindKind::Boxed => format!("&**{}", rust_name(n)),
+                            BindKind::Slice => format!("{}.to_vec()", rust_name(n)),
+                            _ => rust_name(n),
+                        })
+                        .collect();
+                    cp.lets.push(format!(
+                        "let ({},) = match {}{}.as_slice() {{ {}{} => ({},), _ => unreachable!() }};",
+                        names.join(", "),
+                        deref,
+                        rust_name(&tmp),
+                        inner.text,
+                        cond,
+                        values.join(", ")
+                    ));
+                    for (n, t, k) in inner.binds {
+                        let kind = match k {
+                            BindKind::Deref | BindKind::Owned | BindKind::Slice => BindKind::Owned,
+                            _ => BindKind::Ref,
+                        };
+                        cp.binds.push((n, t, kind));
+                    }
+                }
+                cp.lets.extend(inner.lets);
+                rust_name(&tmp)
+            }
             PatKind::List { items, rest } => {
                 let elem = match t {
                     Type::List(e) => (**e).clone(),
@@ -11216,6 +11310,7 @@ impl Gen {
                         self.compile_pat_into(&args[0], &inner, by_ref, &mut sub)?;
                         cp.guards.extend(sub.guards);
                         cp.binds.extend(sub.binds);
+                        cp.lets.extend(sub.lets);
                         format!("Some({})", sub.text)
                     }
                 } else {
@@ -13273,6 +13368,12 @@ impl Gen {
             if self.kept_captured.contains(n) && !matches!(self.lookup(n).map(|b| &b.ty), Some(Type::Shared(..))) {
                 return Err(self.kept_change(n, line, col));
             }
+            // `xs.push(1)` in a task is a change as `xs = ...` is, to the
+            // task's own copy
+            if self.spawn_captured.contains(n) && self.lookup(n).map(|b| !b.mutable && !matches!(b.ty, Type::Shared(..))).unwrap_or(false) {
+                return Err(LumeError::new(recv.line, recv.col, format!("`{}` inside `spawn:` is a copy, so changing it here would not be seen outside", n))
+                    .with_help(format!("declare it `shared var {}` before the `spawn:` if tasks are meant to change it, or bind a new name here", n)));
+            }
         }
         match &recv.kind {
             ExprKind::Ident(n) => match self.lookup(n) {
@@ -13863,7 +13964,7 @@ fn builtins_for(recv: &Type) -> Vec<&'static str> {
         Type::Iter(..) => vec![
             "len", "empty?", "any?", "all?", "first", "last", "max", "min", "sum", "sort", "sort_by", "reverse", "contains?", "join", "map",
             "filter", "reject", "each", "count", "find", "take", "skip", "take_while", "fold", "min_by", "max_by", "enumerate", "to_list",
-            "zip", "flatten", "uniq", "index_of", "avg", "group_by", "partition", "flat_map", "to_set",
+            "zip", "flatten", "uniq", "index_of", "avg", "group_by", "partition", "flat_map", "to_set", "at",
         ],
         Type::Map(..) => vec!["len", "empty?", "any?", "contains?", "keys", "values", "to_list", "remove", "get", "merge", "filter", "reject", "map_values", "each", "count", "all?", "find"],
         // items that arrive later: awaited one at a time, or all of them

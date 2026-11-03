@@ -1,0 +1,6 @@
+error: an alternative of `|` cannot name what is inside a list or a recursive field
+  --> examples/errors/alternative_names_in_list.lume:6:5
+  |
+6 |     ([a], "x") | ([_, a], "y") -> a
+  |     ^
+  help: give this alternative an arm of its own, or use `_` for the names inside it

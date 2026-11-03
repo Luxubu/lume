@@ -40,7 +40,8 @@ Three types answer differently:
   `(key, value)` pairs (`map`, `sort_by`, `max_by`, `min_by`, `fold`,
   `flat_map`, `group_by`, `partition`). They work. The [map](#k-v-maps)
   table has them all.
-- A tuple has no methods. Asking gives an internal error, not a list.
+- A tuple has no methods: ``a tuple has no method `len` ``, with its parts
+  `.0`, `.1` and so on offered instead.
 
 ## `Str`
 

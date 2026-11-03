@@ -1,0 +1,180 @@
+# c06_todo — a command-line to-do tool with failures of its own (an enum,
+# carried in a generic `Outcome[T]`) and an exit code for each kind. Given
+# no arguments, as here, it runs a session of commands against a file under
+# /tmp, and exits with the last command's code, as a shell script would.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# $ todo help
+# commands: add TEXT, done N, rm N, show, clear
+# $ todo add buy milk
+# added 1: buy milk
+# $ todo add call the plumber
+# added 2: call the plumber
+# $ todo add water plants
+# added 3: water plants
+# $ todo done 2
+# done 2: call the plumber
+# $ todo show
+#  1 [-] buy milk
+#  2 [x] call the plumber
+#  3 [-] water plants
+# $ todo done 7
+# $ todo done two
+# $ todo clear
+# cleared 1 done
+# $ todo rm 1
+# removed 1: buy milk
+# $ todo show
+#  1 [-] water plants
+# $ todo add
+# $ todo fly
+# file: - water plants
+#
+# EXPECTED STDERR:
+# todo: no item 7 (exit 3)
+# todo: `two` is not an item number (exit 4)
+# todo: usage: add TEXT (exit 2)
+# todo: unknown command `fly` (exit 2)
+#
+# EXPECTED EXIT: 2
+
+DIR = "/tmp/lume-review-c/todo"
+TODO_FILE = "/tmp/lume-review-c/todo/todo.txt"
+
+SESSION = [
+  ["help"], ["add", "buy", "milk"], ["add", "call", "the", "plumber"],
+  ["add", "water", "plants"], ["done", "2"], ["show"], ["done", "7"],
+  ["done", "two"], ["clear"], ["rm", "1"], ["show"], ["add"], ["fly"],
+]
+
+enum Failure:
+  Usage(why: Str)
+  Unknown(name: Str)
+  NoSuch(index: Int)
+  NotNumber(text: Str)
+  Disk(why: Str)
+
+  def code -> Int:
+    match self:
+      Usage(_) | Unknown(_) -> 2
+      NoSuch(_) -> 3
+      NotNumber(_) -> 4
+      Disk(_) -> 5
+
+  def text -> Str:
+    match self:
+      Usage(why) -> "usage: #{why}"
+      Unknown(name) -> "unknown command `#{name}`"
+      NoSuch(i) -> "no item #{i}"
+      NotNumber(t) -> "`#{t}` is not an item number"
+      Disk(why) -> why
+
+enum Outcome[T]:
+  Good(value: T)
+  Bad(why: Failure)
+
+enum Command:
+  Help
+  Add(text: Str)
+  Done(index: Int)
+  Remove(index: Int)
+  Show
+  Clear
+
+struct Item:
+  text: Str
+  done: Bool
+
+  def mark -> Str = if done: "x" else: "-"
+  def line -> Str = "#{mark} #{text}"
+
+def index_from(text: Str) -> Outcome[Int]:
+  match text.to_int:
+    Ok(i) if i >= 1 -> Good(i)
+    _ -> Bad(NotNumber(text))
+
+def with_index(text: Str, make: (Int) -> Command) -> Outcome[Command]:
+  match index_from(text):
+    Good(i) -> Good(make(i))
+    Bad(f) -> Bad(f)
+
+def parse(argv: [Str]) -> Outcome[Command]:
+  match argv:
+    ["help"] -> Good(Help)
+    ["add", ..words] if not words.empty? -> Good(Add(words.join(" ")))
+    ["add"] -> Bad(Usage("add TEXT"))
+    ["done", n] -> with_index(n) { |i| Done(i) }
+    ["rm", n] -> with_index(n) { |i| Remove(i) }
+    ["done"] | ["rm"] -> Bad(Usage("done N, or rm N"))
+    ["show"] -> Good(Show)
+    ["clear"] -> Good(Clear)
+    [] -> Bad(Usage("todo COMMAND [ARGS]"))
+    [other, ..] -> Bad(Unknown(other))
+
+def load(path: Str) -> [Item] or Error:
+  var items: [Item] = []
+  if File.exists?(path):
+    for l in File.read(path)?.lines:
+      items.push(Item(text: l.slice(2, l.len), done: l.starts_with?("x ")))
+  items
+
+def save(path: Str, items: [Item]) -> () or Error:
+  File.write(path, items.map { |it| it.line + "\n" }.join(""))?
+
+def act(cmd: Command, path: Str) -> Failure?:
+  var xs: [Item] = []
+  match load(path):
+    Ok(found) -> xs = found
+    Error(e) -> return Some(Disk(e.message))
+  match cmd:
+    Help -> puts "commands: add TEXT, done N, rm N, show, clear"
+    Add(text) ->
+      xs.push(Item(text: text, done: false))
+      puts "added #{xs.len}: #{text}"
+    Done(i) ->
+      if i > xs.len:
+        return Some(NoSuch(i))
+      var it = xs.at(i - 1)
+      it.done = true
+      xs[i - 1] = it
+      puts "done #{i}: #{it.text}"
+    Remove(i) ->
+      if i > xs.len:
+        return Some(NoSuch(i))
+      gone = xs.remove_at(i - 1)
+      puts "removed #{i}: #{gone.text}"
+    Show ->
+      puts "nothing to do" if xs.empty?
+      for i, it in xs.enumerate:
+        puts "#{(i + 1).pad(2)} [#{it.mark}] #{it.text}"
+    Clear ->
+      before = xs.len
+      xs = xs.reject { |it| it.done }.to_list
+      puts "cleared #{before - xs.len} done"
+  match save(path, xs):
+    Ok(_) -> None
+    Error(e) -> Some(Disk(e.message))
+
+def report(f: Failure) -> Int:
+  warn "todo: #{f.text} (exit #{f.code})"
+  f.code
+
+def main:
+  _ = Dir.make(DIR)
+  _ = File.remove(TODO_FILE)
+  given = Env.args
+  session = if given.empty?: SESSION else: [given]
+  var last = 0
+  for argv in session:
+    puts "$ todo #{argv.join(" ")}"
+    last = match parse(argv):
+      Bad(f) -> report(f)
+      Good(cmd) ->
+        match act(cmd, TODO_FILE):
+          Some(f) -> report(f)
+          None -> 0
+  puts "file: #{File.read(TODO_FILE).or("").trim}"
+  _ = Dir.remove(DIR)
+  Env.exit(last) if last != 0

@@ -1,0 +1,100 @@
+# b04_io_edges: Files, folders, paths, the environment, time (Input and
+# output). Edges the page states that no example runs: `File.append`
+# creates a missing file; `Dir.make` is fine when the folder exists;
+# `Dir.walk` gives only files, at any depth, sorted; `File.exists?` is true
+# for a folder; each failing call names what it was doing ("cannot read",
+# "cannot write", "cannot remove", "cannot list"); `Path` works on text only
+# (`Path.dir` of a path with one `/`, `Path.base` of a path ending in `/`,
+# `Path.ext` when only a folder has a dot); `Time.parse` before 1970, with a
+# part left out, with a name in capitals, with a weekday that is wrong and
+# ignored, with `%s` negative, and each of its errors; `%j` and `%%`;
+# `Env.args` with no arguments.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ["one", "two"]
+# 8
+# ["a", "b.txt"]
+# /tmp/lume-review-b/io/a/b/c.txt
+# /tmp/lume-review-b/io/a/z.txt
+# /tmp/lume-review-b/io/b.txt
+# true
+# false
+# cannot read `/tmp/lume-review-b/io/none.txt`: No such file or directory (os error 2)
+# cannot write `/tmp/lume-review-b/io/no/dir/x.txt`: No such file or directory (os error 2)
+# cannot remove `/tmp/lume-review-b/io/none.txt`: No such file or directory (os error 2)
+# cannot list `/tmp/lume-review-b/io/none`: No such file or directory (os error 2)
+# false
+# []
+# []
+# []
+# c
+# Ok(-86400)
+# 1969-12-31 00:00:00 Wed
+# 2024-03-01 00:00:00 Fri
+# 2024-03-05 00:00:00 Tue
+# 2024-09-29 00:00:00 Sun
+# 1969-12-31 23:59:00 Wed
+# `2024-13-01` does not match `%Y-%m-%d`: month 13 is not 1 to 12
+# `2024-02-30` does not match `%Y-%m-%d`: February 2024 has days 1 to 29, not 30
+# `2024-09-29 extra` does not match `%Y-%m-%d`: unexpected ` extra` at position 10
+# `24:00` does not match `%H:%M`: 24:00:00 is not a time of day
+# 366 % December
+# []
+
+def show(r: Int or Error) -> Str:
+  match r:
+    Ok(t) -> Time.format(t, "%Y-%m-%d %H:%M:%S %a")
+    Error(e) -> e.message
+
+def main -> () or Error:
+  root = "/tmp/lume-review-b/io"
+  if Dir.exists?(root):
+    Dir.remove(root)?
+  Dir.make(Path.join(root, "a/b"))?
+  Dir.make(Path.join(root, "a/b"))?
+  File.append(Path.join(root, "b.txt"), "one\n")?
+  File.append(Path.join(root, "b.txt"), "two\n")?
+  File.write(Path.join(root, "a/z.txt"), "z")?
+  File.write(Path.join(root, "a/b/c.txt"), "c")?
+
+  puts File.read(Path.join(root, "b.txt"))?.lines.to_list
+  puts File.size(Path.join(root, "b.txt"))?
+  puts Dir.list(root)?
+  for p in Dir.walk(root)?:
+    puts p
+  puts File.exists?(Path.join(root, "a"))
+  puts Dir.exists?(Path.join(root, "b.txt"))
+
+  match File.read(Path.join(root, "none.txt")):
+    Ok(_) -> puts "read?"
+    Error(e) -> puts e.message
+  match File.write(Path.join(root, "no/dir/x.txt"), "x"):
+    Ok(_) -> puts "wrote?"
+    Error(e) -> puts e.message
+  match File.remove(Path.join(root, "none.txt")):
+    Ok(_) -> puts "removed?"
+    Error(e) -> puts e.message
+  match Dir.list(Path.join(root, "none")):
+    Ok(names) -> puts names
+    Error(e) -> puts e.message
+  puts File.exists?(Path.join(root, "no/dir/x.txt"))
+
+  puts "[" + Path.dir("/top") + "]"
+  puts "[" + Path.base("/tmp/dir/") + "]"
+  puts "[" + Path.ext("/a.b/c") + "]"
+  puts Path.stem("/a.b/c")
+
+  puts Time.parse("1969-12-31", "%Y-%m-%d")
+  puts show(Time.parse("1969-12-31", "%Y-%m-%d"))
+  puts show(Time.parse("2024-03", "%Y-%m"))
+  puts show(Time.parse("05 MAR 2024", "%d %b %Y"))
+  puts show(Time.parse("Mon 2024-09-29", "%a %Y-%m-%d"))
+  puts show(Time.parse("-60", "%s"))
+  puts show(Time.parse("2024-13-01", "%Y-%m-%d"))
+  puts show(Time.parse("2024-02-30", "%Y-%m-%d"))
+  puts show(Time.parse("2024-09-29 extra", "%Y-%m-%d"))
+  puts show(Time.parse("24:00", "%H:%M"))
+  puts Time.format(Time.date(2024, 12, 31)?, "%j %% %B")
+
+  puts Env.args
+  Dir.remove(root)?

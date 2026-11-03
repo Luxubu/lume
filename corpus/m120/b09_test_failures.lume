@@ -1,0 +1,55 @@
+# b09_test_failures: Tests (Tests). Run with `lume test corpus/m120/b09_test_failures.lume`.
+# What the page says and no example runs: an `assert` that is not a
+# comparison "shows the line and the `assert`", with no left and right; a
+# comparison other than `==` (here `>`) is still a comparison and shows
+# both sides; `!` on a failure inside the test stops it, told as
+# `file:line: stopped: ...` on the line of the `!`; `!` in a test gives no
+# warning; one failing test does not stop the rest; an `async test` awaits
+# a task; `lume test` exits with 1 when a test fails.
+# Meant to RUN (some tests fail on purpose).
+# EXPECTED OUTPUT:
+# test a quantity is read ... ok
+# test the course list is empty ... FAILED
+#     corpus/m120/b09_test_failures.lume:41: assert courses().empty?
+# test more than ten ... FAILED
+#     corpus/m120/b09_test_failures.lume:44: assert parse_qty("7")! > 10
+#       left:  7
+#       right: 10
+# test a bad quantity stops ... FAILED
+#     corpus/m120/b09_test_failures.lume:47: stopped: `lots` is not an integer
+# test a task is awaited ... ok
+#
+# 5 tests: 2 passed, 3 failed
+# EXPECTED EXIT: 1
+
+def parse_qty(s: Str) -> Int or Error:
+  n = s.trim.to_int?
+  if n < 0:
+    return Error("negative quantity #{n}")
+  n
+
+def courses -> [Str] = ["soup", "pie"]
+
+async def slow(n: Int) -> Int:
+  await Time.sleep(5)
+  n * 2
+
+test "a quantity is read":
+  assert parse_qty(" 4 ")! == 4
+
+test "the course list is empty":
+  assert courses().empty?
+
+test "more than ten":
+  assert parse_qty("7")! > 10
+
+test "a bad quantity stops":
+  n = parse_qty("lots")!
+  assert n == 1
+
+async test "a task is awaited":
+  t = spawn: await slow(4)
+  assert await t == 8
+
+async def main:
+  puts await slow(parse_qty("5").or(0))

@@ -1,0 +1,132 @@
+# c05_feeds — an async pipeline built on an interface that requires an
+# async generator. `Sensor` writes `readings` itself, `Ramp` gets it from
+# an `extend`, and both get the interface's plain default `tag`. On top:
+# an `async def` that walks the sequence three times with the methods that
+# wait (`count`, `sum`, `max`), the same run in three tasks at once, a
+# `def` that hands on a chain, async generators that filter, window and
+# zip, and the methods that wait for every item.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# [north] 4 readings, total 90, top 41
+# [south] 3 readings, total 60, top 50
+# [ramp10] 4 readings, total 70, top 25
+# [12, 30, 41]
+# [20, 30]
+# south reading 3: 50
+# north reading 2: 30
+# north reading 4: 41
+# [21, 18, 24]
+# [22, 45, 27, 66]
+# [(5, 12), (5, 30), (50, 7)]
+# true
+# Some(50)
+# 205
+# 12 30 7 41
+# [7, 12, 30, 41]
+# 90 in 4 readings
+# Some(41)
+
+interface Source:
+  def name -> Str
+  async def readings -> Iterator[Int]
+
+  def tag -> Str = "[#{name}]"
+
+struct Sensor:
+  id: Str
+  values: [Int]
+  every: Int
+
+  def name -> Str = id
+
+  async def readings -> Iterator[Int]:
+    for v in values:
+      await Time.sleep(every)
+      yield v
+
+struct Ramp:
+  start: Int
+  steps: Int
+
+extend Ramp with Source:
+  def name -> Str = "ramp#{start}"
+
+  async def readings -> Iterator[Int]:
+    var v = start
+    for _ in 1..steps:
+      await Time.sleep(1)
+      yield v
+      v += 5
+
+# three walks of one source, each waiting for every item as it comes
+async def summary(s: Source) -> Str:
+  count = s.readings.count
+  total = s.readings.sum
+  top = s.readings.max
+  "#{s.tag} #{count} readings, total #{total}, top #{top.or(0)}"
+
+# a chain handed on: still an async sequence
+def above(s: Source, limit: Int) -> async Iterator[Int] = s.readings.filter { |r| r > limit }
+
+def scaled(s: Source, k: Int) -> async Iterator[Int] = s.readings.map { |r| r * k }
+
+# the readings over a limit, with where they came
+async def alarms(s: Source, limit: Int) -> Iterator[Str]:
+  for i, r in s.readings.enumerate:
+    yield "#{s.name} reading #{i + 1}: #{r}" if r > limit
+
+# the mean of each run of `size` readings in a row
+async def windows(s: Source, size: Int) -> Iterator[Int]:
+  var recent: [Int] = []
+  for v in s.readings:
+    recent.push(v)
+    if recent.len > size:
+      _ = recent.remove_at(0)
+    yield recent.sum / recent.len if recent.len == size
+
+# two sources side by side, until either ends
+async def zipped(a: Source, b: Source) -> Iterator[(Int, Int)]:
+  var xs = a.readings
+  var ys = b.readings
+  while true:
+    x = xs.next
+    y = ys.next
+    match (x, y):
+      (Some(p), Some(q)) -> yield (p, q)
+      _ -> return
+
+async def main:
+  north = Sensor(id: "north", values: [12, 30, 7, 41], every: 3)
+  south = Sensor(id: "south", values: [5, 5, 50], every: 1)
+  ramp = Ramp(start: 10, steps: 4)
+
+  tn = spawn: await summary(north)
+  ts = spawn: await summary(south)
+  tr = spawn: await summary(ramp)
+  for line in await [tn, ts, tr]:
+    puts line
+
+  puts above(north, 10).to_list
+  puts scaled(ramp, 2).take(2).to_list
+  for msg in alarms(south, 20):
+    puts msg
+  for msg in alarms(north, 20):
+    puts msg
+  puts windows(north, 2).to_list
+  puts zipped(north, ramp).map { |p| p.0 + p.1 }.to_list
+  puts zipped(south, north).to_list
+
+  puts north.readings.any? { |v| v > 40 }
+  puts south.readings.find { |v| v > 5 }
+  puts ramp.readings.fold(0) { |acc, v| acc * 2 + v }
+  puts north.readings.join(" ")
+  puts north.readings.sort
+  var total = 0
+  var seen = 0
+  north.readings.each do |v|
+    total += v
+    seen += 1
+  puts "#{total} in #{seen} readings"
+  puts north.readings.last

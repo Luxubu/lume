@@ -1,0 +1,10 @@
+4
+medium coffee, a slice of cake, 3 slices of cake, water
+table 7: 1350
+Coffee(size: Medium)
+true
+false
+[Cake(slices: 1), Cake(slices: 3)]
+Order(table: 7, items: [Coffee(size: Medium), Cake(slices: 1), Cake(slices: 3), Water])
+Small Medium Large
+exit: 0

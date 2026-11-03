@@ -1,0 +1,15 @@
+warning: parameter `loud` is never used
+  --> corpus/m120/b15_check_json_warnings.lume:33:22
+   |
+33 | def greet(name: Str, loud: Bool) -> Str = "hi #{name}"
+   |                      ^
+  help: name it `_loud` if it is there only to fit a signature, as an interface's method may be
+warning: block parameter `w` is never used
+  --> corpus/m120/b15_check_json_warnings.lume:37:34
+   |
+37 |   words = ["über", "née"].map { |w| "é" }
+   |                                  ^
+  help: name it `_w`, or `_` alone
+hi ann
+["é", "é"]
+exit: 0

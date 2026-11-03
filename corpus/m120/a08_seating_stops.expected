@@ -1,0 +1,15 @@
+warning: `!` stops the program if the value is missing or an error
+  --> corpus/m120/a08_seating_stops.lume:27:22
+   |
+27 |   guests = "4".to_int!
+   |                      ^
+  help: fine in tests and quick scripts; elsewhere use `match`, `?` or `.or(default)`
+guests: 4
+guest 0: window
+guest 1: aisle
+guest 2: middle
+error: no item at 3 — the list has 3
+  --> corpus/m120/a08_seating_stops.lume:24
+   |
+24 | def seat_for(guest: Int, seats: [Str]) -> Str = seats.at(guest)
+exit: 101

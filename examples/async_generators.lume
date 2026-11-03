@@ -1,6 +1,7 @@
 # An `async def` with `yield` is an async generator: its body may `await`,
 # and its items arrive one at a time. It runs as a task that is never more
-# than one item ahead of whoever walks it; `for` waits for each item, and
+# than two items ahead of whoever walks it (one waiting to be taken, one made
+# and held at its `yield`); `for` waits for each item, and
 # letting go of it ends the body at its next `yield`. Rust has this as the
 # `async-stream` crate's `stream!`.
 

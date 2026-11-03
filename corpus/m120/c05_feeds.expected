@@ -1,0 +1,19 @@
+[north] 4 readings, total 90, top 41
+[south] 3 readings, total 60, top 50
+[ramp10] 4 readings, total 70, top 25
+[12, 30, 41]
+[20, 30]
+south reading 3: 50
+north reading 2: 30
+north reading 4: 41
+[21, 18, 24]
+[22, 45, 27, 66]
+[(5, 12), (5, 30), (50, 7)]
+true
+Some(50)
+205
+12 30 7 41
+[7, 12, 30, 41]
+90 in 4 readings
+Some(41)
+exit: 0

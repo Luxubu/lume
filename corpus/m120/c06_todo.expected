@@ -1,0 +1,30 @@
+$ todo help
+commands: add TEXT, done N, rm N, show, clear
+$ todo add buy milk
+added 1: buy milk
+$ todo add call the plumber
+added 2: call the plumber
+$ todo add water plants
+added 3: water plants
+$ todo done 2
+done 2: call the plumber
+$ todo show
+ 1 [-] buy milk
+ 2 [x] call the plumber
+ 3 [-] water plants
+$ todo done 7
+todo: no item 7 (exit 3)
+$ todo done two
+todo: `two` is not an item number (exit 4)
+$ todo clear
+cleared 1 done
+$ todo rm 1
+removed 1: buy milk
+$ todo show
+ 1 [-] water plants
+$ todo add
+todo: usage: add TEXT (exit 2)
+$ todo fly
+todo: unknown command `fly` (exit 2)
+file: - water plants
+exit: 2

@@ -1,0 +1,122 @@
+# c03_jobs — a job runner on `Process.spawn`: every job starts at once as
+# `sh -c`, each in a task of its own that reads the child's two outputs as
+# async sequences and waits for its exit code; the outcomes come back in
+# the order the jobs were listed, not the order they ended. A `shared var`
+# counts lines across the tasks (and so warns). Then the passing output is
+# piped through `sort` with `write` and `close_input`, a `sh` loop is asked
+# questions in turns with `read_line`, a sleeper is killed, `Process.run`
+# waits for one more, and a program that does not exist fails to start.
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# ok   greet   2 lines, last world
+# ok   count   1 line, last 3
+# FAIL broken  exit 3: out of tea
+# FAIL quiet   exit 1: no message
+# ok   shout   1 line, last QUIET PLEASE
+# 3 of 5 jobs passed, 5 lines of output
+# sorted: ["3", "QUIET PLEASE", "hello", "world"]
+# 1: broken
+# 2: quiet
+# asker exited with 0
+# sleeper: -1
+# run: 4 done
+# cannot run `no-such-program-lume`: No such file or directory (os error 2)
+#
+# EXPECTED STDERR:
+# warning: `lines_seen` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+#   --> corpus/m120/c03_jobs.lume:87:3
+#    |
+# 87 |   shared var lines_seen = 0
+#    |   ^
+#   help: fine for a store or a counter; keep the work done while it is locked short
+
+struct Job:
+  name: Str
+  command: Str
+
+struct Outcome:
+  name: Str
+  code: Int
+  out: [Str]
+  err: [Str]
+
+  def ok? -> Bool = code == 0
+
+  def line -> Str:
+    if ok?:
+      "ok   #{name.pad_right(7)} #{plural(out.len, "line")}, last #{out.last.or("-")}"
+    else:
+      "FAIL #{name.pad_right(7)} exit #{code}: #{err.first.or("no message")}"
+
+def plural(n: Int, word: Str) -> Str = if n == 1: "1 #{word}" else: "#{n} #{word}s"
+
+JOBS = [
+  Job("greet", "echo hello; echo world"),
+  Job("count", r"printf 'x\ny\nz\n' | wc -l | tr -d ' '"),
+  Job("broken", "echo starting; echo out of tea >&2; exit 3"),
+  Job("quiet", "false"),
+  Job("shout", "echo quiet please | tr a-z A-Z"),
+]
+
+# one job: started at once, its outputs read as they come, then its code
+async def run_job(j: Job) -> Outcome or Error:
+  c = Process.spawn("sh", ["-c", j.command])?
+  out = c.lines.to_list
+  err = c.error_lines.to_list
+  code = await c.wait
+  Outcome(name: j.name, code: code, out: out, err: err)
+
+# a line to a child that answers each line, and its answer back
+async def ask(c: Child, question: Str) -> Str or Error:
+  c.write(question + "\n")?
+  (await c.read_line).or_error("no answer to #{question}")
+
+# lines through `sort`, in the C locale so the order is the same everywhere
+async def sorted(lines: [Str]) -> [Str] or Error:
+  s = Process.spawn("sh", ["-c", "LC_ALL=C sort"])?
+  for l in lines:
+    s.write(l + "\n")?
+  s.close_input
+  got = s.lines.to_list
+  _ = await s.wait
+  got
+
+async def main -> () or Error:
+  shared var lines_seen = 0
+  var tasks: [Task[Outcome or Error]] = []
+  for j in JOBS:
+    t = spawn:
+      r = await run_job(j)
+      lines_seen += r.map { |o| o.out.len }.or(0)
+      r
+    tasks.push(t)
+
+  var outcomes: [Outcome] = []
+  for r in await tasks:
+    outcomes.push(r?)
+  for o in outcomes:
+    puts o.line
+  passed = outcomes.filter { |o| o.ok? }.to_list
+  puts "#{passed.len} of #{outcomes.len} jobs passed, #{lines_seen} lines of output"
+
+  together = await sorted(passed.flat_map { |o| o.out })?
+  puts "sorted: #{together}"
+
+  # in turns: a numbered answer for each failed job's name
+  asker = Process.spawn("sh", ["-c", "n=0; while read x; do n=$((n + 1)); echo \"$n: $x\"; done"])?
+  for o in outcomes where not o.ok?:
+    puts await ask(asker, o.name)?
+  puts "asker exited with #{await asker.wait}"
+
+  sleeper = Process.spawn("sleep", ["30"])?
+  sleeper.kill
+  puts "sleeper: #{await sleeper.wait}"
+
+  (code, out, _) = Process.run("sh", ["-c", "echo done; exit 4"])?
+  puts "run: #{code} #{out.trim}"
+
+  match Process.spawn("no-such-program-lume", []):
+    Ok(_) -> puts "started?"
+    Error(e) -> puts e.message

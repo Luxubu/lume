@@ -1,0 +1,7 @@
+error: `[Int]` values have no method `frobnicate`
+  --> corpus/m120/b02_chain_has_list.lume:17:28
+   |
+17 |   puts xs.map { |n| n * 2 }.frobnicate
+   |                            ^
+  help: `[Int]` has: len, empty?, any?, all?, first, last, max, min, sum, sort, sort_by, reverse, contains?, join, map, filter, reject, each, count, find, take, skip, take_while, fold, min_by, max_by, enumerate, to_list, zip, flatten, uniq, index_of, avg, group_by, partition, flat_map, to_set, at, to_s, to_str
+exit: 1

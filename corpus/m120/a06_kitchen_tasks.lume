@@ -1,0 +1,67 @@
+# Tasks that run at once, as lunch 16 teaches them: `async def main`,
+# `spawn:` with an awaited `async def`, `await` on a list of tasks made with
+# `map` (results in the order started), a plain `def` that sleeps in a task,
+# `next_done` on a `var` list, a `shared var` counter changed by tasks (and
+# the warning it gives), tasks whose bodies give `T or Error`, and a task's
+# copy of a name changed after the `spawn:`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# kettle on
+# tea ready
+# [1, 4, 9, 16]
+# Some("espresso ready")
+# 1
+# ["latte ready"]
+# 8
+# ok 3
+# skip: `x` is not an integer
+# ok 5
+# cooking soup
+# stew
+# EXPECTED STDERR:
+# warning: `vowels` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+#   --> corpus/m120/a06_kitchen_tasks.lume:50:3
+#    |
+# 50 |   shared var vowels = 0
+#    |   ^
+#   help: fine for a store or a counter; keep the work done while it is locked short
+
+def slow_square(n: Int) -> Int:
+  Time.sleep(10 * (5 - n))
+  n * n
+
+async def brew(drink: Str, ms: Int) -> Str:
+  await Time.sleep(ms)
+  "#{drink} ready"
+
+def count_vowels(word: Str) -> Int = word.chars.count { |c| "aeiou".contains?(c) }
+
+async def main:
+  t = spawn: await brew("tea", 30)
+  puts "kettle on"
+  puts await t
+  squares = await [1, 2, 3, 4].map { |n| spawn: slow_square(n) }.to_list
+  puts squares
+  var orders = [spawn: await brew("latte", 80), spawn: await brew("espresso", 5)]
+  first = await orders.next_done
+  puts first
+  puts orders.len
+  puts await orders
+  shared var vowels = 0
+  var counters: [Task[()]] = []
+  for w in ["apple", "kiwi", "banana", "fig"]:
+    c = spawn:
+      vowels += count_vowels(w)
+    counters.push(c)
+  await counters
+  puts vowels
+  results = await ["3", "x", "5"].map { |s| spawn: s.to_int }.to_list
+  for r in results:
+    match r:
+      Ok(n) -> puts "ok #{n}"
+      Error(e) -> puts "skip: #{e.message}"
+  var name = "soup"
+  later = spawn: "cooking #{name}"
+  name = "stew"
+  puts await later
+  puts name

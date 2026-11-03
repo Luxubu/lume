@@ -1,0 +1,75 @@
+# A list pattern inside another pattern: in a variant, an optional, a tuple,
+# another list, and alternatives with `|` that name nothing inside a list.
+# Before 1.0 only a list matched on its own could be taken apart.
+
+enum Node:
+  Leaf(n: Int)
+  Kids(items: [Node])
+
+def opt(x: [Int]?) -> Str:
+  match x:
+    Some([]) -> "some empty"
+    Some([a, ..rest]) -> "some #{a} then #{rest}"
+    None -> "none"
+
+def grid(g: [[Int]]) -> Str:
+  match g:
+    [[a, b], [c]] -> "2+1: #{a} #{b} #{c}"
+    [[], ..] -> "first row empty"
+    [row, ..] -> "first row #{row}"
+    [] -> "no rows"
+
+def alt(p: ([Int], Str)) -> Str:
+  match p:
+    ([a], "x") -> "picked #{a}"
+    ([_, a], "y") -> "picked #{a}"
+    ([1, ..], _) -> "starts at one"
+    _ -> "other"
+
+def tree(n: Node) -> Str:
+  match n:
+    Leaf(v) -> "leaf #{v}"
+    Kids([]) -> "no kids"
+    Kids([Leaf(v)]) -> "one leaf #{v}"
+    Kids([first, ..]) -> "kids from #{tree(first)}"
+
+def words(r: (Str, [Str])) -> Str:
+  match r:
+    ("say", ["hi" | "yo", ..more]) -> "greet +#{more.len}"
+    (cmd, [w]) -> "#{cmd} #{w}"
+    (cmd, _) -> cmd
+
+def small(n: Node) -> Bool:
+  match n:
+    Kids([]) | Leaf(0) -> true
+    _ -> false
+
+def short(p: ([Int], Int)) -> Str:
+  match p:
+    ([], _) | ([_], 1) -> "short"
+    _ -> "long"
+
+def main:
+  puts opt(Some([]))
+  puts opt(Some([1, 2, 3]))
+  puts opt(None)
+  puts grid([[1, 2], [3]])
+  puts grid([[], [4]])
+  puts grid([[5]])
+  puts grid([])
+  puts alt(([7], "x"))
+  puts alt(([8, 9], "y"))
+  puts alt(([1, 9, 9], "z"))
+  puts alt(([], "z"))
+  puts tree(Kids([]))
+  puts tree(Kids([Leaf(4)]))
+  puts tree(Kids([Kids([]), Leaf(2)]))
+  puts words(("say", ["yo", "a", "b"]))
+  puts words(("eat", ["pie"]))
+  puts words(("go", []))
+  puts small(Kids([]))
+  puts small(Leaf(0))
+  puts small(Leaf(2))
+  puts short(([], 5))
+  puts short(([3], 1))
+  puts short(([3], 2))

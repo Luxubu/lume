@@ -186,10 +186,9 @@ The fix is `return Error("negative")`. An `Error(...)` that *is* the function's
 value — the last expression, or the last expression of a branch — is fine, as
 in `half` above; that one is returned.
 
-This first form is checked in a function whose success type is a real type. In
-a function declared `-> () or Error` a stray `Error(...)` statement is
-currently accepted and silently discarded, so write the `return` there by
-habit rather than by the compiler's insistence.
+The same holds in a function declared `-> () or Error`: an `Error(...)` on a
+line of its own, other than the last, is refused with the same message, and
+the fix is the same `return`.
 
 **A call that can fail, standing on its own line, is rejected**:
 
@@ -203,6 +202,9 @@ def main:
 #! can fail, and nothing here looks at the result
 #! pass the failure on with `?`, handle it with `match`, or say you mean to drop it: `_ = ...`
 ```
+
+For a call that gives `() or Error`, which has no result to look at, the
+message ends "nothing here looks at whether it did" instead.
 
 **`_ = ...` is how you say you mean to drop it.** Nothing is hidden: the
 intent is right there in the line. `_` is no name: write `_ = ...` as many
@@ -244,7 +246,7 @@ puts n
 ```
 
 `main` may declare it, and then a failure ends the program with that message
-and a non-zero exit status:
+and exit status 1:
 
 ```lume
 def load(s: Str) -> Int or Error:
@@ -385,8 +387,8 @@ warning: `!` stops the program if the value is missing or an error
   help: fine in tests and quick scripts; elsewhere use `match`, `?` or `.or(default)`
 ```
 
-Give it a failure instead and the run ends there, with the message and a
-non-zero status:
+Give it a failure instead and the run ends there, with the message and
+status 101, as every stop does:
 
 ```
 $ lume run bad.lume       # bad.lume says: puts "x".to_int!

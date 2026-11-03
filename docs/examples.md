@@ -1,6 +1,6 @@
 # The examples, in an order
 
-There are about 5,000 lines of working Lume in `examples/`, and every one of
+There are about 7,000 lines of working Lume in `examples/`, and every one of
 them is run by the test suite on every change, so none of it is stale. This is
 the order to read it in rather than the order the directory lists it.
 
@@ -93,7 +93,7 @@ Each one has a `FINDINGS.md` or a `README.md` saying what it exposed.
 |---|---|
 | `tests/` | files with `test` blocks, and the `lume test` output they must produce |
 | `fmt/` | badly spaced input, and what `lume fmt` makes of it |
-| `errors/` | 106 programs that must keep failing, each with the message it must give |
+| `errors/` | 445 programs that must keep failing, each with the message it must give |
 
 `examples/errors/` is worth a look even though nothing in it runs: it is the
 catalogue of what Lume refuses and what it says when it does.

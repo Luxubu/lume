@@ -1,0 +1,12 @@
+17 words
+{"the": 5, "cat": 2, "sat": 2, "on": 2, "mat": 1, "dog": 1, "log": 1, "and": 1, "ran": 1, "quickly": 1}
+10 different, 10 in a set
+the   5 *****
+cat   2 **
+sat   2 **
+Some("quickly")
+mat, dog, log, and, ran, quickly
+10
+None
+7 letters a
+exit: 0

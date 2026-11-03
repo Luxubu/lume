@@ -1,0 +1,41 @@
+# b05_run_edges: Running a program and waiting for it (Input and output,
+# "Process"). Promises the page makes that no example runs: `run_in` lists
+# the folder it is given; `run_in` with a folder that does not exist is an
+# `Error` worded ``cannot run `ls` in `/no/such`: no such folder``; a
+# program ended by a signal gives `-1`; arguments reach the program as
+# given, with no shell to read `$` or `*`; output with no newline at the
+# end comes back as it is, on both streams, with the exit code.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 0 a.txt,b.txt
+# cannot run `ls` in `/tmp/lume-review-b/run/nope`: no such folder
+# -1
+# [a b][$HOME][*]
+# cannot run `no-such-program-b`: No such file or directory (os error 2)
+# 7|out|err
+
+def main -> () or Error:
+  root = "/tmp/lume-review-b/run"
+  Dir.make(root)?
+  File.write(Path.join(root, "b.txt"), "b")?
+  File.write(Path.join(root, "a.txt"), "a")?
+
+  (code, out, _) = Process.run_in(root, "ls", [])?
+  puts "#{code} #{out.lines.join(",")}"
+  match Process.run_in(Path.join(root, "nope"), "ls", []):
+    Ok(_) -> puts "ran?"
+    Error(e) -> puts e.message
+
+  (killed, _, _) = Process.run("sh", ["-c", "kill -9 $$"])?
+  puts killed
+
+  (_, given, _) = Process.run("printf", ["[%s]", "a b", "$HOME", "*"])?
+  puts given
+
+  match Process.run("no-such-program-b", ["x"]):
+    Ok(_) -> puts "ran?"
+    Error(e) -> puts e.message
+
+  (c3, o3, e3) = Process.run("sh", ["-c", "printf out; printf err >&2; exit 7"])?
+  puts "#{c3}|#{o3}|#{e3}"
+  Dir.remove(root)?

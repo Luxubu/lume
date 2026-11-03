@@ -89,7 +89,8 @@ def run_check(ch: Checker, c: Check) -> Outcome:
 answer that may be absent, lunch 10's `T?`. `run_check` returns as soon as
 a try succeeds, and remembers the last reason otherwise.
 
-`Time.sleep(ms)` outside async code simply pauses the task it is in; the
+`Time.sleep(ms)` outside async code holds up the thread it runs on — in
+23.4 each check gets a thread of its own, so only that check waits. The
 pause grows with each try, so a struggling server gets room to recover.
 
 ## 23.4 All at once

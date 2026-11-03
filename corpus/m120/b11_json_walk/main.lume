@@ -1,0 +1,79 @@
+# b11_json_walk: The `json` package (JSON). Run with
+# `lume run corpus/m120/b11_json_walk/main.lume`. Promises no example runs:
+# `items` makes "`for x in doc` walk an array, and `doc.filter { .. }`
+# work on it" (and so every list method: `len`, `map`); `opt_int` gives
+# `None` for a missing key and for `null`; a list of your own values with
+# `to_json` "writes itself"; `pretty` is "two spaces per level"; the
+# errors of `parse` for `tru`, `1 2`, `{"a" 1}` and nothing, as its table
+# gives them; `need_int` of a number too large, and of a fraction; a
+# character below a space is written `\u00XX`; `path` with a position past
+# the end.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# object
+# object
+# object
+# 3
+# tea,pie,jam
+# 2
+# [Item(name: "tea", qty: 2), Item(name: "pie", qty: 1), Item(name: "jam", qty: 1)]
+# [{"name":"tea","qty":2},{"name":"pie","qty":1},{"name":"jam","qty":1}]
+# {
+#   "a": [
+#     1,
+#     {}
+#   ],
+#   "b": []
+# }
+# Error("expected `true` at position 3")
+# Error("trailing characters at position 2")
+# Error("expected `:`, found `1` at position 5")
+# Error("unexpected end of input at position 0")
+# Error("`size` is too large a number to be an `Int` exactly")
+# Error("`n` is a number, not a whole number")
+# Ok(None)
+# "a\tb\u0007"
+# "pie"
+# none
+
+import json
+import json.Json
+
+struct Item:
+  name: Str
+  qty: Int
+
+  def self.from_json(j: Json) -> Item or Error:
+    Item(name: j.need_str("name")?, qty: j.opt_int("qty")?.or(1))
+
+  def to_json -> Json = json.obj([("name", name.to_json), ("qty", qty.to_json)])
+
+def main -> () or Error:
+  doc = json.parse("[{\"name\": \"tea\", \"qty\": 2}, {\"name\": \"pie\", \"qty\": null}, {\"name\": \"jam\"}]")?
+  for x in doc:
+    puts x.kind
+  puts doc.len
+  puts doc.map { |j| j.need_str("name").or("?") }.join(",")
+  puts doc.filter { |j| j.get("qty").map { |q| q.null? }.or(true) }.len
+
+  var items: [Item] = []
+  for j in doc:
+    items.push(Item.from_json(j)?)
+  puts items
+  puts json.show(items.to_json)
+
+  puts json.pretty(json.parse("{\"a\": [1, {}], \"b\": []}")?)
+  puts json.parse("tru")
+  puts json.parse("1 2")
+  puts json.parse("{\"a\" 1}")
+  puts json.parse("")
+
+  big = json.parse("{\"size\": 1e20, \"n\": 2.5}")?
+  puts big.need_int("size")
+  puts big.need_int("n")
+  puts big.opt_int("missing")
+
+  puts json.show(Json.Str("a\tb\u{7}"))
+  puts doc.path("1.name").map(json.show).or("none")
+  puts doc.path("5.name").map(json.show).or("none")
+  ()

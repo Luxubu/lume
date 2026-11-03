@@ -1,0 +1,38 @@
+# b15_check_json_warnings: For editors and tools (Install, "Editors"). Run
+# with `lume check --json corpus/m120/b15_check_json_warnings.lume`. What
+# the field table promises and examples/check_json does not show: warnings
+# alone leave `ok` true; `diagnostics` holds warnings "by where they are
+# written"; `severity` is "warning"; `col` "counts characters, not bytes"
+# (line 37 has `ü` and `é`, two bytes each, before the name); `help` is the
+# warning's help text. The exit status is 0, as no diagnostic is an error.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# {
+#   "diagnostics": [
+#     {
+#       "col": 22,
+#       "file": "corpus/m120/b15_check_json_warnings.lume",
+#       "help": "name it `_loud` if it is there only to fit a signature, as an interface's method may be",
+#       "line": 33,
+#       "message": "parameter `loud` is never used",
+#       "severity": "warning"
+#     },
+#     {
+#       "col": 34,
+#       "file": "corpus/m120/b15_check_json_warnings.lume",
+#       "help": "name it `_w`, or `_` alone",
+#       "line": 37,
+#       "message": "block parameter `w` is never used",
+#       "severity": "warning"
+#     }
+#   ],
+#   "ok": true
+# }
+# EXPECTED EXIT: 0
+
+def greet(name: Str, loud: Bool) -> Str = "hi #{name}"
+
+def main:
+  puts greet("ann", true)
+  words = ["über", "née"].map { |w| "é" }
+  puts words.to_list

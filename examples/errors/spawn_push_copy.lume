@@ -1,0 +1,8 @@
+# A task's `push` changes its own copy, as `=` would: the list outside
+# stayed empty, and the error said `seen` was not a `var`.
+async def main:
+  var seen: [Int] = []
+  t = spawn:
+    seen.push(1)
+  await t
+  puts seen

@@ -1,0 +1,165 @@
+# c02_inventory — a stock keeper on the `json` package: it writes a stock
+# file as indented JSON under /tmp, reads it back into its own types
+# (decoding with `need_…` and `map_error`), applies a list of moves held in
+# an enum through `var self` methods, keeps a log with `File.append`, and
+# says exactly what is wrong with three bad files. `Dir`, `Path` and `File`
+# throughout; every failure handled with `?` or `match`.
+#
+# Run with `lume run corpus/m120/c02_inventory/main.lume`
+#
+# Meant to RUN.
+#
+# EXPECTED OUTPUT:
+# wrote 16 lines to stock.json
+# read back the same: true
+# 3 items, 3 of 7 moves refused
+# C3 brackets    50 x 0.95
+# B2 hinges      12 x 2.40
+# A1 bolts      100 x 0.15
+# value 91.30
+# 1 ok -20 A1
+# 2 ok +4 B2
+# 3 refused: cannot ship 15 of `B2`: only 12 left
+# 4 ok new C3
+# 5 refused: no item `Z9`
+# 6 refused: `A1` is already stocked
+# 7 ok +10 C3
+# {
+#   "sku": "C3",
+#   "name": "brackets",
+#   "qty": 50,
+#   "cents": 95
+# }
+# refused: /tmp/lume-review-c/inventory/bad.json: item 1: `qty` is a string, not a whole number
+# refused: /tmp/lume-review-c/inventory/bad.json: unexpected end of input at position 11
+# refused: /tmp/lume-review-c/inventory/bad.json: `goods` is missing
+# ["bad.json", "moves.log", "stock.json"]
+# cleaned up: true
+
+import json
+import json.Json
+
+DIR = "/tmp/lume-review-c/inventory"
+
+struct Item:
+  sku: Str
+  name: Str
+  qty: Int
+  cents: Int
+
+  def self.from_json(j: Json) -> Item or Error:
+    Item(sku: j.need_str("sku")?, name: j.need_str("name")?, qty: j.need_int("qty")?, cents: j.need_int("cents")?)
+
+  def to_json -> Json:
+    json.obj([("sku", sku.to_json), ("name", name.to_json), ("qty", qty.to_json), ("cents", cents.to_json)])
+
+  def value -> Int = qty * cents
+
+enum Move:
+  Receive(sku: Str, count: Int)
+  Ship(sku: Str, count: Int)
+  Add(item: Item)
+
+  def label -> Str:
+    match self:
+      Receive(sku, n) -> "+#{n} #{sku}"
+      Ship(sku, n) -> "-#{n} #{sku}"
+      Add(item) -> "new #{item.sku}"
+
+struct Stock:
+  goods: [Item]
+
+  def self.from_json(j: Json) -> Stock or Error:
+    var found: [Item] = []
+    for i, g in j.need_items("goods")?.enumerate:
+      found.push(Item.from_json(g).map_error { |e| Error("item #{i + 1}: #{e.message}") }?)
+    Stock(goods: found)
+
+  def to_json -> Json = json.obj([("goods", goods.to_json)])
+
+  def find(sku: Str) -> Item? = goods.find { |g| g.sku == sku }
+
+  def change(var self, sku: Str, by: Int) -> () or Error:
+    for var g in goods:
+      if g.sku == sku:
+        if g.qty + by < 0:
+          return Error("cannot ship #{0 - by} of `#{sku}`: only #{g.qty} left")
+        g.qty += by
+        return ()
+    return Error("no item `#{sku}`")
+
+  def apply(var self, m: Move) -> () or Error:
+    match m:
+      Add(item) ->
+        if find(item.sku).some?:
+          return Error("`#{item.sku}` is already stocked")
+        goods.push(item)
+      Receive(sku, count) -> change(sku, count)?
+      Ship(sku, count) -> change(sku, 0 - count)?
+    ()
+
+def load(path: Str) -> Stock or Error:
+  text = File.read(path)?
+  doc = json.parse(text).map_error { |e| Error("#{path}: #{e.message}") }?
+  Stock.from_json(doc).map_error { |e| Error("#{path}: #{e.message}") }
+
+def save(path: Str, s: Stock) -> () or Error:
+  File.write(path, json.pretty(s.to_json) + "\n")?
+
+def money(cents: Int) -> Str = (cents.to_float / 100.0).decimals(2)
+
+def main -> () or Error:
+  if Dir.exists?(DIR):
+    Dir.remove(DIR)?
+  Dir.make(DIR)?
+  path = Path.join(DIR, "stock.json")
+  log = Path.join(DIR, "moves.log")
+
+  start = Stock(goods: [
+    Item(sku: "A1", name: "bolts", qty: 120, cents: 15),
+    Item(sku: "B2", name: "hinges", qty: 8, cents: 240),
+  ])
+  save(path, start)?
+  written = File.read(path)?
+  puts "wrote #{written.lines.len} lines to #{Path.base(path)}"
+
+  moves = [
+    Ship("A1", 20),
+    Receive("B2", 4),
+    Ship("B2", 15),
+    Add(Item("C3", "brackets", 40, 95)),
+    Ship("Z9", 1),
+    Add(Item("A1", "bolts again", 1, 1)),
+    Receive("C3", 10),
+  ]
+  var stock = load(path)?
+  var refused = 0
+  for i, m in moves.enumerate:
+    match stock.apply(m):
+      Ok(_) -> File.append(log, "#{i + 1} ok #{m.label}\n")?
+      Error(e) ->
+        refused += 1
+        File.append(log, "#{i + 1} refused: #{e.message}\n")?
+  save(path, stock)?
+
+  again = load(path)?
+  puts "read back the same: #{again == stock}"
+  puts "#{again.goods.len} items, #{refused} of #{moves.len} moves refused"
+  for g in again.goods.sort_by { |x| 0 - x.value }:
+    puts "#{g.sku} #{g.name.pad_right(9)} #{g.qty.pad(4)} x #{money(g.cents)}"
+  puts "value #{money(again.goods.sum { |x| x.value })}"
+  puts File.read(log)?.trim
+  item = again.find("C3").or_error("C3 is gone")?
+  puts json.pretty(item.to_json)
+
+  # three files that are wrong, each in its own way
+  bad = Path.join(DIR, "bad.json")
+  for text in ["{\"goods\": [{\"sku\": \"Q1\", \"name\": \"nuts\", \"qty\": \"many\", \"cents\": 5}]}", "{\"goods\": [", "{\"stock\": []}"]:
+    File.write(bad, text)?
+    match load(bad):
+      Ok(s) -> puts "accepted #{s.goods.len} items?"
+      Error(e) -> puts "refused: #{e.message}"
+
+  puts Dir.list(DIR)?
+  Dir.remove(DIR)?
+  puts "cleaned up: #{not Dir.exists?(DIR)}"

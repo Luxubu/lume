@@ -378,7 +378,7 @@ def main:
     total = total + i
   puts total
 #! `total` is declared on line 2, outside this block; a new `total` here would hide it and be lost when the block ends
-#! declare it `var total` on line 2
+#! to change it from here, declare it `var total` on line 2; to make a separate value, give it another name
 ```
 
 The fix is `var total = 0`; then `total = total + i` changes it. This is

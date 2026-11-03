@@ -1,0 +1,78 @@
+# A small struct-and-enum model: an enum whose variants hold values, one of
+# them another enum; `match self` in enum methods, with a variant nested in a
+# pattern (`Coffee(Small)`), a literal in a pattern (`Cake(1)`), a guard, and
+# ranges on an `Int`; a struct with a `def self.` function, a `var self`
+# method, and `sum` with a block; printing, `==` and `filter` on the values.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 4
+# medium coffee, a slice of cake, 3 slices of cake, water
+# table 7: 1350
+# Coffee(size: Medium)
+# true
+# false
+# [Cake(slices: 1), Cake(slices: 3)]
+# Order(table: 7, items: [Coffee(size: Medium), Cake(slices: 1), Cake(slices: 3), Water])
+# Small Medium Large
+
+enum Size:
+  Small
+  Medium
+  Large
+
+enum Item:
+  Coffee(size: Size)
+  Cake(slices: Int)
+  Water
+
+  def price -> Int:
+    match self:
+      Coffee(Small) -> 200
+      Coffee(Medium) -> 250
+      Coffee(Large) -> 300
+      Cake(n) if n >= 3 -> n * 300 - 100
+      Cake(n) -> n * 300
+      Water -> 0
+
+  def label -> Str:
+    match self:
+      Coffee(s) -> "#{s} coffee".downcase
+      Cake(1) -> "a slice of cake"
+      Cake(n) -> "#{n} slices of cake"
+      Water -> "water"
+
+struct Order:
+  table: Int
+  items: [Item]
+
+  def self.empty(table: Int) -> Order = Order(table: table, items: [])
+
+  def add(var self, item: Item):
+    items.push(item)
+
+  def total -> Int = items.sum { |i| i.price }
+
+  def receipt -> Str = items.map(_.label).join(", ")
+
+def size_for(ml: Int) -> Size:
+  match ml:
+    0..250 -> Small
+    251..400 -> Medium
+    _ -> Large
+
+def main:
+  var o = Order.empty(7)
+  o.add(Coffee(size_for(300)))
+  o.add(Cake(slices: 1))
+  o.add(Cake(3))
+  o.add(Water)
+  puts o.items.len
+  puts o.receipt
+  puts "table #{o.table}: #{o.total}"
+  puts o.items.at(0)
+  puts Coffee(Large) == Coffee(size: Large)
+  puts Coffee(Large) == Coffee(Small)
+  dear = o.items.filter { |i| i.price > 250 }.to_list
+  puts dear
+  puts o
+  puts [size_for(100), size_for(251), size_for(5000)].join(" ")

@@ -119,6 +119,9 @@ puts Path.ext("site.tar.gz")            #=> gz
 puts Path.stem("site.tar.gz")           #=> site.tar
 ```
 
+A path right under the root keeps the root as its folder:
+`Path.dir("/top")` is `/`, as is `Path.dir("/")`.
+
 A leading dot is part of the name, not an extension, so `.bashrc` has none.
 Only the last extension counts.
 

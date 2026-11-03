@@ -1,0 +1,53 @@
+# b01_nested_patterns: the language (Patterns). The page promises "Every
+# pattern inside another can be any of these, to any depth", but every `|`
+# it shows is at the top of an arm. Here `|` sits inside a list pattern,
+# inside a variant, inside a tuple; a range sits inside `Some`; negative
+# literals sit inside a variant on both sides of a `|` that binds `dx` in
+# different positions; `[]` is given to a variant's field as a constructor
+# argument.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# stay
+# edge 5
+# edge 7
+# move -2 of 10
+# move, no budget
+# silence
+# greeting and 2
+# one word: yo
+# greeting and 0
+# starts well
+# talk
+# bye
+
+enum Cmd:
+  Move(dx: Int, dy: Int)
+  Say(words: [Str])
+  Quit
+
+def describe(c: Cmd, budget: Int?) -> Str:
+  match (c, budget):
+    (Move(0, 0), _) -> "stay"
+    (Move(dx, -1) | Move(-1, dx), Some(1..9)) -> "edge #{dx}"
+    (Move(..), None) -> "move, no budget"
+    (Move(dx, dy), Some(b)) -> "move #{dx + dy} of #{b}"
+    (Say([]), _) -> "silence"
+    (Say(["hi" | "hello", ..rest]), _) -> "greeting and #{rest.len}"
+    (Say([w]), _) -> "one word: #{w}"
+    (Say([first, ..]), Some(_)) -> "starts #{first}"
+    (Say(_), None) -> "talk"
+    (Quit, _) -> "bye"
+
+def main:
+  puts describe(Move(0, 0), None)
+  puts describe(Move(5, 0 - 1), Some(3))
+  puts describe(Move(0 - 1, 7), Some(9))
+  puts describe(Move(0 - 1, 0 - 1), Some(10))
+  puts describe(Move(2, 3), None)
+  puts describe(Say([]), Some(1))
+  puts describe(Say(["hello", "there", "you"]), None)
+  puts describe(Say(["yo"]), None)
+  puts describe(Say(["hi"]), None)
+  puts describe(Say(["well", "then"]), Some(2))
+  puts describe(Say(["well", "then"]), None)
+  puts describe(Quit, None)

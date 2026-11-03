@@ -1,0 +1,44 @@
+# A newcomer's word tally: bare `split`, a function's name where a block
+# goes (`map(clean)`), the map counting pattern of lunch 6, a map's
+# `to_list` sorted by a block on its pairs, `take`, `pad_right`, `repeat`,
+# `max_by`, a map's `filter` and `keys`, `to_set`, and comparing a `Char`
+# with a one-letter text.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 17 words
+# {"the": 5, "cat": 2, "sat": 2, "on": 2, "mat": 1, "dog": 1, "log": 1, "and": 1, "ran": 1, "quickly": 1}
+# 10 different, 10 in a set
+# the   5 *****
+# cat   2 **
+# sat   2 **
+# Some("quickly")
+# mat, dog, log, and, ran, quickly
+# 10
+# None
+# 7 letters a
+
+TEXT = """
+  The cat sat on the mat.
+  The dog sat on the log, and the cat ran quickly.
+  """
+
+def clean(word: Str) -> Str = word.downcase.replace(".", "").replace(",", "")
+
+def main:
+  words = TEXT.split.map(clean).to_list
+  puts "#{words.len} words"
+  var counts: {Str: Int} = {}
+  for w in words:
+    counts[w] = counts[w].or(0) + 1
+  puts counts
+  puts "#{counts.len} different, #{words.to_set.len} in a set"
+  top = counts.to_list.sort_by { |_, n| 0 - n }.take(3)
+  for word, n in top:
+    puts "#{word.pad_right(5)} #{n} #{"*".repeat(n)}"
+  puts words.max_by { |w| w.len }
+  once = counts.filter { |_, n| n == 1 }.keys
+  puts once.join(", ")
+  puts counts["the"].or(0) * 2
+  puts counts["zebra"]
+  a_count = words.sum { |w| w.chars.count { |c| c == "a" } }
+  puts "#{a_count} letters a"

@@ -1,0 +1,7 @@
+error: `g` is a generator, and it is used up here, so it cannot be used after
+  --> corpus/m120/b03_generator_printed.lume:23:8
+   |
+23 |   puts g
+   |        ^
+  help: a generator hands out each item once: to walk the items twice, keep them with `.to_list` first
+exit: 1

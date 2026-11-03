@@ -1,0 +1,49 @@
+# b12_http_steps: The `http` package (HTTP). Run with
+# `lume run corpus/m120/b12_http_steps/main.lume`. Promises no example
+# runs: "A body step sets the request's `Content-Type`, taking the place of
+# one an earlier step gave" (here a `header` step, in lower case); "a later
+# body step takes the place of an earlier body" (`with_body` after a
+# `with_file` whose file is missing, so the file is never read); the
+# `Error` of a request that cannot be made "names the method and the URL",
+# for `send`, `send_parts` with a generator, `await fetch` and `delete`; a
+# request's `headers` read as a field. Nothing listens on port 9.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# [("Content-Type", "text/plain")]
+# PUT http://127.0.0.1:9/up: cannot read `/tmp/lume-review-b/http/missing.csv`: No such file or directory (os error 2)
+# [("Content-Type", "text/csv")]
+# true
+# false
+# true
+# true
+# true
+
+import http
+
+def rows(n: Int) -> Iterator[Str]:
+  for i in 1..n:
+    yield "row #{i}\n"
+
+def said(r: http.Response or Error) -> Str:
+  match r:
+    Ok(resp) -> "status #{resp.status}"
+    Error(e) -> e.message
+
+async def main -> () or Error:
+  url = "http://127.0.0.1:9/up"
+  req = http.request("PUT", url).header("content-type", "text/csv").with_file("/tmp/lume-review-b/http/missing.csv", "text/plain")
+  puts req.headers
+  puts said(req.send)
+
+  replaced = req.with_body("a,b\n", "text/csv")
+  puts replaced.headers
+  failed = said(replaced.send)
+  puts failed.starts_with?("PUT http://127.0.0.1:9/up: ")
+  puts failed.contains?("cannot read")
+
+  parts = said(http.request("POST", "http://127.0.0.1:9/rows").send_parts(rows(3)))
+  puts parts.starts_with?("POST http://127.0.0.1:9/rows: ")
+  fetched = await http.request("GET", "http://127.0.0.1:9/").timeout(2000).fetch
+  puts said(fetched).starts_with?("GET http://127.0.0.1:9/: ")
+  puts http.delete("http://127.0.0.1:9/gone").error?
+  ()

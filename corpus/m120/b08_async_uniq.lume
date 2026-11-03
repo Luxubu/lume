@@ -1,0 +1,23 @@
+# b08_async_uniq: Async sequences (Collections, "Async generators"). The
+# page first says an async sequence has, of a list's methods, StreamExt's
+# and "those that need every item before they can answer — `join`, `sort`,
+# `max` and the rest", then lists those as exactly `join`, `max`, `min`,
+# `max_by`, `min_by`, `sort`, `sort_by`, `last` and `reverse`. `uniq` also
+# needs every item before it can answer, but is not on that list: taking the
+# list as complete, it is refused, in the words of
+# examples/errors/async_gen_chain.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: an `async Iterator[Int]` has no `uniq` yet
+#   --> corpus/m120/b08_async_uniq.lume:23:14
+#    |
+# 23 |   puts nums().uniq
+#    |              ^
+#   help: it has the chains `map`, `filter`, `reject`, `take_while`, `take`, `skip` and `enumerate`; `first`, `count`, `sum`, `any?`, `all?`, `find`, `each` and `fold`; and, keeping every item first, `join`, `max`, `min`, `max_by`, `min_by`, `sort`, `sort_by`, `last` and `reverse`; for the rest, keep its items with `.to_list`
+
+async def nums -> Iterator[Int]:
+  for n in [3, 1, 3]:
+    yield n
+
+async def main:
+  puts nums().uniq

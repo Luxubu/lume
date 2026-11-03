@@ -1,0 +1,22 @@
+# The newcomer's classic: a counter made without `var`, then given a new
+# value from itself inside a loop and an `if`. Lunch 2 says a name without
+# `var` may make a new value from the old one "on the next lines of the same
+# block"; this is not the same block, so it is refused, with the message
+# the Names reference gives for a nested block.
+# Run with `lume check corpus/m120/a09_tea_count_fails.lume`
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `count` is declared on line 18, outside this block; a new `count` here would hide it and be lost when the block ends
+#   --> corpus/m120/a09_tea_count_fails.lume:21:7
+#    |
+# 21 |       count = count + 1
+#    |       ^
+#   help: declare it `var count` on line 18
+
+def main:
+  orders = ["tea", "cake", "tea", "soup"]
+  count = 0
+  for o in orders:
+    if o == "tea":
+      count = count + 1
+  puts "#{count} teas"

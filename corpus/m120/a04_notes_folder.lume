@@ -1,0 +1,58 @@
+# Files and folders under /tmp, as lunch 13 teaches them: `Dir.make` with
+# missing parents, `File.write`, `File.append` (also making a new file),
+# `File.read` and `lines`, `File.size` in bytes, `Dir.list` (names, sorted),
+# `Dir.walk` (full paths of files, sorted), `Path.join`, `Path.base`,
+# `Path.dir`, `Path.stem`, `Path.ext`, the message of a failed read,
+# `File.remove`, `File.exists?`, `Dir.remove` and `Dir.exists?`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 3
+# 1. buy bread
+# 2. call Ada
+# 3. water plants
+# 32
+# ["old", "today.txt"]
+# last.txt in old
+# today.txt in notes
+# false
+# cannot read `/tmp/lume-review-A/a04/nope.txt`: No such file or directory (os error 2)
+# run 1
+# run 2
+# run 3
+# false
+# report.final
+# txt
+# false
+
+ROOT = "/tmp/lume-review-A/a04"
+
+def main -> () or Error:
+  notes = Path.join(ROOT, "notes")
+  today = Path.join(notes, "today.txt")
+  Dir.make(Path.join(notes, "old"))?
+  File.write(today, "buy bread\ncall Ada\n")?
+  File.write(Path.join(notes, "old/last.txt"), "fix bike\n")?
+  File.append(today, "water plants\n")?
+  text = File.read(today)?
+  puts text.lines.len
+  for i, line in text.lines.enumerate:
+    puts "#{i + 1}. #{line}"
+  puts File.size(today)?
+  puts Dir.list(notes)?
+  for path in Dir.walk(ROOT)?:
+    puts "#{Path.base(path)} in #{Path.base(Path.dir(path))}"
+  missing = Path.join(ROOT, "nope.txt")
+  puts File.exists?(missing)
+  match File.read(missing):
+    Ok(_) -> puts "found it?"
+    Error(e) -> puts e.message
+  log = Path.join(ROOT, "log.txt")
+  for n in 1..3:
+    File.append(log, "run #{n}\n")?
+  puts File.read(log)?.trim
+  File.remove(log)?
+  puts File.exists?(log)
+  puts Path.stem("report.final.txt")
+  puts Path.ext("report.final.txt")
+  Dir.remove(ROOT)?
+  puts Dir.exists?(ROOT)

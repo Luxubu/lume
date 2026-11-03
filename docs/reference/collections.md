@@ -442,8 +442,10 @@ async def main:
   generator either: write an `async def` function that takes the interface
   value instead (`examples/async_interfaces.lume`).
 - Of a list's methods it has those Rust's `StreamExt` has, below, and
-  those that need every item before they can answer — `join`, `sort`,
-  `max` and the rest — which keep the items first.
+  nine that need every item before they can answer — `join`, `sort`,
+  `sort_by`, `max`, `min`, `max_by`, `min_by`, `last` and `reverse` — which
+  keep the items first. Others that need every item, such as `uniq` or
+  `group_by`, come after `.to_list`.
 - **More:** `examples/async_generators.lume` shows each of these.
 
 #### Chains over an async sequence

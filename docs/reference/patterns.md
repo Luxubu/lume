@@ -319,6 +319,30 @@ match xs:
 #! does not cover: [_, _, ..rest]
 ```
 
+**A list pattern goes inside any other pattern**: a variant's field, an
+optional, a tuple, another list.
+
+```lume
+enum Cmd:
+  Say(words: [Str])
+  Quit
+
+def describe(c: Cmd, loud: Bool) -> Str:
+  match (c, loud):
+    (Say([]), _) -> "silence"
+    (Say(["hi" | "hello", ..rest]), _) -> "greeting and #{rest.len}"
+    (Say([w]), true) -> w.upcase
+    (Say([first, ..]), _) -> "starts #{first}"
+    (Quit, _) -> "bye"
+
+def main:
+  puts describe(Say([]), false)                  #=> silence
+  puts describe(Say(["hi", "you", "two"]), false) #=> greeting and 2
+  puts describe(Say(["yo"]), true)               #=> YO
+  puts describe(Say(["well", "then"]), false)    #=> starts well
+  puts describe(Quit, true)                      #=> bye
+```
+
 ## `|`: alternatives
 
 `p1 | p2` fits if either does. **Every alternative must bind the same
@@ -352,28 +376,35 @@ def main:
 #! every alternative of `|` must bind the same names
 ```
 
-One more rule. When an alternative has a `Str` or `Float` literal inside
-something else, all the alternatives must have the same shape, differing
-only in their literals. The same goes for any literal inside a recursive
-enum's fields. Split such an arm in two:
-
-```lume-bad
-match ("a", 1):
-  ("a", _) | (_, 2) -> puts "hit"
-  _ -> puts "miss"
-#! alternatives with a string or float inside must otherwise look the same
-```
+Alternatives of different shapes may hold literals and lists, as long as
+they name nothing:
 
 ```lume
 for pair in [("a", 1), ("b", 2), ("c", 3)]:
   match pair:
-    ("a", _) -> puts "hit"
-    (_, 2) -> puts "hit"
+    ("a", _) | (_, 2) -> puts "hit"
     _ -> puts "miss"
 #=> hit
 #=> hit
 #=> miss
 ```
+
+**Alternatives that name something are more limited.** When they have a
+`Str` or `Float` literal inside something else, or a literal inside a
+recursive enum's fields, they must have the same shape, differing only in
+their literals. Split such an arm in two:
+
+```lume-bad
+match ("a", "q"):
+  ("a", x) | (x, "b") -> puts x
+  _ -> puts "miss"
+#! alternatives with a string or float inside must otherwise look the same
+```
+
+And a name may not come from inside a list or a recursive field in one
+alternative: `([a], "x") | ([_, a], "y")` is refused with ``an alternative
+of `|` cannot name what is inside a list or a recursive field``. Give each
+alternative an arm of its own.
 
 ## What an arm can do
 

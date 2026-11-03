@@ -1,0 +1,19 @@
+warning: `vowels` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/m120/a06_kitchen_tasks.lume:50:3
+   |
+50 |   shared var vowels = 0
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+kettle on
+tea ready
+[1, 4, 9, 16]
+Some("espresso ready")
+1
+["latte ready"]
+8
+ok 3
+skip: `x` is not an integer
+ok 5
+cooking soup
+stew
+exit: 0

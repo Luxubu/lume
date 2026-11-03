@@ -1,0 +1,50 @@
+# units — amounts with units: read from text, added up, scaled, sorted and
+# shown. The root of the library; `convert` is passed on with it.
+
+pub import convert
+import convert.Unit
+
+pub struct Qty:
+  base: Int
+  unit: Unit
+
+  def same_kind?(o: Qty) -> Bool = unit.mass? == o.unit.mass?
+
+  # in its own unit: whole when it divides evenly, else to two places
+  def show -> Str:
+    if base % unit.factor == 0:
+      "#{base / unit.factor} #{unit.symbol}"
+    else:
+      "#{(base.to_float / unit.factor.to_float).decimals(2)} #{unit.symbol}"
+
+  def plus(o: Qty) -> Qty or Error:
+    if not same_kind?(o):
+      return Error("cannot add #{o.show} to #{show}")
+    Qty(base: base + o.base, unit: unit)
+
+  def times(k: Int) -> Qty = Qty(base: base * k, unit: unit)
+
+  def in_unit(u: Unit) -> Qty = Qty(base: base, unit: u)
+
+  def <(o: Qty) -> Bool = base < o.base
+
+# "250 g", "2 KG", "1 l": a whole amount, a space, a unit
+pub def parse(text: Str) -> Qty or Error:
+  match text.split:
+    [n, sym] ->
+      u = convert.unit_of(sym)?
+      count = n.to_int.map_error { |e| Error("in `#{text}`: #{e.message}") }?
+      Qty(base: count * u.factor, unit: u)
+    _ -> Error("expected `amount unit`, got `#{text}`")
+
+# everything added, in the first one's unit
+pub def total(items: [Qty]) -> Qty or Error:
+  match items:
+    [] -> Error("nothing to add")
+    [head, ..rest] ->
+      var sum = head
+      for q in rest:
+        sum = sum.plus(q)?
+      sum
+
+pub def scale(items: [Qty], k: Int) -> [Qty] = items.map { |q| q.times(k) }.to_list

@@ -1,0 +1,11 @@
+cannot run `ls` in `/tmp/lume-review-b/nope`: no such folder
+4
+4
+cannot write to `cat`: its input is closed
+["one"]
+None
+0
+2
+["c"]
+0
+exit: 0

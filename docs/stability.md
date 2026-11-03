@@ -95,7 +95,8 @@ are listed under **Preview:**.
 
 Every example in `docs/` — the reference and the tutorial — every program
 in `examples/`, and every refused program in `examples/errors/` is run on
-every change, on Linux and macOS, and must print exactly what it shows.
+every change, on Linux, macOS and Windows, and must print exactly what it
+shows (a few that drive Unix programs Windows lacks run on the other two).
 A change that alters a settled behaviour fails those checks, so it cannot
 happen unnoticed: it has to be made on purpose, with its warning release
 and its `CHANGELOG.md` entry, by the rules in `CONTRIBUTING.md`.

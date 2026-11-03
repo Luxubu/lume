@@ -1,0 +1,9 @@
+# In a `() or Error` function a bare `Error` line used to be taken as a
+# `return` — the one place it was — while everywhere else it is refused.
+def save(n: Int) -> () or Error:
+  if n < 0:
+    Error("negative")
+  puts "saved #{n}"
+
+def main -> () or Error:
+  save(-1)?

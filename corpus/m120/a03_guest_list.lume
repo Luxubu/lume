@@ -1,0 +1,65 @@
+# Error handling the way lunch 10 teaches it: functions giving `T or Error`,
+# a plain value wrapped in `Ok` for you, `return Error(...)`, `?` on
+# `to_int` and on our own functions, a list pattern on `split`, `or_error`
+# on an absent value, `map` and `map_error` on a result, `?` followed by a
+# method, and a `main -> () or Error` that ends with a failure.
+# Meant to RUN. It ends through `main`'s `?`, so its exit status is 1.
+# EXPECTED OUTPUT:
+# ok: ada is 36
+# bad: `x` is not an integer
+# bad: age cannot be negative: -2
+# bad: expected `name=age`, got `dee`
+# ada and grace
+# grace
+# Error("expected `name=age`, got `oops`")
+# Error("no guests")
+# Ok(42)
+# Error("age: `x` is not an integer")
+# true
+# 42
+# EXPECTED STDERR:
+# error: `oops` is not an integer
+# EXPECTED EXIT: 1
+
+struct Guest:
+  name: Str
+  age: Int
+
+def parse_age(text: Str) -> Int or Error:
+  n = text.trim.to_int?
+  if n < 0:
+    return Error("age cannot be negative: #{n}")
+  n
+
+def parse_guest(line: Str) -> Guest or Error:
+  match line.split("="):
+    [name, age] -> Guest(name: name.trim, age: parse_age(age)?)
+    _ -> Error("expected `name=age`, got `#{line}`")
+
+def oldest(guests: [Guest]) -> Guest or Error:
+  guests.max_by { |g| g.age }.or_error("no guests")
+
+def load(lines: [Str]) -> [Guest] or Error:
+  var out: [Guest] = []
+  for line in lines:
+    out.push(parse_guest(line)?)
+  out
+
+def main -> () or Error:
+  for line in ["ada = 36", "bo=x", "cy=-2", "dee"]:
+    match parse_guest(line):
+      Ok(g) -> puts "ok: #{g.name} is #{g.age}"
+      Error(e) -> puts "bad: #{e.message}"
+  good = load(["ada=36", "grace=45"])?
+  puts good.map(_.name).join(" and ")
+  puts oldest(good)?.name
+  puts load(["ada=36", "oops"])
+  puts oldest([])
+  puts "7".to_int.map { |n| n * 6 }
+  r = parse_age("x").map_error { |e| Error("age: #{e.message}") }
+  puts r
+  puts r.error?
+  total = parse_age("40")? + parse_age("2")?
+  puts total
+  puts parse_age("oops")?
+  puts "never printed"

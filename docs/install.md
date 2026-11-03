@@ -68,7 +68,8 @@ lume check file.lume --json         errors and warnings as JSON, for tools
 lume lsp                            a language server, for editors
 ```
 
-Inside a package the file can be left out: `lume run`, `lume test` and the
+An option such as `--json` or `--stdout` may come before the file or after
+it. Inside a package the file can be left out: `lume run`, `lume test` and the
 rest use the package the current folder is in. See
 [Packages](reference/packages.md).
 

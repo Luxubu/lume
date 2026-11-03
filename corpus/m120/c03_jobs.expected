@@ -1,0 +1,20 @@
+warning: `lines_seen` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/m120/c03_jobs.lume:87:3
+   |
+87 |   shared var lines_seen = 0
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+ok   greet   2 lines, last world
+ok   count   1 line, last 3
+FAIL broken  exit 3: out of tea
+FAIL quiet   exit 1: no message
+ok   shout   1 line, last QUIET PLEASE
+3 of 5 jobs passed, 5 lines of output
+sorted: ["3", "QUIET PLEASE", "hello", "world"]
+1: broken
+2: quiet
+asker exited with 0
+sleeper: -1
+run: 4 done
+cannot run `no-such-program-lume`: No such file or directory (os error 2)
+exit: 0

@@ -1,0 +1,46 @@
+# b06_child_edges: A program running alongside (Input and output,
+# "Process.spawn"). Promises no example runs: `spawn_in` gives "the same
+# messages as `Process.run`", so a missing folder is ``no such folder``;
+# `kill` on a program that has ended "keeps the code it ended with";
+# `write` after `close_input` is an `Error` worded ``cannot write to `sort`:
+# its input is closed`` (here `cat`); `read_line` gives `None` once the
+# output has ended, here after `lines` has taken all of it; `count` with no
+# block counts every item of `error_lines`, "as `StreamExt::count` does".
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# cannot run `ls` in `/tmp/lume-review-b/nope`: no such folder
+# 4
+# 4
+# cannot write to `cat`: its input is closed
+# ["one"]
+# None
+# 0
+# 2
+# ["c"]
+# 0
+
+async def main -> () or Error:
+  match Process.spawn_in("/tmp/lume-review-b/nope", "ls", []):
+    Ok(_) -> puts "started?"
+    Error(e) -> puts e.message
+
+  done = Process.spawn("sh", ["-c", "exit 4"])?
+  puts await done.wait
+  done.kill
+  puts await done.wait
+
+  cat = Process.spawn("cat", [])?
+  cat.write("one\n")?
+  cat.close_input
+  match cat.write("two\n"):
+    Ok(_) -> puts "wrote?"
+    Error(e) -> puts e.message
+  puts cat.lines.to_list
+  puts await cat.read_line
+  puts await cat.wait
+
+  noisy = Process.spawn("sh", ["-c", "echo a >&2; echo b >&2; echo c"])?
+  puts noisy.error_lines.count
+  puts noisy.lines.to_list
+  puts await noisy.wait
+  ()
