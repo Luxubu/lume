@@ -57,6 +57,8 @@ pub UNIX_ONLY = [
   "corpus/m96/c03_word_pipeline",
   # passes `tr` an argument with a newline in it
   "corpus/m110/a01_word_tally",
+  # a program killed by a signal, and `*` given to `printf` as it is
+  "corpus/m120/b05_run_edges",
 ]
 
 pub def checks -> [Check] or Error:

@@ -35,7 +35,7 @@ Then:
 - **[The examples](docs/examples.md)** — 7,000 lines of working programs, in a
   reading order.
 - **[Installing](docs/install.md)** — and what each command does.
-- **[Changes](CHANGELOG.md)** — what each release holds; 0.8.0 is the latest.
+- **[Changes](CHANGELOG.md)** — what each release holds; 1.0.0 is the latest.
 - **[What is settled](docs/stability.md)** — the parts you can build on, the
   what the promise does not cover, and how a settled part is allowed to
   change.
@@ -69,13 +69,13 @@ fixed — the 782 programs they left behind are run on every change and must
 print what they print today. What Lume refuses, it refuses with a message that
 names the fix — `examples/errors/` is 445 programs kept around to prove it.
 
-**Where it is.** Version 0.8. The language, the collections, files and
+**Where it is.** Version 1.0. The language, the collections, files and
 folders, running programs and talking to them as they run, tasks and async
 sequences, tests, packages and the commands are settled, and so are the
 `http` package, Rust crates through `import rust.<crate>`, and what `lume
 lsp` and `lume check --json` give editors and tools:
 [docs/stability.md](docs/stability.md) promises that a working program does
-not break without a warning release first. The VS Code extension, a tool
+not break without a warning release first, across every 1.x release. The VS Code extension, a tool
 beside the language, and a `rust:` block of Rust written by hand are
 outside the promise. Packages depend on one another by path
 or by git, through `lume.toml`; there is no package registry. Rust crates

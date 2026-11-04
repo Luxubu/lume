@@ -2,35 +2,86 @@
 
 ## Unreleased
 
+## 1.0.0 — the promise, for all of 1.x
+
+Four milestones after 0.8.0 (118–121). Every part of Lume is settled, and
+`docs/stability.md`'s promise now lasts across every 1.x release: a program
+that builds on 1.0 builds, and does the same, on each 1.x after it, unless
+a release before warns it about the form it uses. The means of that
+warning was built and checked before anything needs it. A last review
+round, the twenty-fourth, aimed at everything 1.0 promises rather than one
+release's changes.
+
+### Install
+
+```sh
+git clone https://github.com/Luxubu/lume && cd lume && git checkout v1.0.0
+./install.sh
+lume run examples/fib.lume
+```
+
+It needs a Rust toolchain (<https://rustup.rs>). On Windows, run it from
+Git's bash. See `docs/install.md`.
+
+### Settled
+
+Everything `docs/stability.md` lists: the language, collections,
+generators, files and folders, running programs and talking to them as
+they run, tasks and async sequences, tests, packages, the `json` and
+`http` packages, Rust crates, the commands, and what `lume check --json`
+and `lume lsp` give editors and tools. **There are no previews.** Outside
+the promise, for good: the VS Code extension, a tool beside the language;
+the Rust Lume writes, and `rust:` blocks beside it; the words of messages;
+speed.
+
+The `json` and `http` packages are at 1.0.0 too; take them with
+`tag = "v1.0.0"`.
+
+### What is new
+
 - **Deprecation warnings, ready before they are needed**: a method or a
   namespace's function on its way out is one line in
   `compiler/src/deprecated.rs`; while it is listed, a call of it works as
   the call of its new name and is warned about wherever it is written, with
   what to write and the release it goes in. Nothing is listed: nothing is
   going. The suite checks the warning with a test form.
-
-- **No previews are left.** The VS Code extension, the last, is outside the
-  promise: a tool beside Lume, versioned with it, built on the protocol
-  `lume lsp` speaks, which is settled. Lunch 24 is no longer a preview; it
-  says that the server's answers, which it prints, are not promised word
-  for word.
 - **A list pattern goes inside any other pattern**, as `patterns.md` always
   said: `Say([w])`, `Some([first, ..rest])`, `(cmd, ["hi" | "yo", ..])`,
-  `[[a, b], [c]]`. One did only when the list was matched on its own; inside
-  anything else it reached rustc. Alternatives of `|` that name nothing
-  may now differ in shape and hold literals, as `("a", _) | (_, 2)`.
-- **Fixed**, by the rule for bugs in `stability.md`: in a `-> () or Error`
-  function, an `Error(...)` on a line of its own that does not end the
-  function left it, unlike in every other function, where it is refused;
-  `errors.md` said it was thrown away. It is refused there too now, with
-  the same message and fix: `return Error(...)`. One that ends a branch at
-  the function's end is still its value.
-- **Fixed**: `xs.push(1)` inside `spawn:` on an outside `var` said `xs` was
-  not a `var`; it says, as `xs = ...` does, that the task changes its own
-  copy. A chain's list of methods in an error leaves out `at` no longer.
-- **Fixed**: two examples in the I/O reference used one folder, and the
-  docs check, which runs examples side by side, could have one remove it
-  while the other read it — as 0.8.0's own check on Linux did.
+  `[[a, b], [c]]`. Alternatives of `|` that name nothing may differ in
+  shape and hold literals, as `("a", _) | (_, 2)`.
+- The VS Code extension, the last preview, is outside the promise: a tool
+  beside Lume, versioned with it, built on the protocol `lume lsp` speaks,
+  which is settled. Lunch 24 is no longer a preview.
+
+### Fixed
+
+- By the rule for bugs in `stability.md`: in a `-> () or Error` function,
+  an `Error(...)` on a line of its own that does not end the function left
+  it, unlike in every other function, where it is refused; `errors.md`
+  said it was thrown away. It is refused there too now, with the same
+  message and fix: `return Error(...)`. One that ends a branch at the
+  function's end is still its value, nested `if`s and `match`es included.
+- A list pattern inside anything but a list matched on its own reached
+  rustc.
+- `xs.push(1)` inside `spawn:` on an outside `var` said `xs` was not a
+  `var`; it says, as `xs = ...` does, that the task changes its own copy.
+  A chain's list of methods in an error left out `at`.
+- Two examples in the I/O reference used one folder, and the docs check,
+  which runs examples side by side, could have one remove it while the
+  other read it — as 0.8.0's own check on Linux did.
+
+### How it was checked
+
+- **The suite**: `tests/run.sh`, 1374 checks and 697 docs examples, byte
+  for byte, on Linux, macOS and Windows (where ten that drive Unix programs
+  as Unix has them are left out).
+- **Review round twenty-four** (`corpus/m120/`): thirty programs by three
+  reviewers from the docs alone, one for each settled part among them;
+  42 guesses, no wrong answer, and the one leak to rustc fixed.
+- **An audit** of every settled part against its page, and about fifteen
+  places where two pages disagreed brought to one answer.
+- **The benchmarks**, all within budget; `bench/BASELINE` holds 1.0's.
+- Installed from a clean checkout and run.
 
 ## 0.8.0 — the last previews
 

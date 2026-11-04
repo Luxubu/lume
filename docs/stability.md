@@ -1,7 +1,7 @@
 # What is settled, and what may change
 
-Lume is at 0.8, and still growing. This page says which parts of it you can
-build on today — write programs in, teach, write tutorials about — and
+Lume is at 1.0, and still growing. This page says which parts of it you can
+build on — write programs in, teach, write tutorials about — and
 what the promise does not cover. It also says how a settled part is allowed
 to change, so that what you write keeps working.
 
@@ -101,7 +101,10 @@ A change that alters a settled behaviour fails those checks, so it cannot
 happen unnoticed: it has to be made on purpose, with its warning release
 and its `CHANGELOG.md` entry, by the rules in `CONTRIBUTING.md`.
 
-## Towards 1.0
+## Across 1.x
 
-At 1.0 the promise will last across every 1.x release, as Rust's has since
-its 1.0.
+The promise lasts across every 1.x release, as Rust's has since its 1.0:
+a program that builds on 1.0 builds, and does the same, on every 1.x after
+it, but for the warning releases above and the bugs this page names. New
+parts may come in a 1.x release — as a preview first, if their shape is not
+yet sure — and a settled part may gain methods and fields.
