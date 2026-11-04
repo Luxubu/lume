@@ -1,11 +1,11 @@
-# Lunch 21: A log analyser
+# Lunch 23: A log analyser
 
 **In this lunch you will build `loglens`**, which reads a web server's
 log — one line per request — and reports what happened: how many
 requests, how many failed, which pages were slowest. Logs grow large, so
 this lunch is also about reading a big file quickly.
 
-Each line of the log says when, what, which page, the status (lunch 19),
+Each line of the log says when, what, which page, the status (lunch 21),
 and how many milliseconds the answer took:
 
 ```text
@@ -15,7 +15,7 @@ and how many milliseconds the answer took:
 12:00:03 GET /order/9 500 900
 ```
 
-## 21.1 One line, one entry
+## 23.1 One line, one entry
 
 A line becomes a struct, and reading one can fail — a line cut short, a
 status that is not a number — so `parse_line` gives an `Entry or Error`.
@@ -40,10 +40,10 @@ def parse_line(line: Str) -> Entry or Error:
 `[time, method, path, status, ms]` fits only a list of exactly five, so a
 line with four fields, or six, falls to `_`.
 
-## 21.2 Entries as they are read
+## 23.2 Entries as they are read
 
 A log may hold millions of lines. Rather than building a list of every
-entry, **a generator (lunch 14) hands them out one at a time**, along with
+entry, **a generator (lunch 16) hands them out one at a time**, along with
 the line number of each bad line, so a report can say where it found
 trouble. Its items are `Entry or Error`, so a bad line is an item too, not
 the end of the walk:
@@ -60,7 +60,7 @@ def entries(text: Str) -> Iterator[Entry or Error]:
 A generator item that is a `T or Error` is written as a function giving one
 would be: `yield e` is a good item, `yield Error(...)` a failed one.
 
-## 21.3 The report
+## 23.3 The report
 
 The report walks the entries once, keeping running totals — nothing holds
 every entry. (The log's text itself is read whole, by `File.read`; for a
@@ -97,7 +97,7 @@ Four running totals are maps keyed by status or by page (lunch 6's
 counting pattern). `slowest` is an `Entry?`: before the first entry there
 is none.
 
-## 21.4 Showing it
+## 23.4 Showing it
 
 Averages and the slowest pages come from the totals. **New here:**
 `text.pad_right(n)` adds spaces to the end of text until it is `n` long,
@@ -124,7 +124,7 @@ def show(r: Report) -> Str:
 `sort_by { |_, avg| 0 - avg }` sorts slowest first: sorting by the
 negative of a number is sorting by the number backwards.
 
-## 21.5 The whole program, tried out
+## 23.5 The whole program, tried out
 
 Everything so far, with a `main` that analyses a small log written into
 the program:
@@ -214,7 +214,7 @@ def main:
 Two lines were bad, and each is reported with its line number and why; the
 other six were counted.
 
-## 21.6 Reading a real log, fast
+## 23.6 Reading a real log, fast
 
 The tool's `main` reads the file named in its arguments. To try it on a
 large log, it can also make one — a million made-up lines, so the

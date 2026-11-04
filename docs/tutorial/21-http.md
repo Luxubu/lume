@@ -1,4 +1,4 @@
-# Lunch 19: HTTP
+# Lunch 21: HTTP
 
 > Most of this lunch's examples talk to a real web server, so the test
 > suite cannot run them on every change; they were run by hand, against
@@ -12,11 +12,11 @@
 - build a request a step at a time, with a timeout;
 - read a large body as it arrives, and make many requests at once.
 
-## 19.1 Using a package
+## 21.1 Using a package
 
 HTTP is not built into the language; it comes in a **package**, `http`,
 which lives in Lume's repository next to `json`. A program that uses a
-package is a package itself — lunch 12's folder with a `lume.toml` — and
+package is a package itself — lunch 13's folder with a `lume.toml` — and
 says what it depends on:
 
 ```sh
@@ -38,7 +38,7 @@ http = { git = "https://github.com/Luxubu/lume", tag = "v1.0.0" }
 Lume fetches the package the first time you run the program. From then on
 `import http` brings it in, and `lume run`, in the folder, runs `main.lume`.
 
-## 19.2 Fetching a page
+## 21.2 Fetching a page
 
 **`http.get(url)` fetches a page** and gives a `Response`, or an `Error` if
 the request could not be made:
@@ -75,11 +75,11 @@ def main -> () or Error:
     Error(e) -> puts "could not make it"    # could not make it
 ```
 
-It is the same rule as lunch 15's programs: a program that ran and failed
+It is the same rule as lunch 17's programs: a program that ran and failed
 gave an exit code, not an `Error`. Look at `ok?` or `status` to decide
 what an answer means.
 
-## 19.3 Building a request
+## 21.3 Building a request
 
 `get` is the common case. For the rest, **`http.request(method, url)` builds
 a request a step at a time**, each step giving a new one, and `send` makes
@@ -106,12 +106,12 @@ that gives an `Error` saying it timed out. `http.post(url, body,
 content_type)` and `http.post_json(url, doc)` are shortcuts for sending a
 body; the second sends a JSON document made with the `json` package.
 
-## 19.4 A body as it arrives
+## 21.4 A body as it arrives
 
 `body` holds the whole page, which is fine for a page. For something large
 — a big file, a feed that keeps coming — **`req.open` gives the status and
 headers at once, and the body afterwards, as it arrives**, as an async
-sequence of lines (lunch 17):
+sequence of lines (lunch 19):
 
 ```lume-skip
 import http
@@ -129,7 +129,7 @@ page the rest of the body is never read. (`example.com` sends its whole
 page as one line, so `split` takes the title out of that line.) `page.chunks` gives the body in the pieces it arrives in,
 rather than by line. A body can be walked once.
 
-## 19.5 Many requests at once
+## 21.5 Many requests at once
 
 A request waits for its answer. **`await req.fetch` does the same as `send`,
 but in async code**, where other tasks go on while it waits — so a few
@@ -150,12 +150,12 @@ async def main:
   # --- not a url
 ```
 
-The results come back in the order the requests were started, as lunch 16
+The results come back in the order the requests were started, as lunch 18
 said of all tasks, so **`zip`** — new here — pairs each with its URL:
 `a.zip(b)` is a list of pairs, the first of `a` with the first of `b`, and
 so on.
 
-## 19.6 Checked without a network
+## 21.6 Checked without a network
 
 `docs/tutorial/http-requests/` is a package that builds requests and makes
 ones that cannot succeed — to a port where nothing listens — so it needs no
@@ -185,7 +185,7 @@ The `http` package is written in Lume, with a few lines of Rust where it
 calls the Rust crate **ureq**, which makes the requests. `send` blocks the
 thread it runs on, as ureq does; `fetch` runs it in a task of its own (lunch
 16), so other tasks go on. `open` hands the body to a thread that reads it
-as it arrives, as lunch 18's programs' outputs are read. A Rust program
+as it arrives, as lunch 20's programs' outputs are read. A Rust program
 would more often use the `reqwest` crate, which is async throughout; the
 result is much the same.
 

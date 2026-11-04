@@ -1,4 +1,4 @@
-# The café from lunch 12, in three files: run it with `lume run main.lume`
+# The café from lunch 13, in three files: run it with `lume run main.lume`
 # from this folder. Each `import` path starts from this folder.
 
 import menu

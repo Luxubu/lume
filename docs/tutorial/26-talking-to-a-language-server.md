@@ -1,4 +1,4 @@
-# Lunch 24: Talking to a language server
+# Lunch 26: Talking to a language server
 
 > This lunch talks to `lume lsp`, Lume's language server. The protocol it
 > speaks is settled, but what its answers say — a hover's words, a
@@ -9,14 +9,14 @@
 **language server** — the program behind an editor's error underlines and
 hovers — and asks it questions, as an editor would. The server is Lume's
 own, `lume lsp`. The last lunch puts nearly everything together: a program
-running alongside (lunch 18), messages framed by their length, JSON from a
+running alongside (lunch 20), messages framed by their length, JSON from a
 package, structs, `?`, and async code.
 
 > This lunch's program needs `lume` on your `PATH`, which the test suite cannot assume,
 > so it was run by hand. Lume's own suite drives `lume lsp` the same way,
 > with a longer version of this program: `tools/lumecheck/lsp.lume`.
 
-## 24.1 How editors and servers talk
+## 26.1 How editors and servers talk
 
 An editor and a language server talk over the server's input and output,
 in the **Language Server Protocol**. Each message is a JSON document, and
@@ -30,7 +30,7 @@ Content-Length: 58
 
 A header line, a blank line, then exactly that many bytes — with no line
 ending after them, so the next header starts straight after. That is why
-lunch 18 had `read(n)`.
+lunch 20 had `read(n)`.
 
 The editor sends **requests**, which have an `id` and get an answer with
 the same `id`, and **notices**, which have none and get no answer. The
@@ -38,10 +38,10 @@ server, for its part, sends notices of its own whenever it likes — such as
 the errors it found in a file — so an answer may arrive after some of
 those.
 
-## 24.2 The package
+## 26.2 The package
 
 `lspeek` uses the `json` package that comes with Lume, so it is a package
-(lunch 19):
+(lunch 21):
 
 ```toml
 [package]
@@ -61,7 +61,7 @@ giving the value at that path if there is one. **New here**, all from the
 `.int` and `.items` read a value as text, a whole number or a list, each
 giving it if that is what the value is (a `T?`).
 
-## 24.3 Sending and receiving
+## 26.3 Sending and receiving
 
 A `Server` holds the running program. Sending writes a header and a body;
 receiving reads header lines up to the blank one, then exactly the body:
@@ -104,7 +104,7 @@ def notice(method: Str, params: Json) -> Json =
   json.obj([("jsonrpc", "2.0".to_json), ("method", method.to_json), ("params", params)])
 ```
 
-## 24.4 Waiting for an answer
+## 26.4 Waiting for an answer
 
 Because the server sends notices of its own, the answer to a request is
 the first message that comes back **with that request's `id`**. Anything
@@ -124,7 +124,7 @@ That method goes inside `Server`. A notice the server sends after a
 change — **`textDocument/publishDiagnostics`** — carries the errors it found
 in a file, which is what an editor underlines.
 
-## 24.5 A conversation
+## 26.5 A conversation
 
 `main` starts the server, says hello (`initialize`), opens a file with a
 mistake in it, prints what the server finds, asks what the name under the
@@ -133,7 +133,7 @@ cursor is (`hover`), and says goodbye:
 ```lume-skip
 DIR = "/tmp/lume-lunch-24"
 # the program the editor has open, before and after its mistake is fixed;
-# raw strings (lunch 22), so `#{` in them stays as written
+# raw strings (lunch 24), so `#{` in them stays as written
 TEXT = r"""
   def double(n: Int) -> Int = n * 2
 
@@ -216,7 +216,7 @@ when the pointer rests on `double` — asked after the fix, because the
 server answers hovers from the last version of the file that checked
 cleanly.
 
-## 24.6 What you built
+## 26.6 What you built
 
 `lspeek` is about a hundred lines, and it does what an editor's language
 support does: start a server, frame messages, match answers to requests,
@@ -228,7 +228,7 @@ programs talk to databases, debuggers and many network services.
 
 The server, `lume lsp`, is itself written in Rust, inside Lume's compiler:
 it runs the same checking `lume check` does, on the text it is sent. This
-program's side is lunch 18's `Child` — a thread reading each of the
+program's side is lunch 20's `Child` — a thread reading each of the
 server's outputs, `read(n)` handing out exactly the bytes asked for — and
 the `json` package, written in Lume. Lume's test suite runs a longer
 version of this conversation against every change to the compiler.

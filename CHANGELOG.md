@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Lunch 12 is three lunches**: 12, Generics; 13, Modules and packages,
+  which now makes a library package with `lume new --lib` and uses it from
+  a program, and says how a package comes from git; 14, Tests, which now
+  tests work that may fail and a package's tests. Lunches 13–24 are 15–26,
+  and the tutorial is twenty-six lunches.
+
 ## 1.0.0 — the promise, for all of 1.x
 
 Four milestones after 0.8.0 (118–121). Every part of Lume is settled, and

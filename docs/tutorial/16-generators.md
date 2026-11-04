@@ -1,4 +1,4 @@
-# Lunch 14: Generators
+# Lunch 16: Generators
 
 **In this lunch you will:**
 
@@ -7,7 +7,7 @@
 - make sequences that never end, and take as much of them as you need;
 - connect generators into a pipeline.
 
-## 14.1 A function that hands out values one at a time
+## 16.1 A function that hands out values one at a time
 
 A function gives back one value. A **generator** hands out several, one
 at a time: each `yield` hands out the next. It says what kind of values,
@@ -40,7 +40,7 @@ def main:
   puts courses().filter(_.len > 4).to_list    #=> ["starter", "dessert"]
 ```
 
-## 14.2 Work done only when asked
+## 16.2 Work done only when asked
 
 What makes a generator different from a function giving a list is
 **when** it does its work. A generator does nothing until the first value
@@ -66,7 +66,7 @@ that built a list would have cooked both first. For two dishes it makes
 no difference; for a million lines of a log, it is the difference between
 holding one line at a time and holding them all.
 
-## 14.3 Sequences that never end
+## 16.3 Sequences that never end
 
 Because a generator only works when asked, it may go on for ever. Whoever
 walks it decides when to stop — with `take`, `break` or `find`:
@@ -89,7 +89,7 @@ def main:
 
 Each `ticket_numbers()` call starts a new sequence from 100.
 
-## 14.4 Generators with parameters
+## 16.4 Generators with parameters
 
 A generator takes parameters like any function, and `yield` can go in its
 loops and its `if`s:
@@ -113,7 +113,7 @@ def main:
 
 `return` on its own ends a generator early: there will be no more values.
 
-## 14.5 Pipelines
+## 16.5 Pipelines
 
 **A parameter of type `Iterator[T]` takes any sequence** — a generator, a
 list, a range, a chain — so generators can feed one another. Each step
@@ -145,7 +145,7 @@ ends: `take(2)` asks for two values, `labelled` asks `lucky` for two, and
 `lucky` asks `ticket_numbers` for as many as it takes to find them —
 eighteen — and no more.
 
-## 14.6 Walked once
+## 16.6 Walked once
 
 **A generator is used up as it is walked**: once the values have been
 handed out, they are gone. So a name holding a generator can be walked
@@ -166,7 +166,7 @@ def main:
 To walk the values twice, keep them in a list first, with `.to_list` — or
 call the generator again, which starts it afresh.
 
-## 14.7 One value at a time, by hand
+## 16.7 One value at a time, by hand
 
 `next` asks a generator held in a `var` for its next value. It gives
 `Some(value)`, or `None` once the generator has ended:
@@ -186,7 +186,7 @@ def main:
 A `for` over `menu` after a `next` carries on from where the `next` left
 it.
 
-## 14.8 Methods that are generators
+## 16.8 Methods that are generators
 
 A method can be a generator too. This one walks a menu made of sections,
 some inside others, handing out every dish at any depth:
@@ -218,7 +218,7 @@ changing the value afterwards does not change what it hands out.
 A generator is a Rust function giving `impl Iterator`. Rust has no `yield`
 of its own yet, so Lume turns the body into a state machine: each `yield`
 saves where the body is, and the next request resumes from there. The
-result is an ordinary Rust iterator, so a pipeline like 14.5 compiles to
+result is an ordinary Rust iterator, so a pipeline like 16.5 compiles to
 code much like a hand-written loop. Being used up as it is walked is
 Rust's own rule: an iterator is *moved* into whatever walks it.
 
@@ -231,7 +231,7 @@ Rust's own rule: an iterator is *moved* into whatever walks it.
 3. Write `only_long(xs: Iterator[Str], n: Int) -> Iterator[Str]` that hands
    on the words longer than `n`, and use it on the words of
    `"a big bowl of hot soup"`.
-4. Make the program in 14.6 work, so it prints the list twice.
+4. Make the program in 16.6 work, so it prints the list twice.
 
 ## Recap
 

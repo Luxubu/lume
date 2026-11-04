@@ -1,4 +1,4 @@
-# Lunch 16: Tasks
+# Lunch 18: Tasks
 
 **In this lunch you will:**
 
@@ -7,7 +7,7 @@
 - understand what a task can and cannot see of the rest of your program;
 - share one value between tasks safely.
 
-## 16.1 Why do two things at once
+## 18.1 Why do two things at once
 
 A kitchen does not boil the soup, wait, then start the pie. It puts the
 soup on, starts the pie while the soup boils, and serves each when it is
@@ -31,7 +31,7 @@ async def main:
 running — and the program carries on. `await t` waits until the task is
 done and gives its result.
 
-## 16.2 Functions that wait: `async def`
+## 18.2 Functions that wait: `async def`
 
 Some work is waiting: for a timer, for another task. A function that waits
 for such things is an **`async def`**, and every call to it is awaited.
@@ -64,7 +64,7 @@ async def main:
 #! `cook` is an `async def`: its result arrives later
 ```
 
-## 16.3 Many at once
+## 18.3 Many at once
 
 Start several tasks, and they all run together. **`await` on a list of
 tasks waits for all of them, and gives their results in the order the
@@ -104,10 +104,10 @@ async def main:
   puts totals    #=> [55, 5050, 500500]
 ```
 
-## 16.4 Blocking work in tasks
+## 18.4 Blocking work in tasks
 
 `sum_to` above is a plain `def` — it does not wait for anything, it just
-works. So is `Process.run`, from lunch 15. **A task whose body awaits
+works. So is `Process.run`, from lunch 17. **A task whose body awaits
 nothing runs on a pool of threads of its own**, so plain work like this,
 or a program run, holds up no other task, and many run at once:
 
@@ -124,7 +124,7 @@ async def main:
 Three programs run at the same time, and the results still come back in
 order.
 
-## 16.5 What a task sees: copies
+## 18.5 What a task sees: copies
 
 **A task gets its own copy of the names it uses**, made when it starts. So
 changing a name afterwards does not reach the task:
@@ -152,7 +152,7 @@ async def main:
 #! declare it `shared var served`
 ```
 
-## 16.6 One value for every task: `shared var`
+## 18.6 One value for every task: `shared var`
 
 **`shared var` makes one value that every task works on.** Each use of it
 takes a lock — only one task touches it at a time — so tasks cannot
@@ -179,7 +179,7 @@ waits its turn for the lock, so tasks that do little but change a `shared
 var` run one at a time. Keep the work done on a shared value short, and
 most of the work in each task's own names.
 
-## 16.7 Whichever finishes first
+## 18.7 Whichever finishes first
 
 `await` on a list gives every result, in order. Sometimes you want each
 result as soon as it is ready instead — to show progress, or to start
@@ -200,7 +200,7 @@ async def main:
   puts await kitchen   #=> ["pie"]
 ```
 
-## 16.8 Tasks that may fail
+## 18.8 Tasks that may fail
 
 A task's body may give a `T or Error`, as any function may. Awaiting it
 gives the result, to `match` or pass on with `?`:

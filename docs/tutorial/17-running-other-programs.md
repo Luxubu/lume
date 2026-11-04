@@ -1,4 +1,4 @@
-# Lunch 15: Running other programs
+# Lunch 17: Running other programs
 
 **In this lunch you will:**
 
@@ -7,7 +7,7 @@
 - meet tuples: several values handed back at once;
 - build pipes with `sh`, and run a program in a folder of your choice.
 
-## 15.1 Running a program
+## 17.1 Running a program
 
 Your computer is full of programs that already do useful things: `sort`,
 `ls`, `git`, compilers. **`Process.run(program, args)` runs one, waits for
@@ -21,12 +21,12 @@ def main -> () or Error:
   puts err.len       #=> 0
 ```
 
-It gives back three things: the program's **exit code** (lunch 13: `0`
+It gives back three things: the program's **exit code** (lunch 15: `0`
 for success), what it wrote to standard output, and what it wrote to
 standard error. The output usually ends with a newline, which `trim`
 removes.
 
-## 15.2 Tuples: several values at once
+## 17.2 Tuples: several values at once
 
 Those three values come together as a **tuple**: values side by side, in
 parentheses, each of its own type. The type of `Process.run`'s answer is
@@ -49,7 +49,7 @@ in one line — which is what `(code, out, err) = ...` did above. A tuple is
 for a few values that belong together for a moment; when they are worth
 naming for good, make a struct.
 
-## 15.3 When the program fails
+## 17.3 When the program fails
 
 A program that runs and fails is not an `Error` in Lume: it ran, it gave an
 exit code that is not `0`, and that is its answer. `sh -c` runs a line of
@@ -77,7 +77,7 @@ The difference matters. `grep` exits with `1` when it finds nothing —
 which is an answer, not a failure — and only you know what each program's
 codes mean.
 
-## 15.4 Arguments go one by one
+## 17.4 Arguments go one by one
 
 The program and its arguments are given apart: `["-r", "file.txt"]`, a list
 of separate words. No shell reads them, so a space inside an argument is
@@ -110,7 +110,7 @@ backslash, so the shell is given `\n`, which `printf` turns into a new line.
 A single `\n` would be a new line in the Lume text already — which here
 would work too, but the shell line would not read as written.
 
-## 15.5 Running in a folder
+## 17.5 Running in a folder
 
 A program runs in the folder your program was started from. **`Process.run_in(dir,
 program, args)` runs it in another one**:
@@ -128,7 +128,7 @@ def main -> () or Error:
 
 A folder that does not exist is an `Error`, with a message that says so.
 
-## 15.6 Making failure an `Error`
+## 17.6 Making failure an `Error`
 
 Often you want "run this, and if it fails, stop": a non-zero exit should
 be an `Error` after all. A small function says so once, and lunch 10's `?`

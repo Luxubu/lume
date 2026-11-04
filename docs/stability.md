@@ -43,18 +43,18 @@ a release says so; from then on the promise above covers it.
 
 | part | where it is described |
 |---|---|
-| The language: values, names and `var`, functions, `if`, `match`, loops, blocks, structs, enums, interfaces, generics, `T?` and `T or Error`, `?`, modules, `pub`, `import` | [the reference](README.md), lunches 1–12 |
+| The language: values, names and `var`, functions, `if`, `match`, loops, blocks, structs, enums, interfaces, generics, `T?` and `T or Error`, `?`, modules, `pub`, `import` | [the reference](README.md), lunches 1–13 |
 | Collections: lists, maps, sets and their methods; lazy chains | [Collections](reference/collections.md), [Every method](reference/methods.md) |
-| Generators: `yield`, `Iterator[T]`, generator methods | [Collections](reference/collections.md#generators-yield), lunch 14 |
-| Files, folders, paths, the environment, time: `File`, `Dir`, `Path`, `Env`, `Time` | [Input and output](reference/io.md), lunch 13 |
-| Running a program and waiting for it: `Process.run`, `Process.run_in` | [Input and output](reference/io.md#process), lunch 15 |
-| A program running alongside: `Process.spawn`, `Process.spawn_in`, `Child` — settled in 0.7 | [Input and output](reference/io.md#a-program-running-alongside-processspawn), lunch 18 |
-| Tasks: `async def`, `await`, `spawn:`, `shared var`, `next_done` | [Concurrency](reference/concurrency.md), lunch 16 |
-| Async sequences: async generators, their chains and the methods that wait for their items, `async Iterator[T]`, an interface requiring one — settled in 0.7 | [Collections](reference/collections.md#async-generators-async-def-with-yield), lunch 17 |
-| Tests: `test` blocks, `assert`, `lume test` and its name filter, `async test` (settled in 0.7) | [Tests](reference/testing.md), lunch 12 |
-| Packages: `lume.toml`, dependencies by path and git, `lume.lock` | [Packages](reference/packages.md) |
+| Generators: `yield`, `Iterator[T]`, generator methods | [Collections](reference/collections.md#generators-yield), lunch 16 |
+| Files, folders, paths, the environment, time: `File`, `Dir`, `Path`, `Env`, `Time` | [Input and output](reference/io.md), lunch 15 |
+| Running a program and waiting for it: `Process.run`, `Process.run_in` | [Input and output](reference/io.md#process), lunch 17 |
+| A program running alongside: `Process.spawn`, `Process.spawn_in`, `Child` — settled in 0.7 | [Input and output](reference/io.md#a-program-running-alongside-processspawn), lunch 20 |
+| Tasks: `async def`, `await`, `spawn:`, `shared var`, `next_done` | [Concurrency](reference/concurrency.md), lunch 18 |
+| Async sequences: async generators, their chains and the methods that wait for their items, `async Iterator[T]`, an interface requiring one — settled in 0.7 | [Collections](reference/collections.md#async-generators-async-def-with-yield), lunch 19 |
+| Tests: `test` blocks, `assert`, `lume test` and its name filter, `async test` (settled in 0.7) | [Tests](reference/testing.md), lunch 14 |
+| Packages: `lume.toml`, dependencies by path and git, `lume.lock` | [Packages](reference/packages.md), lunch 13 |
 | The `json` package | [JSON](reference/json.md) |
-| The `http` package — settled in 0.8. A `Request` and an `Opened` may gain fields: read them freely, but build a request with `http.request` and its steps rather than by naming every field, and do not depend on how one prints; `Opened.body_id`, the number a body not yet read is kept under, is Lume's own | [HTTP](reference/http.md), lunch 19 |
+| The `http` package — settled in 0.8. A `Request` and an `Opened` may gain fields: read them freely, but build a request with `http.request` and its steps rather than by naming every field, and do not depend on how one prints; `Opened.body_id`, the number a body not yet read is kept under, is Lume's own | [HTTP](reference/http.md), lunch 21 |
 | The commands: `lume run`, `build`, `check`, `test`, `fmt`, `new`, `clean`, `update` | [Install](install.md#the-commands) |
 | Rust crates: `import rust.<crate>`, `[rust]` in `lume.toml`, how a crate's types are read, builders, `lume crate` — settled in 0.8 | [Rust crates](reference/crates.md) |
 | For editors and tools: the fields of `lume check --json`, and the protocol `lume lsp` speaks — settled in 0.8; what a hover or a completion says is not, as no message's words are | [Install](install.md#editors) |

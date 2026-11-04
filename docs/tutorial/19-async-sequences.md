@@ -1,4 +1,4 @@
-# Lunch 17: Async sequences
+# Lunch 19: Async sequences
 
 **In this lunch you will:**
 
@@ -7,9 +7,9 @@
 - chain and question such a sequence, as you would a list;
 - hand one to a function or a task.
 
-## 17.1 Values that arrive later
+## 19.1 Values that arrive later
 
-Lunch 14's generators hand out values as they are asked for, and each is
+Lunch 16's generators hand out values as they are asked for, and each is
 ready at once. Some values are not: each order from a kitchen, each line a
 slow program prints, each page of a web search. **An `async def` with
 `yield` in it is an *async generator*: between its values, it may `await`.**
@@ -30,7 +30,7 @@ async def main:
 `for` waits for each value as it comes: the soup is served as soon as it
 is ready, before the pie is started. Because walking it waits, **an async
 generator is walked in async code** — an `async def` or a `spawn:` body,
-from lunch 16:
+from lunch 18:
 
 ```lume-bad
 async def orders -> Iterator[Str]:
@@ -42,7 +42,7 @@ def main:
 #! is an `async` generator, which runs as a task, so it is called from async code
 ```
 
-## 17.2 A pass with room for one
+## 19.2 A pass with room for one
 
 An async generator runs as a task of its own, and hands each value over
 through **one place** — like the pass between a kitchen and the dining
@@ -91,7 +91,7 @@ async def main:
               #=> 101
 ```
 
-## 17.3 Chains over values that arrive later
+## 19.3 Chains over values that arrive later
 
 An async sequence has the chains of lunch 7 — `map`, `filter`, `reject`,
 `take_while`, `take`, `skip` and `enumerate` — and each gives an async
@@ -116,7 +116,7 @@ A chain's block runs later, as each value arrives, so **it gets copies of
 the names it uses**, as a task does. It cannot change them, nor use `self`
 in a method; bind what it needs to a name first.
 
-## 17.4 Questions that wait
+## 19.4 Questions that wait
 
 The questions of lunch 7 work too, waiting for the values they need:
 `first`, `count`, `sum`, `any?`, `all?`, `find`, `each` and `fold`. Each
@@ -150,12 +150,12 @@ the names around them, as `each` changes `served`.
 
 **These wait without `await` being written**, as `for` and `to_list` do:
 walking an async sequence always waits, so saying so each time would add
-nothing. `await` is for calling an `async def` (lunch 16), which is why
-17.5 writes `await count_all(...)` but `orders().count`.
+nothing. `await` is for calling an `async def` (lunch 18), which is why
+19.5 writes `await count_all(...)` but `orders().count`.
 
-## 17.5 Methods, functions and parameters
+## 19.5 Methods, functions and parameters
 
-**A method can be an async generator**, as a plain one could in lunch 14.
+**A method can be an async generator**, as a plain one could in lunch 16.
 And the type of an async sequence can be written: **`async Iterator[T]`**.
 A function that hands one on without `yield` says so, and a parameter of
 that type takes one:
@@ -190,7 +190,7 @@ An async generator itself may say either `-> Iterator[T]`, as the examples
 here do, or `-> async Iterator[T]`; they mean the same, since its `async
 def` already says its values arrive later.
 
-## 17.6 A task that walks one
+## 19.6 A task that walks one
 
 A task can walk an async sequence — **the task takes it**, as Rust moves a
 value into a thread, so the name cannot be used after the `spawn:`:

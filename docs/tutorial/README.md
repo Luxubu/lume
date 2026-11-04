@@ -1,6 +1,6 @@
 # Lume, a Lunch at a Time
 
-A tutorial in twenty-four short chapters, each meant to be read — and its
+A tutorial in twenty-six short chapters, each meant to be read — and its
 examples typed and run — in about an hour: a lunch break. Each one teaches
 one idea, with many small programs, a few things to try, and a recap at the
 end.
@@ -30,22 +30,24 @@ it.
 | 9 | [Enums and `match`](09-enums-and-match.md) | say "one of these", and handle each case |
 | 10 | [Absence and failure](10-absence-and-failure.md) | `T?`, `T or Error`, and `?` — values that may not be there, and work that may fail |
 | 11 | [Interfaces](11-interfaces.md) | say what a value can do, not what it is |
-| 12 | [Generics, modules and tests](12-generics-modules-and-tests.md) | write a thing once for many types, split a program into files, and test it |
+| 12 | [Generics](12-generics.md) | write a thing once, for values of many types |
+| 13 | [Modules and packages](13-modules-and-packages.md) | split a program into files, and use a library of your own |
+| 14 | [Tests](14-tests.md) | check that the code does what it should, with `lume test` |
 
 ## Part 2: the world
 
 | | lunch | |
 |---|---|---|
-| 13 | [Files and folders](13-files-and-folders.md) | read, write and walk them |
-| 14 | [Generators](14-generators.md) | sequences made a piece at a time, with `yield` |
-| 15 | [Running other programs](15-running-other-programs.md) | `Process.run`, and what comes back |
-| 16 | [Tasks](16-tasks.md) | many things at once, with `spawn:` and `await`; `shared var` |
-| 17 | [Async sequences](17-async-sequences.md) | items that arrive later: async generators and their methods |
-| 18 | [Programs alongside](18-programs-alongside.md) | `Process.spawn`: talk to a program while it runs |
-| 19 | [HTTP](19-http.md) | requests, and bodies read as they arrive |
+| 13 | [Files and folders](15-files-and-folders.md) | read, write and walk them |
+| 14 | [Generators](16-generators.md) | sequences made a piece at a time, with `yield` |
+| 15 | [Running other programs](17-running-other-programs.md) | `Process.run`, and what comes back |
+| 16 | [Tasks](18-tasks.md) | many things at once, with `spawn:` and `await`; `shared var` |
+| 17 | [Async sequences](19-async-sequences.md) | items that arrive later: async generators and their methods |
+| 18 | [Programs alongside](20-programs-alongside.md) | `Process.spawn`: talk to a program while it runs |
+| 19 | [HTTP](21-http.md) | requests, and bodies read as they arrive |
 
 Every chapter teaches parts of Lume that are settled ([what is
-settled](../stability.md) says what that promises). Lunch 24 prints what a
+settled](../stability.md) says what that promises). Lunch 26 prints what a
 language server answers, whose words may change, as no message's do.
 
 ## Part 3: building things
@@ -56,11 +58,11 @@ marked *new here* where it is used.
 
 | | lunch | |
 |---|---|---|
-| 20 | [A CSV query tool](20-a-csv-query-tool.md) | reading a table, and answering questions about it |
-| 21 | [A log analyser](21-a-log-analyser.md) | a large file, read fast |
-| 22 | [A job runner](22-a-job-runner.md) | programs run in tasks, and their results gathered |
-| 23 | [A health checker](23-a-health-checker.md) | many web pages at once, with retries |
-| 24 | [Talking to a language server](24-talking-to-a-language-server.md) | a program that drives another, message by message |
+| 20 | [A CSV query tool](22-a-csv-query-tool.md) | reading a table, and answering questions about it |
+| 21 | [A log analyser](23-a-log-analyser.md) | a large file, read fast |
+| 22 | [A job runner](24-a-job-runner.md) | programs run in tasks, and their results gathered |
+| 23 | [A health checker](25-a-health-checker.md) | many web pages at once, with retries |
+| 24 | [Talking to a language server](26-talking-to-a-language-server.md) | a program that drives another, message by message |
 
 ## How the chapters are written
 

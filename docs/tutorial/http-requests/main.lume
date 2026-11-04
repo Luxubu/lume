@@ -1,4 +1,4 @@
-# Lunch 19's request building, checked with no network: every request here
+# Lunch 21's request building, checked with no network: every request here
 # goes to a port where nothing listens, so it cannot succeed.
 
 import http

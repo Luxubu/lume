@@ -1,4 +1,4 @@
-# Lunch 22: A job runner
+# Lunch 24: A job runner
 
 **In this lunch you will build `jobrun`**, which runs a list of shell
 commands — jobs — several at a time, and reports which worked. Build
@@ -15,7 +15,7 @@ broken: echo starting; echo out of tea >&2; exit 3
 nap: sleep 0.2; echo rested
 ```
 
-## 22.1 Reading the jobs
+## 24.1 Reading the jobs
 
 A job is a name and a command. The line is cut at its first `: ` — the
 command may well contain more colons:
@@ -41,9 +41,9 @@ dots stopping just before it; `line[cut + 2..line.len]` is everything after
 is fine: a range that runs past the end of text is cut short at the end.
 Lines that start with `#` are comments, so a jobs file can explain itself.
 
-## 22.2 Running one job
+## 24.2 Running one job
 
-A job runs with `sh -c` (lunch 15), so pipes and `;` work in a command. The
+A job runs with `sh -c` (lunch 17), so pipes and `;` work in a command. The
 outcome keeps what a report needs: the exit code, the first line of each
 output, and how long it took:
 
@@ -71,12 +71,12 @@ found".
 `Time.now_ms` is the time now, in milliseconds; the difference between two
 is how long something took.
 
-## 22.3 Running several at once
+## 24.3 Running several at once
 
 Running jobs one after another wastes time when each mostly waits. Running
 all at once can swamp a machine. The usual answer is **a pool**: at most
 `at_once` jobs running, and a new one started each time one finishes —
-lunch 16's `next_done`:
+lunch 18's `next_done`:
 
 ```lume-skip
 async def run_all(jobs: [Job], at_once: Int) -> [Outcome]:
@@ -101,11 +101,11 @@ Three things to notice:
   because jobs finish in any order. The last line puts the outcomes back in
   the jobs' order, so the report reads like the file.
 - **`run_job` awaits nothing**, so each task runs on the pool for blocking
-  work (lunch 16): a job waiting on its program holds up no other.
+  work (lunch 18): a job waiting on its program holds up no other.
 - **`i` and `job` are named before the `spawn:`**, so the task copies those
   values, not the changing `started`.
 
-## 22.4 The report
+## 24.4 The report
 
 ```lume-skip
 def line_for(o: Outcome) -> Str:
@@ -119,7 +119,7 @@ A passing job shows the last line it printed — usually its result; a
 failing one shows its exit code and the first line of its error output —
 usually the reason.
 
-## 22.5 The whole program, tried out
+## 24.5 The whole program, tried out
 
 Everything so far, with a `main` that runs four jobs written into the
 program, two at a time:
@@ -201,7 +201,7 @@ escapes and no `#{ }`, so its `\n` reach `printf` as the two characters
 written, for the shell to turn into new lines. (In the jobs file, which is
 not Lume, they are just text anyway.)
 
-## 22.6 The tool
+## 24.6 The tool
 
 The real `main` reads the jobs file named on the command line, takes `-j N`
 for how many to run at once, shows each job's time, and — like any tool a

@@ -1,4 +1,4 @@
-# Lunch 18: Programs alongside
+# Lunch 20: Programs alongside
 
 **In this lunch you will:**
 
@@ -7,9 +7,9 @@
 - write to it while it runs, and talk with it in turns;
 - read output whose length is given in a header, as many protocols do.
 
-## 18.1 Starting a program and carrying on
+## 20.1 Starting a program and carrying on
 
-Lunch 15's `Process.run` waits for a program to finish and then gives you
+Lunch 17's `Process.run` waits for a program to finish and then gives you
 everything at once. That is fine for `echo`; it is not for a program that
 runs for an hour printing progress, or one you want to talk to. **`Process.spawn`
 starts the program and gives you a `Child` at once**, a handle on the
@@ -24,7 +24,7 @@ async def main -> () or Error:
   puts "exit #{await c.wait}"    #=> exit 0
 ```
 
-**`c.lines` is the program's output as an async sequence** — lunch 17's
+**`c.lines` is the program's output as an async sequence** — lunch 19's
 kind — so each line arrives as the program prints it: `got one` appears
 before the program has even printed `two`. **`await c.wait` waits for the
 program to end** and gives its exit code. Both wait, so a program that uses
@@ -34,7 +34,7 @@ Starting can fail — a program that does not exist — so `Process.spawn`
 gives `Child or Error`, with the same message as `Process.run`.
 `Process.spawn_in(dir, program, args)` starts it in a folder.
 
-## 18.2 Giving it input
+## 20.2 Giving it input
 
 A `Child` can be written to while it runs. **`c.write(text)` sends text to
 its input, and `c.close_input` says there is no more** — which a program
@@ -52,7 +52,7 @@ async def main -> () or Error:
 `await c.wait` closes the input too, before it waits, so a program reading
 to the end can finish.
 
-## 18.3 Talking in turns
+## 20.3 Talking in turns
 
 Some programs answer each line as it comes. **`await c.read_line` reads one
 line of output** — the next answer — so you can send a question, read the
@@ -74,7 +74,7 @@ The little shell program counts the lines it is sent and answers each one.
 `read_line` gives `None` once the program's output has ended, which
 `or_error` (lunch 10) turns into a failure.
 
-## 18.4 Its errors, its end, and stopping it
+## 20.4 Its errors, its end, and stopping it
 
 **`c.error_lines` is what the program writes to standard error**, as
 `c.lines` is its standard output; the two are read apart, so a program that
@@ -99,7 +99,7 @@ async def main -> () or Error:
   puts await slow.wait    #=> -1
 ```
 
-## 18.5 Reading by size
+## 20.5 Reading by size
 
 Many protocols send a message as a header that says how long the message
 is, then the message itself, which may hold anything — even new lines.
@@ -126,7 +126,7 @@ Each message is a `Length:` line, an empty line, and the body with no line
 ending after it — so the next header starts straight after. Lume's own
 test suite drives `lume lsp`, its language server, exactly this way.
 
-## 18.6 Several at once
+## 20.6 Several at once
 
 A `Child` is a value like any other: it can go in a list, in a field, or
 into a task. Here three programs run at once, each walked by a task of its

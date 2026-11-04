@@ -542,20 +542,13 @@ def main:
   puts last_two(["a"])           #=> ["a"]
 ```
 
-**2. and 4.**
+**2.**
 
 ```lume
 def count_of[T](xs: [T], x: T) -> Int = xs.count { |y| y == x }
 
-test "an item that appears twice":
-  assert count_of([1, 2, 1], 1) == 2
-
-test "an empty list has none":
-  empty: [Str] = []
-  assert count_of(empty, "a") == 0
-
 def main:
-  puts count_of([1, 2, 1], 1)                #=> 2
+  puts count_of([1, 2, 1], 1)                    #=> 2
   puts count_of(["tea", "pie", "tea"], "tea")    #=> 2
 ```
 
@@ -573,6 +566,87 @@ def main:
 ```
 
 ## Lunch 13
+
+**1.** In `menu.lume`, beside `find`; `PRICES` is the menu's own, so the
+function that reads it belongs there:
+
+```lume-skip
+pub def cheapest -> Dish:
+  var best = water()
+  for name, c in PRICES:
+    if best.name == "water" or c < best.cents:
+      best = Dish(name: name, cents: c)
+  best
+```
+
+and in `main.lume`, `puts menu.cheapest.name`, which prints `pie`.
+
+**2.** `lume check kitchen/orders.lume` says:
+
+```text
+error: no module `menu.Dish`: neither `kitchen/menu/Dish.lume` nor `kitchen/menu.lume` exists
+```
+
+A path starts from the folder of the file being run or checked. Checked
+on its own, `orders.lume` is that file, so `menu` is looked for inside
+`kitchen/`. Checked through `main.lume`, paths start from `cafe/`, where
+`menu.lume` is.
+
+**3.** In `greet/lib.lume`:
+
+```lume-skip
+pub def farewell(name: Str) -> Str = "Goodbye, #{name}!"
+```
+
+and in `hello/main.lume`:
+
+```lume-skip
+import greet
+
+def main:
+  puts greet.greeting("Ada")
+  puts greet.farewell("Ada")
+```
+
+## Lunch 14
+
+**1.**
+
+```lume
+def count_of[T](xs: [T], x: T) -> Int = xs.count { |y| y == x }
+
+test "an item that appears twice":
+  assert count_of([1, 2, 1], 1) == 2
+
+test "an empty list has none":
+  empty: [Str] = []
+  assert count_of(empty, "a") == 0
+
+def main:
+  puts count_of([1, 2, 1], 1)    #=> 2
+```
+
+**2.**
+
+```lume
+def average(xs: [Int]) -> Int or Error:
+  return Error("no numbers to average") if xs.empty?
+  Ok(xs.sum / xs.len)
+
+test "the average of three":
+  assert average([2, 4, 9])! == 5
+
+test "nothing to average":
+  assert average([]).error?
+
+def main:
+  puts average([2, 4, 9])    #=> Ok(5)
+```
+
+**3.** `lume test average.lume three` runs the first only, and its last
+line says so: ``1 test: 1 passed, 0 failed (1 not matching `three`)``.
+
+## Lunch 15
 
 **1. and 2.**
 
@@ -613,7 +687,7 @@ def main:
 
 `lume run longest.lume soup minestrone pie` prints `minestrone`.
 
-## Lunch 14
+## Lunch 16
 
 **1.**
 
@@ -665,7 +739,7 @@ def main:
   puts menu    #=> ["starter", "main"]
 ```
 
-## Lunch 15
+## Lunch 17
 
 **1.**
 
@@ -709,7 +783,7 @@ def main:
     Error(e) -> puts e.message.trim    #=> `sh` failed with 7:
 ```
 
-## Lunch 16
+## Lunch 18
 
 **1.**
 
@@ -761,7 +835,7 @@ async def main:
   #=> roast
 ```
 
-## Lunch 17
+## Lunch 19
 
 **1. and 3.**
 
@@ -806,7 +880,7 @@ async def main:
   puts await loudest(dishes().map(_.upcase))    #=> Some("MINESTRONE")
 ```
 
-## Lunch 18
+## Lunch 20
 
 **1.**
 
@@ -847,7 +921,7 @@ async def main -> () or Error:
   puts await c.wait    #=> 5
 ```
 
-## Lunch 19
+## Lunch 21
 
 These need the network, so the suite does not run them; each was run by
 hand against `example.com`. Each is the `main.lume` of a package that
@@ -895,7 +969,7 @@ async def main:
   puts statuses.map { |r| r.map { |x| x.status }.or(0) }.to_list    # [200, 200, 200]
 ```
 
-## Lunch 20
+## Lunch 22
 
 Each answer is a change to `csvq.lume`.
 
@@ -940,7 +1014,7 @@ test "sum on a column of words says which line":
     Error(e) -> assert e.message == "line 2: `x` is not an integer"
 ```
 
-## Lunch 21
+## Lunch 23
 
 Each answer adds to `loglens.lume`.
 
@@ -982,7 +1056,7 @@ def busiest_minute(text: Str) -> (Str, Int)?:
 **4.** Give `analyse` a `status: Int?` parameter, and skip the entries that
 do not match it, before counting: `next if status.some? and Some(e.status) != status`.
 
-## Lunch 22
+## Lunch 24
 
 **1.** `sh` starts, but cannot find the command, and exits with `127`; the
 report shows `exit 127` and the shell's own message, such as
@@ -1016,7 +1090,7 @@ parameter.
 **4.** With `-j 1` two `nap` jobs take about 0.4 seconds between them, one
 after the other; with `-j 4` about 0.2, side by side.
 
-## Lunch 23
+## Lunch 25
 
 **1.** In `pretend`, an arm `"https://cafe.test/hours" -> Ok((200, "Closed today"))`,
 and a check expecting `"Open"`; it reports `DOWN  hours: no "Open" on the
@@ -1035,7 +1109,7 @@ page (2 tries)`.
     Time.sleep(20 * 2.pow(attempt - 1)) if attempt < ch.tries
 ```
 
-**4.** A block can hold a `shared var` (lunch 16), and a plain function can
+**4.** A block can hold a `shared var` (lunch 18), and a plain function can
 take one as a parameter: `calls: shared var {Str: Int}`. The block counts,
 then fetches as before:
 
@@ -1054,7 +1128,7 @@ async def main:
 The pages that were down are fetched twice — once, and once more on the
 retry; the page that was up, once.
 
-## Lunch 24
+## Lunch 26
 
 Each is a few lines added to `main`, before the `shutdown`.
 
@@ -1067,7 +1141,7 @@ Each is a few lines added to `main`, before the `shutdown`.
   puts "defined on line #{line + 1}"    # defined on line 1
 ```
 
-**2.** A `didChange`, as in 24.5, with text such as
+**2.** A `didChange`, as in 26.5, with text such as
 `def main:\n  puts nope\n`; the diagnostics that come back say
 ``line 2: unknown name `nope` ``, printed by `show_diagnostics` while the next
 answer is awaited.

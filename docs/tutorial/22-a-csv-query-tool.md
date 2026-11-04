@@ -1,4 +1,4 @@
-# Lunch 20: A CSV query tool
+# Lunch 22: A CSV query tool
 
 Part 3 builds programs. Each lunch is one small, whole program, made a step
 at a time from what Parts 1 and 2 taught, with notes on why it is shaped
@@ -26,7 +26,7 @@ lume run csvq.lume orders.csv where dish soup
 lume run csvq.lume orders.csv tally dish
 ```
 
-## 20.1 The shape of it
+## 22.1 The shape of it
 
 Before writing code, decide what the program *is made of*. Here, two
 things:
@@ -39,7 +39,7 @@ things:
 Each becomes a type: a struct for the table (lunch 8) and an enum for the
 command (lunch 9). The rest of the program is functions between them.
 
-## 20.2 Reading a table
+## 22.2 Reading a table
 
 A `Table` holds the header and the rows. Reading one from text can fail —
 a row with too few fields, an empty file — so `parse` gives a
@@ -72,7 +72,7 @@ and one for the header.
 does not, which keeps `split(",")` honest. The `csv` package in
 `examples/csvq/` handles quotes.)
 
-## 20.3 Finding a column
+## 22.3 Finding a column
 
 Every question names a column, so finding one is a method of its own. A
 name that is not in the header is a failure, and the message lists the
@@ -86,7 +86,7 @@ names there are — the most useful thing to tell someone who mistyped one:
 `index_of` gives an `Int?`; `or_error` turns its `None` into a failure with
 a reason (lunch 10).
 
-## 20.4 The four questions
+## 22.4 The four questions
 
 Each question is a method on `Table`, and each starts by finding its
 column with `?`, so a bad column name stops it with that message:
@@ -133,7 +133,7 @@ Three choices worth a look:
 The method is `matching`, not `where`: `where` is one of Lume's words
 (lunch 5's `for x in xs where ...`), so it cannot name a method.
 
-## 20.5 Commands
+## 22.5 Commands
 
 The command line gives a list of words. An enum names the four commands,
 and a function turns words into one. **New here: list patterns.** Lunch 9's
@@ -169,7 +169,7 @@ def answer(t: Table, cmd: Command) -> Str or Error:
 Every case of `Command` is answered; add a fifth command to the enum, and
 `answer` will not compile until it answers that one too.
 
-## 20.6 The whole program, tried out
+## 22.6 The whole program, tried out
 
 Here is everything so far, with a `main` that tries it on a table written
 into the program — so you can run it, and see each answer, before it reads
@@ -291,11 +291,11 @@ def main:
 The last three are mistakes on purpose, and each says what went wrong in a
 way a person can act on — the measure of a tool other people will use.
 
-## 20.7 Reading a file from the command line
+## 22.7 Reading a file from the command line
 
 The tool itself replaces the trying-out `main` with one that reads its
 arguments: the file first, then the command. A missing argument is a usage
-error, with exit status 2 (lunch 13); anything that fails after that ends
+error, with exit status 2 (lunch 15); anything that fails after that ends
 the program through `main`'s `?`, with exit status 1 (lunch 10):
 
 ```lume-skip
@@ -332,10 +332,10 @@ error: no column `cost`; there are: table, dish, price
 `lume build csvq.lume -o csvq` makes it a program of its own: `./csvq
 orders.csv tally dish`.
 
-## 20.8 Testing it
+## 22.8 Testing it
 
 The questions most likely to go wrong unnoticed are the edges — an empty
-file, a short row. A few tests (lunch 12) at the bottom of `csvq.lume` keep
+file, a short row. A few tests (lunch 14) at the bottom of `csvq.lume` keep
 them right as the tool grows:
 
 ```lume-tests

@@ -1,16 +1,16 @@
-# Lunch 23: A health checker
+# Lunch 25: A health checker
 
 **In this lunch you will build `pulse`**, which checks a list of web pages
 at once — is each one up, does it say what it should, is it quick enough —
 trying again before it calls a page down. Every team that runs a website
 has a tool like this somewhere.
 
-It brings together the `http` package (lunch 19), tasks (lunch 16) and
-failures that are results (lunch 22) — and one new technique: **keeping
+It brings together the `http` package (lunch 21), tasks (lunch 18) and
+failures that are results (lunch 24) — and one new technique: **keeping
 the part that talks to the world in a block, so the rest can be tried out
 without it.**
 
-## 23.1 What to check
+## 25.1 What to check
 
 A check is a page and what is expected of it:
 
@@ -34,7 +34,7 @@ struct Outcome:
   tries: Int
 ```
 
-## 23.2 Fetching, kept apart
+## 25.2 Fetching, kept apart
 
 Checking needs to fetch a page. If `run_check` called `http.get` itself, the
 only way to try it would be with real pages — slow, and never the broken
@@ -54,7 +54,7 @@ tell the difference — which is exactly what makes it testable. (A block
 type, from lunch 7, may be a field's type; `(Str) -> (Int, Str) or Error`
 reads "given a `Str`, gives a status and a body, or an `Error`".)
 
-## 23.3 One check, with retries
+## 25.3 One check, with retries
 
 A page that fails once may be fine a moment later — a server restarting,
 a dropped connection. So a check tries up to `tries` times, pausing a
@@ -90,13 +90,13 @@ answer that may be absent, lunch 10's `T?`. `run_check` returns as soon as
 a try succeeds, and remembers the last reason otherwise.
 
 `Time.sleep(ms)` outside async code holds up the thread it runs on — in
-23.4 each check gets a thread of its own, so only that check waits. The
+25.4 each check gets a thread of its own, so only that check waits. The
 pause grows with each try, so a struggling server gets room to recover.
 
-## 23.4 All at once
+## 25.4 All at once
 
 Every check is a task of its own — `run_check` waits for pages and awaits
-nothing, so each runs on the pool for blocking work (lunch 16) — and a
+nothing, so each runs on the pool for blocking work (lunch 18) — and a
 slow page holds up no other:
 
 ```lume-skip
@@ -107,7 +107,7 @@ async def check_all(ch: Checker, checks: [Check]) -> [Outcome] =
 The results come back in the checks' order, so the report reads like the
 list.
 
-## 23.5 The whole program, with pretend pages
+## 25.5 The whole program, with pretend pages
 
 Here is everything, with a fetching block that answers from a few pretend
 pages — one up, one down, one with the wrong text, one slow, one whose
@@ -199,10 +199,10 @@ of 100, so it fails however busy the machine is. The run takes about as
 long as the slowest page's two tries, not as long as all the checks one
 after another.
 
-## 23.6 Real pages
+## 25.6 Real pages
 
 The real `pulse` gives the `Checker` a block that fetches with `http`, as
-a package (lunch 19) that depends on it. Only this part is new:
+a package (lunch 21) that depends on it. Only this part is new:
 
 ```lume-skip
 import http
@@ -231,7 +231,7 @@ DOWN  missing: status 404 (3 tries)
 
 It exits with status 1 when a page is down, so a scheduled job or a build
 can raise the alarm. A real `pulse` would read its checks from a file, as
-lunch 22's runner reads its jobs — the
+lunch 24's runner reads its jobs — the
 [`examples/healthcheck/`](../../examples/healthcheck/main.lume) program in
 Lume's repository does, from JSON.
 

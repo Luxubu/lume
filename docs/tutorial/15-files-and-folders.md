@@ -1,4 +1,4 @@
-# Lunch 13: Files and folders
+# Lunch 15: Files and folders
 
 **In this lunch you will:**
 
@@ -12,7 +12,7 @@ world is less tidy than a list — a file may be missing, a folder may be
 read-only — so almost everything here may fail, and lunch 10's `?` is
 everywhere.
 
-## 13.1 Reading and writing a file
+## 15.1 Reading and writing a file
 
 **`File.write` puts text in a file, and `File.read` gives the whole file
 back.** Both can fail, so both give a result, and `?` passes a failure on:
@@ -50,7 +50,7 @@ def main -> () or Error:
 `lines` cuts text at each line ending, so the file's last newline leaves no
 empty line behind.
 
-## 13.2 When a file is not there
+## 15.2 When a file is not there
 
 Reading a file that does not exist is a failure, with a reason that names
 the file:
@@ -75,7 +75,7 @@ def main:
 `File` also has `remove`, `size` (in bytes) and `modified` (when the file
 last changed, in seconds since 1970).
 
-## 13.3 Folders
+## 15.3 Folders
 
 **`Dir.make` makes a folder**, and any missing folders above it. **`Dir.list`
 gives the names in a folder**, sorted, and **`Dir.walk` gives every file
@@ -97,7 +97,7 @@ def main -> () or Error:
 **`Dir.remove` removes a folder and everything in it**, so be careful what
 you give it. `Dir.exists?` answers whether a folder is there.
 
-## 13.4 Paths
+## 15.4 Paths
 
 A path is text, and **`Path` takes it apart and puts it together without
 looking at the disk** — so nothing in it can fail:
@@ -123,7 +123,7 @@ def main:
   puts Path.join("a/", "/b")    #=> a//b
 ```
 
-## 13.5 A program's arguments
+## 15.5 A program's arguments
 
 The words after the file name in `lume run` are the program's
 **arguments**, and `Env.args` gives them as a list:
@@ -146,7 +146,7 @@ hello, Grace
 
 The same works for a program made with `lume build`: `./greet Ada Grace`.
 
-## 13.6 Input, error output and exit codes
+## 15.6 Input, error output and exit codes
 
 **`Env.stdin` reads everything a program is given on its input**, which is
 how a program works in a pipe:
@@ -196,7 +196,7 @@ def main:
   puts Env.get("LUME_LUNCH_NOT_SET").or("not set")    #=> not set
 ```
 
-## 13.7 A small tool
+## 15.7 A small tool
 
 All of this together: a to-do list kept in a file. Each run either adds a
 line to it or shows it, numbered:
