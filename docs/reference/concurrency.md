@@ -114,6 +114,20 @@ async def main:
   puts await tasks                         #=> ["item 1", "item 2", "item 3"]
 ```
 
+**A `for` over a list of tasks walks the tasks themselves**, so each can be
+awaited in turn. As awaiting gives a task up, the list is given up too: it
+cannot be used after the loop, and Lume says so if it is.
+
+```lume
+def cook(dish: Str) -> Str = dish.upcase
+
+async def main:
+  tasks = ["pie", "tea"].map { |d| spawn: cook(d) }.to_list
+  for t in tasks:
+    puts await t    #=> PIE
+                    #=> TEA
+```
+
 So results can be paired back with what started them, by position:
 
 ```lume

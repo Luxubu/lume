@@ -21,6 +21,7 @@
 # Rust crate ureq.
 
 import rust.ureq
+import rust.tiny_http
 import json
 import json.Json
 
@@ -234,6 +235,163 @@ pub def post_json(url: Str, doc: Json) -> Response or Error = post(url, json.sho
 pub def send(method: Str, url: Str, headers: [(Str, Str)], body: Str) -> Response or Error:
   Request(method: method, url: url, headers: headers, body: body, timeout_ms: 30000, body_file: "").send
 
+# ---- Serving (a preview: its shape may change in a 1.x release) ----------
+#
+#   server = http.listen("127.0.0.1:8080")?
+#   for req in server.requests:
+#     req.respond(http.reply(200, "hello from #{req.path}"))?
+#
+# It is built on the Rust crate tiny_http.
+
+# A server listening for requests, from `http.listen`.
+pub struct Server:
+  # the address it listens on, with the port it was given: `127.0.0.1:8080`
+  address: Str
+  port: Int
+  # the server, set aside under a number; Lume's own
+  server_id: Int
+
+  # Waits for the next request, and gives it with its whole body read.
+  # An `Error` once the server is closed.
+  def accept -> Incoming or Error:
+    id = server_id
+    raw: (Str, Str, [(Str, Str)], Str, Int) or Error = rust:
+      {
+        use std::io::Read;
+        let s = lume_held().lock().unwrap().get(&id).and_then(|b| b.downcast_ref::<std::sync::Arc<tiny_http::Server>>()).cloned();
+        match s {
+          None => Err(Error { message: String::from("the server is closed") }),
+          Some(s) => match s.recv() {
+            Ok(mut r) => {
+              let method = r.method().to_string();
+              let url = r.url().to_string();
+              let names: Vec<(String, String)> = r.headers().iter().map(|h| (h.field.as_str().as_str().to_lowercase(), h.value.as_str().to_string())).collect();
+              let mut b = Vec::new();
+              match r.as_reader().read_to_end(&mut b) {
+                Ok(_) => Ok((method, url, names, String::from_utf8_lossy(&b).into_owned(), lume_hold(r))),
+                Err(e) => Err(Error { message: format!("reading the body of {} {}: {}", method, url, e) }),
+              }
+            }
+            Err(e) => Err(Error { message: format!("the server stopped: {}", e) }),
+          },
+        }
+      }
+    (method, url, got, body, rid) = raw?
+    (path, query) = match url.index_of("?"):
+      Some(i) -> (url.slice(0, i), url.slice(i + 1, url.len))
+      None -> (url, "")
+    Incoming(method: method, path: path, query: query, headers: got, body: body, answer_id: rid)
+
+  # Every request, as it comes, until the server is closed: for a `for`.
+  def requests -> Iterator[Incoming]:
+    while true:
+      match accept():
+        Ok(r) -> yield r
+        Error(_) -> return
+
+  # The same, waited for in async code: other tasks go on meanwhile.
+  async def incoming -> Iterator[Incoming]:
+    s = Server(address: address, port: port, server_id: server_id)
+    while true:
+      t = spawn: s.accept
+      match await t:
+        Ok(r) -> yield r
+        Error(_) -> return
+
+  # Stops listening; an `accept` waiting now gives an `Error`.
+  def close -> ():
+    id = server_id
+    gone: () = rust:
+      {
+        let s = lume_held().lock().unwrap().remove(&id);
+        if let Some(s) = s.and_then(|b| b.downcast::<std::sync::Arc<tiny_http::Server>>().ok()) {
+          s.unblock();
+        }
+      }
+    gone
+
+# A request that came to a server: read it, then answer it once with `respond`.
+pub struct Incoming:
+  method: Str
+  # the path, without its query: `/menu`
+  path: Str
+  # what follows `?` in the URL, as it was sent; "" for none
+  query: Str
+  # names in lower case, in the order the client sent them
+  headers: [(Str, Str)]
+  body: Str
+  # the connection waiting for the answer; Lume's own
+  answer_id: Int
+
+  def header(name: Str) -> Str?:
+    n = name.downcase
+    headers.find { |k, _| k == n }.map { |kv| kv.1 }
+
+  # the body, parsed as JSON
+  def json -> Json or Error = json.parse(body).map_error { |e| Error("the body is not JSON: #{e.message}") }
+
+  # Sends the answer. A request is answered once: a second time is an `Error`.
+  def respond(r: Reply) -> () or Error:
+    return Error("#{r.status} is not an HTTP status: one from 100 to 599") if r.status < 100 or r.status > 599
+    id = answer_id
+    status = r.status
+    hs = r.headers
+    text = r.body
+    what = "#{method} #{path}"
+    done: () or Error = rust:
+      {
+        let r = lume_held().lock().unwrap().remove(&id).and_then(|b| b.downcast::<tiny_http::Request>().ok());
+        match r {
+          None => Err(Error { message: format!("{} has been answered already", what) }),
+          Some(r) => {
+            let mut resp = tiny_http::Response::from_data(text.clone().into_bytes()).with_status_code(status as u16);
+            for (k, v) in hs.iter() {
+              if let Ok(h) = tiny_http::Header::from_bytes(k.as_bytes(), v.as_bytes()) {
+                resp.add_header(h);
+              }
+            }
+            (*r).respond(resp).map_err(|e| Error { message: format!("answering {}: {}", what, e) })
+          }
+        }
+      }
+    done
+
+# An answer to an `Incoming`, built a step at a time as a `Request` is.
+pub struct Reply:
+  status: Int
+  headers: [(Str, Str)]
+  body: Str
+
+  def header(name: Str, value: Str) -> Reply = Reply(status: status, headers: headers + [(name, value)], body: body)
+
+  # a body, and what it is, in place of the one before
+  def with_body(text: Str, content_type: Str) -> Reply = Reply(status: status, headers: headers.reject { |h| h.0.downcase == "content-type" }.to_list + [("Content-Type", content_type)], body: text)
+
+# An answer of text: `http.reply(404, "not here")`.
+pub def reply(status: Int, text: Str) -> Reply = Reply(status: status, headers: [("Content-Type", "text/plain; charset=utf-8")], body: text)
+
+# An answer of a JSON document.
+pub def reply_json(status: Int, doc: Json) -> Reply = reply(status, "").with_body(json.show(doc), "application/json")
+
+# Listens at `address` — `"127.0.0.1:8080"`, or port 0 for one the system
+# picks, which `port` then says.
+pub def listen(address: Str) -> Server or Error:
+  raw: (Int, Int) or Error = rust:
+    {
+      match tiny_http::Server::http(&*address) {
+        Ok(s) => {
+          let port = s.server_addr().to_ip().map(|a| a.port() as i64).unwrap_or(0);
+          Ok((port, lume_hold(std::sync::Arc::new(s))))
+        }
+        Err(e) => Err(Error { message: format!("cannot listen on {}: {}", address, e) }),
+      }
+    }
+  (port, id) = raw?
+  # the host as it was given, before the last `:`, with the port it got
+  parts = address.split(":").to_list
+  host = parts.take(parts.len - 1).join(":")
+  Server(address: "#{host}:#{port}", port: port, server_id: id)
+
 test "a request that cannot be made is an Error":
   r = get("not a url")
   assert r.error?
@@ -249,3 +407,14 @@ test "a request is built a step at a time":
   assert r.headers == [("X-A", "1"), ("Content-Type", "application/json")]
   assert r.body == "{}"
   assert r.timeout_ms == 500
+
+test "a reply is built a step at a time":
+  r = reply(404, "not here").header("X-A", "1")
+  assert r.status == 404
+  assert r.headers == [("Content-Type", "text/plain; charset=utf-8"), ("X-A", "1")]
+  j = reply_json(200, json.Json.Bool(true))
+  assert j.headers == [("Content-Type", "application/json")]
+  assert j.body == "true"
+
+test "an address that cannot be listened on is an Error":
+  assert listen("not an address").error?

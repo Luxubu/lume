@@ -1,0 +1,6 @@
+error: `tasks` is used after this loop, but walking its tasks gives them up, as awaiting one does
+  --> examples/errors/tasks_walked_then_used.lume:7:12
+  |
+7 |   for t in tasks:
+  |            ^
+  help: wait for them all at once — `results = await tasks` — and loop over the results

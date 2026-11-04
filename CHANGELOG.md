@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **Preview: serving HTTP.** `http.listen(address)` gives a `Server`;
+  `accept`, `requests` and, in async code, `incoming` give each request
+  as an `Incoming` with its method, path, query, headers and body, and
+  `req.respond(http.reply(status, text))` answers it once. `reply_json`,
+  `.header` and `.with_body` build other answers. Built on the Rust crate
+  tiny_http; `examples/http_server/` is a server and its own client.
+- **A `for` over a list of tasks** walks the tasks themselves, so each can
+  be awaited in turn; it reached rustc. The list is given up with them,
+  and using it after the loop is refused, saying so.
+
 - **Lunch 12 is three lunches**: 12, Generics; 13, Modules and packages,
   which now makes a library package with `lume new --lib` and uses it from
   a program, and says how a package comes from git; 14, Tests, which now

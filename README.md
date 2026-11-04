@@ -67,13 +67,14 @@ each by reviewers who had never seen the compiler, wrote programs from the docs
 alone and predicted their output by hand, and every problem they found was
 fixed — the 782 programs they left behind are run on every change and must
 print what they print today. What Lume refuses, it refuses with a message that
-names the fix — `examples/errors/` is 445 programs kept around to prove it.
+names the fix — `examples/errors/` is 446 programs kept around to prove it.
 
 **Where it is.** Version 1.0. The language, the collections, files and
 folders, running programs and talking to them as they run, tasks and async
 sequences, tests, packages and the commands are settled, and so are the
-`http` package, Rust crates through `import rust.<crate>`, and what `lume
-lsp` and `lume check --json` give editors and tools:
+`http` package's requests, Rust crates through `import rust.<crate>`, and
+what `lume lsp` and `lume check --json` give editors and tools. Serving
+HTTP is a preview:
 [docs/stability.md](docs/stability.md) promises that a working program does
 not break without a warning release first, across every 1.x release. The VS Code extension, a tool
 beside the language, and a `rust:` block of Rust written by hand are

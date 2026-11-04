@@ -1,0 +1,32 @@
+# A server and its own client, in one program: the server answers three
+# requests on a port the system picks, while a task makes them.
+import http
+import json
+
+def answer(req: http.Incoming) -> http.Reply:
+  match (req.method, req.path):
+    ("GET", "/")        -> http.reply(200, "the café is open")
+    ("GET", "/menu")    -> http.reply_json(200, json.parse("{\"soup\": 400, \"pie\": 350}").or(json.Json.Null))
+    ("POST", "/orders") -> http.reply(201, "ordered: #{req.body}").header("Location", "/orders/1")
+    _                   -> http.reply(404, "no #{req.path} here")
+
+def visit(base: Str) -> [Str] or Error:
+  var seen: [Str] = []
+  for path in ["/", "/menu", "/nowhere"]:
+    r = http.get(base + path)?
+    seen.push("#{r.status} #{path}: #{r.body}")
+  r = http.post(base + "/orders", "two soups", "text/plain")?
+  seen.push("#{r.status} /orders: #{r.body} at #{r.header("location").or("?")}")
+  Ok(seen)
+
+async def main -> () or Error:
+  server = http.listen("127.0.0.1:0")?
+  base = "http://#{server.address}"
+  client = spawn: visit(base)
+  for req in server.requests.take(4):
+    puts "server: #{req.method} #{req.path}"
+    req.respond(answer(req))?
+  for line in await client?:
+    puts "client: #{line}"
+  server.close
+  ()

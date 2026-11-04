@@ -1,0 +1,9 @@
+# Walking a list of tasks gives each one up, as awaiting it does, so the
+# list cannot be used after the loop.
+def cook(dish: Str) -> Str = dish.upcase
+
+async def main:
+  tasks = ["pie", "tea"].map { |d| spawn: cook(d) }.to_list
+  for t in tasks:
+    puts await t
+  puts tasks.len

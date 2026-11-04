@@ -689,6 +689,19 @@ fn lume_park(r: ::std::boxed::Box<dyn std::io::Read + Send>) -> i64 {
     lume_parked().lock().unwrap().insert(id, r);
     id
 }
+/// Any value set aside under a number, for a package's Rust to reach again
+/// from another `rust:` block — a server, a request waiting for its answer.
+/// The value stays until a block takes it out.
+fn lume_held() -> &'static std::sync::Mutex<std::collections::HashMap<i64, ::std::boxed::Box<dyn ::std::any::Any + Send>>> {
+    static HELD: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<i64, ::std::boxed::Box<dyn ::std::any::Any + Send>>>> = std::sync::OnceLock::new();
+    HELD.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
+}
+fn lume_hold<T: ::std::any::Any + Send>(x: T) -> i64 {
+    static NEXT: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(1);
+    let id = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    lume_held().lock().unwrap().insert(id, ::std::boxed::Box::new(x));
+    id
+}
 fn lume_parked_pipe(id: i64) -> LumePipeRef {
     match lume_parked().lock().unwrap().remove(&id) {
         Some(r) => lume_pipe(r),
@@ -9250,6 +9263,17 @@ impl Gen {
                             _ => unreachable!(),
                         }
                     }
+                    // A task is awaited once, and awaiting gives it up: the
+                    // loop walks the tasks themselves, which the list must
+                    // not be needed for after it
+                    Type::List(elem) if matches!(**elem, Type::Task(_)) => match &iter.kind {
+                        ExprKind::Ident(n) if !self.used_after(n) => (format!("({}).into_iter()", self.expr(iter)?), (**elem).clone(), false),
+                        ExprKind::Ident(n) => {
+                            return Err(LumeError::new(iter.line, iter.col, format!("`{}` is used after this loop, but walking its tasks gives them up, as awaiting one does", n))
+                                .with_help(format!("wait for them all at once — `results = await {}` — and loop over the results", n)));
+                        }
+                        _ => (format!("({}).into_iter()", self.expr(iter)?), (**elem).clone(), false),
+                    },
                     Type::List(elem) if elem.is_copy() || **elem == Type::Unknown => (format!("({}).iter().cloned()", self.expr(iter)?), (**elem).clone(), false),
                     Type::List(elem) => (format!("({}).iter()", self.expr(iter)?), (**elem).clone(), true),
                     Type::Map(k, v) => (format!("({}).iter()", self.expr(iter)?), Type::Tuple(vec![(**k).clone(), (**v).clone()]), true),

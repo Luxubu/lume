@@ -141,10 +141,76 @@ awaits nothing, and it runs on a pool of its own (see
 [Concurrency](concurrency.md#a-task-that-waits-without-await)).
 `examples/healthcheck/` does this, and `examples/http_demo/` does both.
 
+## Serving: a preview
+
+> **A preview**, new in 1.1: its shape may change in a 1.x release, with
+> each change listed in `CHANGELOG.md` under **Preview:**
+> ([what is settled](../stability.md#previews)). Requests, above, are
+> settled. It is built on the Rust crate tiny_http.
+
+**`http.listen(address)` gives a `Server`**, or an `Error` when the
+address cannot be listened on — one taken already, or one that does not
+parse. Port 0 asks the system for a free one, which `server.port` then
+says:
+
+```lume-skip
+import http
+
+def main -> () or Error:
+  server = http.listen("127.0.0.1:8080")?
+  puts "listening on http://#{server.address}"
+  for req in server.requests:
+    match (req.method, req.path):
+      ("GET", "/") -> req.respond(http.reply(200, "hello"))?
+      _ -> req.respond(http.reply(404, "no #{req.path} here"))?
+  ()
+```
+
+| on a `Server` | |
+|---|---|
+| `address`, `port` | where it listens: `127.0.0.1:8080` and `8080` |
+| `accept` | waits for the next request: `Incoming or Error`, an `Error` once the server is closed |
+| `requests` | every request as it comes, for a `for`, until the server is closed |
+| `incoming` | the same as an async sequence: in async code, other tasks go on while it waits |
+| `close` | stops listening; an `accept` waiting then gives an `Error` |
+
+**Each request is an `Incoming`**, its body read whole before it is given:
+
+| on an `Incoming` | |
+|---|---|
+| `method`, `path` | `"GET"`, `"/menu"`: the path without its query |
+| `query` | what follows `?` in the URL, as it was sent; `""` for none |
+| `headers`, `header(name)` | as a `Response`'s: names in lower case, found in any case |
+| `body`, `json` | the body as text, or parsed |
+| `respond(reply)` | sends the answer: `() or Error` |
+
+**A request is answered once**: a second `respond` is an `Error` — ``GET
+/menu has been answered already`` — and so is a status outside 100 to 599.
+A request never answered keeps its connection open until the program
+ends.
+
+**An answer is a `Reply`**, built as a request is:
+
+| | |
+|---|---|
+| `http.reply(status, text)` | text, as `text/plain; charset=utf-8` |
+| `http.reply_json(status, doc)` | a `Json` document, as `application/json` |
+| `.header(name, value)` | one more header |
+| `.with_body(text, content_type)` | a body, in place of the one before |
+
+`requests` handles one request at a time: the next waits until this one is
+answered. To answer many at once, walk `incoming` in async code and give
+each request to a task, as `spawn: answer(req)`.
+
+`examples/http_server/` is a server and its own client in one program: it
+listens on a port the system picks, and a task makes the requests it
+answers.
+
 ## Not in it yet
 
 Each of these could come later without changing what is here:
 
 - **Encoding and cookies:** there are no form or URL helpers and no
   cookies. Build the body as text, and send headers with `send`.
-- **Serving HTTP:** the package makes requests; it does not answer them.
+- **For serving**: TLS (`https://`), a body read as it arrives, and
+  answers sent as they are made.

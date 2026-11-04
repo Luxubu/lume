@@ -61,6 +61,7 @@ Each one has a `FINDINGS.md` or a `README.md` saying what it exposed.
 | `jobr/` | a job runner in two packages: waves of jobs run in tasks, retries, skips, a `shared var` tally, `Process.run` |
 | `healthcheck/` | checks services at once with `http` and `json`: a task per check, retries, a JSON report |
 | `http_demo/` | the `http` package against a local server: JSON, a 404, a POST echoed back, no connection |
+| `http_server/` | serving HTTP, a preview: a server and its own client in one program, on a port the system picks |
 | `csvq/` | a CSV query tool in three packages — `csv`, `table` and the program — with a small query language, stdin, and each package's own tests |
 
 ## Modules
@@ -93,7 +94,7 @@ Each one has a `FINDINGS.md` or a `README.md` saying what it exposed.
 |---|---|
 | `tests/` | files with `test` blocks, and the `lume test` output they must produce |
 | `fmt/` | badly spaced input, and what `lume fmt` makes of it |
-| `errors/` | 445 programs that must keep failing, each with the message it must give |
+| `errors/` | 446 programs that must keep failing, each with the message it must give |
 
 `examples/errors/` is worth a look even though nothing in it runs: it is the
 catalogue of what Lume refuses and what it says when it does.

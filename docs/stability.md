@@ -54,17 +54,19 @@ a release says so; from then on the promise above covers it.
 | Tests: `test` blocks, `assert`, `lume test` and its name filter, `async test` (settled in 0.7) | [Tests](reference/testing.md), lunch 14 |
 | Packages: `lume.toml`, dependencies by path and git, `lume.lock` | [Packages](reference/packages.md), lunch 13 |
 | The `json` package | [JSON](reference/json.md) |
-| The `http` package — settled in 0.8. A `Request` and an `Opened` may gain fields: read them freely, but build a request with `http.request` and its steps rather than by naming every field, and do not depend on how one prints; `Opened.body_id`, the number a body not yet read is kept under, is Lume's own | [HTTP](reference/http.md), lunch 21 |
+| The `http` package's requests — settled in 0.8. A `Request` and an `Opened` may gain fields: read them freely, but build a request with `http.request` and its steps rather than by naming every field, and do not depend on how one prints; `Opened.body_id`, the number a body not yet read is kept under, is Lume's own | [HTTP](reference/http.md), lunch 21 |
 | The commands: `lume run`, `build`, `check`, `test`, `fmt`, `new`, `clean`, `update` | [Install](install.md#the-commands) |
 | Rust crates: `import rust.<crate>`, `[rust]` in `lume.toml`, how a crate's types are read, builders, `lume crate` — settled in 0.8 | [Rust crates](reference/crates.md) |
 | For editors and tools: the fields of `lume check --json`, and the protocol `lume lsp` speaks — settled in 0.8; what a hover or a completion says is not, as no message's words are | [Install](install.md#editors) |
 
 ## Previews
 
-There are none: since 0.8, every part of Lume is settled or, below, outside
-the promise. A part added before it has been used enough to be sure of its
-shape may be a preview again; this table then lists it, and its changes
-are listed under **Preview:**.
+A part added before it has been used enough to be sure of its shape is a
+preview, listed here; its changes are listed under **Preview:**.
+
+| part | since | where it is described |
+|---|---|---|
+| Serving HTTP: `http.listen`, `Server`, `Incoming`, `Reply` | 1.1 | [HTTP](reference/http.md#serving-a-preview) |
 
 ## Not covered by the promise
 
