@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **Faster, by copying less.** `match f(x):` takes apart the value the call
+  gave instead of copying what each arm binds out of it; a list made in a
+  chain — `to_list`, `sort_by`, a call's result — is walked without a copy
+  of each item; `group_by`, `partition`, `sort_by` and `min_by` take their
+  items one at a time, without a list of copies made first; `first` and
+  `last` of a list made just now give its item up; and a map not needed
+  again gives its entries to `to_list`. `bench/b8_logq`, a log parsed and
+  summarised, went from 200% of the same program in Rust to 155%.
+
 - **URLs and forms, in the `http` package**: `http.encode` and
   `http.decode` for a piece of a URL; `http.form` and `http.parse_form` for
   `a=1&b=two+words`, as a browser's form and a query write them; the

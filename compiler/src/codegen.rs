@@ -5357,7 +5357,7 @@ impl Gen {
         // a chain that starts by consuming its list hands out the items
         // themselves, not borrows of them
         if let (Type::Iter(el, true), ExprKind::Method { recv, name, .. }) = (&t, &e.kind) {
-            if matches!(name.as_str(), "filter" | "reject" | "take_while" | "take" | "skip") && self.can_consume(recv) {
+            if matches!(name.as_str(), "filter" | "reject" | "take_while" | "take" | "skip") && (self.can_consume(recv) || fresh_list(recv)) {
                 return Type::Iter(el.clone(), false);
             }
         }
@@ -6032,6 +6032,32 @@ impl Gen {
         let text = text?;
         // `tmp` stands for the place `xs[i]`
         Ok(text.replacen(&tmp, &format!("{}[({}) as usize]", l, i), 1))
+    }
+
+    /// Whether a value of `t` can hold a recursive enum, whose fields behind a
+    /// `Box` are taken apart through a reference: a match on one stays by
+    /// reference.
+    fn holds_boxed(&self, t: &Type, seen: &mut Vec<String>) -> bool {
+        match t {
+            Type::Option(i) | Type::List(i) | Type::Set(i) => self.holds_boxed(i, seen),
+            Type::Result(a, b) | Type::Map(a, b) => self.holds_boxed(a, seen) || self.holds_boxed(b, seen),
+            Type::Tuple(ts) => ts.iter().any(|t| self.holds_boxed(t, seen)),
+            Type::Named(n) | Type::App(n, _) => {
+                let n = self.canon(n);
+                if seen.contains(&n) {
+                    return false;
+                }
+                seen.push(n.clone());
+                if let Some(en) = self.enums.get(&n) {
+                    return en.variants.iter().any(|(_, fs)| fs.iter().any(|(_, ft)| self.boxed_field(&n, ft) || self.holds_boxed(ft, seen)));
+                }
+                if let Some(st) = self.structs.get(&n) {
+                    return st.fields.iter().any(|(_, ft)| self.holds_boxed(ft, seen));
+                }
+                false
+            }
+            _ => false,
+        }
     }
 
     /// A variant field whose type is the enum itself lives behind a `Box`.
@@ -8472,6 +8498,12 @@ impl Gen {
 
     /// `xs.reverse`, `xs.sort` and the like, where `xs` can be given away:
     /// the result is built in the list itself, not in a copy of it.
+    /// The receiver of method call `e` is a list made by the expression
+    /// itself, held by nothing else.
+    fn fresh_recv(&self, e: &Expr) -> bool {
+        matches!(&e.kind, ExprKind::Method { recv, .. } if fresh_list(recv))
+    }
+
     fn consumes_recv(&self, e: &Expr) -> bool {
         matches!(&e.kind, ExprKind::Method { recv, .. } if self.can_consume(recv))
     }
@@ -9697,6 +9729,18 @@ impl Gen {
 
     /// Like `collect_iter`, but knows the item type: borrowed strings may be
     /// `&str` (from `split`/`lines`), which `to_string` handles and `cloned` does not.
+    /// The items of `it` as owned values, one at a time, without a list of
+    /// them made first.
+    fn owned_iter_t(&self, it: &str, by_ref: bool, elem: &Type) -> String {
+        if by_ref && *elem == Type::Str {
+            format!("({}).map(|s| s.to_string())", it)
+        } else if by_ref {
+            format!("({}).cloned()", it)
+        } else {
+            format!("({})", it)
+        }
+    }
+
     fn collect_iter_t(&self, it: &str, by_ref: bool, elem: &Type) -> String {
         if by_ref && *elem == Type::Str {
             format!("({}).map(|s| s.to_string()).collect::<Vec<String>>()", it)
@@ -10164,7 +10208,7 @@ impl Gen {
             Type::List(elem) => {
                 if elem.is_copy() {
                     Ok((format!("({}).iter().cloned()", r), *elem, false))
-                } else if self.can_consume(recv) {
+                } else if self.can_consume(recv) || fresh_list(recv) {
                     // the list is not needed again: take its items, not copies
                     Ok((format!("({}).into_iter()", r), *elem, false))
                 } else {
@@ -10641,7 +10685,18 @@ impl Gen {
                 let inner = (**inner).clone();
                 let r = self.expr(recv)?;
                 let f = self.gen_lambda(params, body, &inner, false, false, true, None, lam)?;
-                return Ok(format!("({}).clone().map({})", r, f));
+                // a call's or a method's result is already a value of its own
+                // (a field reads as a method, and is not one)
+                let made = match &recv.kind {
+                    ExprKind::Call { .. } => true,
+                    ExprKind::Method { recv: inner, name, .. } => {
+                        matches!(name.as_str(), "first" | "last" | "find" | "get" | "max" | "min" | "max_by" | "min_by" | "index_of" | "to_int" | "to_float")
+                            && matches!(self.ty_of(inner).materialized(), Type::List(_) | Type::Map(..) | Type::Set(_) | Type::Str | Type::Iter(..))
+                    }
+                    _ => false,
+                };
+                let copy = if made { "" } else { ".clone()" };
+                return Ok(format!("({}){}.map({})", r, copy, f));
             }
             (Type::Result(_, err), "map_error") => {
                 let err = (**err).clone();
@@ -10724,7 +10779,7 @@ impl Gen {
                 }
                 // the key function is called with `&item` of an owned copy
                 let f = self.gen_lambda(params, body, &elem, false, true, true, None, lam)?;
-                let owned = self.collect_iter_t(&it, by_ref, &elem);
+                let owned = self.owned_iter_t(&it, by_ref, &elem);
                 format!(
                     "{{ let lume_key = {}; let mut lume_m: LumeMap<_, Vec<_>> = LumeMap::new(); for lume_x in {} {{ let lume_k = lume_key(&lume_x); match lume_m.get_mut(&lume_k) {{ Some(v) => v.push(lume_x), None => {{ lume_m.insert(lume_k, vec![lume_x]); }} }} }} lume_m }}",
                     key_closure(&f, &self.rt(&elem)),
@@ -10733,7 +10788,7 @@ impl Gen {
             }
             "partition" => {
                 let f = self.gen_lambda(params, body, &elem, false, true, true, None, lam)?;
-                let owned = self.collect_iter_t(&it, by_ref, &elem);
+                let owned = self.owned_iter_t(&it, by_ref, &elem);
                 format!("{{ let lume_test = {}; {}.into_iter().partition::<Vec<_>, _>(|lume_x| lume_test(lume_x)) }}", key_closure(&f, &self.rt(&elem)), owned)
             }
             "flat_map" => {
@@ -10777,7 +10832,8 @@ impl Gen {
             "sort_by" | "min_by" | "max_by" => {
                 // the key is called with `&item` of an owned copy
                 let f = self.gen_lambda(params, body, &elem, false, true, true, None, lam)?;
-                let owned = self.collect_iter_t(&it, by_ref, &elem);
+                // `max_by` walks backwards, which a list can and a chain cannot
+                let owned = if name == "max_by" { self.collect_iter_t(&it, by_ref, &elem) } else { self.owned_iter_t(&it, by_ref, &elem) };
                 let key = key_closure(&f, &self.rt(&elem));
                 match name {
                     // each key is worked out once, as Rust's `sort_by_cached_key`
@@ -10971,7 +11027,10 @@ impl Gen {
         let uses_list_pat = arms.iter().any(|a| pat_has_list(&a.pat));
         let s = self.expr_val(scrutinee)?;
         // How the scrutinee is matched: by value for Copy types, otherwise by reference.
-        let by_ref = !st.is_copy();
+        // A function's result is a fresh value nothing else holds: matched
+        // by value, what the arms bind is moved out of it, not copied
+        let fresh = matches!(scrutinee.kind, ExprKind::Call { .. }) && !uses_list_pat && !self.holds_boxed(&st, &mut Vec::new());
+        let by_ref = !st.is_copy() && !fresh;
         let scrut = if uses_list_pat {
             if !matches!(st, Type::List(_)) {
                 return Err(LumeError::new(e.line, e.col, format!("a list pattern cannot match a `{}`", type_name(&st))));
@@ -13386,7 +13445,7 @@ impl Gen {
                 }
                 if let Type::List(elem) = &rt {
                     // a list not needed again gives its items away
-                    let consumed = !elem.is_copy() && matches!(name.as_str(), "take" | "skip" | "enumerate" | "to_list") && self.can_consume(recv);
+                    let consumed = !elem.is_copy() && matches!(name.as_str(), "take" | "skip" | "enumerate" | "to_list") && (self.can_consume(recv) || fresh_list(recv));
                     let base = if elem.is_copy() {
                         format!("({}).iter().cloned()", r)
                     } else if consumed {
@@ -13615,6 +13674,7 @@ impl Gen {
             }
             "keys" if matches!(rt, Type::Map(..)) => { need(0)?; format!("({}).keys().cloned().collect::<Vec<_>>()", recv) }
             "values" if matches!(rt, Type::Map(..)) => { need(0)?; format!("({}).values().cloned().collect::<Vec<_>>()", recv) }
+            "to_list" if matches!(rt, Type::Map(..)) && self.consumes_recv(e) => { need(0)?; format!("({}).into_iter().collect::<Vec<_>>()", recv) }
             "to_list" if matches!(rt, Type::Map(..)) => { need(0)?; format!("({}).iter().map(|(k, v)| (k.clone(), v.clone())).collect::<Vec<_>>()", recv) }
             "contains?" if matches!(rt, Type::Map(..)) => { need(1)?; format!("({}).contains_key({})", recv, map_key(rt, &args[0])) }
             "remove" if matches!(rt, Type::Map(..)) => { need(1)?; format!("({}).remove({})", recv, map_key(rt, &args[0])) }
@@ -13642,6 +13702,9 @@ impl Gen {
             "sum" => { need(0)?; format!("({}).lume_sum()", recv) }
             "push" => { need(1)?; format!("({}).push({})", recv, args[0]) }
             "pop" => { need(0)?; format!("({}).pop()", recv) }
+            // a list made just now gives up its item rather than a copy
+            "first" if matches!(rt, Type::List(_)) && self.fresh_recv(e) => { need(0)?; format!("({}).into_iter().next()", recv) }
+            "last" if matches!(rt, Type::List(_)) && self.fresh_recv(e) => { need(0)?; format!("({}).into_iter().next_back()", recv) }
             "first" => { need(0)?; format!("({}).first().cloned()", recv) }
             "last" => { need(0)?; format!("({}).last().cloned()", recv) }
             "contains?" => {
@@ -15075,6 +15138,16 @@ fn pat_text(p: &Pat) -> String {
         }
         Pat::Ctor(c, args) if args.is_empty() => c.clone(),
         Pat::Ctor(c, args) => format!("{}({})", c, args.iter().map(pat_text).collect::<Vec<_>>().join(", ")),
+    }
+}
+
+/// A list made by the expression itself — a call's result, or a method that
+/// builds a new one — which nothing else holds, so its items can be taken.
+fn fresh_list(e: &Expr) -> bool {
+    match &e.kind {
+        ExprKind::Call { .. } => true,
+        ExprKind::Method { name, .. } => matches!(name.as_str(), "to_list" | "sort" | "sort_by" | "reverse" | "uniq" | "keys" | "values" | "flatten"),
+        _ => false,
     }
 }
 
