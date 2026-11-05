@@ -1,0 +1,5 @@
+# `is_none?` for `none?`: an optional's own method, asked the way another
+# language asks.
+def main:
+  seat: Int? = None
+  puts seat.is_none?

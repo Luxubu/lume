@@ -67,7 +67,7 @@ each by reviewers who had never seen the compiler, wrote programs from the docs
 alone and predicted their output by hand, and every problem they found was
 fixed — the 782 programs they left behind are run on every change and must
 print what they print today. What Lume refuses, it refuses with a message that
-names the fix — `examples/errors/` is 446 programs kept around to prove it.
+names the fix — `examples/errors/` is 448 programs kept around to prove it.
 
 **Where it is.** Version 1.0. The language, the collections, files and
 folders, running programs and talking to them as they run, tasks and async

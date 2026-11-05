@@ -1,0 +1,5 @@
+# Rust's name for a result's method: it said the value must be unwrapped
+# first, when the method was there under Lume's name.
+def main:
+  r = "3".to_int
+  puts r.is_err

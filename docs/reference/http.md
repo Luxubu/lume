@@ -51,10 +51,12 @@ new one, as Rust's `reqwest::RequestBuilder` does:
 | `.header(name, value)` | one more header |
 | `.with_body(text, content_type)` | a body, with its `Content-Type` |
 | `.with_file(path, content_type)` | a file as the body, read as it is sent, never held whole; its length goes first, as `Content-Length` |
+| `.with_form(pairs)` | a form as the body, `[(Str, Str)]` written as `http.form` writes it, as `application/x-www-form-urlencoded` |
+| `.with_query(pairs)` | names and values added to the URL's query, after a `?` or the query it has |
+| `.timeout(ms)` | how long to wait for an answer, in milliseconds |
 
 A body step sets the request's `Content-Type`, taking the place of one an
 earlier step gave; a later body step takes the place of an earlier body.
-| `.timeout(ms)` | how long to wait for an answer, in milliseconds |
 
 and then one of:
 
@@ -133,6 +135,38 @@ def main -> () or Error:
 `send_parts` takes the parts by move, as any `Iterator[T]` parameter does,
 and sets aside a body `with_body` or `with_file` gave.
 
+## URLs and forms
+
+A URL carries only some characters as they are, and a form — what a
+browser sends from a `<form>`, and what a query is — writes its names and
+values a particular way. **These write and read them**, as Python's
+`urllib.parse` does:
+
+| call | gives | |
+|---|---|---|
+| `http.encode(text)` | `Str` | a piece of a URL — a path segment, a value — with every byte but letters, digits and `-._~` as `%XX` |
+| `http.decode(text)` | `Str or Error` | the other way |
+| `http.form(pairs)` | `Str` | names and values as `a=1&b=two+words`: each encoded, a space as `+` |
+| `http.parse_form(text)` | `[(Str, Str)] or Error` | the other way, in order; a name with no `=` has the value `""` |
+
+```lume-skip
+import http
+
+def main:
+  puts http.encode("a café")                    #=> a%20caf%C3%A9
+  puts http.decode("a%20caf%C3%A9")             #=> Ok("a café")
+  puts http.form([("q", "pie & tea"), ("n", "2")])    #=> q=pie+%26+tea&n=2
+  puts http.parse_form("q=pie+%26+tea&n=2")     #=> Ok([("q", "pie & tea"), ("n", "2")])
+  puts http.decode("100%")
+  #=> Error("`%` in `100%` is not a byte written as `%` and two hex digits")
+```
+
+**Decoding is an `Error`** for a `%` without two hex digits after it, and
+for bytes that are not UTF-8 text: ``"`%FF` does not decode to UTF-8
+text"``. A query or a form is a list of pairs, not a map, because a name
+may come more than once, and the order can matter; to look one up, use
+`find`.
+
 ## Many requests at once
 
 A request waits for its answer. To make many at once, `await req.fetch`
@@ -182,6 +216,8 @@ def main -> () or Error:
 | `query` | what follows `?` in the URL, as it was sent; `""` for none |
 | `headers`, `header(name)` | as a `Response`'s: names in lower case, found in any case |
 | `body`, `json` | the body as text, or parsed |
+| `params` | the query's names and values, decoded as `http.parse_form` decodes them |
+| `form` | a form sent as the body, decoded the same way |
 | `respond(reply)` | sends the answer: `() or Error` |
 
 **A request is answered once**: a second `respond` is an `Error` — ``GET
@@ -210,7 +246,7 @@ answers.
 
 Each of these could come later without changing what is here:
 
-- **Encoding and cookies:** there are no form or URL helpers and no
-  cookies. Build the body as text, and send headers with `send`.
+- **Cookies:** there is no cookie jar. Send and read the `Cookie` and
+  `Set-Cookie` headers yourself.
 - **For serving**: TLS (`https://`), a body read as it arrives, and
   answers sent as they are made.

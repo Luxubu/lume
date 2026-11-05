@@ -14,6 +14,10 @@
 #   opened = req.open?                        # status and headers now ...
 #   for line in opened.lines:                 # ... and the body as it arrives
 #
+#   http.request("GET", url).with_query([("q", "pie")])   # ?q=pie
+#   http.request("POST", url).with_form([("name", "Ada")])
+#   http.encode("a b")   http.form(pairs)   http.parse_form(text)?
+#
 # Only a request that could not be made is an `Error` (no connection, a bad
 # URL, a timeout). A 404 or a 500 is a `Response` like any other, with
 # `ok?` false, as Python's requests and Rust's reqwest have it. Requests
@@ -64,6 +68,15 @@ pub struct Request:
 
   # the headers, with `Content-Type` said once, as `content_type`
   def typed(content_type: Str) -> [(Str, Str)] = headers.reject { |h| h.0.downcase == "content-type" }.to_list + [("Content-Type", content_type)]
+
+  # a form as the body: `a=1&b=two+words`, as a browser sends one
+  def with_form(pairs: [(Str, Str)]) -> Request = with_body(form(pairs), "application/x-www-form-urlencoded")
+
+  # a query added to the URL, after a `?` or the query it has
+  def with_query(pairs: [(Str, Str)]) -> Request:
+    return Request(method: method, url: url, headers: headers, body: body, timeout_ms: timeout_ms, body_file: body_file) if pairs.empty?
+    joined = if url.contains?("?"): "#{url}&#{form(pairs)}" else: "#{url}?#{form(pairs)}"
+    Request(method: method, url: joined, headers: headers, body: body, timeout_ms: timeout_ms, body_file: body_file)
 
   def timeout(ms: Int) -> Request = Request(method: method, url: url, headers: headers, body: body, timeout_ms: ms, body_file: body_file)
 
@@ -235,6 +248,79 @@ pub def post_json(url: Str, doc: Json) -> Response or Error = post(url, json.sho
 pub def send(method: Str, url: Str, headers: [(Str, Str)], body: Str) -> Response or Error:
   Request(method: method, url: url, headers: headers, body: body, timeout_ms: 30000, body_file: "").send
 
+# ---- Encoding: URLs and forms ---------------------------------------------
+
+# A piece of a URL — a path segment, a query value — with every byte but
+# letters, digits and `-._~` written as `%XX`: `http.encode("two words")` is
+# `two%20words`.
+pub def encode(text: Str) -> Str = escape(text, false)
+
+# The other way: `%XX` back to its byte. An `Error` for a `%` not followed by
+# two hex digits, or bytes that are not UTF-8 text.
+pub def decode(text: Str) -> Str or Error = unescape(text, false)
+
+# Names and values as a form, or a query, sends them: `a=1&b=two+words`,
+# each encoded, with a space as `+`.
+pub def form(pairs: [(Str, Str)]) -> Str = pairs.map { |k, v| "#{escape(k, true)}=#{escape(v, true)}" }.join("&")
+
+# A form or a query back into its names and values, in order, a `+` read as
+# a space. A name with no `=` has the value `""`; `""` gives none.
+pub def parse_form(text: Str) -> [(Str, Str)] or Error:
+  var out: [(Str, Str)] = []
+  for piece in text.split("&"):
+    next if piece.empty?
+    (k, v) = match piece.index_of("="):
+      Some(i) -> (piece.slice(0, i), piece.slice(i + 1, piece.len))
+      None -> (piece, "")
+    out.push((unescape(k, true)?, unescape(v, true)?))
+  Ok(out)
+
+def escape(text: Str, plus: Bool) -> Str:
+  out: Str = rust:
+    {
+      let mut out = String::with_capacity(text.len());
+      for b in text.bytes() {
+        match b {
+          b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => out.push(b as char),
+          b' ' if plus => out.push('+'),
+          _ => out.push_str(&format!("%{:02X}", b)),
+        }
+      }
+      out
+    }
+  out
+
+def unescape(text: Str, plus: Bool) -> Str or Error:
+  out: Str or Error = rust:
+    {
+      let src = text.as_bytes();
+      let mut bytes = Vec::with_capacity(src.len());
+      let mut i = 0;
+      let mut bad: Option<String> = None;
+      while i < src.len() {
+        match src[i] {
+          b'%' => {
+            let hex = |c: u8| (c as char).to_digit(16);
+            match (src.get(i + 1).and_then(|c| hex(*c)), src.get(i + 2).and_then(|c| hex(*c))) {
+              (Some(a), Some(b)) => { bytes.push((a * 16 + b) as u8); i += 3; }
+              _ => {
+                let end = (i + 3).min(src.len());
+                bad = Some(String::from_utf8_lossy(&src[i..end]).into_owned());
+                break;
+              }
+            }
+          }
+          b'+' if plus => { bytes.push(b' '); i += 1; }
+          c => { bytes.push(c); i += 1; }
+        }
+      }
+      match bad {
+        Some(b) => Err(Error { message: format!("`{}` in `{}` is not a byte written as `%` and two hex digits", b, text) }),
+        None => String::from_utf8(bytes).map_err(|_| Error { message: format!("`{}` does not decode to UTF-8 text", text) }),
+      }
+    }
+  out
+
 # ---- Serving (a preview: its shape may change in a 1.x release) ----------
 #
 #   server = http.listen("127.0.0.1:8080")?
@@ -330,6 +416,13 @@ pub struct Incoming:
   # the body, parsed as JSON
   def json -> Json or Error = json.parse(body).map_error { |e| Error("the body is not JSON: #{e.message}") }
 
+  # the query's names and values, decoded: `?q=pie&n=2` gives
+  # `[("q", "pie"), ("n", "2")]`
+  def params -> [(Str, Str)] or Error = parse_form(query)
+
+  # a form sent as the body, decoded the same way
+  def form -> [(Str, Str)] or Error = parse_form(body)
+
   # Sends the answer. A request is answered once: a second time is an `Error`.
   def respond(r: Reply) -> () or Error:
     return Error("#{r.status} is not an HTTP status: one from 100 to 599") if r.status < 100 or r.status > 599
@@ -418,3 +511,22 @@ test "a reply is built a step at a time":
 
 test "an address that cannot be listened on is an Error":
   assert listen("not an address").error?
+
+test "a piece of a URL is encoded, and decoded back":
+  assert encode("two words & a café") == "two%20words%20%26%20a%20caf%C3%A9"
+  assert decode("two%20words%20%26%20a%20caf%C3%A9")! == "two words & a café"
+  assert decode("100%").error?
+  assert decode("%FF").error?
+
+test "a form is written, and read back":
+  f = form([("q", "pie & tea"), ("n", "2")])
+  assert f == "q=pie+%26+tea&n=2"
+  assert parse_form(f)! == [("q", "pie & tea"), ("n", "2")]
+  assert parse_form("")! == []
+  assert parse_form("a&b=&&c=1")! == [("a", ""), ("b", ""), ("c", "1")]
+
+test "a request gets a form, or a query":
+  r = request("POST", "http://example.com/find").with_query([("page", "2")]).with_query([("q", "a b")]).with_form([("name", "Ada")])
+  assert r.url == "http://example.com/find?page=2&q=a+b"
+  assert r.body == "name=Ada"
+  assert r.headers == [("Content-Type", "application/x-www-form-urlencoded")]

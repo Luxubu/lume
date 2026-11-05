@@ -1,13 +1,37 @@
-# A server and its own client, in one program: the server answers three
-# requests on a port the system picks, while a task makes them.
+# A server and its own client, in one program: the server answers five
+# requests on a port the system picks, while a task makes them — one with
+# a query, one with a form as its body.
 import http
 import json
+
+PRICES = {"soup": 400, "pie": 350, "stew": 600}
+
+# the value of `name` in a query or a form, if it has one
+def value_of(pairs: [(Str, Str)], name: Str) -> Str? =
+  pairs.find { |k, _| k == name }.map { |kv| kv.1 }
+
+def find(req: http.Incoming) -> http.Reply:
+  match req.params:
+    Ok(ps) ->
+      wanted = value_of(ps, "q").or("")
+      hits = PRICES.keys.filter { |d| d.contains?(wanted) }.sort.to_list
+      http.reply(200, if hits.empty?: "nothing like #{wanted}" else: hits.join(", "))
+    Error(e) -> http.reply(400, e.message)
+
+def order(req: http.Incoming) -> http.Reply:
+  match req.form:
+    Ok(fields) ->
+      dish = value_of(fields, "dish").or("?")
+      note = value_of(fields, "note").or("")
+      http.reply(201, "ordered #{dish} (#{note})").header("Location", "/orders/1")
+    Error(e) -> http.reply(400, e.message)
 
 def answer(req: http.Incoming) -> http.Reply:
   match (req.method, req.path):
     ("GET", "/")        -> http.reply(200, "the café is open")
     ("GET", "/menu")    -> http.reply_json(200, json.parse("{\"soup\": 400, \"pie\": 350}").or(json.Json.Null))
-    ("POST", "/orders") -> http.reply(201, "ordered: #{req.body}").header("Location", "/orders/1")
+    ("GET", "/find")    -> find(req)
+    ("POST", "/orders") -> order(req)
     _                   -> http.reply(404, "no #{req.path} here")
 
 def visit(base: Str) -> [Str] or Error:
@@ -15,16 +39,19 @@ def visit(base: Str) -> [Str] or Error:
   for path in ["/", "/menu", "/nowhere"]:
     r = http.get(base + path)?
     seen.push("#{r.status} #{path}: #{r.body}")
-  r = http.post(base + "/orders", "two soups", "text/plain")?
-  seen.push("#{r.status} /orders: #{r.body} at #{r.header("location").or("?")}")
+  found = http.request("GET", base + "/find").with_query([("q", "s")]).send?
+  seen.push("#{found.status} /find?q=s: #{found.body}")
+  made = http.request("POST", base + "/orders").with_form([("dish", "stew"), ("note", "no salt, 50% less")]).send?
+  seen.push("#{made.status} /orders: #{made.body} at #{made.header("location").or("?")}")
   Ok(seen)
 
 async def main -> () or Error:
   server = http.listen("127.0.0.1:0")?
   base = "http://#{server.address}"
   client = spawn: visit(base)
-  for req in server.requests.take(4):
-    puts "server: #{req.method} #{req.path}"
+  for req in server.requests.take(5):
+    asked = if req.query.empty?: req.path else: "#{req.path}?#{req.query}"
+    puts "server: #{req.method} #{asked}"
     req.respond(answer(req))?
   for line in await client?:
     puts "client: #{line}"

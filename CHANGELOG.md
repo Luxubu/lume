@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **URLs and forms, in the `http` package**: `http.encode` and
+  `http.decode` for a piece of a URL; `http.form` and `http.parse_form` for
+  `a=1&b=two+words`, as a browser's form and a query write them; the
+  request steps `.with_form(pairs)` and `.with_query(pairs)`. Settled in
+  this release, with the requests they belong to. **Preview:** a served
+  request's `params` and `form` decode its query and its form body.
+- **A misspelt method on an optional or a result** says it has no such
+  method, with the one meant — `is_error?`, `is_ok` and Rust's `is_err` for
+  `error?` and `ok?`, `unwrap_or` for `or` — not that the value must be
+  unwrapped first.
+
 - **Preview: serving HTTP.** `http.listen(address)` gives a `Server`;
   `accept`, `requests` and, in async code, `incoming` give each request
   as an `Incoming` with its method, path, query, headers and body, and

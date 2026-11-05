@@ -1,0 +1,6 @@
+error: an `Int?` has no method `is_none?`
+  --> examples/errors/optional_method_misspelt.lume:5:12
+  |
+5 |   puts seat.is_none?
+  |            ^
+  help: did you mean `none?`?

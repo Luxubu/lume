@@ -1,0 +1,6 @@
+error: an `Int or Error` has no method `is_err`
+  --> examples/errors/result_method_like_rust.lume:5:9
+  |
+5 |   puts r.is_err
+  |         ^
+  help: did you mean `error?`?

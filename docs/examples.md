@@ -94,7 +94,7 @@ Each one has a `FINDINGS.md` or a `README.md` saying what it exposed.
 |---|---|
 | `tests/` | files with `test` blocks, and the `lume test` output they must produce |
 | `fmt/` | badly spaced input, and what `lume fmt` makes of it |
-| `errors/` | 446 programs that must keep failing, each with the message it must give |
+| `errors/` | 448 programs that must keep failing, each with the message it must give |
 
 `examples/errors/` is worth a look even though nothing in it runs: it is the
 catalogue of what Lume refuses and what it says when it does.

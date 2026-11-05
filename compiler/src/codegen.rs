@@ -3965,6 +3965,28 @@ impl Gen {
         best.map(|b| b.1)
     }
 
+    /// One of a type's own methods for a name that is not one: by spelling,
+    /// or by Rust's or Python's way of asking — `is_error`, `is_none?` and
+    /// `error` for Lume's `error?`.
+    fn suggest_own(&self, name: &str, own: &[&str]) -> Option<String> {
+        // Rust's names for the same methods
+        let rust = match name {
+            "unwrap_or" | "unwrap_or_default" => Some("or"),
+            "is_err" | "is_err?" => Some("error?"),
+            "map_err" => Some("map_error"),
+            "ok_or" => Some("or_error"),
+            _ => None,
+        };
+        if let Some(m) = rust.filter(|m| own.contains(m)) {
+            return Some(m.to_string());
+        }
+        let bare = name.strip_prefix("is_").unwrap_or(name).trim_end_matches('?');
+        if let Some(m) = own.iter().find(|m| m.trim_end_matches('?') == bare && m.ends_with('?') && **m != name) {
+            return Some(m.to_string());
+        }
+        self.suggest_from(name, own.iter().map(|m| m.to_string()))
+    }
+
     fn suggest(&self, name: &str) -> Option<String> {
         self.suggest_from(name, self.all_names().into_iter())
     }
@@ -13219,6 +13241,15 @@ impl Gen {
                                 || self.structs.get(tn).map(|s| s.fields.iter().any(|(n, _)| n == name)).unwrap_or(false),
                             other => builtin_method_type(other, name) != Type::Unknown,
                         };
+                        if !known {
+                            // neither the optional nor what it holds has it:
+                            // a misspelling, as `none` for `none?`, more likely
+                            // than a call meant for the value inside
+                            if let Some(sug) = self.suggest_own(name, &["or", "some?", "none?", "or_error", "map", "to_s"]) {
+                                return Err(LumeError::new(e.line, e.col, format!("a `{}` has no method `{}`", type_name(&rt), name))
+                                    .with_help(format!("did you mean `{}`?", sug)));
+                            }
+                        }
                         let err = LumeError::new(e.line, e.col, format!("this value is a `{}` — it may be absent, so `.{}` cannot be called on it directly", type_name(&rt), name));
                         return Err(if known {
                             err.with_help(format!("unwrap it first: `match` on `Some(x)`/`None`, or `.or(default).{}`", name))
@@ -13227,8 +13258,19 @@ impl Gen {
                         });
                     }
                 }
-                if let Type::Result(..) = &rt {
+                if let Type::Result(inner, _) = &rt {
                     if !matches!(name.as_str(), "or" | "ok?" | "error?" | "error" | "ok" | "to_s" | "to_str") {
+                        let known = match &**inner {
+                            Type::Named(tn) => self.methods_of(tn).map(|m| m.contains_key(name)).unwrap_or(false)
+                                || self.structs.get(tn).map(|s| s.fields.iter().any(|(n, _)| n == name)).unwrap_or(false),
+                            other => builtin_method_type(other, name) != Type::Unknown,
+                        };
+                        if !known {
+                            if let Some(sug) = self.suggest_own(name, &["or", "ok?", "error?", "ok", "error", "map", "map_error", "to_s"]) {
+                                return Err(LumeError::new(e.line, e.col, format!("a `{}` has no method `{}`", type_name(&rt), name))
+                                    .with_help(format!("did you mean `{}`?", sug)));
+                            }
+                        }
                         return Err(LumeError::new(e.line, e.col, format!("this value is a `{}` — it may be an error, so `.{}` cannot be called on it directly", type_name(&rt), name))
                             .with_help("unwrap it first: `?` to pass the error up, `match` on `Ok(x)`/`Error(e)`, or `.or(default)`"));
                     }

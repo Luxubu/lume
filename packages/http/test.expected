@@ -3,6 +3,9 @@ test a response reads its headers in any case ... ok
 test a request is built a step at a time ... ok
 test a reply is built a step at a time ... ok
 test an address that cannot be listened on is an Error ... ok
+test a piece of a URL is encoded, and decoded back ... ok
+test a form is written, and read back ... ok
+test a request gets a form, or a query ... ok
 
-5 tests: 5 passed, 0 failed
+8 tests: 8 passed, 0 failed
 exit: 0

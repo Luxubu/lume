@@ -1,9 +1,11 @@
 server: GET /
 server: GET /menu
 server: GET /nowhere
+server: GET /find?q=s
 server: POST /orders
 client: 200 /: the café is open
 client: 200 /menu: {"soup":400,"pie":350}
 client: 404 /nowhere: no /nowhere here
-client: 201 /orders: ordered: two soups at /orders/1
+client: 200 /find?q=s: soup, stew
+client: 201 /orders: ordered stew (no salt, 50% less) at /orders/1
 exit: 0
