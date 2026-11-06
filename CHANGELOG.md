@@ -2,57 +2,91 @@
 
 ## Unreleased
 
+## 1.1.0 — serving
+
+Six milestones after 1.0.0 (122–127), the first release under the 1.x
+promise. Nothing that worked in 1.0 stops working. The `http` package can
+answer requests now, as a preview, and has the URL and form helpers a
+request and a server both need; the tutorial's longest lunch is three;
+and a log parsed and summarised runs a fifth faster.
+
+### Install
+
+```sh
+git clone https://github.com/Luxubu/lume && cd lume && git checkout v1.1.0
+./install.sh
+lume run examples/fib.lume
+```
+
+It needs a Rust toolchain (<https://rustup.rs>). On Windows, run it from
+Git's bash. See `docs/install.md`. Take the packages with
+`tag = "v1.1.0"`; the `http` package is at 1.1.0.
+
+### Preview
+
+**Serving HTTP**, the first preview since 0.8: its shape may change in a
+1.x release, with each change listed here under **Preview:**.
+`http.listen(address)` gives a `Server`; `accept`, `requests` and, in async
+code, `incoming` give each request as an `Incoming` — its method, path,
+query, headers and body, and `params` and `form` decoded — and
+`req.respond(reply)` answers it once. `http.reply`, `http.reply_json`,
+`.header` and `.with_body` build a `Reply`. Built on the Rust crate
+tiny_http; `examples/http_server/` is a server and its own client.
+
+### Settled in this release
+
+- **URLs and forms** in the `http` package: `http.encode` and
+  `http.decode` for a piece of a URL; `http.form` and `http.parse_form` for
+  `a=1&b=two+words`; the request steps `.with_form(pairs)` and
+  `.with_query(pairs)`, the second before a `#fragment`. Lunch 21 teaches
+  them.
+
+### What is new
+
+- **The tutorial is twenty-six lunches.** Lunch 12 is three: 12,
+  Generics; 13, Modules and packages, which makes a library package of
+  your own and takes one from git; 14, Tests, which tests work that may
+  fail and a package's tests. Lunches 13–24 are 15–26.
+- **Faster, by copying less.** `match f(x):` takes apart the value the call
+  gave; a list made in a chain — `to_list`, `sort_by`, a call's result — is
+  walked without a copy of each item; `group_by`, `partition`, `sort_by`
+  and `min_by` take their items one at a time; `first` and `last` of a
+  list made just now give its item up; a map not needed again gives its
+  entries to `to_list`. `bench/b8_logq` went from 200% of the same program
+  in Rust to 155%.
+- **A `for` over a list of tasks** walks the tasks themselves, so each can
+  be awaited in turn; using the list after the loop is refused, saying so.
+- **A method an optional or a result lacks** is named as missing, with the
+  one meant — `is_error?`, `is_ok` and Rust's `is_err` for `error?` and
+  `ok?`, `unwrap_or` for `or`, `map_err` for `map_error` — not that the
+  value must be unwrapped first.
 - **`http`: of two headers with one name, in any case, only the later is
   sent**, as `http.md` now says; `headers` keeps both, as you built it.
   ureq sent the later of two in the same case, both of two in different
-  cases, and both of any beginning `X-`. **Preview:** the same for a
-  `Reply`.
-- **`.with_query`** puts the query before a `#fragment`, and adds no `&`
-  after a URL that ends in `?`.
-- **Fixed**: `xs[i % xs.len] = xs.at(i) + 1` reached rustc, the list read
-  while it was written; the value and the position are worked out first.
-- **Fixed**: `await t` in a loop said `t` was used again below, when a
-  later `for t in ...` named its own `t`.
-- **Fixed**: a stray `Error(...)` at the end of an `if` in a loop that ends
-  a `() or Error` function was taken as the function's value, and left it;
-  a loop's body is not the function's end, and the line is refused.
+  cases, and both of any beginning `X-`.
+
+### Fixed
+
+- A `for` over a list of tasks, `xs[i % xs.len] = xs.at(i) + 1`, and a
+  list pattern inside another pattern each reached rustc.
+- `await t` in a loop said `t` was used again below, when a later `for t
+  in ...` named its own `t`.
+- A stray `Error(...)` at the end of an `if` in a loop that ends a `() or
+  Error` function was taken as the function's value, and left it. A loop's
+  body is not the function's end; the line is refused, as such a line is
+  everywhere else, by the rule for bugs in `stability.md`.
 - Alternatives of `|` of different shapes point at the one that differs.
 
-- **Faster, by copying less.** `match f(x):` takes apart the value the call
-  gave instead of copying what each arm binds out of it; a list made in a
-  chain — `to_list`, `sort_by`, a call's result — is walked without a copy
-  of each item; `group_by`, `partition`, `sort_by` and `min_by` take their
-  items one at a time, without a list of copies made first; `first` and
-  `last` of a list made just now give its item up; and a map not needed
-  again gives its entries to `to_list`. `bench/b8_logq`, a log parsed and
-  summarised, went from 200% of the same program in Rust to 155%.
+### How it was checked
 
-- **URLs and forms, in the `http` package**: `http.encode` and
-  `http.decode` for a piece of a URL; `http.form` and `http.parse_form` for
-  `a=1&b=two+words`, as a browser's form and a query write them; the
-  request steps `.with_form(pairs)` and `.with_query(pairs)`. Settled in
-  this release, with the requests they belong to. **Preview:** a served
-  request's `params` and `form` decode its query and its form body.
-- **A misspelt method on an optional or a result** says it has no such
-  method, with the one meant — `is_error?`, `is_ok` and Rust's `is_err` for
-  `error?` and `ok?`, `unwrap_or` for `or` — not that the value must be
-  unwrapped first.
-
-- **Preview: serving HTTP.** `http.listen(address)` gives a `Server`;
-  `accept`, `requests` and, in async code, `incoming` give each request
-  as an `Incoming` with its method, path, query, headers and body, and
-  `req.respond(http.reply(status, text))` answers it once. `reply_json`,
-  `.header` and `.with_body` build other answers. Built on the Rust crate
-  tiny_http; `examples/http_server/` is a server and its own client.
-- **A `for` over a list of tasks** walks the tasks themselves, so each can
-  be awaited in turn; it reached rustc. The list is given up with them,
-  and using it after the loop is refused, saying so.
-
-- **Lunch 12 is three lunches**: 12, Generics; 13, Modules and packages,
-  which now makes a library package with `lume new --lib` and uses it from
-  a program, and says how a package comes from git; 14, Tests, which now
-  tests work that may fail and a package's tests. Lunches 13–24 are 15–26,
-  and the tutorial is twenty-six lunches.
+- **The suite**: `tests/run.sh`, 1408 checks and 703 docs examples, byte
+  for byte, on Linux, macOS and Windows (where ten that drive Unix programs
+  as Unix has them are left out).
+- **Review round twenty-five** (`corpus/m126/`): thirty programs by three
+  reviewers from the docs alone, fourteen of them a server and its own
+  client; 35 guesses, no wrong answer, and the one leak to rustc fixed.
+- **The benchmarks**, all within budget.
+- Installed from a clean checkout and run.
 
 ## 1.0.0 — the promise, for all of 1.x
 

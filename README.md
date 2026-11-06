@@ -35,7 +35,7 @@ Then:
 - **[The examples](docs/examples.md)** — 7,000 lines of working programs, in a
   reading order.
 - **[Installing](docs/install.md)** — and what each command does.
-- **[Changes](CHANGELOG.md)** — what each release holds; 1.0.0 is the latest.
+- **[Changes](CHANGELOG.md)** — what each release holds; 1.1.0 is the latest.
 - **[What is settled](docs/stability.md)** — the parts you can build on, the
   what the promise does not cover, and how a settled part is allowed to
   change.
@@ -69,7 +69,7 @@ fixed — the 782 programs they left behind are run on every change and must
 print what they print today. What Lume refuses, it refuses with a message that
 names the fix — `examples/errors/` is 448 programs kept around to prove it.
 
-**Where it is.** Version 1.0. The language, the collections, files and
+**Where it is.** Version 1.1. The language, the collections, files and
 folders, running programs and talking to them as they run, tasks and async
 sequences, tests, packages and the commands are settled, and so are the
 `http` package's requests, Rust crates through `import rust.<crate>`, and

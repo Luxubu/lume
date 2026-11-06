@@ -191,7 +191,7 @@ A package can come from a git repository too, at a tag:
 
 ```toml
 [dependencies]
-json = { git = "https://github.com/Luxubu/lume", tag = "v1.0.0" }
+json = { git = "https://github.com/Luxubu/lume", tag = "v1.1.0" }
 ```
 
 The first `lume run` fetches it and writes the exact commit it used into

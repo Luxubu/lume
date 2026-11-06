@@ -1,6 +1,6 @@
 # What is settled, and what may change
 
-Lume is at 1.0, and still growing. This page says which parts of it you can
+Lume is at 1.1, and still growing. This page says which parts of it you can
 build on — write programs in, teach, write tutorials about — and
 what the promise does not cover. It also says how a settled part is allowed
 to change, so that what you write keeps working.
