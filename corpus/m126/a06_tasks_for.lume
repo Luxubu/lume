@@ -1,0 +1,51 @@
+# a06 tasks_for — tasks in a list, awaited one by one with a `for`: made
+# with `map` and finishing in another order than they started, pushed onto
+# a `var` list and giving `Int or Error`, running programs, and `await t?`
+# passing a task's failure up from an `async def main -> () or Error`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# pie boiled after 30
+# tea boiled after 1
+# soup boiled after 10
+# skipped: `two` is not an integer
+# total 16
+# SOUP
+# PIE
+# sum 15
+async def boil(dish: Str, ms: Int) -> Str:
+  await Time.sleep(ms)
+  "#{dish} boiled after #{ms}"
+
+def portion(text: Str) -> Int or Error = text.to_int
+
+def say(word: Str) -> Str:
+  (_, out, _) = Process.run("echo", [word]).or((1, "", ""))
+  out.trim
+
+async def main -> () or Error:
+  pots = [("pie", 30), ("tea", 1), ("soup", 10)].map { |d, ms| spawn: await boil(d, ms) }.to_list
+  for t in pots:
+    puts await t
+
+  var counts: [Task[Int or Error]] = []
+  for text in ["4", "two", "12"]:
+    counts.push(spawn: portion(text))
+  var total = 0
+  for t in counts:
+    match await t:
+      Ok(n) -> total += n
+      Error(e) -> puts "skipped: #{e.message}"
+  puts "total #{total}"
+
+  words = ["soup", "pie"].map { |w| spawn: say(w) }.to_list
+  for t in words:
+    line = await t
+    puts line.upcase
+
+  parts = ["7", "8"].map { |s| spawn: portion(s) }.to_list
+  var sum = 0
+  for t in parts:
+    n = await t?
+    sum += n
+  puts "sum #{sum}"
+  ()

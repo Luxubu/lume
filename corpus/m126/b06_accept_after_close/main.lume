@@ -1,0 +1,28 @@
+# Probes `accept` after `close`: an `accept` already waiting in a task when
+# the server closes gives an `Error`, and so does one called after; then
+# `requests` gives nothing, and closing a second time is harmless. The
+# server's address and port can still be read.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# the waiting accept gave an Error: true
+# accept after close: the server is closed
+# requests after close: 0
+# closed twice
+# true
+
+import http
+
+async def main -> () or Error:
+  server = http.listen("127.0.0.1:0")?
+  waiting = spawn: server.accept
+  await Time.sleep(100)
+  server.close
+  got = await waiting
+  puts "the waiting accept gave an Error: #{got.error?}"
+  match server.accept:
+    Ok(req) -> puts "accepted #{req.path} after close?"
+    Error(e) -> puts "accept after close: #{e.message}"
+  puts "requests after close: #{server.requests.to_list.len}"
+  server.close
+  puts "closed twice"
+  puts server.address.starts_with?("127.0.0.1:") and server.port > 0

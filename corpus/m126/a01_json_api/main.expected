@@ -1,0 +1,10 @@
+server: GET /items
+server: POST /items
+server: POST /items
+server: DELETE /items/1
+client: 200 application/json [{"name":"tea","cents":250},{"name":"pie","cents":400}]
+client: 2 items, the first is tea
+client: 201 {"id":3,"name":"soup","cents":375}
+client: 400 {"error":"`cents` is missing"}
+client: 405 false DELETE is not allowed on /items/1
+exit: 0

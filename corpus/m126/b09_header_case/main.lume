@@ -1,0 +1,44 @@
+# Probes a header looked up in another case than it was sent in, on both
+# sides: the server reads `X-Dish` as `X-DISH` and `x-table` as `X-Table`,
+# and its `headers` list has the names in lower case; the client reads the
+# server's `X-Served-By` as `X-SERVED-BY` and its `Content-Type` as
+# `CONTENT-type`, and a header not sent is `None`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# server: X-DISH is Some("pie")
+# server: X-Table is Some("4")
+# server: [("x-dish", "pie"), ("x-table", "4")]
+# client: status 200
+# client: X-SERVED-BY is Some("Lume Kitchen")
+# client: x-served-by is Some("Lume Kitchen")
+# client: CONTENT-type is Some("text/plain; charset=utf-8")
+# client: X-Nothing is None
+# client: [("x-served-by", "Lume Kitchen")]
+
+import http
+
+def visit(base: Str) -> [Str] or Error:
+  r = http.request("GET", base + "/menu").header("X-Dish", "pie").header("x-table", "4").send?
+  ours = r.headers.filter { |k, _| k.starts_with?("x-") }.to_list
+  Ok([
+    "status #{r.status}",
+    "X-SERVED-BY is #{r.header("X-SERVED-BY")}",
+    "x-served-by is #{r.header("x-served-by")}",
+    "CONTENT-type is #{r.header("CONTENT-type")}",
+    "X-Nothing is #{r.header("X-Nothing")}",
+    "#{ours}",
+  ])
+
+async def main -> () or Error:
+  server = http.listen("127.0.0.1:0")?
+  client = spawn: visit("http://#{server.address}")
+  for req in server.requests.take(1):
+    puts "server: X-DISH is #{req.header("X-DISH")}"
+    puts "server: X-Table is #{req.header("X-Table")}"
+    sent = req.headers.filter { |k, _| k.starts_with?("x-") }.to_list
+    puts "server: #{sent}"
+    req.respond(http.reply(200, "ok").header("X-Served-By", "Lume Kitchen"))?
+  for line in await client?:
+    puts "client: #{line}"
+  server.close
+  ()

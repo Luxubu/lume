@@ -1,0 +1,6 @@
+[package]
+name = "b08_incoming_tasks"
+version = "0.1.0"
+
+[dependencies]
+http = { path = "../../../packages/http" }

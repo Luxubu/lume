@@ -1,0 +1,57 @@
+# a04 url_text — `http.encode`, `decode`, `form` and `parse_form` on
+# awkward text: spaces, `&`, `=`, `+`, `%`, `/`, accents and a euro sign;
+# lower-case hex; a `%` cut short; a byte that is not UTF-8; a name twice,
+# a name with no `=`, a value holding `=`; and a form read back.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 50%25%20off%20%26%20free
+# cr%C3%A8me%20br%C3%BBl%C3%A9e
+# a%2Bb%3Dc
+# ~ada%2Fnotes.v2_final-1
+# Ok("a+b c")
+# Ok("€5")
+# Ok("crème brûlée")
+# Error("`%zz` in `%zz1` is not a byte written as `%` and two hex digits")
+# Error("`%4` in `ab%4` is not a byte written as `%` and two hex digits")
+# Error("`%C3` does not decode to UTF-8 text")
+# name=Jos%C3%A9+N%C3%BA%C3%B1ez&note=50%25+%26+more&empty=
+# [0]
+# Ok([("a", "1"), ("a", "2"), ("b", "")])
+# Ok([("x", "a+b c")])
+# Ok([("eq", "1=2")])
+# Ok([])
+# Error("`%G1` in `%G1` is not a byte written as `%` and two hex digits")
+# true
+# José Núñez
+import http
+
+def main:
+  puts http.encode("50% off & free")
+  puts http.encode("crème brûlée")
+  puts http.encode("a+b=c")
+  puts http.encode("~ada/notes.v2_final-1")
+
+  puts http.decode("a+b%20c")
+  puts http.decode("%e2%82%ac5")
+  puts http.decode(http.encode("crème brûlée"))
+  puts http.decode("%zz1")
+  puts http.decode("ab%4")
+  puts http.decode("%C3")
+
+  pairs = [("name", "José Núñez"), ("note", "50% & more"), ("empty", "")]
+  written = http.form(pairs)
+  puts written
+  none: [(Str, Str)] = []
+  puts "[#{http.form(none).len}]"
+
+  puts http.parse_form("a=1&a=2&b")
+  puts http.parse_form("x=a%2Bb+c")
+  puts http.parse_form("eq=1=2")
+  puts http.parse_form("&&")
+  puts http.parse_form("ok=1&bad=%G1")
+
+  back = http.parse_form(written)
+  puts back.ok == Some(pairs)
+  match back:
+    Ok(ps) -> puts ps.find { |k, _| k == "name" }.map { |kv| kv.1 }.or("?")
+    Error(e) -> puts e.message

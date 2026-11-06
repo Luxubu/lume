@@ -1,0 +1,7 @@
+error: this failure is thrown away, because nothing returns it
+  --> corpus/m126/b13_stray_error.lume:18:7
+   |
+18 |       Error("seat #{s} is below zero")
+   |       ^
+  help: write `return Error(...)` to stop here with it
+exit: 1

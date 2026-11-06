@@ -1,0 +1,180 @@
+# c03 — a form-driven to-do service, as a browser's forms would drive it:
+# POST /todos adds one from a form, POST /todos/<n> with a form field
+# `action` marks it done, undoes it or deletes it, GET /todos lists them
+# (filtered by a query: `tag` and `state`), and GET /todos.json gives
+# them as JSON, read back with the json package. Forms go by `.with_form`
+# and once by `http.form` by hand; queries by `.with_query`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# server: POST /todos -> 201
+# server: POST /todos -> 201
+# server: POST /todos -> 201
+# server: POST /todos -> 422
+# server: POST /todos/2 -> 200
+# server: POST /todos/9 -> 404
+# server: POST /todos/1 -> 400
+# server: POST /todos/x -> 400
+# server: GET /todos -> 200
+# server: GET /todos?tag=home&state=open -> 200
+# server: POST /todos/1 -> 200
+# server: GET /todos.json -> 200
+# server: GET /todos?state=done -> 200
+# server: POST /quit -> 200
+# client: 201 add buy tea: added #1
+# client: 201 add write the report: added #2
+# client: 201 add call Ada & Bo: added #3
+# client: 422 add a blank: a to-do needs a title
+# client: 200 done 2: done #2
+# client: 404 done 9: no to-do #9
+# client: 400 burn 1: no action `burn`
+# client: 400 done x: `x` is not a to-do number
+# client: 200 all:
+# client:   1 [ ] buy tea (home)
+# client:   2 [x] write the report (work)
+# client:   3 [ ] call Ada & Bo (home)
+# client: 200 open at home:
+# client:   1 [ ] buy tea (home)
+# client:   3 [ ] call Ada & Bo (home)
+# client: 200 delete 1: deleted #1
+# client: 200 json, application/json: write the report, call Ada & Bo
+# client: 200 done: 2 [x] write the report (work)
+# client: 200 quit: bye
+# 2 to-dos kept, the next is #4
+
+import http
+import json
+import json.Json
+
+struct Todo:
+  id: Int
+  title: Str
+  tag: Str
+  done: Bool
+
+  def mark -> Str = if done: "x" else: " "
+  def line -> Str = "#{id} [#{mark}] #{title} (#{tag})"
+  def to_json -> Json = json.obj([("id", id.to_json), ("title", title.to_json), ("tag", tag.to_json), ("done", done.to_json)])
+
+struct Board:
+  todos: [Todo]
+  next_id: Int
+
+  def add(var self, title: Str, tag: Str) -> Int:
+    id = next_id
+    todos.push(Todo(id: id, title: title, tag: tag, done: false))
+    next_id += 1
+    id
+
+  # "done", "undo" or "delete" on one to-do
+  def act(var self, id: Int, action: Str) -> Str or Error:
+    if not todos.any? { |t| t.id == id }:
+      return Error("no to-do ##{id}")
+    match action:
+      "delete" ->
+        todos = todos.reject { |t| t.id == id }.to_list
+        "deleted ##{id}"
+      _ ->
+        for var t in todos:
+          if t.id == id:
+            t.done = action == "done"
+        "#{action} ##{id}"
+
+  # "" for a tag or a state means any
+  def listing(tag: Str, state: Str) -> [Todo] =
+    todos.filter { |t| (tag.empty? or t.tag == tag) and (state.empty? or (state == "done") == t.done) }.to_list
+
+def value_of(pairs: [(Str, Str)], name: Str) -> Str? =
+  pairs.find { |k, _| k == name }.map { |kv| kv.1 }
+
+def list_page(board: Board, req: http.Incoming) -> http.Reply:
+  match req.params:
+    Error(e) -> http.reply(400, e.message)
+    Ok(ps) ->
+      shown = board.listing(value_of(ps, "tag").or(""), value_of(ps, "state").or(""))
+      http.reply(200, if shown.empty?: "(nothing to do)" else: shown.map { |t| t.line }.join("\n"))
+
+def add_page(var board: Board, req: http.Incoming) -> http.Reply:
+  match req.form:
+    Error(e) -> http.reply(400, e.message)
+    Ok(fields) ->
+      title = value_of(fields, "title").or("").trim
+      if title.empty?:
+        return http.reply(422, "a to-do needs a title")
+      id = board.add(title, value_of(fields, "tag").or("misc"))
+      http.reply(201, "added ##{id}").header("Location", "/todos/#{id}")
+
+def act_page(var board: Board, raw: Str, req: http.Incoming) -> http.Reply:
+  id = match raw.to_int:
+    Ok(n) -> n
+    Error(_) -> return http.reply(400, "`#{raw}` is not a to-do number")
+  fields = match req.form:
+    Ok(f) -> f
+    Error(e) -> return http.reply(400, e.message)
+  action = value_of(fields, "action").or("")
+  if not ["done", "undo", "delete"].contains?(action):
+    return http.reply(400, "no action `#{action}`")
+  match board.act(id, action):
+    Ok(said) -> http.reply(200, said)
+    Error(e) -> http.reply(404, e.message)
+
+def answer(var board: Board, req: http.Incoming) -> http.Reply:
+  match (req.method, req.path):
+    ("GET", "/todos") -> list_page(board, req)
+    ("GET", "/todos.json") -> http.reply_json(200, board.todos.to_json)
+    ("POST", "/todos") -> add_page(board, req)
+    ("POST", "/quit") -> http.reply(200, "bye")
+    ("POST", path) if path.starts_with?("/todos/") -> act_page(board, path.slice(7, path.len), req)
+    _ -> http.reply(404, "no #{req.method} #{req.path} here")
+
+def form_post(url: Str, pairs: [(Str, Str)]) -> http.Response or Error =
+  http.request("POST", url).with_form(pairs).send
+
+# one line for a one-line body; the body's lines under it otherwise
+def show(label: Str, r: http.Response) -> [Str]:
+  lines = r.body.lines.to_list
+  if lines.len <= 1:
+    return ["#{r.status} #{label}: #{r.body}"]
+  ["#{r.status} #{label}:"] + lines.map { |l| "  #{l}" }.to_list
+
+def visit(base: Str) -> [Str] or Error:
+  todos = base + "/todos"
+  var seen: [Str] = []
+  for title, tag in [("buy tea", "home"), ("write the report", "work")]:
+    seen = seen + show("add #{title}", form_post(todos, [("title", title), ("tag", tag)])?)
+  by_hand = http.form([("title", "call Ada & Bo"), ("tag", "home")])
+  seen = seen + show("add call Ada & Bo", http.post(todos, by_hand, "application/x-www-form-urlencoded")?)
+  seen = seen + show("add a blank", form_post(todos, [("title", "   ")])?)
+  for id, action in [("2", "done"), ("9", "done"), ("1", "burn"), ("x", "done")]:
+    seen = seen + show("#{action} #{id}", form_post("#{todos}/#{id}", [("action", action)])?)
+  seen = seen + show("all", http.get(todos)?)
+  at_home = http.request("GET", todos).with_query([("tag", "home"), ("state", "open")]).send?
+  seen = seen + show("open at home", at_home)
+  seen = seen + show("delete 1", form_post("#{todos}/1", [("action", "delete")])?)
+  listed = http.get(todos + ".json")?
+  doc = listed.json?
+  var titles: [Str] = []
+  for item in doc.items:
+    titles.push(item.need_str("title")?)
+  kind = listed.header("content-type").or("?")
+  seen.push("#{listed.status} json, #{kind}: #{titles.join(", ")}")
+  finished = http.request("GET", todos).with_query([("state", "done")]).send?
+  seen = seen + show("done", finished)
+  seen = seen + show("quit", http.post(base + "/quit", "", "text/plain")?)
+  Ok(seen)
+
+async def main -> () or Error:
+  server = http.listen("127.0.0.1:0")?
+  base = "http://#{server.address}"
+  client = spawn: visit(base)
+  var board = Board(todos: [], next_id: 1)
+  for req in server.requests:
+    reply = answer(board, req)
+    asked = if req.query.empty?: req.path else: "#{req.path}?#{req.query}"
+    puts "server: #{req.method} #{asked} -> #{reply.status}"
+    req.respond(reply)?
+    break if req.path == "/quit"
+  server.close
+  for line in await client?:
+    puts "client: #{line}"
+  puts "#{board.todos.len} to-dos kept, the next is ##{board.next_id}"
+  ()

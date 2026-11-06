@@ -1,0 +1,7 @@
+server: answered GET /also-fast
+server: answered GET /fast
+server: answered GET /slow
+client: 200 answered /slow
+client: 200 answered /fast
+client: 200 answered /also-fast
+exit: 0

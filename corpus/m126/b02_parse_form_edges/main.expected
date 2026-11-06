@@ -1,0 +1,13 @@
+Ok([])
+Ok([("a", ""), ("b", "")])
+Ok([])
+Ok([(" ", "")])
+Ok([("+", "")])
+Ok([("q", "+1 2")])
+Ok([("a", "b=c"), ("", "x")])
+Ok([("n", "1"), ("n", "2")])
+Error("`%G0` in `%G0` is not a byte written as `%` and two hex digits")
+Error("`k%FF` does not decode to UTF-8 text")
+a+b=c%26d&%C3%A9=%3D
+true
+exit: 0

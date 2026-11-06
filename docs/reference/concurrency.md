@@ -116,7 +116,19 @@ async def main:
 
 **A `for` over a list of tasks walks the tasks themselves**, so each can be
 awaited in turn. As awaiting gives a task up, the list is given up too: it
-cannot be used after the loop, and Lume says so if it is.
+cannot be used after the loop, and Lume says so if it is:
+
+```lume-bad
+def cook(dish: Str) -> Str = dish.upcase
+
+async def main:
+  tasks = ["pie", "tea"].map { |d| spawn: cook(d) }.to_list
+  for t in tasks:
+    puts await t
+  puts tasks.len
+#! `tasks` is used after this loop, but walking its tasks gives them up, as awaiting one does
+#! wait for them all at once — `results = await tasks` — and loop over the results
+```
 
 ```lume
 def cook(dish: Str) -> Str = dish.upcase

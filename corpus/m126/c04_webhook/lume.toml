@@ -1,0 +1,7 @@
+[package]
+name = "webhook"
+version = "0.1.0"
+
+[dependencies]
+http = { path = "../../../packages/http" }
+json = { path = "../../../packages/json" }

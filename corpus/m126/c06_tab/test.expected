@@ -1,0 +1,17 @@
+test money: amounts are read ... ok
+test money: a bad amount says why ... ok
+test money: amounts are written with two places ... ok
+test share: every cent goes to someone ... ok
+test share: nobody to share with ... ok
+test share: by weight ... ok
+test a receipt shares the bill ... ok
+test a dish with no price is refused ... ok
+test a price that is not one is refused ... ok
+test receipts for two tables at once ... ok
+test this one fails on purpose ... FAILED
+    lib.lume:78: assert share.evenly(Amount(cents: 100), 3)!.map { |s| s.cents }.to_list == [33, 33, 33]
+      left:  [34, 33, 33]
+      right: [33, 33, 33]
+
+11 tests: 10 passed, 1 failed
+exit: 1

@@ -1,0 +1,7 @@
+error: an `Int?` has no method `unwrap_or`
+  --> corpus/m126/a08_unwrap_or.lume:14:21
+   |
+14 |   tea = stock["tea"].unwrap_or(0)
+   |                     ^
+  help: did you mean `or`?
+exit: 1

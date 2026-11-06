@@ -1,0 +1,15 @@
+# a08 unwrap_or — Rust's name for an optional's method: `unwrap_or` on the
+# `Int?` a map gives for a key, where Lume's name is `or`. Neither an
+# `Int?` nor an `Int` has `unwrap_or`, so this is not "unwrap it first".
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: an `Int?` has no method `unwrap_or`
+#   --> corpus/m126/a08_unwrap_or.lume:14:21
+#    |
+# 14 |   tea = stock["tea"].unwrap_or(0)
+#    |                     ^
+#   help: did you mean `or`?
+def main:
+  stock = {"tea": 12, "pie": 0}
+  tea = stock["tea"].unwrap_or(0)
+  puts "tea: #{tea}"

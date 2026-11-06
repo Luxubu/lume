@@ -1,0 +1,6 @@
+the waiting accept gave an Error: true
+accept after close: the server is closed
+requests after close: 0
+closed twice
+true
+exit: 0

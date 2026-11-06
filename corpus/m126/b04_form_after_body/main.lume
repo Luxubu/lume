@@ -1,0 +1,41 @@
+# Probes `.with_form` after `.with_body`, and which headers leave: a
+# `Content-Type` given by hand in lower case, and the one `with_body` gave,
+# both go; other headers stay, in order, and the new `Content-Type` comes
+# last. Also a form after a file (the file is set aside), a file after a
+# form (the form's body goes), a form of no pairs, and a timeout kept
+# through the body steps.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# [("X-Trace", "7"), ("content-type", "text/csv")]
+# [("X-Trace", "7"), ("Content-Type", "text/csv")]
+# a,b
+# [("X-Trace", "7"), ("Accept", "text/plain"), ("Content-Type", "application/x-www-form-urlencoded")]
+# dish=fish+%26+chips&n=2
+# 500
+# file then form: [] dish=pie
+# form then file: [/tmp/lume-review-b/up.txt] []
+# [("Content-Type", "text/plain")]
+# no pairs: [] [("Content-Type", "application/x-www-form-urlencoded")]
+
+import http
+
+def main:
+  url = "http://127.0.0.1:9/orders"
+  typed = http.request("POST", url).timeout(500).header("X-Trace", "7").header("content-type", "text/csv")
+  puts typed.headers
+  csv = typed.with_body("a,b", "text/csv")
+  puts csv.headers
+  puts csv.body
+  form = csv.header("Accept", "text/plain").with_form([("dish", "fish & chips"), ("n", "2")])
+  puts form.headers
+  puts form.body
+  puts form.timeout_ms
+  filed = http.request("PUT", url).with_file("/tmp/lume-review-b/up.txt", "text/plain")
+  after_file = filed.with_form([("dish", "pie")])
+  puts "file then form: [#{after_file.body_file}] #{after_file.body}"
+  after_form = after_file.with_file("/tmp/lume-review-b/up.txt", "text/plain")
+  puts "form then file: [#{after_form.body_file}] [#{after_form.body}]"
+  puts after_form.headers
+  nothing: [(Str, Str)] = []
+  empty = http.request("POST", url).with_form(nothing)
+  puts "no pairs: [#{empty.body}] #{empty.headers}"

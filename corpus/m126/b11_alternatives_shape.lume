@@ -1,0 +1,22 @@
+# Probes alternatives that differ in shape: both bind `size`, a `Str`, but
+# one has the `"tea"` literal first and the other has it second. The
+# patterns page says alternatives that name something, with a `Str`
+# literal inside a tuple, must look the same but for their literals.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: alternatives with a string or float inside must otherwise look the same
+#   --> corpus/m126/b11_alternatives_shape.lume:16:21
+#    |
+# 16 |     ("tea", size) | (size, "tea") -> "tea, #{size}"
+#    |                     ^
+#   help: give each alternative an arm of its own
+
+def kind(p: (Str, Str)) -> Str:
+  match p:
+    ("tea", size) | (size, "tea") -> "tea, #{size}"
+    ("coffee", _) | (_, "coffee") -> "coffee"
+    _ -> "something else"
+
+def main:
+  puts kind(("tea", "large"))
+  puts kind(("small", "tea"))

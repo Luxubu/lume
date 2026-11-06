@@ -1,0 +1,6 @@
+[package]
+name = "b06_accept_after_close"
+version = "0.1.0"
+
+[dependencies]
+http = { path = "../../../packages/http" }

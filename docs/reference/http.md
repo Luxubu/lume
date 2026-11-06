@@ -39,7 +39,10 @@ Each gives `Response or Error`. **Only a request that could not be made is
 an `Error`**: no connection, a URL that does not parse, no answer in time
 (30 seconds, unless the request says otherwise). The message names the method and the URL. **A 404 or a 500 is a
 `Response`** like any other, as Python's `requests` and Rust's `reqwest`
-have it: look at `ok?` or `status`.
+have it: look at `ok?` or `status`. **A redirect is followed**, up to
+five, as ureq does: a `301`, `302`, `303`, `307` or `308` with a
+`Location` gives the answer from there. Any other status, a `201` with a
+`Location` among them, is the answer.
 
 ### Built a step at a time
 
@@ -48,11 +51,11 @@ new one, as Rust's `reqwest::RequestBuilder` does:
 
 | step | |
 |---|---|
-| `.header(name, value)` | one more header |
+| `.header(name, value)` | one more header; of two with one name, in any case, only the later is sent |
 | `.with_body(text, content_type)` | a body, with its `Content-Type` |
 | `.with_file(path, content_type)` | a file as the body, read as it is sent, never held whole; its length goes first, as `Content-Length` |
 | `.with_form(pairs)` | a form as the body, `[(Str, Str)]` written as `http.form` writes it, as `application/x-www-form-urlencoded` |
-| `.with_query(pairs)` | names and values added to the URL's query, after a `?` or the query it has |
+| `.with_query(pairs)` | names and values added to the URL's query — after a `?`, or the query it has, and before a `#fragment` |
 | `.timeout(ms)` | how long to wait for an answer, in milliseconds |
 
 A body step sets the request's `Content-Type`, taking the place of one an
@@ -163,7 +166,8 @@ def main:
 
 **Decoding is an `Error`** for a `%` without two hex digits after it, and
 for bytes that are not UTF-8 text: ``"`%FF` does not decode to UTF-8
-text"``. A query or a form is a list of pairs, not a map, because a name
+text"``. The message names the text given to `decode`; for `parse_form`, the
+name or value that would not decode. A query or a form is a list of pairs, not a map, because a name
 may come more than once, and the order can matter; to look one up, use
 `find`.
 
@@ -212,7 +216,7 @@ def main -> () or Error:
 
 | on an `Incoming` | |
 |---|---|
-| `method`, `path` | `"GET"`, `"/menu"`: the path without its query |
+| `method`, `path` | `"GET"`, `"/menu"`: the path without its query, as it was sent — `%20` stays `%20`; `http.decode` reads it |
 | `query` | what follows `?` in the URL, as it was sent; `""` for none |
 | `headers`, `header(name)` | as a `Response`'s: names in lower case, found in any case |
 | `body`, `json` | the body as text, or parsed |
@@ -221,7 +225,9 @@ def main -> () or Error:
 | `respond(reply)` | sends the answer: `() or Error` |
 
 **A request is answered once**: a second `respond` is an `Error` — ``GET
-/menu has been answered already`` — and so is a status outside 100 to 599.
+/menu has been answered already`` — and so is a status outside 100 to 599:
+``600 is not an HTTP status: one from 100 to 599``. A refused answer sends
+nothing, so the request can still be answered.
 A request never answered keeps its connection open until the program
 ends.
 
@@ -231,11 +237,12 @@ ends.
 |---|---|
 | `http.reply(status, text)` | text, as `text/plain; charset=utf-8` |
 | `http.reply_json(status, doc)` | a `Json` document, as `application/json` |
-| `.header(name, value)` | one more header |
+| `.header(name, value)` | one more header; of two with one name, in any case, only the later is sent |
 | `.with_body(text, content_type)` | a body, in place of the one before |
 
 `requests` handles one request at a time: the next waits until this one is
-answered. To answer many at once, walk `incoming` in async code and give
+answered. A `for` over it ends when the server is closed, or at a `break`,
+or after `.take(n)`. To answer many at once, walk `incoming` in async code and give
 each request to a task, as `spawn: answer(req)`.
 
 `examples/http_server/` is a server and its own client in one program: it

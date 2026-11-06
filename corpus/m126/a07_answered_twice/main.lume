@@ -1,0 +1,47 @@
+# a07 answered_twice — a request answered twice, and statuses out of
+# range: the second `respond` is an `Error` and the client sees the first
+# answer; 600 and 99 are refused with the request left unanswered, so a
+# third `respond`, with a real status (418, which is not `ok?`), still
+# reaches the client.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# server: GET /twice
+# server:   first answer sent: true
+# server:   GET /twice has been answered already
+# server: GET /odd
+# server:   600 is not an HTTP status: one from 100 to 599
+# server:   99 is not an HTTP status: one from 100 to 599
+# server:   418 sent
+# client: 200 true /twice: once
+# client: 418 false /odd: short and stout
+import http
+
+def visit(base: Str) -> [Str] or Error:
+  var seen: [Str] = []
+  for path in ["/twice", "/odd"]:
+    r = http.get(base + path)?
+    seen.push("#{r.status} #{r.ok?} #{path}: #{r.body}")
+  Ok(seen)
+
+async def main -> () or Error:
+  server = http.listen("127.0.0.1:0")?
+  client = spawn: visit("http://#{server.address}")
+  for req in server.requests.take(2):
+    puts "server: #{req.method} #{req.path}"
+    if req.path == "/twice":
+      first = req.respond(http.reply(200, "once"))
+      puts "server:   first answer sent: #{first.ok?}"
+      match req.respond(http.reply(200, "twice")):
+        Ok(_) -> puts "server:   answered twice?"
+        Error(e) -> puts "server:   #{e.message}"
+    else:
+      for status in [600, 99]:
+        match req.respond(http.reply(status, "?")):
+          Ok(_) -> puts "server:   #{status} sent?"
+          Error(e) -> puts "server:   #{e.message}"
+      req.respond(http.reply(418, "short and stout"))?
+      puts "server:   418 sent"
+  for line in await client?:
+    puts "client: #{line}"
+  server.close
+  ()

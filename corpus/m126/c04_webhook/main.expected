@@ -1,0 +1,29 @@
+server: POST /hook -> 401
+server: POST /hook -> 415
+server: POST /hook -> 202
+server: POST /hook -> 200
+server: POST /hook -> 202
+server: POST /hook -> 422
+server: POST /hook -> 400
+server: POST /hook -> 422
+server: POST /hook -> 202
+server: POST /hook -> 400
+server: GET /log -> 200
+server: POST /quit -> 200
+client: 401 no token: bad or missing token
+client: 415 plain text: send JSON, not text/plain
+client: 202 push d1: push to lume: 2 commits (a1b2, c3d4)
+client: 200 push d1 again: already had delivery d1
+client: 202 issue d2: issue #42: crash on empty input [bug]
+client: 422 issue d3: `number` is a string, not a whole number
+client: 400 broken d4: the body is not JSON: expected `:`, found `1` at position 8
+client: 422 deploy d5: no event `deploy`; this hook takes push and issue
+client: 202 issue d6: issue #7: slow start [none]
+client: 400 no event d7: no X-Event header
+client: 200 log, application/json
+client:   d1 push: push to lume: 2 commits (a1b2, c3d4)
+client:   d2 issue: issue #42: crash on empty input [bug]
+client:   d6 issue: issue #7: slow start [none]
+client: 200 quit: bye
+3 deliveries taken
+exit: 0

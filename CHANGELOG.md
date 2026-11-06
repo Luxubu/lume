@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- **`http`: of two headers with one name, in any case, only the later is
+  sent**, as `http.md` now says; `headers` keeps both, as you built it.
+  ureq sent the later of two in the same case, both of two in different
+  cases, and both of any beginning `X-`. **Preview:** the same for a
+  `Reply`.
+- **`.with_query`** puts the query before a `#fragment`, and adds no `&`
+  after a URL that ends in `?`.
+- **Fixed**: `xs[i % xs.len] = xs.at(i) + 1` reached rustc, the list read
+  while it was written; the value and the position are worked out first.
+- **Fixed**: `await t` in a loop said `t` was used again below, when a
+  later `for t in ...` named its own `t`.
+- **Fixed**: a stray `Error(...)` at the end of an `if` in a loop that ends
+  a `() or Error` function was taken as the function's value, and left it;
+  a loop's body is not the function's end, and the line is refused.
+- Alternatives of `|` of different shapes point at the one that differs.
+
 - **Faster, by copying less.** `match f(x):` takes apart the value the call
   gave instead of copying what each arm binds out of it; a list made in a
   chain — `to_list`, `sort_by`, a call's result — is walked without a copy

@@ -1,0 +1,68 @@
+# a01 json_api — a small JSON API on 127.0.0.1:0, called by its own client
+# task: a list sent with `http.reply_json`, a document posted with
+# `http.post_json` and read back with `req.json` and `need_…`, one with a
+# field missing answered 400, and a method the API does not have.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# server: GET /items
+# server: POST /items
+# server: POST /items
+# server: DELETE /items/1
+# client: 200 application/json [{"name":"tea","cents":250},{"name":"pie","cents":400}]
+# client: 2 items, the first is tea
+# client: 201 {"id":3,"name":"soup","cents":375}
+# client: 400 {"error":"`cents` is missing"}
+# client: 405 false DELETE is not allowed on /items/1
+import http
+import json
+import json.Json
+
+def item(name: Str, cents: Int) -> Json = json.obj([("name", name.to_json), ("cents", cents.to_json)])
+
+def oops(status: Int, message: Str) -> http.Reply = http.reply_json(status, json.obj([("error", message.to_json)]))
+
+# the posted item, with the id it is given
+def made(req: http.Incoming, id: Int) -> Json or Error:
+  doc = req.json?
+  name = doc.need_str("name")?
+  cents = doc.need_int("cents")?
+  Ok(json.obj([("id", id.to_json), ("name", name.to_json), ("cents", cents.to_json)]))
+
+def answer(req: http.Incoming, id: Int) -> http.Reply:
+  match (req.method, req.path):
+    ("GET", "/items") -> http.reply_json(200, Json.Arr([item("tea", 250), item("pie", 400)]))
+    ("POST", "/items") ->
+      match made(req, id):
+        Ok(doc) -> http.reply_json(201, doc)
+        Error(e) -> oops(400, e.message)
+    (m, p) -> http.reply(405, "#{m} is not allowed on #{p}")
+
+def visit(base: Str) -> [Str] or Error:
+  var seen: [Str] = []
+  list = http.get(base + "/items")?
+  seen.push("#{list.status} #{list.header("content-type").or("?")} #{list.body}")
+  doc = list.json?
+  first = doc.path("0.name").map { |j| j.str.or("?") }.or("none")
+  seen.push("#{doc.items.len} items, the first is #{first}")
+  soup = http.post_json(base + "/items", json.obj([("name", "soup".to_json), ("cents", 375.to_json)]))?
+  seen.push("#{soup.status} #{soup.body}")
+  stew = http.post(base + "/items", "{\"name\": \"stew\"}", "application/json")?
+  seen.push("#{stew.status} #{stew.body}")
+  gone = http.delete(base + "/items/1")?
+  seen.push("#{gone.status} #{gone.ok?} #{gone.body}")
+  Ok(seen)
+
+async def main -> () or Error:
+  server = http.listen("127.0.0.1:0")?
+  base = "http://#{server.address}"
+  client = spawn: visit(base)
+  var next_id = 3
+  for req in server.requests.take(4):
+    puts "server: #{req.method} #{req.path}"
+    req.respond(answer(req, next_id))?
+    if req.method == "POST":
+      next_id += 1
+  for line in await client?:
+    puts "client: #{line}"
+  server.close
+  ()

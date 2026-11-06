@@ -1,0 +1,22 @@
+warning: `!` stops the program if the value is missing or an error
+  --> corpus/m126/b01_decode_edges/main.lume:47:24
+   |
+47 |   puts http.decode("%")!
+   |                        ^
+  help: fine in tests and quick scripts; elsewhere use `match`, `?` or `.or(default)`
+Error("`%` in `%` is not a byte written as `%` and two hex digits")
+Error("`%` in `50%` is not a byte written as `%` and two hex digits")
+Error("`%4` in `%4` is not a byte written as `%` and two hex digits")
+Error("`%zz` in `%zz` is not a byte written as `%` and two hex digits")
+Error("`%4g` in `a%4g1` is not a byte written as `%` and two hex digits")
+Error("`%FF` does not decode to UTF-8 text")
+Error("`caf%C3` does not decode to UTF-8 text")
+Ok("é")
+Ok("a+b c")
+%C2%BD%20%26%20~
+Ok("½ & ~")
+error: `%` in `%` is not a byte written as `%` and two hex digits
+  --> corpus/m126/b01_decode_edges/main.lume:47
+   |
+47 |   puts http.decode("%")!
+exit: 101

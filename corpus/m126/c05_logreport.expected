@@ -1,0 +1,34 @@
+12 requests read, 1 skipped
+  skipped line 10: `two` is not an integer
+
+By day
+  2026-11-02: 5 requests, 1 failed, slowest GET /order/7 (900 ms)
+  2026-11-03: 4 requests, 0 failed, slowest POST /order (140 ms)
+  2026-11-04: 3 requests, 1 failed, slowest POST /order (1500 ms)
+
+Busiest paths
+  /menu      6 requests, 32 ms on average
+  /order     3 requests, 586 ms on average
+  /order/7   1 requests, 900 ms on average
+
+Users
+  ada  4 requests, first GET /menu at 2026-11-02 09:00:01
+  bo   3 requests, first POST /order at 2026-11-02 09:00:04
+  cy   3 requests, first GET /menu at 2026-11-02 09:01:10
+  dee  2 requests, first GET /menu at 2026-11-04 08:00:00
+  busiest: ada, with 4
+
+By status
+  2xx: 8 (200, 201)
+  3xx: 1 (304)
+  4xx: 1 (404)
+  5xx: 2 (500, 503)
+
+Slowest
+   1500 ms POST /order (dee, 2026-11-04 08:00:02)
+    900 ms GET /order/7 (bo, 2026-11-02 09:02:00)
+    140 ms POST /order (ada, 2026-11-03 10:15:09)
+  fastest: GET /menu (5 ms)
+  first failure: GET /order/7, 500 at 2026-11-02 09:02:00
+(32 lines, written to report.txt and removed)
+exit: 0

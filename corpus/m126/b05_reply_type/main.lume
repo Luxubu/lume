@@ -1,0 +1,50 @@
+# Probes a `Reply` whose `.with_body` changes its type: the
+# `text/plain; charset=utf-8` that `http.reply` gave leaves, a header added
+# before stays, and the new `Content-Type` comes last; the reply before the
+# step is left as it was. A `Content-Type` added with `.header` is one more
+# header, not a replacement, until a body step takes both away. Then a
+# server answers two requests with such replies, and the client reads the
+# type each one came with.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# [("Content-Type", "text/plain; charset=utf-8"), ("X-Kind", "list")]
+# [("X-Kind", "list"), ("Content-Type", "application/json")]
+# 200 [1, 2]; before: plain words
+# [("Content-Type", "text/plain; charset=utf-8"), ("content-type", "text/html")]
+# [("Content-Type", "text/csv")]
+# client: 200 /list: application/json, kind list: [1, 2]
+# client: 404 /gone: text/html, kind none: <p>gone</p>
+
+import http
+
+def answer(req: http.Incoming) -> http.Reply:
+  match req.path:
+    "/list" -> http.reply(200, "plain words").header("X-Kind", "list").with_body("[1, 2]", "application/json")
+    _ -> http.reply(404, "no #{req.path} here").with_body("<p>gone</p>", "text/html")
+
+def visit(base: Str) -> [Str] or Error:
+  var seen: [Str] = []
+  for path in ["/list", "/gone"]:
+    r = http.get(base + path)?
+    kind = r.header("content-type").or("no type")
+    tag = r.header("x-kind").or("none")
+    seen.push("#{r.status} #{path}: #{kind}, kind #{tag}: #{r.body}")
+  Ok(seen)
+
+async def main -> () or Error:
+  r = http.reply(200, "plain words").header("X-Kind", "list")
+  puts r.headers
+  j = r.with_body("[1, 2]", "application/json")
+  puts j.headers
+  puts "#{j.status} #{j.body}; before: #{r.body}"
+  twice = http.reply(200, "x").header("content-type", "text/html")
+  puts twice.headers
+  puts twice.with_body("a,b", "text/csv").headers
+  server = http.listen("127.0.0.1:0")?
+  client = spawn: visit("http://#{server.address}")
+  for req in server.requests.take(2):
+    req.respond(answer(req))?
+  for line in await client?:
+    puts "client: #{line}"
+  server.close
+  ()

@@ -1,0 +1,6 @@
+[package]
+name = "search_page"
+version = "0.1.0"
+
+[dependencies]
+http = { path = "../../../packages/http" }

@@ -1,0 +1,7 @@
+error: an alternative of `|` cannot name what is inside a list or a recursive field
+  --> corpus/m126/b10_nested_list_pattern.lume:23:5
+   |
+23 |     Dishes([d, ..]) | Table(_, [d, ..]) -> d
+   |     ^
+  help: give this alternative an arm of its own, or use `_` for the names inside it
+exit: 1

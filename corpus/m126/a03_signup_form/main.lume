@@ -1,0 +1,67 @@
+# a03 signup_form — a form posted with `.with_form` and read with
+# `req.form`: accents, `&`, `=` and `%` in values, an empty value, a form
+# that takes the place of an earlier `.with_body`, a form with a query
+# beside it, and a body by hand that is not UTF-8 once decoded.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# server: POST /signup as application/x-www-form-urlencoded
+# server:   body name=Zo%C3%AB+%C3%85ngstr%C3%B6m&note=fish+%26+chips+%3D+100%25+yes&tea=
+# server:   form Ok([("name", "Zoë Ångström"), ("note", "fish & chips = 100% yes"), ("tea", "")])
+# server:   params Ok([])
+# server: POST /signup as application/x-www-form-urlencoded
+# server:   body name=Bo
+# server:   form Ok([("name", "Bo")])
+# server:   params Ok([])
+# server: POST /signup as application/x-www-form-urlencoded
+# server:   body name=Cy&name=Di
+# server:   form Ok([("name", "Cy"), ("name", "Di")])
+# server:   params Ok([("ref", "mail")])
+# server: POST /signup as application/x-www-form-urlencoded
+# server:   body name=%E9
+# server:   form Error("`%E9` does not decode to UTF-8 text")
+# server:   params Ok([])
+# client: 201 welcome, Zoë Ångström (3 fields)
+# client: 201 welcome, Bo (1 fields)
+# client: 201 welcome, Cy (2 fields), from mail
+# client: 400 `%E9` does not decode to UTF-8 text
+import http
+
+def value_of(pairs: [(Str, Str)], name: Str) -> Str? =
+  pairs.find { |k, _| k == name }.map { |kv| kv.1 }
+
+def signup(req: http.Incoming) -> http.Reply:
+  match req.form:
+    Error(e) -> http.reply(400, e.message)
+    Ok(fields) ->
+      name = value_of(fields, "name").or("nobody")
+      via = match req.params:
+        Ok(ps) -> value_of(ps, "ref").map { |r| ", from #{r}" }.or("")
+        Error(_) -> ""
+      http.reply(201, "welcome, #{name} (#{fields.len} fields)#{via}")
+
+def visit(base: Str) -> [Str] or Error:
+  url = base + "/signup"
+  var asks: [http.Request] = []
+  asks.push(http.request("POST", url).with_form([("name", "Zoë Ångström"), ("note", "fish & chips = 100% yes"), ("tea", "")]))
+  asks.push(http.request("POST", url).with_body("{\"name\": \"Bo\"}", "application/json").with_form([("name", "Bo")]))
+  asks.push(http.request("POST", url).with_query([("ref", "mail")]).with_form([("name", "Cy"), ("name", "Di")]))
+  asks.push(http.request("POST", url).with_body("name=%E9", "application/x-www-form-urlencoded"))
+  var seen: [Str] = []
+  for ask in asks:
+    r = ask.send?
+    seen.push("#{r.status} #{r.body}")
+  Ok(seen)
+
+async def main -> () or Error:
+  server = http.listen("127.0.0.1:0")?
+  client = spawn: visit("http://#{server.address}")
+  for req in server.requests.take(4):
+    puts "server: #{req.method} #{req.path} as #{req.header("Content-Type").or("nothing")}"
+    puts "server:   body #{req.body}"
+    puts "server:   form #{req.form}"
+    puts "server:   params #{req.params}"
+    req.respond(signup(req))?
+  for line in await client?:
+    puts "client: #{line}"
+  server.close
+  ()

@@ -1,0 +1,35 @@
+server: POST /todos -> 201
+server: POST /todos -> 201
+server: POST /todos -> 201
+server: POST /todos -> 422
+server: POST /todos/2 -> 200
+server: POST /todos/9 -> 404
+server: POST /todos/1 -> 400
+server: POST /todos/x -> 400
+server: GET /todos -> 200
+server: GET /todos?tag=home&state=open -> 200
+server: POST /todos/1 -> 200
+server: GET /todos.json -> 200
+server: GET /todos?state=done -> 200
+server: POST /quit -> 200
+client: 201 add buy tea: added #1
+client: 201 add write the report: added #2
+client: 201 add call Ada & Bo: added #3
+client: 422 add a blank: a to-do needs a title
+client: 200 done 2: done #2
+client: 404 done 9: no to-do #9
+client: 400 burn 1: no action `burn`
+client: 400 done x: `x` is not a to-do number
+client: 200 all:
+client:   1 [ ] buy tea (home)
+client:   2 [x] write the report (work)
+client:   3 [ ] call Ada & Bo (home)
+client: 200 open at home:
+client:   1 [ ] buy tea (home)
+client:   3 [ ] call Ada & Bo (home)
+client: 200 delete 1: deleted #1
+client: 200 json, application/json: write the report, call Ada & Bo
+client: 200 done: 2 [x] write the report (work)
+client: 200 quit: bye
+2 to-dos kept, the next is #4
+exit: 0

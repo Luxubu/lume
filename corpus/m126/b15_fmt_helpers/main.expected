@@ -1,0 +1,9 @@
+q=pie+%26+tea&n=2
+a is 1
+b is two words
+http://127.0.0.1:9/find?page=2&q=pie+%26+tea&n=2
+dish:stew
+`%` in `100%` is not a byte written as `%` and two hex digits
+a%20b
+a%20b
+exit: 0

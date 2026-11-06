@@ -1,0 +1,175 @@
+# c04 — a webhook receiver: POST /hook checks its headers (the content
+# type, a token, the event, a delivery id seen only once) before it reads
+# the body, then parses the body as JSON (`req.json`) and decodes it with
+# the json package's `need_…` and `opt_…`; GET /log gives what it took,
+# as JSON (`http.reply_json`). The client sends with `http.post_json`,
+# with `http.send` and headers of its own, and reads the log back.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# server: POST /hook -> 401
+# server: POST /hook -> 415
+# server: POST /hook -> 202
+# server: POST /hook -> 200
+# server: POST /hook -> 202
+# server: POST /hook -> 422
+# server: POST /hook -> 400
+# server: POST /hook -> 422
+# server: POST /hook -> 202
+# server: POST /hook -> 400
+# server: GET /log -> 200
+# server: POST /quit -> 200
+# client: 401 no token: bad or missing token
+# client: 415 plain text: send JSON, not text/plain
+# client: 202 push d1: push to lume: 2 commits (a1b2, c3d4)
+# client: 200 push d1 again: already had delivery d1
+# client: 202 issue d2: issue #42: crash on empty input [bug]
+# client: 422 issue d3: `number` is a string, not a whole number
+# client: 400 broken d4: the body is not JSON: expected `:`, found `1` at position 8
+# client: 422 deploy d5: no event `deploy`; this hook takes push and issue
+# client: 202 issue d6: issue #7: slow start [none]
+# client: 400 no event d7: no X-Event header
+# client: 200 log, application/json
+# client:   d1 push: push to lume: 2 commits (a1b2, c3d4)
+# client:   d2 issue: issue #42: crash on empty input [bug]
+# client:   d6 issue: issue #7: slow start [none]
+# client: 200 quit: bye
+# 3 deliveries taken
+
+import http
+import json
+import json.Json
+
+TOKEN = "s3cret"
+EVENTS = ["push", "issue"]
+
+struct Hook:
+  deliveries: {Str}
+  log: [(Str, Str, Str)]
+
+# ---- the server ------------------------------------------------------------
+
+# Why a delivery is turned away before its body is read, if it is.
+def refuse(req: http.Incoming, seen: {Str}) -> http.Reply?:
+  kind = req.header("Content-Type").or("nothing")
+  if not kind.starts_with?("application/json"):
+    return http.reply(415, "send JSON, not #{kind}")
+  if req.header("X-Hook-Token") != Some(TOKEN):
+    return http.reply(401, "bad or missing token")
+  event = req.header("x-event").or("")
+  if event.empty?:
+    return http.reply(400, "no X-Event header")
+  if not EVENTS.contains?(event):
+    return http.reply(422, "no event `#{event}`; this hook takes #{EVENTS.join(" and ")}")
+  delivery = req.header("x-delivery").or("")
+  if delivery.empty?:
+    return http.reply(400, "no X-Delivery header")
+  if seen.contains?(delivery):
+    return http.reply(200, "already had delivery #{delivery}")
+  None
+
+# What a delivery says, or which field is wrong.
+def summarise(event: Str, doc: Json) -> Str or Error:
+  match event:
+    "push" ->
+      repo = doc.need_str("repo")?
+      var ids: [Str] = []
+      for c in doc.need_items("commits")?:
+        ids.push(c.need_str("id")?)
+      "push to #{repo}: #{ids.len} commits (#{ids.join(", ")})"
+    _ ->
+      n = doc.need_int("number")?
+      title = doc.need_str("title")?
+      label = doc.opt_str("label")?.or("none")
+      "issue ##{n}: #{title} [#{label}]"
+
+def receive(var hook: Hook, req: http.Incoming) -> http.Reply:
+  match refuse(req, hook.deliveries):
+    Some(r) -> return r
+    None -> ()
+  doc = match req.json:
+    Ok(d) -> d
+    Error(e) -> return http.reply(400, e.message)
+  event = req.header("x-event").or("")
+  match summarise(event, doc):
+    Error(e) -> http.reply(422, e.message)
+    Ok(said) ->
+      delivery = req.header("x-delivery").or("")
+      hook.deliveries.add(delivery)
+      hook.log.push((delivery, event, said))
+      http.reply(202, said)
+
+def log_json(hook: Hook) -> Json =
+  Json.Arr(hook.log.map { |d, e, s| json.obj([("delivery", d.to_json), ("event", e.to_json), ("summary", s.to_json)]) }.to_list)
+
+def answer(var hook: Hook, req: http.Incoming) -> http.Reply:
+  match (req.method, req.path):
+    ("POST", "/hook") -> receive(hook, req)
+    ("GET", "/log") -> http.reply_json(200, log_json(hook))
+    ("POST", "/quit") -> http.reply(200, "bye")
+    _ -> http.reply(404, "no #{req.path} here")
+
+# ---- the client ------------------------------------------------------------
+
+def commit(id: Str, message: Str) -> Json = json.obj([("id", id.to_json), ("message", message.to_json)])
+
+def push_doc -> Json = json.obj([
+  ("repo", "lume".to_json),
+  ("commits", Json.Arr([commit("a1b2", "fix the parser"), commit("c3d4", "add tests")])),
+])
+
+def issue(title: Str, number: Json, label: Json) -> Str =
+  json.show(json.obj([("title", title.to_json), ("number", number), ("label", label)]))
+
+def deliver(url: Str, event: Str, delivery: Str, body: Str) -> http.Response or Error:
+  var headers = [("Content-Type", "application/json"), ("X-Hook-Token", TOKEN)]
+  headers.push(("X-Event", event)) if not event.empty?
+  headers.push(("X-Delivery", delivery))
+  http.send("POST", url, headers, body)
+
+def line(label: Str, r: http.Response) -> Str = "#{r.status} #{label}: #{r.body}"
+
+def visit(base: Str) -> [Str] or Error:
+  hook = base + "/hook"
+  pushed = json.show(push_doc())
+  var seen: [Str] = []
+  seen.push(line("no token", http.post_json(hook, push_doc())?))
+  plain = http.send("POST", hook, [("Content-Type", "text/plain"), ("X-Hook-Token", TOKEN), ("X-Event", "push"), ("X-Delivery", "d1")], "hello")?
+  seen.push(line("plain text", plain))
+  sends = [
+    ("push d1", "push", "d1", pushed),
+    ("push d1 again", "push", "d1", pushed),
+    ("issue d2", "issue", "d2", issue("crash on empty input", 42.to_json, "bug".to_json)),
+    ("issue d3", "issue", "d3", issue("docs", "7".to_json, "docs".to_json)),
+    ("broken d4", "push", "d4", "{\"repo\" 1}"),
+    ("deploy d5", "deploy", "d5", "{}"),
+    ("issue d6", "issue", "d6", issue("slow start", 7.to_json, Json.Null)),
+    ("no event d7", "", "d7", "{}"),
+  ]
+  for label, event, delivery, body in sends:
+    seen.push(line(label, deliver(hook, event, delivery, body)?))
+  got = http.get(base + "/log")?
+  seen.push("#{got.status} log, #{got.header("content-type").or("?")}")
+  doc = got.json?
+  for item in doc.items:
+    d = item.need_str("delivery")?
+    e = item.need_str("event")?
+    s = item.need_str("summary")?
+    seen.push("  #{d} #{e}: #{s}")
+  seen.push(line("quit", http.post(base + "/quit", "", "text/plain")?))
+  Ok(seen)
+
+async def main -> () or Error:
+  server = http.listen("127.0.0.1:0")?
+  base = "http://#{server.address}"
+  client = spawn: visit(base)
+  var hook = Hook(deliveries: {}, log: [])
+  for req in server.requests:
+    reply = answer(hook, req)
+    puts "server: #{req.method} #{req.path} -> #{reply.status}"
+    req.respond(reply)?
+    break if req.path == "/quit"
+  server.close
+  for out in await client?:
+    puts "client: #{out}"
+  puts "#{hook.deliveries.len} deliveries taken"
+  ()

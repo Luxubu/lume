@@ -1,0 +1,78 @@
+# c06 — a library package with modules and its own tests (lunches 13 and
+# 14): `tab` reads a bill and shares it out. lib.lume passes on its two
+# modules, `money` and `share`, with `pub import`; each module has tests
+# of its own, named with the module first, and they run before these.
+# One async test starts tasks with no `main` anywhere, and one test fails
+# on purpose, so `lume test` shows `left` and `right` and exits with 1.
+# Run with `lume test corpus/m126/c06_tab/lib.lume`
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# test money: amounts are read ... ok
+# test money: a bad amount says why ... ok
+# test money: amounts are written with two places ... ok
+# test share: every cent goes to someone ... ok
+# test share: nobody to share with ... ok
+# test share: by weight ... ok
+# test a receipt shares the bill ... ok
+# test a dish with no price is refused ... ok
+# test a price that is not one is refused ... ok
+# test receipts for two tables at once ... ok
+# test this one fails on purpose ... FAILED
+#     corpus/m126/c06_tab/lib.lume:78: assert share.evenly(Amount(cents: 100), 3)!.map { |s| s.cents }.to_list == [33, 33, 33]
+#       left:  [34, 33, 33]
+#       right: [33, 33, 33]
+#
+# 11 tests: 10 passed, 1 failed
+# EXPECTED EXIT: 1
+
+pub import money
+pub import share
+import money.Amount
+
+# one person's part of a bill
+pub struct Part:
+  who: Str
+  owes: Amount
+
+  def line -> Str = "#{who} #{owes.show}"
+
+# "soup 4.50, pie 3.00" — each dish a name and a price — shared out
+# evenly between `people`, in the order they are named
+pub def receipt(items: Str, people: [Str]) -> [Part] or Error:
+  var total = Amount(cents: 0)
+  for item in items.split(","):
+    match item.trim.split(" "):
+      [_, price] -> total = total.plus(money.parse(price)?)
+      _ -> return Error("`#{item.trim}` is not a dish and a price")
+  shares = share.evenly(total, people.len)?
+  people.zip(shares).map { |p, s| Part(who: p, owes: s) }.to_list
+
+# the parts, one line each, and what they come to
+pub def show(parts: [Part]) -> Str:
+  var sum = Amount(cents: 0)
+  for p in parts:
+    sum = sum.plus(p.owes)
+  (parts.map { |p| p.line }.to_list + ["total #{sum.show}"]).join("\n")
+
+test "a receipt shares the bill":
+  parts = receipt("soup 4.50, pie 3.00, tea 2.51", ["ada", "bo", "cy"])!
+  assert parts.map { |p| p.line }.to_list == ["ada 3.34", "bo 3.34", "cy 3.33"]
+  assert show(parts).lines.last == Some("total 10.01")
+
+test "a dish with no price is refused":
+  assert receipt("soup", ["ada"]).error.map { |e| e.message } == Some("`soup` is not a dish and a price")
+
+test "a price that is not one is refused":
+  assert receipt("soup 4,50", ["ada"]).error?
+  assert receipt("pie 3.5", ["ada"]).error.map { |e| e.message } == Some("`3.5` is not an amount like 12.50")
+
+async test "receipts for two tables at once":
+  four = spawn: receipt("pie 3.00", ["ada", "bo"])
+  nine = spawn: receipt("stew 6.00, tea 1.00", ["cy"])
+  done = await [four, nine]
+  assert done.map { |r| r.map { |ps| ps.len }.or(0) }.to_list == [2, 1]
+  assert done.at(1).map { |ps| show(ps) }.or("") == "cy 7.00\ntotal 7.00"
+
+# a cent cannot vanish: 1.00 between three is 0.34, 0.33 and 0.33
+test "this one fails on purpose":
+  assert share.evenly(Amount(cents: 100), 3)!.map { |s| s.cents }.to_list == [33, 33, 33]

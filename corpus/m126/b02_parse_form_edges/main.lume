@@ -1,0 +1,37 @@
+# Probes `http.parse_form` at its edges: `""`, `a&b=`, `&&`, a lone `+`,
+# `%2B`, a value holding `=`, an empty name, a name given twice, a bad
+# `%` in a value (the message names the piece, not the whole form), bytes
+# that are not UTF-8 in a name, and a form written by `http.form` and
+# read back.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# Ok([])
+# Ok([("a", ""), ("b", "")])
+# Ok([])
+# Ok([(" ", "")])
+# Ok([("+", "")])
+# Ok([("q", "+1 2")])
+# Ok([("a", "b=c"), ("", "x")])
+# Ok([("n", "1"), ("n", "2")])
+# Error("`%G0` in `%G0` is not a byte written as `%` and two hex digits")
+# Error("`k%FF` does not decode to UTF-8 text")
+# a+b=c%26d&%C3%A9=%3D
+# true
+
+import http
+
+def main:
+  puts http.parse_form("")
+  puts http.parse_form("a&b=")
+  puts http.parse_form("&&")
+  puts http.parse_form("+")
+  puts http.parse_form("%2B")
+  puts http.parse_form("q=%2B1+2")
+  puts http.parse_form("a=b=c&=x")
+  puts http.parse_form("n=1&n=2")
+  puts http.parse_form("ok=1&bad=%G0")
+  puts http.parse_form("k%FF=1")
+  pairs = [("a b", "c&d"), ("é", "=")]
+  written = http.form(pairs)
+  puts written
+  puts http.parse_form(written).or([]) == pairs

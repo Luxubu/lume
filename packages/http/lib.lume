@@ -57,6 +57,7 @@ pub struct Request:
   # a file to send as the body, read as it is sent; "" for none
   body_file: Str
 
+  # one more header; of two with one name, in any case, the later is sent
   def header(name: Str, value: Str) -> Request = Request(method: method, url: url, headers: headers + [(name, value)], body: body, timeout_ms: timeout_ms, body_file: body_file)
 
   # a body, and what it is
@@ -75,8 +76,12 @@ pub struct Request:
   # a query added to the URL, after a `?` or the query it has
   def with_query(pairs: [(Str, Str)]) -> Request:
     return Request(method: method, url: url, headers: headers, body: body, timeout_ms: timeout_ms, body_file: body_file) if pairs.empty?
-    joined = if url.contains?("?"): "#{url}&#{form(pairs)}" else: "#{url}?#{form(pairs)}"
-    Request(method: method, url: joined, headers: headers, body: body, timeout_ms: timeout_ms, body_file: body_file)
+    # the query goes before a `#fragment`, which is never sent
+    (base, fragment) = match url.index_of("#"):
+      Some(i) -> (url.slice(0, i), url.slice(i, url.len))
+      None -> (url, "")
+    sep = if not base.contains?("?"): "?" elif base.ends_with?("?") or base.ends_with?("&"): "" else: "&"
+    Request(method: method, url: "#{base}#{sep}#{form(pairs)}#{fragment}", headers: headers, body: body, timeout_ms: timeout_ms, body_file: body_file)
 
   def timeout(ms: Int) -> Request = Request(method: method, url: url, headers: headers, body: body, timeout_ms: ms, body_file: body_file)
 
@@ -110,7 +115,7 @@ pub struct Request:
   def send_parts(parts: Iterator[Str]) -> Response or Error:
     m = method
     u = url
-    hs = headers
+    hs = sent(headers)
     ms = timeout_ms
     raw: (Int, [(Str, Str)], Str) or Error = rust:
       {
@@ -155,7 +160,7 @@ pub struct Request:
     # the Rust below reads these by name
     m = method
     u = url
-    hs = headers
+    hs = sent(headers)
     b = body
     f = body_file
     ms = timeout_ms
@@ -428,7 +433,7 @@ pub struct Incoming:
     return Error("#{r.status} is not an HTTP status: one from 100 to 599") if r.status < 100 or r.status > 599
     id = answer_id
     status = r.status
-    hs = r.headers
+    hs = sent(r.headers)
     text = r.body
     what = "#{method} #{path}"
     done: () or Error = rust:
@@ -459,6 +464,14 @@ pub struct Reply:
 
   # a body, and what it is, in place of the one before
   def with_body(text: Str, content_type: Str) -> Reply = Reply(status: status, headers: headers.reject { |h| h.0.downcase == "content-type" }.to_list + [("Content-Type", content_type)], body: text)
+
+# The headers as they are sent: one of each name, in any case, the later
+# taking the place of the earlier where it stood.
+def sent(headers: [(Str, Str)]) -> [(Str, Str)]:
+  var out: [(Str, Str)] = []
+  for k, v in headers:
+    out = out.reject { |h| h.0.downcase == k.downcase }.to_list + [(k, v)]
+  out
 
 # An answer of text: `http.reply(404, "not here")`.
 pub def reply(status: Int, text: Str) -> Reply = Reply(status: status, headers: [("Content-Type", "text/plain; charset=utf-8")], body: text)
@@ -528,5 +541,10 @@ test "a form is written, and read back":
 test "a request gets a form, or a query":
   r = request("POST", "http://example.com/find").with_query([("page", "2")]).with_query([("q", "a b")]).with_form([("name", "Ada")])
   assert r.url == "http://example.com/find?page=2&q=a+b"
+  assert request("GET", "http://x.test/a#top").with_query([("q", "1")]).url == "http://x.test/a?q=1#top"
+  assert request("GET", "http://x.test/a?").with_query([("q", "1")]).url == "http://x.test/a?q=1"
+  r2 = request("GET", "http://x.test/").header("Accept", "a").header("X-A", "1").header("accept", "b")
+  assert r2.headers == [("Accept", "a"), ("X-A", "1"), ("accept", "b")]
+  assert sent(r2.headers) == [("X-A", "1"), ("accept", "b")]
   assert r.body == "name=Ada"
   assert r.headers == [("Content-Type", "application/x-www-form-urlencoded")]

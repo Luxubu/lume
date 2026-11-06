@@ -1,0 +1,27 @@
+# Probes a list pattern nested inside a variant, under `|`: both
+# alternatives bind `d`, of the same type, but from inside a list, which
+# the patterns page says an alternative may not do — here one level
+# deeper than its example, inside two different variants.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: an alternative of `|` cannot name what is inside a list or a recursive field
+#   --> corpus/m126/b10_nested_list_pattern.lume:23:5
+#    |
+# 23 |     Dishes([d, ..]) | Table(_, [d, ..]) -> d
+#    |     ^
+#   help: give this alternative an arm of its own, or use `_` for the names inside it
+
+enum Order:
+  Dishes(names: [Str])
+  Table(n: Int, names: [Str])
+
+def first_dish(o: Order) -> Str:
+  match o:
+    Dishes([]) -> "nothing"
+    Table(n, []) -> "table #{n}, nothing"
+    Table(0, [d]) -> "the counter: #{d}"
+    Dishes([d, ..]) | Table(_, [d, ..]) -> d
+
+def main:
+  puts first_dish(Dishes(["soup", "pie"]))
+  puts first_dish(Table(4, ["stew"]))

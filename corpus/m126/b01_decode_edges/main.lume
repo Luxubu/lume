@@ -1,0 +1,47 @@
+# Probes `http.decode` at its edges: a lone `%`, a `%` at the end, a `%`
+# with one hex digit or none, lowercase hex, a `+` (left alone: only a
+# form reads it as a space), bytes that are not UTF-8 (one bad byte, and
+# half of a two-byte character), and then `!` on a failed decode, which
+# stops the program.
+# Meant to STOP.
+# EXPECTED OUTPUT:
+# Error("`%` in `%` is not a byte written as `%` and two hex digits")
+# Error("`%` in `50%` is not a byte written as `%` and two hex digits")
+# Error("`%4` in `%4` is not a byte written as `%` and two hex digits")
+# Error("`%zz` in `%zz` is not a byte written as `%` and two hex digits")
+# Error("`%4g` in `a%4g1` is not a byte written as `%` and two hex digits")
+# Error("`%FF` does not decode to UTF-8 text")
+# Error("`caf%C3` does not decode to UTF-8 text")
+# Ok("é")
+# Ok("a+b c")
+# %C2%BD%20%26%20~
+# Ok("½ & ~")
+# EXPECTED STDERR:
+# warning: `!` stops the program if the value is missing or an error
+#   --> corpus/m126/b01_decode_edges/main.lume:47:24
+#    |
+# 47 |   puts http.decode("%")!
+#    |                        ^
+#   help: fine in tests and quick scripts; elsewhere use `match`, `?` or `.or(default)`
+# error: `%` in `%` is not a byte written as `%` and two hex digits
+#   --> corpus/m126/b01_decode_edges/main.lume:47
+#    |
+# 47 |   puts http.decode("%")!
+# EXPECTED EXIT: 101
+
+import http
+
+def main:
+  puts http.decode("%")
+  puts http.decode("50%")
+  puts http.decode("%4")
+  puts http.decode("%zz")
+  puts http.decode("a%4g1")
+  puts http.decode("%FF")
+  puts http.decode("caf%C3")
+  puts http.decode("%c3%a9")
+  puts http.decode("a+b%20c")
+  sent = http.encode("½ & ~")
+  puts sent
+  puts http.decode(sent)
+  puts http.decode("%")!

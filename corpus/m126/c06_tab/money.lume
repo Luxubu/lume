@@ -1,0 +1,37 @@
+# money.lume — an amount as whole cents: read from text like `12.50`, and
+# written back with two places. Its tests run before lib.lume's, named
+# `money: …`.
+
+pub struct Amount:
+  cents: Int
+
+  def plus(o: Amount) -> Amount = Amount(cents: cents + o.cents)
+
+  def show -> Str:
+    sign = if cents < 0: "-" else: ""
+    whole = cents.abs / 100
+    part = cents.abs % 100
+    zero = if part < 10: "0" else: ""
+    "#{sign}#{whole}.#{zero}#{part}"
+
+# "12.50", "3" or "0.05"; anything else is an Error that says what it was
+pub def parse(text: Str) -> Amount or Error:
+  match text.trim.split("."):
+    [whole] if whole.digit? -> Amount(cents: whole.to_int? * 100)
+    [whole, frac] if whole.digit? and frac.len == 2 and frac.digit? -> Amount(cents: whole.to_int? * 100 + frac.to_int?)
+    _ -> Error("`#{text}` is not an amount like 12.50")
+
+test "amounts are read":
+  assert parse("12.50") == Ok(Amount(cents: 1250))
+  assert parse(" 3 ") == Ok(Amount(cents: 300))
+  assert parse("0.05") == Ok(Amount(cents: 5))
+
+test "a bad amount says why":
+  assert parse("12.5").error.map { |e| e.message } == Some("`12.5` is not an amount like 12.50")
+  assert parse("ten").error?
+  assert parse("-1.00").error?
+
+test "amounts are written with two places":
+  assert Amount(cents: 1250).show == "12.50"
+  assert Amount(cents: 5).show == "0.05"
+  assert Amount(cents: 0 - 705).show == "-7.05"

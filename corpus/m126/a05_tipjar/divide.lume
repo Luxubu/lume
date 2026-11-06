@@ -1,0 +1,18 @@
+# divide.lume — not passed on with `pub import`, so it is tipjar's own.
+
+# `total` shared out as evenly as whole cents allow, the first ones paying
+# a cent more when it does not divide
+pub def shares(total: Int, people: Int) -> [Int] or Error:
+  return Error("a bill needs at least one person") if people < 1
+  base = total / people
+  extra = total % people
+  Ok((1..people).map { |i| if i <= extra: base + 1 else: base }.to_list)
+
+test "shares add up":
+  assert shares(110, 3)! == [37, 37, 36]
+
+test "one person pays it all":
+  assert shares(110, 1)! == [110]
+
+test "nobody is no table":
+  assert shares(110, 0).error?

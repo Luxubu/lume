@@ -2,3 +2,7 @@
 [("Accept", "text/plain")]
 500
 true
+two%20soups
+dish=pie+%26+tea&table=4
+http://127.0.0.1:9/find?q=caf%C3%A9
+dish=stew

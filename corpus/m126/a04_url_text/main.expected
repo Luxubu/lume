@@ -1,0 +1,20 @@
+50%25%20off%20%26%20free
+cr%C3%A8me%20br%C3%BBl%C3%A9e
+a%2Bb%3Dc
+~ada%2Fnotes.v2_final-1
+Ok("a+b c")
+Ok("€5")
+Ok("crème brûlée")
+Error("`%zz` in `%zz1` is not a byte written as `%` and two hex digits")
+Error("`%4` in `ab%4` is not a byte written as `%` and two hex digits")
+Error("`%C3` does not decode to UTF-8 text")
+name=Jos%C3%A9+N%C3%BA%C3%B1ez&note=50%25+%26+more&empty=
+[0]
+Ok([("a", "1"), ("a", "2"), ("b", "")])
+Ok([("x", "a+b c")])
+Ok([("eq", "1=2")])
+Ok([])
+Error("`%G1` in `%G1` is not a byte written as `%` and two hex digits")
+true
+José Núñez
+exit: 0

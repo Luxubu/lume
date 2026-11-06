@@ -1,0 +1,9 @@
+test divide: shares add up ... ok
+test divide: one person pays it all ... ok
+test divide: nobody is no table ... ok
+test a tenth of a round bill ... ok
+test the one who pays most ... ok
+test nobody pays nothing ... ok
+
+6 tests: 6 passed, 0 failed
+exit: 0

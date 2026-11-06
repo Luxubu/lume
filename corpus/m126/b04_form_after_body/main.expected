@@ -1,0 +1,11 @@
+[("X-Trace", "7"), ("content-type", "text/csv")]
+[("X-Trace", "7"), ("Content-Type", "text/csv")]
+a,b
+[("X-Trace", "7"), ("Accept", "text/plain"), ("Content-Type", "application/x-www-form-urlencoded")]
+dish=fish+%26+chips&n=2
+500
+file then form: [] dish=pie
+form then file: [/tmp/lume-review-b/up.txt] []
+[("Content-Type", "text/plain")]
+no pairs: [] [("Content-Type", "application/x-www-form-urlencoded")]
+exit: 0

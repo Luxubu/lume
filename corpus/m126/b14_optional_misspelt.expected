@@ -1,0 +1,7 @@
+error: a `Str?` has no method `some`
+  --> corpus/m126/b14_optional_misspelt.lume:17:10
+   |
+17 |   if seat.some:
+   |          ^
+  help: did you mean `some?`?
+exit: 1

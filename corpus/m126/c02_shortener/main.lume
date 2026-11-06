@@ -1,0 +1,141 @@
+# c02 — a URL shortener, served over HTTP, and a client task that uses
+# it. Long URLs come in as a form (`.with_form`, and a body written by
+# hand), short codes go out encoded in a `Location` header
+# (`http.encode`), come back in a path and are decoded (`http.decode`);
+# a search takes a query (`.with_query`, `req.params`) and answers with a
+# form of its own (`http.form`), which the client reads back with
+# `http.parse_form`. A form that does not decode is a 400.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# server: POST /shorten -> 201
+# server: POST /shorten -> 201
+# server: POST /shorten -> 409
+# server: POST /shorten -> 400
+# server: POST /shorten -> 400
+# server: GET /s/u1 -> 200
+# server: GET /s/caf%C3%A9%20menu -> 200
+# server: GET /s/nope -> 404
+# server: GET /find?q=example.com -> 200
+# server: POST /quit -> 200
+# client: 201 shorten: /s/u1
+# client: 201 shorten as café menu: /s/caf%C3%A9%20menu
+# client: 409 the same name again: `café menu` is taken
+# client: 400 no url: no url given
+# client: 400 a broken form: `%` in `100%` is not a byte written as `%` and two hex digits
+# client: 200 GET /s/u1: https://example.com/menu?day=mon&meal=lunch
+# client: 200 GET /s/caf%C3%A9%20menu: https://example.com/a b
+# client: 404 GET /s/nope: no link `nope`
+# client: 200 find example.com: u1=https%3A%2F%2Fexample.com%2Fmenu%3Fday%3Dmon%26meal%3Dlunch&caf%C3%A9+menu=https%3A%2F%2Fexample.com%2Fa+b
+# client:   u1 -> https://example.com/menu?day=mon&meal=lunch
+# client:   café menu -> https://example.com/a b
+# client: 200 quit: bye
+# 2 links kept: ["u1", "café menu"]
+
+import http
+
+FORM = "application/x-www-form-urlencoded"
+
+struct Links:
+  by_code: {Str: Str}
+  made: Int
+
+  # a code for `url`: the one asked for, or the next `u<n>`
+  def add(var self, url: Str, wanted: Str) -> Str or Error:
+    code = if wanted.empty?: "u#{made + 1}" else: wanted
+    return Error("`#{code}` is taken") if by_code.contains?(code)
+    made += 1
+    by_code[code] = url
+    code
+
+# the value of `name` in a query or a form, if it has one
+def value_of(pairs: [(Str, Str)], name: Str) -> Str? =
+  pairs.find { |k, _| k == name }.map { |kv| kv.1 }
+
+# ---- the server ------------------------------------------------------------
+
+def shorten(var links: Links, req: http.Incoming) -> http.Reply:
+  fields = match req.form:
+    Ok(f) -> f
+    Error(e) -> return http.reply(400, e.message)
+  url = value_of(fields, "url").or("")
+  if url.empty?:
+    return http.reply(400, "no url given")
+  match links.add(url, value_of(fields, "name").or("")):
+    Ok(code) ->
+      short = "/s/#{http.encode(code)}"
+      http.reply(201, short).header("Location", short)
+    Error(e) -> http.reply(409, e.message)
+
+def resolve(links: Links, raw: Str) -> http.Reply:
+  match http.decode(raw):
+    Error(e) -> http.reply(400, e.message)
+    Ok(code) ->
+      match links.by_code[code]:
+        Some(url) -> http.reply(200, url)
+        None -> http.reply(404, "no link `#{code}`")
+
+# every link whose URL holds `q`, as a form: code=url&code=url
+def search(links: Links, req: http.Incoming) -> http.Reply:
+  match req.params:
+    Error(e) -> http.reply(400, e.message)
+    Ok(ps) ->
+      q = value_of(ps, "q").or("")
+      hits = links.by_code.filter { |_, u| u.contains?(q) }.to_list
+      http.reply(200, http.form(hits))
+
+def answer(var links: Links, req: http.Incoming) -> http.Reply:
+  match (req.method, req.path):
+    ("POST", "/shorten") -> shorten(links, req)
+    ("GET", "/find") -> search(links, req)
+    ("POST", "/quit") -> http.reply(200, "bye")
+    ("GET", path) if path.starts_with?("/s/") -> resolve(links, path.slice(3, path.len))
+    _ -> http.reply(404, "no #{req.path} here")
+
+# ---- the client ------------------------------------------------------------
+
+def show(label: Str, r: http.Response) -> Str = "#{r.status} #{label}: #{r.body}"
+
+def visit(base: Str) -> [Str] or Error:
+  var seen: [Str] = []
+  to_shorten = http.request("POST", base + "/shorten")
+  plain = to_shorten.with_form([("url", "https://example.com/menu?day=mon&meal=lunch")]).send?
+  seen.push(show("shorten", plain))
+  named = to_shorten.with_form([("url", "https://example.com/a b"), ("name", "café menu")]).send?
+  seen.push(show("shorten as café menu", named))
+  again = to_shorten.with_form([("url", "https://example.org/"), ("name", "café menu")]).send?
+  seen.push(show("the same name again", again))
+  # two forms written by hand: one with no url, one that does not decode
+  empty = http.post(base + "/shorten", "url=&name=x", FORM)?
+  seen.push(show("no url", empty))
+  broken = http.post(base + "/shorten", "url=100%", FORM)?
+  seen.push(show("a broken form", broken))
+  for r in [plain, named]:
+    at = r.header("location").or("/s/")
+    back = http.get(base + at)?
+    seen.push(show("GET #{at}", back))
+  missing = http.get(base + "/s/nope")?
+  seen.push(show("GET /s/nope", missing))
+  found = http.request("GET", base + "/find").with_query([("q", "example.com")]).send?
+  seen.push(show("find example.com", found))
+  for code, url in http.parse_form(found.body)?:
+    seen.push("  #{code} -> #{url}")
+  bye = http.post(base + "/quit", "", "text/plain")?
+  seen.push(show("quit", bye))
+  Ok(seen)
+
+async def main -> () or Error:
+  server = http.listen("127.0.0.1:0")?
+  base = "http://#{server.address}"
+  client = spawn: visit(base)
+  var links = Links(by_code: {}, made: 0)
+  for req in server.requests:
+    reply = answer(links, req)
+    asked = if req.query.empty?: req.path else: "#{req.path}?#{req.query}"
+    puts "server: #{req.method} #{asked} -> #{reply.status}"
+    req.respond(reply)?
+    break if req.path == "/quit"
+  server.close
+  for line in await client?:
+    puts "client: #{line}"
+  puts "#{links.made} links kept: #{links.by_code.keys}"
+  ()

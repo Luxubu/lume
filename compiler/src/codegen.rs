@@ -8963,7 +8963,25 @@ impl Gen {
                     let place = self.mutable_place(&target, "this position", *line, *col)?;
                     let et = match self.ty_of(recv).materialized() { Type::List(e) => *e, _ => Type::Unknown };
                     let v = if op.is_some() { self.expr(value)? } else { self.expr_owned_as(value, &et)? };
-                    self.line(&format!("{} {} {};", place, op.unwrap_or("="), v));
+                    // the value first: it may read the list the place writes
+                    // (`xs[i] = xs.at(i) + 1`), which Rust lends once at a time
+                    let root = Self::root_name(recv);
+                    if root.as_ref().map(|n| expr_mentions(value, n) || expr_mentions(index, n)).unwrap_or(true) {
+                        let tmp = self.fresh("v");
+                        // and the position, when it reads the list too (`xs[i % xs.len]`)
+                        let it = self.expr(index)?;
+                        // the position is the last `[...]` of the place
+                        let tail = format!("[({}) as usize]", it);
+                        let (pre, place) = if place.ends_with(&tail) {
+                            let at = self.fresh("i");
+                            (format!(" let {} = {};", at, it), format!("{}[({}) as usize]", &place[..place.len() - tail.len()], at))
+                        } else {
+                            (String::new(), place)
+                        };
+                        self.line(&format!("{{ let {} = {};{} {} {} {}; }}", tmp, v, pre, place, op.unwrap_or("="), tmp));
+                    } else {
+                        self.line(&format!("{} {} {};", place, op.unwrap_or("="), v));
+                    }
                 }
                 if is_tail {
                     return self.tail_unit(*line, *col);
@@ -9066,7 +9084,7 @@ impl Gen {
                     // the function's end is its value: the branch's way of
                     // failing, as `Draft -> ...` beside `_ -> Error(...)`.
                     // Anywhere else it is thrown away, and refused below.
-                    let ends_fn = self.tail_of_fn && self.rest_stack.last().map_or(false, |r| r.is_empty());
+                    let ends_fn = self.tail_of_fn && self.loop_depth == 0 && self.rest_stack.last().map_or(false, |r| r.is_empty());
                     if ends_fn && !self.in_block && !matches!(e.kind, ExprKind::If { .. } | ExprKind::Match { .. }) {
                         if let Type::Result(t, err_t) = self.current_ret.clone() {
                             if *t == Type::Unit {
@@ -11222,9 +11240,9 @@ impl Gen {
                         cp.guards.push(format!("({})", tests.join(" || ")));
                         return Ok(cp.text = rust_name(&tmp));
                     }
-                    if texts.iter().any(|t| *t != texts[0]) {
-                        return Err(LumeError::new(p.line, p.col, "alternatives with a string or float inside must otherwise look the same")
-                            .with_help("write `Some(\"a\") | Some(\"e\")` (same shape), or separate arms"));
+                    if let Some(j) = texts.iter().position(|t| *t != texts[0]) {
+                        return Err(LumeError::new(alts[j].line, alts[j].col, "alternatives with a string or float inside must otherwise look the same")
+                            .with_help("give each alternative an arm of its own"));
                     }
                     let tests: Vec<String> = alt_guards.iter().map(|g| if g.is_empty() { "true".to_string() } else { g.join(" && ") }).collect();
                     cp.guards.push(format!("({})", tests.join(" || ")));
@@ -14973,6 +14991,12 @@ fn reads_before_rebind(stmts: &[Stmt], name: &str) -> bool {
 
 /// `stmt_mentions`, plus names that are assigned to (`x += 1`, `x = v`).
 fn stmt_uses(s: &Stmt, name: &str) -> bool {
+    // a loop that names its own `name` uses the outer one only in what it walks
+    if let Stmt::For { vars, iter, .. } = s {
+        if vars.iter().any(|v| v == name) {
+            return expr_mentions(iter, name);
+        }
+    }
     let assigned = match s {
         Stmt::OpAssign { name: n, .. } | Stmt::Bind { name: n, .. } => n == name,
         Stmt::Destructure { names, .. } => names.iter().any(|n| n == name),

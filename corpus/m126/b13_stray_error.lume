@@ -1,0 +1,22 @@
+# Probes a stray `Error(...)` line in a `() or Error` function: it is the
+# last line of an `if` inside a `for`, and the `for` is the function's last
+# statement — so it is the last line written, but not the function's
+# value, and nothing returns it. The errors page says such a line is
+# refused, with `return` as the fix.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: this failure is thrown away, because nothing returns it
+#   --> corpus/m126/b13_stray_error.lume:18:7
+#    |
+# 18 |       Error("seat #{s} is below zero")
+#    |       ^
+#   help: write `return Error(...)` to stop here with it
+
+def check_all(seats: [Int]) -> () or Error:
+  for s in seats:
+    if s < 0:
+      Error("seat #{s} is below zero")
+
+def main -> () or Error:
+  check_all([3, 0 - 1, 2])?
+  puts "all seats checked"

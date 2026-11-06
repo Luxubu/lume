@@ -1,0 +1,34 @@
+# Probes a `() or Error` function whose last statement is a `match` whose
+# last arms are `Error(...)`: the errors page says an `Error` that is the
+# last expression of a branch is the function's value, and a `() or Error`
+# function that reaches its end has succeeded, so the `puts` arm is `Ok`
+# and the `Error` arms are returned. `main` passes the last one up with
+# `?`, so the program ends with it and exit status 1.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# booking Ada
+# Ada: 4 seats
+# ok
+# booking Bo
+# refused: Bo: 0 is not a number of seats
+# booking Cy
+# refused: Cy: `x` is not an integer
+# booking Di
+# EXPECTED STDERR:
+# error: Di: -2 is not a number of seats
+# EXPECTED EXIT: 1
+
+def book(name: Str, count: Str) -> () or Error:
+  puts "booking #{name}"
+  match count.to_int:
+    Ok(n) if n > 0 -> puts "#{name}: #{n} seats"
+    Ok(n) -> Error("#{name}: #{n} is not a number of seats")
+    Error(e) -> Error("#{name}: #{e.message}")
+
+def main -> () or Error:
+  for name, count in [("Ada", "4"), ("Bo", "0"), ("Cy", "x")]:
+    match book(name, count):
+      Ok(_) -> puts "ok"
+      Error(e) -> puts "refused: #{e.message}"
+  book("Di", "-2")?
+  puts "never printed"

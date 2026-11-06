@@ -1,0 +1,49 @@
+# Probes `lume fmt --stdout` on code using the URL and form helpers, badly
+# spaced: a list of pairs, `for (k, v)` over `parse_form(...)?`, a chain of
+# request steps, a chain over lines after a `?`, and a `match` whose arms
+# have patterns of different widths. The comment lines are kept as they
+# are.
+# Run with `lume fmt --stdout corpus/m126/b15_fmt_helpers/main.lume`
+# EXPECTED OUTPUT: lines 1 to 29 of this file as they stand (this header),
+# then:
+# import http
+#
+# def main -> () or Error:
+#   pairs = [("q", "pie & tea"), ("n", "2")]
+#   puts http.form(pairs)
+#   for k, v in http.parse_form("a=1&b=two+words")?:
+#     puts "#{k} is #{v}"
+#   url = "http://127.0.0.1:9/find?page=2"
+#   req = http.request("GET", url).with_query(pairs).with_form([("dish", "stew")])
+#   puts req.url
+#   shown = http.parse_form(req.body)?
+#     # one pair to a piece
+#     .map { |k, v| "#{k}:#{v}" }
+#     .join(",")
+#   puts shown
+#   match http.decode("100%"):
+#     Ok(s)    -> puts s
+#     Error(e) -> puts e.message
+#   puts http.encode("a b")
+#   puts "#{ http.encode( "a b" ) }"
+#   ()
+import   http
+def main->() or Error:
+    pairs=[("q","pie & tea"),( "n" ,"2" )]
+    puts http.form( pairs )
+    for (k,v) in http.parse_form("a=1&b=two+words")?:
+        puts "#{k} is #{v}"
+    url="http://127.0.0.1:9/find?page=2"
+    req=http.request( "GET",url ).with_query(pairs).with_form( [("dish","stew")] )
+    puts req.url
+    shown=http.parse_form(req.body)?
+          # one pair to a piece
+          .map{|k,v| "#{k}:#{v}"}
+          .join(",")
+    puts shown
+    match http.decode("100%"):
+        Ok(s)->puts s
+        Error(e)  ->  puts e.message
+    puts http.encode( "a b" )
+    puts "#{ http.encode( "a b" ) }"
+    ()

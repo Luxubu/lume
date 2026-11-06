@@ -1,0 +1,10 @@
+server: GET /twice
+server:   first answer sent: true
+server:   GET /twice has been answered already
+server: GET /odd
+server:   600 is not an HTTP status: one from 100 to 599
+server:   99 is not an HTTP status: one from 100 to 599
+server:   418 sent
+client: 200 true /twice: once
+client: 418 false /odd: short and stout
+exit: 0

@@ -1,0 +1,7 @@
+error: `jobs` is used after this loop, but walking its tasks gives them up, as awaiting one does
+  --> corpus/m126/a09_tasks_after_for.lume:17:12
+   |
+17 |   for t in jobs:
+   |            ^
+  help: wait for them all at once — `results = await jobs` — and loop over the results
+exit: 1

@@ -1,0 +1,18 @@
+# Probes a misspelt method on an optional: `some` for `some?`, the
+# question mark left off, as a Rust or Python hand would write it. The
+# optional's own method is one letter away, so the error should name it,
+# as `examples/errors/optional_method_misspelt.lume` does for `is_none?`.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: a `Str?` has no method `some`
+#   --> corpus/m126/b14_optional_misspelt.lume:17:10
+#    |
+# 17 |   if seat.some:
+#    |          ^
+#   help: did you mean `some?`?
+
+def main:
+  seats = {"Ada": "window", "Bo": "aisle"}
+  seat = seats["Ada"]
+  if seat.some:
+    puts "Ada has a seat"

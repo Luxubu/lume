@@ -1,0 +1,51 @@
+# Probes `incoming` in async code, each request given to a task of its own
+# with `spawn: answer(req)`, as the HTTP page says to answer many at once.
+# The client sends three requests at the same time; `/slow` is answered
+# after 200 ms, while the other two are taken and answered. The tasks are
+# walked with a `for` over the list of tasks; what they say is sorted, as
+# the order they are taken in depends on timing. The client's results come
+# back in the order its requests were started.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# server: answered GET /also-fast
+# server: answered GET /fast
+# server: answered GET /slow
+# client: 200 answered /slow
+# client: 200 answered /fast
+# client: 200 answered /also-fast
+
+import http
+
+# answers one request, and says which; blocking, so its task has a thread
+def answer(req: http.Incoming) -> Str:
+  if req.path == "/slow":
+    Time.sleep(200)
+  match req.respond(http.reply(200, "answered #{req.path}")):
+    Ok(_) -> "answered #{req.method} #{req.path}"
+    Error(e) -> "failed: #{e.message}"
+
+async def visit(base: Str) -> [Str]:
+  tasks = ["/slow", "/fast", "/also-fast"].map { |p| spawn: await http.request("GET", base + p).fetch }.to_list
+  var seen: [Str] = []
+  for t in tasks:
+    match await t:
+      Ok(r) -> seen.push("#{r.status} #{r.body}")
+      Error(e) -> seen.push("error: #{e.message}")
+  seen
+
+async def main -> () or Error:
+  server = http.listen("127.0.0.1:0")?
+  client = spawn: await visit("http://#{server.address}")
+  var answering: [Task[Str]] = []
+  for req in server.incoming.take(3):
+    answering.push(spawn: answer(req))
+  var said: [Str] = []
+  for t in answering:
+    got = await t
+    said.push(got)
+  server.close
+  for line in said.sort:
+    puts "server: #{line}"
+  for line in await client:
+    puts "client: #{line}"
+  ()

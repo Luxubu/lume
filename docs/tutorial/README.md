@@ -38,13 +38,13 @@ it.
 
 | | lunch | |
 |---|---|---|
-| 13 | [Files and folders](15-files-and-folders.md) | read, write and walk them |
-| 14 | [Generators](16-generators.md) | sequences made a piece at a time, with `yield` |
-| 15 | [Running other programs](17-running-other-programs.md) | `Process.run`, and what comes back |
-| 16 | [Tasks](18-tasks.md) | many things at once, with `spawn:` and `await`; `shared var` |
-| 17 | [Async sequences](19-async-sequences.md) | items that arrive later: async generators and their methods |
-| 18 | [Programs alongside](20-programs-alongside.md) | `Process.spawn`: talk to a program while it runs |
-| 19 | [HTTP](21-http.md) | requests, and bodies read as they arrive |
+| 15 | [Files and folders](15-files-and-folders.md) | read, write and walk them |
+| 16 | [Generators](16-generators.md) | sequences made a piece at a time, with `yield` |
+| 17 | [Running other programs](17-running-other-programs.md) | `Process.run`, and what comes back |
+| 18 | [Tasks](18-tasks.md) | many things at once, with `spawn:` and `await`; `shared var` |
+| 19 | [Async sequences](19-async-sequences.md) | items that arrive later: async generators and their methods |
+| 20 | [Programs alongside](20-programs-alongside.md) | `Process.spawn`: talk to a program while it runs |
+| 21 | [HTTP](21-http.md) | requests, and bodies read as they arrive |
 
 Every chapter teaches parts of Lume that are settled ([what is
 settled](../stability.md) says what that promises). Lunch 26 prints what a
@@ -58,11 +58,11 @@ marked *new here* where it is used.
 
 | | lunch | |
 |---|---|---|
-| 20 | [A CSV query tool](22-a-csv-query-tool.md) | reading a table, and answering questions about it |
-| 21 | [A log analyser](23-a-log-analyser.md) | a large file, read fast |
-| 22 | [A job runner](24-a-job-runner.md) | programs run in tasks, and their results gathered |
-| 23 | [A health checker](25-a-health-checker.md) | many web pages at once, with retries |
-| 24 | [Talking to a language server](26-talking-to-a-language-server.md) | a program that drives another, message by message |
+| 22 | [A CSV query tool](22-a-csv-query-tool.md) | reading a table, and answering questions about it |
+| 23 | [A log analyser](23-a-log-analyser.md) | a large file, read fast |
+| 24 | [A job runner](24-a-job-runner.md) | programs run in tasks, and their results gathered |
+| 25 | [A health checker](25-a-health-checker.md) | many web pages at once, with retries |
+| 26 | [Talking to a language server](26-talking-to-a-language-server.md) | a program that drives another, message by message |
 
 ## How the chapters are written
 

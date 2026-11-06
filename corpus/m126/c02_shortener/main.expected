@@ -1,0 +1,24 @@
+server: POST /shorten -> 201
+server: POST /shorten -> 201
+server: POST /shorten -> 409
+server: POST /shorten -> 400
+server: POST /shorten -> 400
+server: GET /s/u1 -> 200
+server: GET /s/caf%C3%A9%20menu -> 200
+server: GET /s/nope -> 404
+server: GET /find?q=example.com -> 200
+server: POST /quit -> 200
+client: 201 shorten: /s/u1
+client: 201 shorten as café menu: /s/caf%C3%A9%20menu
+client: 409 the same name again: `café menu` is taken
+client: 400 no url: no url given
+client: 400 a broken form: `%` in `100%` is not a byte written as `%` and two hex digits
+client: 200 GET /s/u1: https://example.com/menu?day=mon&meal=lunch
+client: 200 GET /s/caf%C3%A9%20menu: https://example.com/a b
+client: 404 GET /s/nope: no link `nope`
+client: 200 find example.com: u1=https%3A%2F%2Fexample.com%2Fmenu%3Fday%3Dmon%26meal%3Dlunch&caf%C3%A9+menu=https%3A%2F%2Fexample.com%2Fa+b
+client:   u1 -> https://example.com/menu?day=mon&meal=lunch
+client:   café menu -> https://example.com/a b
+client: 200 quit: bye
+2 links kept: ["u1", "café menu"]
+exit: 0

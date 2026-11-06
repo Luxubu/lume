@@ -1,0 +1,8 @@
+[("Content-Type", "text/plain; charset=utf-8"), ("X-Kind", "list")]
+[("X-Kind", "list"), ("Content-Type", "application/json")]
+200 [1, 2]; before: plain words
+[("Content-Type", "text/plain; charset=utf-8"), ("content-type", "text/html")]
+[("Content-Type", "text/csv")]
+client: 200 /list: application/json, kind list: [1, 2]
+client: 404 /gone: text/html, kind none: <p>gone</p>
+exit: 0

@@ -1,0 +1,158 @@
+# c05 — a static report built from a web server's log: `group_by` by day,
+# path, user and status class, `sort_by` with a number and with a tuple
+# for its key, `first` on what they give, `max_by`, `uniq` and `take` —
+# the chains milestone 125 made faster, whose output must not change.
+# Each section is worked out by a task of its own, and a `for` over the
+# list of tasks awaits them in turn. The report is written to a file
+# under /tmp/lume-review-c/, read back and printed, then removed.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 12 requests read, 1 skipped
+#   skipped line 10: `two` is not an integer
+#
+# By day
+#   2026-11-02: 5 requests, 1 failed, slowest GET /order/7 (900 ms)
+#   2026-11-03: 4 requests, 0 failed, slowest POST /order (140 ms)
+#   2026-11-04: 3 requests, 1 failed, slowest POST /order (1500 ms)
+#
+# Busiest paths
+#   /menu      6 requests, 32 ms on average
+#   /order     3 requests, 586 ms on average
+#   /order/7   1 requests, 900 ms on average
+#
+# Users
+#   ada  4 requests, first GET /menu at 2026-11-02 09:00:01
+#   bo   3 requests, first POST /order at 2026-11-02 09:00:04
+#   cy   3 requests, first GET /menu at 2026-11-02 09:01:10
+#   dee  2 requests, first GET /menu at 2026-11-04 08:00:00
+#   busiest: ada, with 4
+#
+# By status
+#   2xx: 8 (200, 201)
+#   3xx: 1 (304)
+#   4xx: 1 (404)
+#   5xx: 2 (500, 503)
+#
+# Slowest
+#    1500 ms POST /order (dee, 2026-11-04 08:00:02)
+#     900 ms GET /order/7 (bo, 2026-11-02 09:02:00)
+#     140 ms POST /order (ada, 2026-11-03 10:15:09)
+#   fastest: GET /menu (5 ms)
+#   first failure: GET /order/7, 500 at 2026-11-02 09:02:00
+# (32 lines, written to report.txt and removed)
+
+struct Entry:
+  day: Str
+  time: Str
+  method: Str
+  path: Str
+  status: Int
+  ms: Int
+  user: Str
+
+  def what -> Str = "#{method} #{path}"
+  def failed? -> Bool = status >= 500
+
+LOG = """
+  2026-11-02 09:00:01 GET /menu 200 35 ada
+  2026-11-02 09:00:04 POST /order 201 120 bo
+  2026-11-02 09:01:10 GET /menu 200 41 cy
+  2026-11-02 09:02:00 GET /order/7 500 900 bo
+  2026-11-02 09:02:30 GET /tables 200 12 ada
+  2026-11-03 10:15:00 GET /menu 200 30 cy
+  2026-11-03 10:15:09 POST /order 201 140 ada
+  2026-11-03 10:16:00 GET /menu 304 5 bo
+  2026-11-03 10:17:45 GET /order/9 404 8 cy
+  2026-11-03 10:18:00 GET /tables two 12 dee
+  2026-11-04 08:00:00 GET /menu 200 44 dee
+  2026-11-04 08:00:02 POST /order 503 1500 dee
+  2026-11-04 08:00:03 GET /menu 200 38 ada
+  """
+
+def parse_line(line: Str) -> Entry or Error:
+  match line.split(" "):
+    [day, time, method, path, status, ms, user] ->
+      Entry(day: day, time: time, method: method, path: path, status: status.to_int?, ms: ms.to_int?, user: user)
+    parts -> Error("expected 7 fields, found #{parts.len}")
+
+# The entries that could be read, and why the others could not.
+def read_log(text: Str) -> ([Entry], [Str]):
+  var good: [Entry] = []
+  var bad: [Str] = []
+  for i, line in text.lines.enumerate:
+    next if line.trim.empty?
+    match parse_line(line):
+      Ok(e) -> good.push(e)
+      Error(err) -> bad.push("line #{i + 1}: #{err.message}")
+  (good, bad)
+
+def by_day(es: [Entry]) -> [Str]:
+  var out = ["By day"]
+  for day, group in es.group_by { |e| e.day }:
+    failed = group.count { |e| e.failed? }
+    slowest = match group.sort_by { |e| -e.ms }.first:
+      Some(e) -> "#{e.what} (#{e.ms} ms)"
+      None -> "-"
+    out.push("  #{day}: #{group.len} requests, #{failed} failed, slowest #{slowest}")
+  out
+
+# the most used first; a tie goes to the path that sorts first
+def by_path(es: [Entry]) -> [Str]:
+  var out = ["Busiest paths"]
+  ranked = es.group_by { |e| e.path }.sort_by { |path, group| (0 - group.len, path) }
+  for path, group in ranked.take(3):
+    avg = group.sum { |e| e.ms } / group.len
+    out.push("  #{path.pad_right(9)} #{group.len.pad(2)} requests, #{avg} ms on average")
+  out
+
+def by_user(es: [Entry]) -> [Str]:
+  var out = ["Users"]
+  groups = es.group_by { |e| e.user }
+  for user, group in groups:
+    match group.first:
+      Some(e) -> out.push("  #{user.pad_right(4)} #{group.len} requests, first #{e.what} at #{e.day} #{e.time}")
+      None -> ()
+  match groups.max_by { |_, group| group.len }:
+    Some((user, group)) -> out.push("  busiest: #{user}, with #{group.len}")
+    None -> ()
+  out
+
+def by_class(es: [Entry]) -> [Str]:
+  var out = ["By status"]
+  for kind, group in es.group_by { |e| e.status / 100 }.sort_by { |k, _| k }:
+    codes = group.map { |e| e.status }.uniq.join(", ")
+    out.push("  #{kind}xx: #{group.len} (#{codes})")
+  out
+
+def extremes(es: [Entry]) -> [Str]:
+  var out = ["Slowest"]
+  for e in es.sort_by { |x| -x.ms }.take(3):
+    out.push("  #{e.ms.pad(5)} ms #{e.what} (#{e.user}, #{e.day} #{e.time})")
+  match es.sort_by { |x| x.ms }.first:
+    Some(e) -> out.push("  fastest: #{e.what} (#{e.ms} ms)")
+    None -> out.push("  fastest: -")
+  match es.filter { |x| x.status >= 400 }.first:
+    Some(e) -> out.push("  first failure: #{e.what}, #{e.status} at #{e.day} #{e.time}")
+    None -> out.push("  no failures")
+  out
+
+async def main -> () or Error:
+  (entries, bad) = read_log(LOG)
+  tasks = [spawn: by_day(entries), spawn: by_path(entries), spawn: by_user(entries), spawn: by_class(entries), spawn: extremes(entries)]
+  var report = ["#{entries.len} requests read, #{bad.len} skipped"]
+  for b in bad:
+    report.push("  skipped #{b}")
+  for t in tasks:
+    report.push("")
+    for line in await t:
+      report.push(line)
+  dir = "/tmp/lume-review-c"
+  Dir.make(dir)?
+  path = Path.join(dir, "report.txt")
+  File.write(path, report.join("\n") + "\n")?
+  text = File.read(path)?
+  for line in text.lines:
+    puts line
+  Dir.remove(dir)?
+  puts "(#{text.lines.len} lines, written to #{Path.base(path)} and removed)"
+  ()

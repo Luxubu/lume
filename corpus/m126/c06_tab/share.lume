@@ -1,0 +1,35 @@
+# share.lume — a bill shared out, so that every cent goes to someone. It
+# imports `money`, as lib.lume does, so `money`'s tests run first either
+# way. Its tests are named `share: …`.
+
+import money.Amount
+
+# `total` between `people`; the first ones take the odd cents
+pub def evenly(total: Amount, people: Int) -> [Amount] or Error:
+  return Error("a bill is shared by at least one person") if people < 1
+  each = total.cents / people
+  odd = total.cents % people
+  (0...people).map { |i| Amount(cents: if i < odd: each + 1 else: each) }.to_list
+
+# by weight: [2, 1, 1] of 10.00 is 5.00, 2.50 and 2.50
+pub def by_weight(total: Amount, weights: [Int]) -> [Amount] or Error:
+  sum = weights.sum
+  return Error("the weights add up to nothing") if sum <= 0
+  var shares = weights.map { |w| total.cents * w / sum }.to_list
+  # what rounding down left over goes to the first shares, a cent each
+  left = total.cents - shares.sum
+  for i in 0...left:
+    shares[i % shares.len] = shares.at(i % shares.len) + 1
+  shares.map { |c| Amount(cents: c) }.to_list
+
+test "every cent goes to someone":
+  shares = evenly(Amount(cents: 1000), 3)!
+  assert shares.map { |s| s.cents }.to_list == [334, 333, 333]
+
+test "nobody to share with":
+  assert evenly(Amount(cents: 1000), 0).error.map { |e| e.message } == Some("a bill is shared by at least one person")
+
+test "by weight":
+  assert by_weight(Amount(cents: 1000), [2, 1, 1])!.map { |s| s.show }.to_list == ["5.00", "2.50", "2.50"]
+  assert by_weight(Amount(cents: 100), [1, 1, 1])!.map { |s| s.cents }.to_list == [34, 33, 33]
+  assert by_weight(Amount(cents: 100), [0]).error?

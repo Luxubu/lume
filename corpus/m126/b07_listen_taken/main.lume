@@ -1,0 +1,28 @@
+# Probes `http.listen` on an address already taken — by this program's own
+# server, on the port the system picked — and on addresses that do not
+# parse: no port, a port past 65535, a port that is not a number, words.
+# The port and the system's own words are never printed: only that the
+# message starts by naming the address.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# taken: an Error
+# true
+# not an address: true
+# 127.0.0.1: true
+# 127.0.0.1:99999: true
+# 127.0.0.1:x: true
+# the first has a port: true
+
+import http
+
+def main -> () or Error:
+  first = http.listen("127.0.0.1:0")?
+  match http.listen(first.address):
+    Ok(_) -> puts "listened twice?"
+    Error(e) ->
+      puts "taken: an Error"
+      puts e.message.starts_with?("cannot listen on #{first.address}: ")
+  for bad in ["not an address", "127.0.0.1", "127.0.0.1:99999", "127.0.0.1:x"]:
+    puts "#{bad}: #{http.listen(bad).error?}"
+  puts "the first has a port: #{first.port > 0}"
+  first.close

@@ -1,0 +1,129 @@
+# c01 — a key-value store served over HTTP, and a client task that walks
+# it: GET, PUT and DELETE on /k/<key>, keys written with http.encode by
+# the client and read back with http.decode by the server, a 405 that
+# says what is allowed in a header, a 400 from a key that does not
+# decode, and a POST /quit that ends the server's `for`. The server
+# answers one request at a time, so its lines come in the client's order.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# server: GET /keys -> 200
+# server: PUT /k/tea -> 201
+# server: PUT /k/two%20words -> 201
+# server: PUT /k/caf%C3%A9 -> 201
+# server: GET /k/tea -> 200
+# server: PUT /k/tea -> 200
+# server: GET /keys -> 200
+# server: DELETE /k/tea -> 200
+# server: DELETE /k/tea -> 404
+# server: GET /k/caf%C3%A9 -> 200
+# server: POST /k/tea -> 405
+# server: GET /k/bad%ZZ -> 400
+# server: GET /keys -> 200
+# server: GET /nothing -> 404
+# server: POST /quit -> 200
+# client: 200 GET /keys: (none)
+# client: 201 PUT /k/tea: created tea
+# client: 201 PUT /k/two%20words: created two words
+# client: 201 PUT /k/caf%C3%A9: created café
+# client: 200 GET /k/tea: green
+# client: 200 PUT /k/tea: replaced tea
+# client: 200 GET /keys: tea,two words,café
+# client: 200 DELETE /k/tea: deleted tea
+# client: 404 DELETE /k/tea: no key tea
+# client: 200 GET /k/caf%C3%A9: open
+# client: 405 POST /k/tea: POST is not allowed on a key (allow: GET, PUT, DELETE)
+# client: 400 GET /k/bad%ZZ: `%ZZ` in `bad%ZZ` is not a byte written as `%` and two hex digits
+# client: 200 GET /keys: two words,café
+# client: 404 GET /nothing: no /nothing here
+# client: 200 POST /quit: bye
+# kept: {"two words": "a b", "café": "open"}
+
+import http
+
+# ---- the server ------------------------------------------------------------
+
+# One key: read it, set it, or take it away.
+def on_key(var store: {Str: Str}, method: Str, key: Str, body: Str) -> http.Reply:
+  match method:
+    "GET" ->
+      match store[key]:
+        Some(v) -> http.reply(200, v)
+        None -> http.reply(404, "no key #{key}")
+    "PUT" ->
+      fresh = not store.contains?(key)
+      store[key] = body
+      if fresh: http.reply(201, "created #{key}") else: http.reply(200, "replaced #{key}")
+    "DELETE" ->
+      match store.remove(key):
+        Some(_) -> http.reply(200, "deleted #{key}")
+        None -> http.reply(404, "no key #{key}")
+    other -> http.reply(405, "#{other} is not allowed on a key").header("Allow", "GET, PUT, DELETE")
+
+def answer(var store: {Str: Str}, req: http.Incoming) -> http.Reply:
+  match (req.method, req.path):
+    ("GET", "/keys") -> http.reply(200, if store.empty?: "(none)" else: store.keys.join(","))
+    ("POST", "/quit") -> http.reply(200, "bye")
+    (method, path) if path.starts_with?("/k/") ->
+      # the key is a piece of the path, so it comes encoded
+      match http.decode(path.slice(3, path.len)):
+        Ok(key) -> on_key(store, method, key, req.body)
+        Error(e) -> http.reply(400, e.message)
+    _ -> http.reply(404, "no #{req.path} here")
+
+# ---- the client ------------------------------------------------------------
+
+# What the client does, in order: a method, a path, and a body.
+def steps -> [(Str, Str, Str)]:
+  two = "/k/#{http.encode("two words")}"
+  cafe = "/k/#{http.encode("café")}"
+  [
+    ("GET", "/keys", ""),
+    ("PUT", "/k/tea", "green"),
+    ("PUT", two, "a b"),
+    ("PUT", cafe, "open"),
+    ("GET", "/k/tea", ""),
+    ("PUT", "/k/tea", "black"),
+    ("GET", "/keys", ""),
+    ("DELETE", "/k/tea", ""),
+    ("DELETE", "/k/tea", ""),
+    ("GET", cafe, ""),
+    ("POST", "/k/tea", "x"),
+    ("GET", "/k/bad%ZZ", ""),
+    ("GET", "/keys", ""),
+    ("GET", "/nothing", ""),
+    ("POST", "/quit", ""),
+  ]
+
+def make(base: Str, method: Str, path: Str, body: Str) -> http.Response or Error:
+  url = base + path
+  match method:
+    "GET" -> http.get(url)
+    "PUT" -> http.put(url, body, "text/plain")
+    "DELETE" -> http.delete(url)
+    _ -> http.post(url, body, "text/plain")
+
+# Blocking work: it awaits nothing, so as a task it runs on a pool of its
+# own while `main` answers.
+def visit(base: Str) -> [Str] or Error:
+  var seen: [Str] = []
+  for method, path, body in steps():
+    r = make(base, method, path, body)?
+    allow = r.header("allow").map { |a| " (allow: #{a})" }.or("")
+    seen.push("#{r.status} #{method} #{path}: #{r.body}#{allow}")
+  Ok(seen)
+
+async def main -> () or Error:
+  server = http.listen("127.0.0.1:0")?
+  base = "http://#{server.address}"
+  client = spawn: visit(base)
+  var store: {Str: Str} = {}
+  for req in server.requests:
+    reply = answer(store, req)
+    puts "server: #{req.method} #{req.path} -> #{reply.status}"
+    req.respond(reply)?
+    break if req.path == "/quit"
+  server.close
+  for line in await client?:
+    puts "client: #{line}"
+  puts "kept: #{store}"
+  ()

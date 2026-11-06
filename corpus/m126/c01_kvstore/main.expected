@@ -1,0 +1,32 @@
+server: GET /keys -> 200
+server: PUT /k/tea -> 201
+server: PUT /k/two%20words -> 201
+server: PUT /k/caf%C3%A9 -> 201
+server: GET /k/tea -> 200
+server: PUT /k/tea -> 200
+server: GET /keys -> 200
+server: DELETE /k/tea -> 200
+server: DELETE /k/tea -> 404
+server: GET /k/caf%C3%A9 -> 200
+server: POST /k/tea -> 405
+server: GET /k/bad%ZZ -> 400
+server: GET /keys -> 200
+server: GET /nothing -> 404
+server: POST /quit -> 200
+client: 200 GET /keys: (none)
+client: 201 PUT /k/tea: created tea
+client: 201 PUT /k/two%20words: created two words
+client: 201 PUT /k/caf%C3%A9: created café
+client: 200 GET /k/tea: green
+client: 200 PUT /k/tea: replaced tea
+client: 200 GET /keys: tea,two words,café
+client: 200 DELETE /k/tea: deleted tea
+client: 404 DELETE /k/tea: no key tea
+client: 200 GET /k/caf%C3%A9: open
+client: 405 POST /k/tea: POST is not allowed on a key (allow: GET, PUT, DELETE)
+client: 400 GET /k/bad%ZZ: `%ZZ` in `bad%ZZ` is not a byte written as `%` and two hex digits
+client: 200 GET /keys: two words,café
+client: 404 GET /nothing: no /nothing here
+client: 200 POST /quit: bye
+kept: {"two words": "a b", "café": "open"}
+exit: 0

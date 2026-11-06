@@ -1,0 +1,64 @@
+# a02 search_page — a search page reading `req.params`: a query built with
+# `.with_query` (a `&` in a value, an accent, a name twice), one added to
+# a URL that has a query already, one written by hand with `%25` and a
+# name with no `=`, one with a bad `%`, and one with no query at all.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# server: /search [q=pie+%26+tea] Ok([("q", "pie & tea")])
+# server: /search [q=cr%C3%A8me&tag=sweet&tag=french] Ok([("q", "crème"), ("tag", "sweet"), ("tag", "french")])
+# server: /search [tag=hot&q=tea] Ok([("tag", "hot"), ("q", "tea")])
+# server: /search [q=100%25&flag] Ok([("q", "100%"), ("flag", "")])
+# server: /search [q=50%zz] Error("`%zz` in `50%zz` is not a byte written as `%` and two hex digits")
+# server: /search [] Ok([])
+# client: 200 1 for 'pie & tea': pie & tea; tags []
+# client: 200 1 for 'crème': crème brûlée; tags ["sweet", "french"]
+# client: 200 2 for 'tea': pie & tea | tea; tags ["hot"]
+# client: 200 1 for '100%': 100% juice; tags []
+# client: 400 `%zz` in `50%zz` is not a byte written as `%` and two hex digits
+# client: 400 say what to look for, as ?q=
+import http
+
+DISHES = ["apple pie", "pie & tea", "tea", "crème brûlée", "100% juice"]
+
+# the first value of `name`, and every value of it
+def value_of(pairs: [(Str, Str)], name: Str) -> Str? =
+  pairs.find { |k, _| k == name }.map { |kv| kv.1 }
+
+def all_of(pairs: [(Str, Str)], name: Str) -> [Str] =
+  pairs.filter { |k, _| k == name }.map { |kv| kv.1 }.to_list
+
+def search(req: http.Incoming) -> http.Reply:
+  match req.params:
+    Error(e) -> http.reply(400, e.message)
+    Ok(ps) ->
+      q = value_of(ps, "q").or("")
+      if q.empty?:
+        return http.reply(400, "say what to look for, as ?q=")
+      hits = DISHES.filter { |d| d.contains?(q) }.to_list
+      http.reply(200, "#{hits.len} for '#{q}': #{hits.join(" | ")}; tags #{all_of(ps, "tag")}")
+
+def visit(base: Str) -> [Str] or Error:
+  url = base + "/search"
+  var asks: [http.Request] = []
+  asks.push(http.request("GET", url).with_query([("q", "pie & tea")]))
+  asks.push(http.request("GET", url).with_query([("q", "crème"), ("tag", "sweet"), ("tag", "french")]))
+  asks.push(http.request("GET", url + "?tag=hot").with_query([("q", "tea")]))
+  asks.push(http.request("GET", url + "?q=100%25&flag"))
+  asks.push(http.request("GET", url + "?q=50%zz"))
+  asks.push(http.request("GET", url))
+  var seen: [Str] = []
+  for ask in asks:
+    r = ask.send?
+    seen.push("#{r.status} #{r.body}")
+  Ok(seen)
+
+async def main -> () or Error:
+  server = http.listen("127.0.0.1:0")?
+  client = spawn: visit("http://#{server.address}")
+  for req in server.requests.take(6):
+    puts "server: #{req.path} [#{req.query}] #{req.params}"
+    req.respond(search(req))?
+  for line in await client?:
+    puts "client: #{line}"
+  server.close
+  ()

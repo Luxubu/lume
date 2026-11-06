@@ -1,0 +1,9 @@
+pie boiled after 30
+tea boiled after 1
+soup boiled after 10
+skipped: `two` is not an integer
+total 16
+SOUP
+PIE
+sum 15
+exit: 0

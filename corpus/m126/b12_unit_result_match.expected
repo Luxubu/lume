@@ -1,0 +1,10 @@
+booking Ada
+Ada: 4 seats
+ok
+booking Bo
+refused: Bo: 0 is not a number of seats
+booking Cy
+refused: Cy: `x` is not an integer
+booking Di
+error: Di: -2 is not a number of seats
+exit: 1

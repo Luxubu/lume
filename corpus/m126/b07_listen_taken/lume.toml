@@ -1,0 +1,6 @@
+[package]
+name = "b07_listen_taken"
+version = "0.1.0"
+
+[dependencies]
+http = { path = "../../../packages/http" }

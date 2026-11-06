@@ -120,6 +120,9 @@ rm -rf tests/stops/.lume tests/stops/shop/.lume"""
   all.push(script("json_config", "cd examples/json_config && \"$LUME\" run; echo \"exit: $?\"", "examples/json_config/main.expected"))
   all.push(suite.one("http package, local server", How.Skippable("skipped: no local connection allowed here"), "tests/http_local.sh \"$LUME\"", "tests/http_local.expected"))
   all.push(suite.one("http_server", How.Skippable("skipped: no local connection allowed here"), "examples/http_server/check.sh \"$LUME\"", "examples/http_server/check.expected"))
+  # a review program that is a library: its tests are what it shows
+  all.push(script("corpus/m126/c06_tab tests", "cd corpus/m126/c06_tab && \"$LUME\" test; echo \"exit: $?\"; rm -rf .lume", "corpus/m126/c06_tab/test.expected"))
+  all.push(script("corpus/m126/a05_tipjar tests", "cd corpus/m126/a05_tipjar && \"$LUME\" test; echo \"exit: $?\"; rm -rf .lume", "corpus/m126/a05_tipjar/test.expected"))
   all.push(script("http package tests", "cd packages/http && \"$LUME\" test 2>&1 | grep -v \"^warning\\|^ *|\\|^  -->\\|^  help\"; echo \"exit: ${PIPESTATUS[0]}\"", "packages/http/test.expected"))
 
   # the dogfood programs

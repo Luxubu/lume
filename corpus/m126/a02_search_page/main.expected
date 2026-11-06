@@ -1,0 +1,13 @@
+server: /search [q=pie+%26+tea] Ok([("q", "pie & tea")])
+server: /search [q=cr%C3%A8me&tag=sweet&tag=french] Ok([("q", "crème"), ("tag", "sweet"), ("tag", "french")])
+server: /search [tag=hot&q=tea] Ok([("tag", "hot"), ("q", "tea")])
+server: /search [q=100%25&flag] Ok([("q", "100%"), ("flag", "")])
+server: /search [q=50%zz] Error("`%zz` in `50%zz` is not a byte written as `%` and two hex digits")
+server: /search [] Ok([])
+client: 200 1 for 'pie & tea': pie & tea; tags []
+client: 200 1 for 'crème': crème brûlée; tags ["sweet", "french"]
+client: 200 2 for 'tea': pie & tea | tea; tags ["hot"]
+client: 200 1 for '100%': 100% juice; tags []
+client: 400 `%zz` in `50%zz` is not a byte written as `%` and two hex digits
+client: 400 say what to look for, as ?q=
+exit: 0

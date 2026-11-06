@@ -12,3 +12,11 @@ def main:
   match careful.send:
     Ok(_) -> puts "answered?"
     Error(e) -> puts e.message.starts_with?("GET http://127.0.0.1:9/menu")    # true
+
+  # a query, and a form, written as a URL carries them
+  puts http.encode("two soups")                              # two%20soups
+  puts http.form([("dish", "pie & tea"), ("table", "4")])    # dish=pie+%26+tea&table=4
+  req = http.request("GET", "http://127.0.0.1:9/find").with_query([("q", "café")])
+  puts req.url                                               # http://127.0.0.1:9/find?q=caf%C3%A9
+  posted = http.request("POST", "http://127.0.0.1:9/orders").with_form([("dish", "stew")])
+  puts posted.body                                           # dish=stew

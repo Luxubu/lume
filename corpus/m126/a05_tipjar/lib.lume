@@ -1,0 +1,37 @@
+# a05 tipjar — a library package written as lunch 13 teaches (`lume new
+# tipjar --lib`: a `lume.toml` and a `lib.lume`, with a module of its own,
+# `divide.lume`, that stays inside it), and its tests run as lunch 14
+# teaches: `lume test` on the package, the module's tests named with the
+# module first and run before the root's, `!` and `.error?` in tests.
+# Run with `lume test corpus/m126/a05_tipjar/lib.lume`
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# test divide: shares add up ... ok
+# test divide: one person pays it all ... ok
+# test divide: nobody is no table ... ok
+# test a tenth of a round bill ... ok
+# test the one who pays most ... ok
+# test nobody pays nothing ... ok
+#
+# 6 tests: 6 passed, 0 failed
+
+# The package `tipjar`: what is `pub` here, other packages can use.
+
+import divide
+
+# a tip, in whole cents, rounded down
+pub def tip(bill: Int, percent: Int) -> Int = bill * percent / 100
+
+# what the one who pays most pays, when the bill and its tip are shared
+pub def each_pays(bill: Int, percent: Int, people: Int) -> Int or Error:
+  shares = divide.shares(bill + tip(bill, percent), people)?
+  Ok(shares.max.or(0))
+
+test "a tenth of a round bill":
+  assert tip(50, 10) == 5
+
+test "the one who pays most":
+  assert each_pays(100, 10, 3)! == 37
+
+test "nobody pays nothing":
+  assert each_pays(100, 10, 0).error?

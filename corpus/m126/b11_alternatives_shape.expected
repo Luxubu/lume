@@ -1,0 +1,7 @@
+error: alternatives with a string or float inside must otherwise look the same
+  --> corpus/m126/b11_alternatives_shape.lume:16:21
+   |
+16 |     ("tea", size) | (size, "tea") -> "tea, #{size}"
+   |                     ^
+  help: give each alternative an arm of its own
+exit: 1

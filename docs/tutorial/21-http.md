@@ -99,12 +99,32 @@ def main -> () or Error:
 | `.header(name, value)` | a header to send |
 | `.with_body(text, content_type)` | a body, and what kind of text it is |
 | `.with_file(path, content_type)` | a file as the body, sent as it is read |
+| `.with_form(pairs)` | a form as the body, as a browser sends one: `[("name", "Ada")]` |
+| `.with_query(pairs)` | names and values added to the URL, after a `?` |
 | `.timeout(ms)` | how long to wait for an answer, in milliseconds |
 
 Without `.timeout`, a request waits up to 30 seconds. A server slower than
 that gives an `Error` saying it timed out. `http.post(url, body,
 content_type)` and `http.post_json(url, doc)` are shortcuts for sending a
 body; the second sends a JSON document made with the `json` package.
+
+A URL carries only some characters as they are, so a query or a form
+**writes the rest as `%` and two hex digits**. `.with_query` and
+`.with_form` do that for you; `http.encode(text)` does it for one piece,
+and `http.form(pairs)` for a whole query:
+
+```lume-skip
+import http
+
+def main:
+  puts http.encode("two soups")                              # two%20soups
+  puts http.form([("dish", "pie & tea"), ("table", "4")])    # dish=pie+%26+tea&table=4
+  req = http.request("GET", "http://127.0.0.1:9/find").with_query([("q", "café")])
+  puts req.url                                               # http://127.0.0.1:9/find?q=caf%C3%A9
+```
+
+`http.decode` and `http.parse_form` read them back; both give an `Error`
+for text that is not encoded properly.
 
 ## 21.4 A body as it arrives
 
@@ -184,7 +204,7 @@ failed; the rest of it is the system's reason.
 The `http` package is written in Lume, with a few lines of Rust where it
 calls the Rust crate **ureq**, which makes the requests. `send` blocks the
 thread it runs on, as ureq does; `fetch` runs it in a task of its own (lunch
-16), so other tasks go on. `open` hands the body to a thread that reads it
+18), so other tasks go on. `open` hands the body to a thread that reads it
 as it arrives, as lunch 20's programs' outputs are read. A Rust program
 would more often use the `reqwest` crate, which is async throughout; the
 result is much the same.
@@ -207,6 +227,7 @@ result is much the same.
   or an `Error` when the request could not be made at all. A `404` is a
   `Response`.
 - `http.request(method, url)` builds a request with `.header`,
-  `.with_body` and `.timeout(ms)`; `send` makes it.
+  `.with_body`, `.with_form`, `.with_query` and `.timeout(ms)`; `send`
+  makes it. `http.encode` and `http.form` write text a URL can carry.
 - `open` gives the body as it arrives, as `lines` or `chunks`.
 - `await req.fetch` makes a request in async code, so many can run at once.

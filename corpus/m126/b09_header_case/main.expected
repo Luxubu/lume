@@ -1,0 +1,10 @@
+server: X-DISH is Some("pie")
+server: X-Table is Some("4")
+server: [("x-dish", "pie"), ("x-table", "4")]
+client: status 200
+client: X-SERVED-BY is Some("Lume Kitchen")
+client: x-served-by is Some("Lume Kitchen")
+client: CONTENT-type is Some("text/plain; charset=utf-8")
+client: X-Nothing is None
+client: [("x-served-by", "Lume Kitchen")]
+exit: 0

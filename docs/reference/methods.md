@@ -34,8 +34,10 @@ puts xs.revers
 
 Three types answer differently:
 
-- A `T?` or a `T or Error` says to unwrap it first, because it may not hold a
-  value. Their methods are in the tables below.
+- A `T?` or a `T or Error`, asked for a method of the value it may hold,
+  says to unwrap it first, because it may not hold one; asked for one
+  neither has, it names it as missing, with the one meant. Their methods
+  are in the tables below.
 - A map's list leaves out the methods that take a block and work on its
   `(key, value)` pairs (`map`, `sort_by`, `max_by`, `min_by`, `fold`,
   `flat_map`, `group_by`, `partition`). They work. The [map](#k-v-maps)
@@ -425,7 +427,17 @@ A `Float` cannot go in a set or be a map key. Floats have no exact equality.
 | `to_s`, `to_str` | | `Str` | `Some(...)` or `None` |
 
 Anything else needs the value first: `match`, `.or(default)`, or `?`
-([errors](errors.md)).
+([errors](errors.md)). A method neither the optional nor its value has is
+named as missing, with the one meant — Rust's and Python's names among
+them:
+
+```lume-bad
+def main:
+  seat: Int? = None
+  puts seat.unwrap_or(0)
+#! an `Int?` has no method `unwrap_or`
+#! did you mean `or`?
+```
 
 ```lume
 price: Int? = Some(4)

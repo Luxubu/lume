@@ -1,0 +1,19 @@
+# a09 tasks_after_for — a list of tasks walked by a `for`, each awaited in
+# the loop, then counted after it: walking the tasks gave them up.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `jobs` is used after this loop, but walking its tasks gives them up, as awaiting one does
+#   --> corpus/m126/a09_tasks_after_for.lume:17:12
+#    |
+# 17 |   for t in jobs:
+#    |            ^
+#   help: wait for them all at once — `results = await jobs` — and loop over the results
+def pack(order: Str) -> Str = "#{order} packed"
+
+async def main:
+  var jobs: [Task[Str]] = []
+  for order in ["A1", "B2", "C3"]:
+    jobs.push(spawn: pack(order))
+  for t in jobs:
+    puts await t
+  puts "#{jobs.len} orders done"

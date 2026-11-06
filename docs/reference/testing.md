@@ -182,6 +182,11 @@ named with the module first, `menu: prices add up`, and the modules' tests
 run before the entry file's. `lume test prices` filters a package's tests
 by that whole name, so `lume test menu` runs every test of `menu`. Naming
 the package's `main.lume` or `lib.lume` runs the same tests as naming none.
+A library has no `main`, and needs none: its tests, `async test`s among
+them, run all the same.
+
+What `lume test` prints goes to standard output; warnings, and what a
+test writes with `warn`, go to standard error.
 
 ## Underneath, in Rust
 

@@ -1,0 +1,30 @@
+# Probes `.with_query` on a URL that already has a query, and its edges: no
+# query, a query, a bare `?` at the end, a `#fragment` (the query goes after
+# it, as the step only looks for a `?`), no pairs at all, and two steps in
+# a row. The last request goes to port 9, where nothing listens, so its
+# `Error` names the method and the whole URL, query and all.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# http://127.0.0.1:9/find?q=pie+%26+tea
+# http://127.0.0.1:9/find?page=2&q=a%2Fb&n=1
+# http://127.0.0.1:9/find?&q=x
+# http://127.0.0.1:9/find#top?q=x
+# http://127.0.0.1:9/find?page=2
+# http://127.0.0.1:9/find?q=1&q=2
+# true
+
+import http
+
+def main:
+  base = "http://127.0.0.1:9/find"
+  puts http.request("GET", base).with_query([("q", "pie & tea")]).url
+  paged = http.request("GET", base + "?page=2").with_query([("q", "a/b"), ("n", "1")])
+  puts paged.url
+  puts http.request("GET", base + "?").with_query([("q", "x")]).url
+  puts http.request("GET", base + "#top").with_query([("q", "x")]).url
+  nothing: [(Str, Str)] = []
+  puts http.request("GET", base + "?page=2").with_query(nothing).url
+  puts http.request("GET", base).with_query([("q", "1")]).with_query([("q", "2")]).url
+  match paged.timeout(2000).send:
+    Ok(_) -> puts "port 9 answered?"
+    Error(e) -> puts e.message.starts_with?("GET http://127.0.0.1:9/find?page=2&q=a%2Fb&n=1: ")
