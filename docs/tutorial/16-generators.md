@@ -217,8 +217,11 @@ changing the value afterwards does not change what it hands out.
 
 A generator is a Rust function giving `impl Iterator`. Rust has no `yield`
 of its own yet, so Lume turns the body into a state machine: each `yield`
-saves where the body is, and the next request resumes from there. The
-result is an ordinary Rust iterator, so a pipeline like 16.5 compiles to
+saves where the body is, and the next request resumes from there. A
+generator that is only a loop around one `yield`, as `naturals` is,
+becomes a plain closure Rust calls for each item, `std::iter::from_fn`,
+with no state machine at all. Either way the result is an ordinary Rust
+iterator, so a pipeline like 16.5 compiles to
 code much like a hand-written loop. Being used up as it is walked is
 Rust's own rule: an iterator is *moved* into whatever walks it.
 

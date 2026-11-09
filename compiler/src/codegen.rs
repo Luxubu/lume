@@ -1538,6 +1538,9 @@ pub struct Gen {
     /// The pattern being compiled is matched against a slice: a list
     /// pattern here is Rust's own. Anywhere deeper the list is a `Vec`.
     slice_here: bool,
+    /// The generator being written is a closure called for each item: a
+    /// `yield` returns its item.
+    gen_lowered: bool,
     /// Set just before emitting an if/match that sits in tail position.
     at_tail: bool,
     tmp: usize,
@@ -1706,6 +1709,7 @@ pub fn generate_module(program: &[Item], rust_mod: Option<&str>, module_id: &str
         in_block: false,
         tail_of_fn: false,
         slice_here: false,
+        gen_lowered: false,
         at_tail: false,
         tmp: 0,
         warnings: Vec::new(),
@@ -6034,6 +6038,69 @@ impl Gen {
         Ok(text.replacen(&tmp, &format!("{}[({}) as usize]", l, i), 1))
     }
 
+    /// The body of a generator `lowerable_gen` accepts: what sets it up, as
+    /// it is, then its `while` as one step of `std::iter::from_fn`.
+    fn lowered_gen_body(&mut self, b: &Block) -> Result<()> {
+        let (last, prefix) = b.stmts.split_last().expect("checked by lowerable_gen");
+        for (i, st) in prefix.iter().enumerate() {
+            self.rest_stack.push(b.stmts[i + 1..].to_vec());
+            self.stmt_stack.push(st.clone());
+            let r = self.stmt(st, false);
+            self.stmt_stack.pop();
+            self.rest_stack.pop();
+            r?;
+        }
+        let (cond, body) = match last {
+            Stmt::While { cond, body } => (cond, body),
+            _ => unreachable!(),
+        };
+        let at = body.stmts.iter().position(|st| matches!(st, Stmt::Yield { .. })).expect("checked by lowerable_gen");
+        let after = Block { stmts: body.stmts[at + 1..].to_vec() };
+        let turn = Block { stmts: body.stmts[..=at].to_vec() };
+        self.rest_stack.push(Vec::new());
+        self.stmt_stack.push(last.clone());
+        self.line("let mut lume_done = false;");
+        if !after.stmts.is_empty() {
+            self.line("let mut lume_started = false;");
+        }
+        self.line("std::iter::from_fn(move || {");
+        self.indent += 1;
+        self.line("if lume_done { return None; }");
+        // each call is one turn of the loop: what it sets is used again by
+        // the next, as in the loop it was
+        self.loop_depth += 1;
+        self.barriers.push(self.scopes.len());
+        let saved = std::mem::replace(&mut self.gen_lowered, true);
+        let mut r = Ok(());
+        if !after.stmts.is_empty() {
+            // the rest of the turn the last item ended
+            self.line("if lume_started {");
+            self.push_scope();
+            r = self.nested_block(&after, false);
+            self.pop_scope();
+            self.line("}");
+            self.line("lume_started = true;");
+        }
+        if r.is_ok() && !matches!(cond.kind, ExprKind::Bool(true)) {
+            match self.expr(cond) {
+                Ok(c) => self.line(&format!("if !({}) {{ lume_done = true; return None; }}", c)),
+                Err(e) => r = Err(e),
+            }
+        }
+        self.push_scope();
+        let r = r.and_then(|_| self.block_body(&turn, false));
+        self.pop_scope();
+        self.gen_lowered = saved;
+        self.barriers.pop();
+        self.loop_depth -= 1;
+        self.stmt_stack.pop();
+        self.rest_stack.pop();
+        r?;
+        self.indent -= 1;
+        self.line("})");
+        Ok(())
+    }
+
     /// Whether a value of `t` can hold a recursive enum, whose fields behind a
     /// `Box` are taken apart through a reference: a match on one stays by
     /// reference.
@@ -7728,6 +7795,8 @@ impl Gen {
             self.line("lume_install_panic_hook();");
             self.line("let _lume_tasks_left = LumeTasksLeft;");
         }
+        // a generator written as a plain iterator, with no coroutine
+        let mut lowered = false;
         if let Some(item) = &gen_item {
             // the generator keeps its own copy of everything it was given,
             // since it runs after the call has returned
@@ -7805,6 +7874,9 @@ impl Gen {
                 self.line(&format!("let (lume_co, lume_rx) = lume_stream::<{}>();", self.rt(item)));
                 self.line("tokio::spawn(async move {");
                 self.indent += 1;
+            } else if lowerable_gen(&f.body) && !self.in_trait_impl && !self.in_trait_decl {
+                // set up, then a closure called for each item
+                lowered = true;
             } else {
                 self.line(&format!("LumeGen::new(move |lume_co: LumeYield<{}>| async move {{", self.rt(item)));
                 self.indent += 1;
@@ -7872,6 +7944,8 @@ impl Gen {
             if !gives_result {
                 self.line("Ok(())");
             }
+        } else if lowered {
+            self.lowered_gen_body(&f.body)?;
         } else {
             self.block_body(&f.body, want_value)?;
         }
@@ -7886,7 +7960,7 @@ impl Gen {
             self.indent -= 1;
             self.line("});");
             self.line("lume_rx");
-        } else if gen_item.is_some() && !(owner.is_some() && f.self_kind == SelfKind::Read) {
+        } else if gen_item.is_some() && !(owner.is_some() && f.self_kind == SelfKind::Read) && !lowered {
             self.indent -= 1;
             self.line("})");
         }
@@ -9138,7 +9212,9 @@ impl Gen {
                         self.expr_owned_as(value, &item)?
                     }
                 };
-                if self.gen_async {
+                if self.gen_lowered {
+                    self.line(&format!("return Some({});", v));
+                } else if self.gen_async {
                     // nobody walks it any more: the body ends here
                     self.line(&format!("if !lume_co.put({}).await {{ return; }}", v));
                 } else {
@@ -14920,6 +14996,79 @@ fn param_type(t: Type) -> Type {
         Type::App(n, args) if args.len() == 1 && is_iterator_name(&n) => Type::Gen(Box::new(args[0].clone())),
         other => other,
     }
+}
+
+/// A generator a plain Rust iterator can be: statements that set it up, then
+/// one `while` that ends it, whose body ends in its one `yield` — nothing
+/// else in it, or before it, yields, returns, breaks or skips. Each item is
+/// then a call of a closure over what was set up, with no coroutine.
+fn lowerable_gen(b: &Block) -> bool {
+    fn jumps(b: &Block) -> bool {
+        fn ex(e: &Expr) -> bool {
+            match &e.kind {
+                ExprKind::If { branches, else_block } => branches.iter().any(|(_, b)| jumps(b)) || else_block.as_ref().map(jumps).unwrap_or(false),
+                ExprKind::Match { arms, .. } => arms.iter().any(|a| jumps(&a.body)),
+                _ => false,
+            }
+        }
+        b.stmts.iter().any(|st| match st {
+            Stmt::Yield { .. } | Stmt::Return { .. } | Stmt::Break { .. } | Stmt::Next { .. } | Stmt::Shared { .. } => true,
+            Stmt::While { body, .. } | Stmt::For { body, .. } => jumps(body),
+            Stmt::Expr(e) => ex(e),
+            _ => false,
+        })
+    }
+    let n = b.stmts.len();
+    let (prefix, last) = match b.stmts.split_last() {
+        Some((last, prefix)) if n >= 1 => (prefix, last),
+        _ => return false,
+    };
+    let body = match last {
+        Stmt::While { body, .. } => body,
+        _ => return false,
+    };
+    // the loop's one `yield`, at its top: what comes before it in a turn,
+    // and what comes after, which the next call runs first
+    let at = match body.stmts.iter().position(|st| matches!(st, Stmt::Yield { .. })) {
+        Some(i) => i,
+        None => return false,
+    };
+    let yielded = &body.stmts[at];
+    let before = &body.stmts[..at];
+    let after = &body.stmts[at + 1..];
+    // what is named before the `yield` lives for that call only
+    let named: Vec<&String> = before.iter().filter_map(|st| match st {
+        Stmt::Bind { name, .. } | Stmt::Var { name, .. } => Some(name),
+        _ => None,
+    }).collect();
+    if before.iter().any(|st| matches!(st, Stmt::Destructure { .. })) || after.iter().any(|st| named.iter().any(|n| stmt_mentions(st, n))) {
+        return false;
+    }
+    if jumps(&Block { stmts: after.to_vec() }) {
+        return false;
+    }
+    // A coroutine sets up when it is first asked for an item; a closure when
+    // it is made. Only a set-up nobody can see happen may move: names bound
+    // to values worked out from names and literals, with no call.
+    fn plain(e: &Expr) -> bool {
+        match &e.kind {
+            ExprKind::Int(_) | ExprKind::Float(_) | ExprKind::Bool(_) | ExprKind::Ident(_) => true,
+            ExprKind::Str(parts) => parts.iter().all(|p| matches!(p, StrPiece::Lit(_))),
+            // arithmetic may overflow, and stop the program: not even that may
+            // happen sooner than it did
+            ExprKind::Unary { op: "not", expr } => plain(expr),
+            ExprKind::Unary { expr, .. } => matches!(expr.kind, ExprKind::Int(_) | ExprKind::Float(_)),
+            _ => false,
+        }
+    }
+    let setup = prefix.iter().all(|st| match st {
+        Stmt::Bind { value, .. } | Stmt::Var { value, .. } => plain(value),
+        _ => false,
+    });
+    setup
+        && matches!(yielded, Stmt::Yield { .. })
+        && !jumps(&Block { stmts: prefix.to_vec() })
+        && !jumps(&Block { stmts: before.to_vec() })
 }
 
 /// Whether a function body hands out items with `yield`: in its own

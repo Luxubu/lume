@@ -189,7 +189,7 @@ async def fetch(id: Int, ms: Int) -> Str:
   "item #{id}"
 
 async def main:
-  var tasks = [spawn: await fetch(1, 60), spawn: await fetch(2, 30), spawn: await fetch(3, 1)]
+  var tasks = [spawn: await fetch(1, 300), spawn: await fetch(2, 150), spawn: await fetch(3, 1)]
   puts await tasks.next_done    #=> Some("item 3")
   puts tasks.len                #=> 2
   puts await tasks              #=> ["item 1", "item 2"]

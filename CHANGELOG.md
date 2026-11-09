@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **A generator that is a loop around one `yield`** — names bound to plain
+  values, then a `while` with one `yield` at its top — runs as a plain Rust
+  iterator, a closure called for each item, with no coroutine. Its work
+  happens when, and in the order, it did. `bench/b7_generators` went from
+  130% of the same iterator written by hand in Rust to 100%.
+- A docs example on `next_done` gave its three tasks too little time apart
+  for a busy machine running examples side by side; they are further apart.
+
 ## 1.1.0 — serving
 
 Six milestones after 1.0.0 (122–127), the first release under the 1.x

@@ -309,7 +309,9 @@ def main:
 `Iterator[T]`, and each `yield` hands out the next item. Nothing in it runs
 until an item is asked for, and it stops where it is until the next one is,
 so a generator may go on for ever. In Rust it is a function that gives
-`impl Iterator`, with the body compiled to a state machine:
+`impl Iterator`, with the body compiled to a state machine — or, for one
+that is a loop around one `yield` after names bound to plain values, to a
+closure called for each item, as fast as an iterator written by hand:
 
 ```lume
 def naturals -> Iterator[Int]:

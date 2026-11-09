@@ -2,11 +2,12 @@
 # tests/bench.sh fails a benchmark that is more than 25% over its number here.
 # Recorded for 1.0 (milestone 120); b7 kept at 130, as one run at 138 was noise beside one at 129.
 # b8 from 200 to 160 in milestone 125: a call matched by value, and lists made in a chain walked without copies.
+# b7 from 130 to 105 in milestone 128: a generator that is a loop around one `yield` is a plain iterator.
 b1_generic_blocks 97
 b2_interface_values 100
 b3_wordcount 107
 b4_text 100
 b5_printing 100
 b6_iterators 100
-b7_generators 130
+b7_generators 105
 b8_logq 160
