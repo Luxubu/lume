@@ -1175,3 +1175,48 @@ and a completion request at its end — line 4 (from 0), character 13:
   puts refused.path("error.message").map { |x| x.str.or("") }.or("")
   # `textDocument/rename` is not supported
 ```
+
+## Lunch 27
+
+**1.** A route of its own, beside `Serve`, and an arm for it in `answer`:
+
+```lume-skip
+enum Route:
+  List
+  Take
+  Show(id: Int)
+  Serve(id: Int)
+  Nowhere
+
+# in `route`
+    ("GET", ["orders", id])    -> id.to_int.map { |n| Show(n) }.or(Nowhere)
+
+# in `answer`
+    Show(id) ->
+      match kitchen.orders.find { |o| o.id == id }:
+        Some(o) -> http.reply_json(200, o.to_json)
+        None -> http.reply(404, "no order #{id}")
+```
+
+`GET /orders/3` then answers `200 {"id":3,"dish":"tea","table":9}`, and
+`GET /orders/2`, served already, `404 no order 2`.
+
+**2.** In `answer`, the `List` arm looks for a `table` in the query:
+
+```lume-skip
+    List ->
+      shown = match http.value(req.params.or([]), "table").map { |t| t.to_int.or(0) }:
+        Some(table) -> kitchen.orders.filter { |o| o.table == table }.to_list
+        None -> kitchen.orders
+      http.reply_json(200, shown.map { |o| o.to_json }.to_list.to_json)
+```
+
+`GET /orders?table=9` answers `[{"id":3,"dish":"tea","table":9}]`.
+
+**3.**
+
+```lume-skip
+test "one order":
+  assert route("GET", "/orders/3") == Show(3)
+  assert route("GET", "/orders/three") == Nowhere
+```

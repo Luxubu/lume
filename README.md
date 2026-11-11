@@ -72,9 +72,9 @@ names the fix — `examples/errors/` is 449 programs kept around to prove it.
 **Where it is.** Version 1.1. The language, the collections, files and
 folders, running programs and talking to them as they run, tasks and async
 sequences, tests, packages and the commands are settled, and so are the
-`http` package's requests, Rust crates through `import rust.<crate>`, and
-what `lume lsp` and `lume check --json` give editors and tools. Serving
-HTTP is a preview:
+`http` package, making requests and answering them, Rust crates through
+`import rust.<crate>`, and what `lume lsp` and `lume check --json` give
+editors and tools:
 [docs/stability.md](docs/stability.md) promises that a working program does
 not break without a warning release first, across every 1.x release. The VS Code extension, a tool
 beside the language, and a `rust:` block of Rust written by hand are

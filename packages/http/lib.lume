@@ -330,7 +330,7 @@ def unescape(text: Str, plus: Bool) -> Str or Error:
     }
   out
 
-# ---- Serving (a preview: its shape may change in a 1.x release) ----------
+# ---- Serving ---------------------------------------------------------------
 #
 #   server = http.listen("127.0.0.1:8080")?
 #   for req in server.requests:

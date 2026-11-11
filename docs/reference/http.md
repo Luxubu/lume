@@ -180,12 +180,10 @@ awaits nothing, and it runs on a pool of its own (see
 [Concurrency](concurrency.md#a-task-that-waits-without-await)).
 `examples/healthcheck/` does this, and `examples/http_demo/` does both.
 
-## Serving: a preview
+## Serving
 
-> **A preview**, new in 1.1: its shape may change in a 1.x release, with
-> each change listed in `CHANGELOG.md` under **Preview:**
-> ([what is settled](../stability.md#previews)). Requests, above, are
-> settled. It is built on the Rust crate tiny_http.
+Settled in 1.2, after a release as a preview; built on the Rust crate
+tiny_http. Lunch 27 teaches it.
 
 **`http.listen(address)` gives a `Server`**, or an `Error` when the
 address cannot be listened on — one taken already, or one that does not

@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- **`LUME_CACHE_KEEP`**: how many programs' builds the shared cache keeps,
+  300 unless it says otherwise. `LUME_CACHE_KEEP=50` keeps the cache near a
+  gigabyte, for a small disk, rebuilding more often.
+- **`LUME_INCREMENTAL=0`** builds with no incremental state: a tenth of
+  what a build leaves in `.lume/`, for a machine that builds each program
+  once. The test suite sets it, and needs a few gigabytes less.
+
+- **Serving HTTP is settled**, as it was in 1.1: `http.listen`, `Server`,
+  `Incoming`, `Reply`. It was a preview for one release, and building
+  `examples/notes/` on it found nothing to change. An `Incoming` and a
+  `Reply` may gain fields, as a `Request` may.
+- **Lunch 27, A small web service**, teaches it: a café's orders, routes as
+  a `match`, a `shared var` many requests share, forms and JSON, a program
+  that is its own client, and tests with no network. The tutorial is
+  twenty-seven lunches.
+
 - **`examples/notes/`**, a notes service built on the server preview: a
   store kept in a JSON file, a task per request on one `shared var`, JSON
   and form bodies, a query, its own tests and its own client. Its

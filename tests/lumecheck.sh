@@ -10,6 +10,9 @@
 # The build is cached, so only the first run after a change compiles.
 set -u
 cd "$(dirname "$0")/.."
+# each program is built once here, so rustc's incremental state, most of
+# what a build leaves, would only fill the disk
+export LUME_INCREMENTAL="${LUME_INCREMENTAL:-0}"
 if [ ! -x compiler/target/release/lume ]; then
   echo "building compiler..."
   (cd compiler && cargo build --release 2>&1 | grep -E "^error" -A 8) && true

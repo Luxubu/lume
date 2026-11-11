@@ -1,0 +1,104 @@
+# Lunch 27's café orders service, and a client that tries it: the server
+# listens on a port the system picks, a task makes the requests, and the
+# server stops when the client is done.
+
+import http
+import json
+import json.Json
+
+struct Order:
+  id: Int
+  dish: Str
+  table: Int
+
+  def to_json -> Json =
+    json.obj([("id", id.to_json), ("dish", dish.to_json), ("table", table.to_json)])
+
+# What every request shares: the orders, and the next number to give one.
+struct Kitchen:
+  orders: [Order]
+  next_id: Int
+
+  def add(var self, dish: Str, table: Int) -> Order:
+    o = Order(id: next_id, dish: dish, table: table)
+    orders.push(o)
+    next_id += 1
+    o
+
+  def serve(var self, id: Int) -> Bool:
+    before = orders.len
+    orders = orders.reject { |o| o.id == id }.to_list
+    orders.len < before
+
+enum Route:
+  List
+  Take
+  Serve(id: Int)
+  Nowhere
+
+def route(method: Str, path: Str) -> Route:
+  match (method, path.split("/").reject(_.empty?).to_list):
+    ("GET", ["orders"])        -> List
+    ("POST", ["orders"])       -> Take
+    ("DELETE", ["orders", id]) -> id.to_int.map { |n| Serve(n) }.or(Nowhere)
+    _                          -> Nowhere
+
+def answer(kitchen: shared var Kitchen, req: http.Incoming) -> http.Reply:
+  match route(req.method, req.path):
+    List -> http.reply_json(200, kitchen.orders.map { |o| o.to_json }.to_list.to_json)
+    Take ->
+      form = req.form.or([])
+      dish = http.value(form, "dish").or("")
+      table = http.value(form, "table").or("").to_int.or(0)
+      if dish.empty? or table < 1:
+        http.reply(400, "an order needs a dish and a table")
+      else:
+        o = kitchen.add(dish, table)
+        http.reply_json(201, o.to_json)
+    Serve(id) -> if kitchen.serve(id): http.reply(200, "served #{id}") else: http.reply(404, "no order #{id}")
+    Nowhere   -> http.reply(404, "no #{req.method} #{req.path} here")
+
+async def listen(server: http.Server) -> () or Error:
+  shared var kitchen = Kitchen(orders: [], next_id: 1)
+  var answering: [Task[() or Error]] = []
+  for req in server.incoming:
+    answering.push(spawn: req.respond(answer(kitchen, req)))
+  for t in answering:
+    await t?
+  ()
+
+def try_it(base: Str, server: http.Server) -> [Str]:
+  var said: [Str] = []
+  for dish, table in [("soup", "4"), ("pie", "4"), ("tea", "9")]:
+    r = http.request("POST", "#{base}/orders").with_form([("dish", dish), ("table", table)]).send
+    said.push(r.map { |x| "#{x.status} #{x.body}" }.or("no answer"))
+  for method, path in [("DELETE", "/orders/2"), ("DELETE", "/orders/2"), ("GET", "/orders"), ("GET", "/menu")]:
+    r = http.request(method, base + path).send
+    said.push(r.map { |x| "#{method} #{path}: #{x.status} #{x.body}" }.or("no answer"))
+  bad = http.request("POST", "#{base}/orders").with_form([("dish", "stew")]).send
+  said.push(bad.map { |x| "#{x.status} #{x.body}" }.or("no answer"))
+  server.close
+  said
+
+async def main -> () or Error:
+  server = http.listen("127.0.0.1:0")?
+  client = spawn: try_it("http://#{server.address}", server)
+  await listen(server)?
+  for line in await client:
+    puts line
+  ()
+
+test "routes":
+  assert route("GET", "/orders") == List
+  assert route("POST", "/orders/") == Take
+  assert route("DELETE", "/orders/7") == Serve(7)
+  assert route("DELETE", "/orders/seven") == Nowhere
+  assert route("PUT", "/orders") == Nowhere
+
+test "a kitchen numbers its orders":
+  var k = Kitchen(orders: [], next_id: 1)
+  assert k.add("soup", 4).id == 1
+  assert k.add("pie", 4).id == 2
+  assert k.serve(1)
+  assert not k.serve(1)
+  assert k.orders.map(_.dish).to_list == ["pie"]

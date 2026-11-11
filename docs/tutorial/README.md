@@ -1,6 +1,6 @@
 # Lume, a Lunch at a Time
 
-A tutorial in twenty-six short chapters, each meant to be read — and its
+A tutorial in twenty-seven short chapters, each meant to be read — and its
 examples typed and run — in about an hour: a lunch break. Each one teaches
 one idea, with many small programs, a few things to try, and a recap at the
 end.
@@ -63,6 +63,7 @@ marked *new here* where it is used.
 | 24 | [A job runner](24-a-job-runner.md) | programs run in tasks, and their results gathered |
 | 25 | [A health checker](25-a-health-checker.md) | many web pages at once, with retries |
 | 26 | [Talking to a language server](26-talking-to-a-language-server.md) | a program that drives another, message by message |
+| 27 | [A small web service](27-a-small-web-service.md) | answering requests: routes, a store many requests share, and a program that is its own client |
 
 ## How the chapters are written
 

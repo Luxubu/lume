@@ -1,0 +1,8 @@
+201 {"id":1,"dish":"soup","table":4}
+201 {"id":2,"dish":"pie","table":4}
+201 {"id":3,"dish":"tea","table":9}
+DELETE /orders/2: 200 served 2
+DELETE /orders/2: 404 no order 2
+GET /orders: 200 [{"id":1,"dish":"soup","table":4},{"id":3,"dish":"tea","table":9}]
+GET /menu: 404 no GET /menu here
+400 an order needs a dish and a table

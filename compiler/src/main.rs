@@ -642,11 +642,15 @@ fn build_with_cargo(path: &Path, rust: &str, deps: &[(String, String)], bin: &Pa
     Ok(())
 }
 
-/// How many programs the shared cache keeps the build of, per profile.
-const KEEP_PROGRAMS: usize = 300;
+/// How many programs the shared cache keeps the build of, per profile:
+/// `LUME_CACHE_KEEP`, or 300. Fewer keeps the cache small on a small disk,
+/// at the cost of rebuilding more often.
+fn keep_programs() -> usize {
+    env::var("LUME_CACHE_KEEP").ok().and_then(|v| v.trim().parse::<usize>().ok()).unwrap_or(300).max(1)
+}
 
 /// The shared cache keeps the programs built most recently, as a cache
-/// does: past `KEEP_PROGRAMS`, the oldest programs' binaries, compiled
+/// does: past `keep_programs()`, the oldest programs' binaries, compiled
 /// objects and incremental state go, down to nine in ten of the limit.
 /// The crates every program shares stay, and cargo rebuilds a program it
 /// finds missing. Without this, each new program left its build behind
@@ -666,11 +670,12 @@ fn prune_shared_cache(dir: &Path) {
             Some((e.metadata().ok()?.modified().ok()?, name))
         })
         .collect();
-    if bins.len() <= KEEP_PROGRAMS {
+    let keep = keep_programs();
+    if bins.len() <= keep {
         return;
     }
     bins.sort();
-    let gone: std::collections::HashSet<String> = bins[..bins.len() - KEEP_PROGRAMS * 9 / 10].iter().map(|(_, n)| n.clone()).collect();
+    let gone: std::collections::HashSet<String> = bins[..bins.len() - keep * 9 / 10].iter().map(|(_, n)| n.clone()).collect();
     for n in &gone {
         let _ = fs::remove_file(dir.join(format!("{}{}", n, env::consts::EXE_SUFFIX)));
         let _ = fs::remove_file(dir.join(format!("{}.d", n)));
@@ -774,8 +779,13 @@ fn build(path: &Path, out: Option<PathBuf>, quiet: bool, test_mode: bool, mode: 
     cmd.args(["--edition", "2021", "-O", "-C", "debuginfo=0", "-C", checks]);
     if mode == Mode::Iterate {
         // rustc's incremental cache: a rebuild after an edit takes a fraction of a fresh compile
-        let inc = build_dir.join(format!("inc-{}", stem));
-        cmd.arg("-C").arg(format!("incremental={}", inc.shown()));
+        // rustc's incremental state makes the next build after an edit quick,
+        // and is most of what a build leaves: `LUME_INCREMENTAL=0` keeps none,
+        // for a machine that builds each program once, as the test suite does
+        if env::var("LUME_INCREMENTAL").map(|v| v.trim() != "0").unwrap_or(true) {
+            let inc = build_dir.join(format!("inc-{}", stem));
+            cmd.arg("-C").arg(format!("incremental={}", inc.shown()));
+        }
     }
     let status = cmd
         .arg("-o")

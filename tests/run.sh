@@ -7,6 +7,10 @@
 #   tests/run.sh -x         stop at the first failure
 #   tests/run.sh -v         name every check that passes, as it passes
 #
+# On a small disk, LUME_CACHE_KEEP=50 tests/run.sh keeps the shared build
+# cache near a gigabyte, rebuilding more often. The suite builds each
+# program once, so it keeps no incremental state (LUME_INCREMENTAL=0).
+#
 # The suite itself is written in Lume: tools/lumecheck/plan.lume lists every
 # check, and tools/lumecheck/suite.lume runs them, on several tasks at once;
 # each failure is told as soon as it is known.
