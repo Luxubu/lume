@@ -1,0 +1,75 @@
+# notes — a small notes service over HTTP, kept in a JSON file.
+#
+#   lume run -- serve 127.0.0.1:8080 /tmp/notes    serves until stopped
+#   lume run -- demo                               serves a fresh store on a
+#                                                  port the system picks, with
+#                                                  its own client, then stops
+#
+# GET /notes (?tag=t), POST /notes (JSON or a form), GET, PUT and DELETE
+# /notes/<id>, and GET /health. Each request is answered in a task of its
+# own, all of them working on one store.
+
+import http
+import json
+import routes
+import store
+import store.Store
+
+async def serve(server: http.Server, notes: Store) -> () or Error:
+  shared var kept = notes
+  var answering: [Task[() or Error]] = []
+  for req in server.incoming:
+    answering.push(spawn: req.respond(routes.answer(kept, req)))
+  for t in answering:
+    await t?
+  ()
+
+# One request and what came back, as a line.
+def line(what: Str, r: http.Response or Error) -> Str:
+  match r:
+    Ok(resp) -> "#{what} -> #{resp.status} #{resp.body}"
+    Error(e) -> "#{what} -> #{e.message}"
+
+def demo_client(base: Str, server: http.Server) -> [Str]:
+  var seen: [Str] = []
+  seen.push(line("GET /health", http.get("#{base}/health")))
+  tea = json.obj([("title", "tea".to_json), ("body", "green, not too hot".to_json), ("tags", ["drink", "morning"].to_json)])
+  seen.push(line("POST /notes (JSON)", http.post_json("#{base}/notes", tea)))
+  seen.push(line("POST /notes (a form)", http.request("POST", "#{base}/notes").with_form([("title", "pie"), ("tags", "food, sweet")]).send))
+  seen.push(line("POST /notes (no title)", http.post_json("#{base}/notes", json.obj([("body", "x".to_json)]))))
+  seen.push(line("GET /notes", http.get("#{base}/notes")))
+  seen.push(line("GET /notes?tag=drink", http.request("GET", "#{base}/notes").with_query([("tag", "drink")]).send))
+  seen.push(line("GET /notes/2", http.get("#{base}/notes/2")))
+  coffee = json.obj([("title", "coffee".to_json), ("tags", ["drink"].to_json)])
+  seen.push(line("PUT /notes/1", http.request("PUT", "#{base}/notes/1").with_body(json.show(coffee), "application/json").send))
+  seen.push(line("DELETE /notes/2", http.delete("#{base}/notes/2")))
+  seen.push(line("DELETE /notes/2 again", http.delete("#{base}/notes/2")))
+  seen.push(line("GET /notes/seven", http.get("#{base}/notes/seven")))
+  seen.push(line("PATCH /notes/1", http.request("PATCH", "#{base}/notes/1").send))
+  seen.push(line("GET /notes", http.get("#{base}/notes")))
+  server.close
+  seen
+
+async def main -> () or Error:
+  args = Env.args
+  match args:
+    ["serve", address, folder] ->
+      notes = store.open(folder)?
+      server = http.listen(address)?
+      puts "notes on http://#{server.address}, kept in #{folder}"
+      await serve(server, notes)
+    ["demo"] ->
+      folder = "/tmp/lume-notes-demo"
+      Dir.remove(folder)? if Dir.exists?(folder)
+      notes = store.open(folder)?
+      server = http.listen("127.0.0.1:0")?
+      client = spawn: demo_client("http://#{server.address}", server)
+      await serve(server, notes)?
+      for l in await client:
+        puts l
+      kept = store.open(folder)?
+      puts "kept on disk: #{kept.notes.map { |n| n.title }.to_list}, next id #{kept.next_id}"
+      Dir.remove(folder)
+    _ ->
+      warn "usage: notes serve <address> <folder>  |  notes demo"
+      Env.exit(2)

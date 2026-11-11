@@ -1,0 +1,43 @@
+# note.lume — a note, and how it is written as JSON and read back.
+
+import json
+import json.Json
+
+pub struct Note:
+  id: Int
+  title: Str
+  body: Str
+  tags: [Str]
+
+  def to_json -> Json =
+    json.obj([("id", id.to_json), ("title", title.to_json), ("body", body.to_json), ("tags", tags.to_json)])
+
+  def tagged?(tag: Str) -> Bool = tags.contains?(tag)
+
+# A note's fields from a JSON object, as a client sends them: `title` must be
+# there, `body` and `tags` may not be.
+pub def fields(doc: Json) -> (Str, Str, [Str]) or Error:
+  title = doc.need_str("title")?
+  return Error("a note needs a title") if title.trim.empty?
+  body = doc.opt_str("body")?.or("")
+  var tags: [Str] = []
+  for t in doc.get("tags").map { |j| j.items }.or([]):
+    tags.push(t.str.or_error("every tag is text")?)
+  Ok((title, body, tags))
+
+# A note as it was saved.
+pub def read(doc: Json) -> Note or Error:
+  (title, body, tags) = fields(doc)?
+  Note(id: doc.need_int("id")?, title: title, body: body, tags: tags)
+
+test "a note is written and read back":
+  n = Note(id: 3, title: "tea", body: "green", tags: ["drink"])
+  back = read(json.parse(json.show(n.to_json))!)!
+  assert back == n
+
+test "a note needs a title":
+  assert fields(json.parse("{\"body\": \"x\"}")!).error?
+  assert fields(json.parse("{\"title\": \"  \"}")!).error?
+
+test "tags must be text":
+  assert fields(json.parse("{\"title\": \"t\", \"tags\": [1]}")!).error?

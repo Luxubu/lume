@@ -2933,9 +2933,10 @@ impl Gen {
         if !self.ext_generics.contains_key(&key) {
             return Some(m);
         }
+        let gens = self.ext_generics.get(&key).cloned().unwrap_or_default();
         Some(
             m.into_iter()
-                .map(|(k, v)| {
+                .filter_map(|(k, v)| {
                     // Each method is read through the target its own
                     // `extend` was written against. A name this receiver
                     // does not pin stays as written: a `[Int]` says what
@@ -2945,8 +2946,16 @@ impl Gen {
                         Self::unify(shape, t, &mut sub);
                         sub.retain(|_, x| *x != Type::Unknown);
                     }
+                    // an `extend [T: Loud]` is not for a `[Int]` unless an
+                    // `Int` is `Loud`: its methods are not there
+                    let unmet = sub.iter().any(|(n, x)| {
+                        gens.iter().any(|g| &g.name == n && g.bound.as_ref().map(|b| !matches!(x, Type::Var(_)) && !self.meets_bound(x, b)).unwrap_or(false))
+                    });
+                    if unmet {
+                        return None;
+                    }
                     let v = Sig { params: v.params.iter().map(|(n, x)| (n.clone(), Self::subst(x, &sub))).collect(), ret: Self::subst(&v.ret, &sub), ..v };
-                    (k, v)
+                    Some((k, v))
                 })
                 .collect(),
         )
@@ -3336,10 +3345,51 @@ impl Gen {
         for k in keys {
             let mut sub = HashMap::new();
             if ext_fits(&self.ext_targets[k], t, &mut sub) {
-                out.push((k.clone(), sub));
+                // `extend [T: Loud]` is for a list of what is `Loud` only
+                let gens = self.ext_generics.get(k).cloned().unwrap_or_default();
+                let unmet = sub.iter().any(|(n, x): (&String, &Type)| {
+                    gens.iter().any(|g| &g.name == n && g.bound.as_ref().map(|b| built_in_only(x) && self.bound_known(b) && !self.meets_bound(x, b)).unwrap_or(false))
+                });
+                if !unmet {
+                    out.push((k.clone(), sub));
+                }
             }
         }
         out
+    }
+
+    /// A bound that means the same here as where its `extend` was written:
+    /// a built-in one, or an interface known by that name in this file. An
+    /// `extend` from another module may name one this file does not.
+    fn bound_known(&self, b: &Type) -> bool {
+        match b {
+            Type::Named(n) | Type::App(n, _) => Self::is_builtin_bound(n) || self.interfaces.contains_key(&self.canon(n)),
+            _ => false,
+        }
+    }
+
+    /// Why an `extend` that has `name` is not for `t`: the bound it puts on a
+    /// type parameter, which what `t` holds does not meet.
+    fn unmet_ext_bound(&self, t: &Type, name: &str) -> Option<String> {
+        let mut keys: Vec<&String> = self.ext_targets.keys().filter(|k| k.starts_with("ext:")).collect();
+        keys.sort();
+        for k in keys {
+            if !self.ext_methods.get(k).map(|m| m.contains_key(name)).unwrap_or(false) {
+                continue;
+            }
+            let mut sub = HashMap::new();
+            if !ext_fits(&self.ext_targets[k], t, &mut sub) {
+                continue;
+            }
+            for g in self.ext_generics.get(k).cloned().unwrap_or_default() {
+                if let (Some(b), Some(x)) = (&g.bound, sub.get(&g.name)) {
+                    if built_in_only(x) && self.bound_known(b) && !self.meets_bound(x, b) {
+                        return Some(format!("`{}` is there for `{}` where `{}` is `{}`, and `{}` is not", name, type_name(&self.ext_targets[k]), g.name, type_name(b), type_name(x)));
+                    }
+                }
+            }
+        }
+        None
     }
 
     /// Is `name` a method `t` has from an `extend`?
@@ -9168,6 +9218,13 @@ impl Gen {
                                     self.line(&format!("return Err({});", v));
                                     return Ok(());
                                 }
+                                // a call that gives a `() or E` of its own is
+                                // the value too, as on the function's last line
+                                if matches!(&et, Type::Result(ok, e2) if **ok == Type::Unit && self.assignable(e2, &err_t)) {
+                                    let v = self.expr_owned(e)?;
+                                    self.line(&format!("return {};", v));
+                                    return Ok(());
+                                }
                             }
                         }
                     }
@@ -13472,6 +13529,10 @@ impl Gen {
                     if matches!(rt, Type::List(_) | Type::Iter(..)) && name == "add" {
                         return Err(err.with_help("a list takes values with `.push(x)`"));
                     }
+                    // an `extend` has it, for items that meet a bound these do not
+                    if let Some(why) = self.unmet_ext_bound(&rt, name) {
+                        return Err(err.with_help(why));
+                    }
                     return Err(match self.suggest_from(name, names.iter().map(|s| s.to_string())) {
                         Some(sug) => err.with_help(format!("did you mean `{}`?", sug)),
                         None if names.is_empty() => err,
@@ -15311,6 +15372,17 @@ fn pat_text(p: &Pat) -> String {
         }
         Pat::Ctor(c, args) if args.is_empty() => c.clone(),
         Pat::Ctor(c, args) => format!("{}({})", c, args.iter().map(pat_text).collect::<Vec<_>>().join(", ")),
+    }
+}
+
+/// A type made of built-in ones only, whose `extend`s are all known where it
+/// is used — not a type of a module's own, extended perhaps from another.
+fn built_in_only(t: &Type) -> bool {
+    match t {
+        Type::Int | Type::Float | Type::Str | Type::Bool | Type::Char => true,
+        Type::List(i) | Type::Set(i) | Type::Option(i) => built_in_only(i),
+        Type::Tuple(ts) => ts.iter().all(built_in_only),
+        _ => false,
     }
 }
 

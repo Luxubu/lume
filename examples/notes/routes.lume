@@ -1,0 +1,100 @@
+# routes.lume — which request is which, and what each one gets back.
+
+import http
+import json
+import note
+import store.Store
+
+pub enum Route:
+  Health
+  List
+  Create
+  Show(id: Int)
+  Change(id: Int)
+  Remove(id: Int)
+  NoSuchPath
+  NoSuchMethod(allowed: Str)
+
+# The route a method and a path ask for. `/notes/7` is note 7; an id that is
+# not a number is no note at all.
+pub def route(method: Str, path: Str) -> Route:
+  parts = path.split("/").reject { |p| p.empty? }.to_list
+  match parts:
+    ["health"] -> if method == "GET": Health else: NoSuchMethod("GET")
+    ["notes"] ->
+      match method:
+        "GET"  -> List
+        "POST" -> Create
+        _      -> NoSuchMethod("GET, POST")
+    ["notes", id] ->
+      match id.to_int:
+        Error(_) -> NoSuchPath
+        Ok(n) ->
+          match method:
+            "GET"    -> Show(n)
+            "PUT"    -> Change(n)
+            "DELETE" -> Remove(n)
+            _        -> NoSuchMethod("GET, PUT, DELETE")
+    _ -> NoSuchPath
+
+def problem(status: Int, why: Str) -> http.Reply =
+  http.reply_json(status, json.obj([("error", why.to_json)]))
+
+# A note's fields from a request: JSON, or a form as a browser sends one.
+pub def fields(req: http.Incoming) -> (Str, Str, [Str]) or Error:
+  kind = req.header("content-type").or("")
+  if kind.starts_with?("application/x-www-form-urlencoded"):
+    form = req.form?
+    title = http.value(form, "title").or_error("a note needs a title")?
+    tags = http.value(form, "tags").map { |t| t.split(",").map(_.trim).reject(_.empty?).to_list }.or([])
+    return Ok((title, http.value(form, "body").or(""), tags))
+  doc = req.json?
+  note.fields(doc)
+
+# The answer to `req`, made with the shared store: every change to it is one
+# use of the lock, so tasks answering at once never see one half done.
+pub def answer(notes: shared var Store, req: http.Incoming) -> http.Reply:
+  match route(req.method, req.path):
+    Health                -> http.reply(200, "ok")
+    NoSuchPath            -> problem(404, "no #{req.path} here")
+    NoSuchMethod(allowed) -> problem(405, "#{req.method} is not for #{req.path}").header("Allow", allowed)
+    List ->
+      wanted = http.value(req.params.or([]), "tag")
+      shown = match wanted:
+        Some(tag) -> notes.tagged(tag)
+        None      -> notes.notes
+      http.reply_json(200, shown.map { |n| n.to_json }.to_list.to_json)
+    Show(id) ->
+      match notes.find(id):
+        Some(n) -> http.reply_json(200, n.to_json)
+        None    -> problem(404, "no note #{id}")
+    Create ->
+      match fields(req):
+        Error(e) -> problem(400, e.message)
+        Ok((title, body, tags)) ->
+          match notes.add(title, body, tags):
+            Ok(n)    -> http.reply_json(201, n.to_json).header("Location", "/notes/#{n.id}")
+            Error(e) -> problem(500, e.message)
+    Change(id) ->
+      match fields(req):
+        Error(e) -> problem(400, e.message)
+        Ok((title, body, tags)) ->
+          match notes.change(id, title, body, tags):
+            Ok(Some(n)) -> http.reply_json(200, n.to_json)
+            Ok(None)    -> problem(404, "no note #{id}")
+            Error(e)    -> problem(500, e.message)
+    Remove(id) ->
+      match notes.remove(id):
+        Ok(true)  -> http.reply(204, "")
+        Ok(false) -> problem(404, "no note #{id}")
+        Error(e)  -> problem(500, e.message)
+
+test "routes":
+  assert route("GET", "/health") == Health
+  assert route("GET", "/notes") == List
+  assert route("POST", "/notes/") == Create
+  assert route("GET", "/notes/7") == Show(7)
+  assert route("DELETE", "/notes/7") == Remove(7)
+  assert route("GET", "/notes/seven") == NoSuchPath
+  assert route("PATCH", "/notes/7") == NoSuchMethod("GET, PUT, DELETE")
+  assert route("GET", "/") == NoSuchPath

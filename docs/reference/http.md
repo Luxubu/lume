@@ -151,6 +151,7 @@ values a particular way. **These write and read them**, as Python's
 | `http.decode(text)` | `Str or Error` | the other way |
 | `http.form(pairs)` | `Str` | names and values as `a=1&b=two+words`: each encoded, a space as `+` |
 | `http.parse_form(text)` | `[(Str, Str)] or Error` | the other way, in order; a name with no `=` has the value `""` |
+| `http.value(pairs, name)` | `Str?` | the value of `name` in such a list, the first if it comes twice: `http.value(req.params?, "q")` |
 
 ```lume-skip
 import http
@@ -247,7 +248,9 @@ each request to a task, as `spawn: answer(req)`.
 
 `examples/http_server/` is a server and its own client in one program: it
 listens on a port the system picks, and a task makes the requests it
-answers.
+answers. `examples/notes/` is a whole service: notes kept in a JSON file,
+a task per request on one `shared var` store, and every method a REST
+service needs.
 
 ## Not in it yet
 

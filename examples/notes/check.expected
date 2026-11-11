@@ -1,0 +1,29 @@
+== tests
+test note: a note is written and read back ... ok
+test note: a note needs a title ... ok
+test note: tags must be text ... ok
+test store: a store keeps what it is given, across opening it again ... ok
+test store: a change and a removal say whether the note was there ... ok
+test routes: routes ... ok
+
+6 tests: 6 passed, 0 failed
+exit: 0
+== demo
+GET /health -> 200 ok
+POST /notes (JSON) -> 201 {"id":1,"title":"tea","body":"green, not too hot","tags":["drink","morning"]}
+POST /notes (a form) -> 201 {"id":2,"title":"pie","body":"","tags":["food","sweet"]}
+POST /notes (no title) -> 400 {"error":"`title` is missing"}
+GET /notes -> 200 [{"id":1,"title":"tea","body":"green, not too hot","tags":["drink","morning"]},{"id":2,"title":"pie","body":"","tags":["food","sweet"]}]
+GET /notes?tag=drink -> 200 [{"id":1,"title":"tea","body":"green, not too hot","tags":["drink","morning"]}]
+GET /notes/2 -> 200 {"id":2,"title":"pie","body":"","tags":["food","sweet"]}
+PUT /notes/1 -> 200 {"id":1,"title":"coffee","body":"","tags":["drink"]}
+DELETE /notes/2 -> 204 
+DELETE /notes/2 again -> 404 {"error":"no note 2"}
+GET /notes/seven -> 404 {"error":"no /notes/seven here"}
+PATCH /notes/1 -> 405 {"error":"PATCH is not for /notes/1"}
+GET /notes -> 200 [{"id":1,"title":"coffee","body":"","tags":["drink"]}]
+kept on disk: ["coffee"], next id 3
+exit: 0
+== usage
+usage: notes serve <address> <folder>  |  notes demo
+exit: 2

@@ -1,0 +1,81 @@
+# store.lume — the notes, kept in one JSON file in a folder of their own.
+# Every change is saved as it is made, so a server stopped at any point
+# keeps what it said it kept.
+
+import json
+import note
+import note.Note
+
+pub struct Store:
+  file: Str
+  notes: [Note]
+  next_id: Int
+
+  def find(id: Int) -> Note? = notes.find { |n| n.id == id }
+
+  def tagged(tag: Str) -> [Note] = notes.filter { |n| n.tagged?(tag) }.to_list
+
+  # Adds a note with the next id, and saves.
+  def add(var self, title: Str, body: Str, tags: [Str]) -> Note or Error:
+    n = Note(id: next_id, title: title, body: body, tags: tags)
+    notes.push(n)
+    next_id += 1
+    save()?
+    Ok(n)
+
+  # Replaces the note with `id`; `None` when there is none.
+  def change(var self, id: Int, title: Str, body: Str, tags: [Str]) -> Note? or Error:
+    match notes.enumerate.find { |_, n| n.id == id }.map { |p| p.0 }:
+      None -> Ok(None)
+      Some(i) ->
+        n = Note(id: id, title: title, body: body, tags: tags)
+        notes[i] = n
+        save()?
+        Ok(Some(n))
+
+  # Takes the note with `id` away; whether there was one.
+  def remove(var self, id: Int) -> Bool or Error:
+    before = notes.len
+    notes = notes.reject { |n| n.id == id }.to_list
+    return Ok(false) if notes.len == before
+    save()?
+    Ok(true)
+
+  def save -> () or Error:
+    doc = json.obj([("next_id", next_id.to_json), ("notes", notes.map { |n| n.to_json }.to_list.to_json)])
+    File.write(file, json.pretty(doc))
+
+# The store in `folder`: what its file holds, or an empty one.
+pub def open(folder: Str) -> Store or Error:
+  Dir.make(folder)?
+  file = Path.join(folder, "notes.json")
+  return Ok(Store(file: file, notes: [], next_id: 1)) unless File.exists?(file)
+  doc = json.parse(File.read(file)?).map_error { |e| Error("#{file}: #{e.message}") }?
+  var notes: [Note] = []
+  for d in doc.need_items("notes")?:
+    notes.push(note.read(d)?)
+  Store(file: file, notes: notes, next_id: doc.need_int("next_id")?)
+
+test "a store keeps what it is given, across opening it again":
+  dir = "/tmp/lume-notes-test-store"
+  Dir.remove(dir)! if Dir.exists?(dir)
+  var s = open(dir)!
+  _ = s.add("tea", "green", ["drink"])!
+  _ = s.add("pie", "", [])!
+  again = open(dir)!
+  assert again.notes.len == 2
+  assert again.next_id == 3
+  assert again.find(2).map { |n| n.title } == Some("pie")
+  Dir.remove(dir)!
+
+test "a change and a removal say whether the note was there":
+  dir = "/tmp/lume-notes-test-change"
+  Dir.remove(dir)! if Dir.exists?(dir)
+  var s = open(dir)!
+  _ = s.add("tea", "", [])!
+  assert s.change(9, "x", "", [])! == None
+  assert s.change(1, "coffee", "", [])!.map { |n| n.title } == Some("coffee")
+  assert not s.remove(9)!
+  assert s.remove(1)!
+  assert s.notes.empty?
+  Dir.remove(dir)!

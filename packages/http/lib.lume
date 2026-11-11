@@ -280,6 +280,10 @@ pub def parse_form(text: Str) -> [(Str, Str)] or Error:
     out.push((unescape(k, true)?, unescape(v, true)?))
   Ok(out)
 
+# The value of `name` in a query or a form, the first if it comes twice:
+# `http.value(req.params?, "q")`.
+pub def value(pairs: [(Str, Str)], name: Str) -> Str? = pairs.find { |k, _| k == name }.map { |kv| kv.1 }
+
 def escape(text: Str, plus: Bool) -> Str:
   out: Str = rust:
     {
@@ -537,6 +541,8 @@ test "a form is written, and read back":
   assert parse_form(f)! == [("q", "pie & tea"), ("n", "2")]
   assert parse_form("")! == []
   assert parse_form("a&b=&&c=1")! == [("a", ""), ("b", ""), ("c", "1")]
+  assert value(parse_form("q=pie&q=tea")!, "q") == Some("pie")
+  assert value([], "q") == None
 
 test "a request gets a form, or a query":
   r = request("POST", "http://example.com/find").with_query([("page", "2")]).with_query([("q", "a b")]).with_form([("name", "Ada")])

@@ -1,0 +1,6 @@
+error: `[Int]` values have no method `loud`
+  --> examples/errors/extend_bound_unmet.lume:14:14
+   |
+14 |   puts [1, 2].loud
+   |              ^
+  help: `loud` is there for `[T]` where `T` is `Loud`, and `Int` is not

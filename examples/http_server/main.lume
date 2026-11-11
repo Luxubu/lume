@@ -6,14 +6,10 @@ import json
 
 PRICES = {"soup": 400, "pie": 350, "stew": 600}
 
-# the value of `name` in a query or a form, if it has one
-def value_of(pairs: [(Str, Str)], name: Str) -> Str? =
-  pairs.find { |k, _| k == name }.map { |kv| kv.1 }
-
 def find(req: http.Incoming) -> http.Reply:
   match req.params:
     Ok(ps) ->
-      wanted = value_of(ps, "q").or("")
+      wanted = http.value(ps, "q").or("")
       hits = PRICES.keys.filter { |d| d.contains?(wanted) }.sort.to_list
       http.reply(200, if hits.empty?: "nothing like #{wanted}" else: hits.join(", "))
     Error(e) -> http.reply(400, e.message)
@@ -21,8 +17,8 @@ def find(req: http.Incoming) -> http.Reply:
 def order(req: http.Incoming) -> http.Reply:
   match req.form:
     Ok(fields) ->
-      dish = value_of(fields, "dish").or("?")
-      note = value_of(fields, "note").or("")
+      dish = http.value(fields, "dish").or("?")
+      note = http.value(fields, "note").or("")
       http.reply(201, "ordered #{dish} (#{note})").header("Location", "/orders/1")
     Error(e) -> http.reply(400, e.message)
 

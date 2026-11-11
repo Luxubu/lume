@@ -179,6 +179,10 @@ extend Float with ToJson:
 extend Bool with ToJson:
   def to_json -> Json = Bool(self)
 
+# a document is JSON already, so a list of them is too
+extend Json with ToJson:
+  def to_json -> Json = self
+
 extend [T: ToJson] with ToJson:
   def to_json -> Json = Arr(self.map { |x| x.to_json }.to_list)
 

@@ -1,0 +1,14 @@
+# An `extend [T: Loud]` is for a list of what is `Loud` only: on a `[Int]`
+# its method was accepted, and the program reached rustc.
+interface Loud:
+  def loud -> Str
+
+extend Str with Loud:
+  def loud -> Str = self.upcase
+
+extend [T: Loud] with Loud:
+  def loud -> Str = self.map { |x| x.loud }.join(" ")
+
+def main:
+  puts ["a", "b"].loud
+  puts [1, 2].loud

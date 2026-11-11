@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- **`examples/notes/`**, a notes service built on the server preview: a
+  store kept in a JSON file, a task per request on one `shared var`, JSON
+  and form bodies, a query, its own tests and its own client. Its
+  `FINDINGS.md` says what building it found; the preview needed no change.
+- **`http.value(pairs, name)`**, the value of a name in a query or a form.
+- **Fixed**: a method of `extend [T: Loud]` was accepted on a list of
+  built-in values that are not `Loud`, and reached rustc; the bound is
+  checked there, and the error says which is not met. A `Json` document is
+  `ToJson`, so a list of them is too.
+- **Fixed**: a `() or Error` call at the end of a branch that ends a `() or
+  Error` function was refused as dropped; it is the function's value, as on
+  the function's own last line.
+
 - **A generator that is a loop around one `yield`** — names bound to plain
   values, then a `while` with one `yield` at its top — runs as a plain Rust
   iterator, a closure called for each item, with no coroutine. Its work
