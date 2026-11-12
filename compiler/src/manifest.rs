@@ -422,6 +422,10 @@ pub fn load_all(root: Manifest, fetcher: &mut Fetcher) -> Result<Vec<Manifest>, 
                                 ));
                             }
                         }
+                        // a package of a repository taken from git, and the
+                        // same folder named by a path from beside it in that
+                        // checkout — `http`'s `json = { path = "../json" }`
+                        _ if crate::canonical(&all[j].root).unwrap_or(all[j].root.clone()) == crate::canonical(&m.root).unwrap_or(m.root.clone()) => {}
                         _ => {
                             let (git, path) = if m.origin.is_some() { (&m, &all[j]) } else { (&all[j], &m) };
                             return Err(here(

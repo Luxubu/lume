@@ -35,10 +35,12 @@ Then:
 - **[The examples](docs/examples.md)** — 7,000 lines of working programs, in a
   reading order.
 - **[Installing](docs/install.md)** — and what each command does.
-- **[Changes](CHANGELOG.md)** — what each release holds; 1.2.0 is the latest.
-- **[What is settled](docs/stability.md)** — the parts you can build on, the
+- **[Changes](CHANGELOG.md)** — what each release holds; 1.2.1 is the latest.
+- **[What is settled](docs/stability.md)** — the parts you can build on,
   what the promise does not cover, and how a settled part is allowed to
   change.
+- **[Lume on macOS, for a real app](docs/macos.md)** — from nothing
+  installed to a service built for release and run by `launchd`.
 
 Every example in the documentation is compiled, run, and checked against the
 output it claims, by `tests/docs.sh`. An answer that stops being true fails

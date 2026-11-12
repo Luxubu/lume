@@ -2,6 +2,40 @@
 
 ## Unreleased
 
+## 1.2.1 — two packages from one repository
+
+A fix, and a guide. Nothing else changed: the `http` and `json` packages
+are as they were in 1.2.0.
+
+```sh
+cd lume && git fetch --tags && git checkout v1.2.1 && ./install.sh
+```
+
+### Fixed
+
+- **Two packages from one repository at one tag** — `http` and `json` from
+  Lume's own, as `http.md` and the tutorial show them — failed: the second
+  said it had no such tag. Each package had a copy of the repository of its
+  own, and the second's was never fetched. There is one copy of each
+  repository now, and one checkout of each commit, as `packages.md` always
+  said; and a package named by a path beside it in that checkout, as
+  `http` names `json`, is the same package, not one from two places.
+
+### New
+
+- **[Lume on macOS, for a real app](docs/macos.md)**: from nothing installed
+  to a service built for release and run by `launchd`, every step done on a
+  Mac. `install.md` says what macOS needs first, and to take a release's
+  tag.
+
+### How it was checked
+
+- The suite, with a case of two packages from one repository in
+  `tests/git_packages.sh`.
+- The guide's steps, on macOS 26: Lume installed from a clean clone of its
+  repository, a package with `http` and `json` from git, its tests, a
+  release build, and the service answering `curl`.
+
 ## 1.2.0 — settled serving
 
 Five milestones after 1.1.0 (128–132). Serving HTTP, the preview of 1.1, is

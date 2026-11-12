@@ -90,6 +90,13 @@ error: <tmp>/mono.git?tag=v1 has no package named `missing`
   | ^
   help: a repository's packages are found by the name in their `lume.toml`, at its top or up to three folders down; check that one is named `missing`
 exit: 1
+--- two packages of one repository at one tag, one using the other by path
+fetching `web` from <tmp>/duo.git
+<h1>HI</h1>
+BOTH
+exit: 0
+name = "text"
+name = "web"
 --- a path dependency cannot be updated
 error: `colors` comes from a path, so there is nothing to update
   help: `lume update` moves packages that come from git

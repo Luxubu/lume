@@ -104,6 +104,20 @@ run "$tmp/usesmono" run
 printf '[package]\nname = "usesmono"\nversion = "0.1.0"\n\n[dependencies]\nmissing = { git = "../mono.git", tag = "v1" }\n' > "$tmp/usesmono/lume.toml"
 run "$tmp/usesmono" check
 
+step "two packages of one repository at one tag, one using the other by path"
+mkdir -p "$tmp/src/duo/packages/web" "$tmp/src/duo/packages/text" && cd "$tmp/src/duo" || exit 1
+g init -q .
+printf '[package]\nname = "text"\nversion = "0.1.0"\n' > packages/text/lume.toml
+printf 'pub def shout(s: Str) -> Str = s.upcase\n' > packages/text/lib.lume
+printf '[package]\nname = "web"\nversion = "0.1.0"\n\n[dependencies]\ntext = { path = "../text" }\n' > packages/web/lume.toml
+printf 'import text\n\npub def page(s: Str) -> Str = "<h1>#{text.shout(s)}</h1>"\n' > packages/web/lib.lume
+g add -A && g commit -qm one && g tag v1 && g clone -q --bare . "$tmp/duo.git"
+mkdir -p "$tmp/usesduo"
+printf '[package]\nname = "usesduo"\nversion = "0.1.0"\n\n[dependencies]\nweb = { git = "../duo.git", tag = "v1" }\ntext = { git = "../duo.git", tag = "v1" }\n' > "$tmp/usesduo/lume.toml"
+printf 'import web\nimport text\n\ndef main:\n  puts web.page("hi")\n  puts text.shout("both")\n' > "$tmp/usesduo/main.lume"
+run "$tmp/usesduo" run
+grep '^name' "$tmp/usesduo/lume.lock"
+
 step "a path dependency cannot be updated"
 mkdir -p "$tmp/local"
 printf '[package]\nname = "local"\nversion = "0.1.0"\n\n[dependencies]\ncolors = { path = "../src/colors" }\n' > "$tmp/local/lume.toml"

@@ -1,13 +1,17 @@
 # Installing Lume
 
 Lume compiles to Rust and `rustc` compiles that to a native binary, so you
-need a Rust toolchain — [rustup.rs](https://rustup.rs) is the usual way.
+need a Rust toolchain — [rustup.rs](https://rustup.rs) is the usual way. On
+macOS, rustc links with Apple's command line tools: `xcode-select --install`
+puts them there. [Lume on macOS](macos.md) goes from that to a service run
+by `launchd`.
 
-Get Lume's source and install it:
+Get Lume's source at a release, and install it:
 
 ```sh
 git clone https://github.com/Luxubu/lume
 cd lume
+git checkout v1.2.1
 ./install.sh
 ```
 
@@ -19,7 +23,8 @@ That builds the compiler (a minute or two the first time) and puts `lume` in
 ```
 
 If `~/.local/bin` is not on your `PATH`, the script says so and gives you the
-line to add to your shell profile.
+line to add to your shell profile — on macOS, whose shell is zsh, that is
+`~/.zshrc`.
 
 Check it:
 

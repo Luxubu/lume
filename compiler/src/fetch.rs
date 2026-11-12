@@ -51,6 +51,15 @@ fn lume_home() -> PathBuf {
 
 /// A short name for a URL that stays the same from one run of lume to the
 /// next (FNV-1a), so the cache is found again.
+/// The last part of a repository's URL, for its folder's name: `lume` for
+/// `https://github.com/Luxubu/lume`, `colors` for `../colors.git`.
+fn repo_name(url: &str) -> String {
+    let last = url.trim_end_matches('/').rsplit(['/', ':', '\\']).next().unwrap_or("repo");
+    let last = last.strip_suffix(".git").unwrap_or(last);
+    let clean: String = last.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_').collect();
+    if clean.is_empty() { "repo".to_string() } else { clean }
+}
+
 fn url_hash(url: &str) -> String {
     let mut h: u64 = 0xcbf29ce484222325;
     for b in url.bytes() {
@@ -128,7 +137,9 @@ impl Fetcher {
             Update::All => true,
             Update::One(n) => n == name,
         };
-        let db = self.home.join("git").join("db").join(format!("{}-{}", name, url_hash(url)));
+        // one copy of each repository, whichever of its packages is asked
+        // for: two from one repository at one tag share it, and its fetch
+        let db = self.home.join("git").join("db").join(format!("{}-{}", repo_name(url), url_hash(url)));
         let locked = if moving { None } else { self.locked.iter().find(|e| e.name == name && e.source == key).map(|e| e.commit.clone()) };
         let commit = match locked {
             Some(c) => {
@@ -169,7 +180,8 @@ impl Fetcher {
     }
 
     fn checkout_dir(&self, name: &str, url: &str, commit: &str) -> PathBuf {
-        self.home.join("git").join("checkouts").join(format!("{}-{}", name, url_hash(url))).join(short(commit))
+        let _ = name;
+        self.home.join("git").join("checkouts").join(format!("{}-{}", repo_name(url), url_hash(url))).join(short(commit))
     }
 
     /// Brings the bare copy of `url` up to date: the only step that asks the
