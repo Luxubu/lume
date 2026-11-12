@@ -1,0 +1,52 @@
+# recipe.lume — what a dish takes, for how many, and what that costs.
+
+import json
+import json.Json
+import qty
+import qty.Qty
+
+pub struct Part:
+  name: Str
+  amount: Qty
+  cost: Int
+  # what this much costs, in cents: the `cents` that `pantry.Priced` asks for
+  def cents -> Int = cost
+
+  def times(k: Int) -> Part = Part(name: name, amount: amount.times(k), cost: cost * k)
+
+# JSON by the json package's interface, so a list of parts is JSON too.
+extend Part with json.ToJson:
+  def to_json -> Json = json.obj([("name", name.to_json), ("amount", amount.show.to_json), ("cents", cost.to_json)])
+
+pub struct Recipe:
+  title: Str
+  serves: Int
+  parts: [Part]
+
+  # The same dish for `n` people, when `n` is a whole number of servings.
+  def for_people(n: Int) -> Recipe or Error:
+    return Error("#{title} serves #{serves}, and #{n} is not a multiple of it") if n % serves != 0
+    k = n / serves
+    Recipe(title: title, serves: n, parts: parts.map { |p| p.times(k) }.to_list)
+
+pub def soup -> Recipe:
+  Recipe(title: "soup", serves: 2, parts: [
+    Part(name: "leeks", amount: qty.grams(300), cost: 120),
+    Part(name: "stock", amount: qty.ml(500), cost: 80),
+    Part(name: "cream", amount: qty.ml(50), cost: 45),
+  ])
+
+pub def bread -> Recipe:
+  Recipe(title: "bread", serves: 4, parts: [
+    Part(name: "flour", amount: qty.grams(500), cost: 60),
+    Part(name: "eggs", amount: qty.pieces(2), cost: 50),
+    Part(name: "cream", amount: qty.ml(100), cost: 90),
+  ])
+
+test "a recipe grows by whole servings":
+  four = soup().for_people(4)!
+  assert four.parts.map { |p| p.amount.show }.to_list == ["600g", "1000ml", "100ml"]
+  assert soup().for_people(3).error?
+
+test "parts are JSON":
+  assert json.show(soup().parts.take(1).to_list.to_json) == "[{\"name\":\"leeks\",\"amount\":\"300g\",\"cents\":120}]"

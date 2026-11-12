@@ -179,7 +179,7 @@ In a package, `lume test` with no file runs the tests of every file in the
 package — `main.lume` or `lib.lume` and the modules they import — and not
 the tests of its dependencies, as `cargo test` does. A test in a module is
 named with the module first, `menu: prices add up`, and the modules' tests
-run before the entry file's. `lume test prices` filters a package's tests
+run before the entry file's, in the order the entry file imports them. `lume test prices` filters a package's tests
 by that whole name, so `lume test menu` runs every test of `menu`. Naming
 the package's `main.lume` or `lib.lume` runs the same tests as naming none.
 A library has no `main`, and needs none: its tests, `async test`s among

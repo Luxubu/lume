@@ -1,0 +1,151 @@
+# c05: a rate-limited proxy. A front server lets each client (by its
+# `X-Client` header) make three requests a round and answers `429` with
+# `Retry-After` past that; what it lets through it passes to an upstream
+# server of its own, or to http://127.0.0.1:9/, where nothing listens (502).
+# A round ends only when asked, never by the clock, and the client sends
+# bursts of requests at once: which of a burst are refused depends on
+# timing, so it prints how many, which does not.
+# Probes two servers in one program, `incoming` with a task per request,
+# `await req.fetch` in tasks, and a `shared var` limiter's `var self` lock.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# ana GET /price/tea: 200 tea: 250 [via proxy]
+# bo, 5 at once: 3 answered, 2 told to wait
+# ana GET /price/soup: 200 soup: 520 [via proxy]
+# ana, 4 at once: 1 answered, 3 told to wait
+# bo GET /price/tea: 429 bo has had 3 this round [retry after 1]
+# anyone POST /round: 200 round 2: 3 each
+# bo, 3 at once: 3 answered, 0 told to wait
+# cy GET /price/cake: 404 no price for cake [via proxy]
+# cy GET /dead/price/tea: 502 the upstream did not answer [via proxy]
+# cy GET /price/pie: 200 pie: 400 [via proxy]
+# cy GET /price/pie: 429 cy has had 3 this round [retry after 1]
+# both servers closed
+# EXPECTED STDERR:
+# warning: `limits` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+#   --> corpus/m131/c05_limits/main.lume:84:3
+#    |
+# 84 |   shared var limits = Limiter(used: {}, round: 1)
+#    |   ^
+#   help: fine for a store or a counter; keep the work done while it is locked short
+
+import http
+
+LIMIT = 3
+PRICES = {"tea": 250, "pie": 400, "soup": 520}
+
+# How many requests each client has made this round.
+struct Limiter:
+  used: {Str: Int}
+  round: Int
+
+  def take(var self, who: Str) -> Bool:
+    now = used[who].or(0)
+    return false if now >= LIMIT
+    used[who] = now + 1
+    true
+
+  def next_round(var self) -> Int:
+    used = {}
+    round += 1
+    round
+
+# The upstream: a price, or a 404.
+def price(req: http.Incoming) -> http.Reply:
+  match req.path.split("/").reject(_.empty?).to_list:
+    ["price", item] ->
+      match PRICES[item]:
+        Some(cents) -> http.reply(200, "#{item}: #{cents}")
+        None -> http.reply(404, "no price for #{item}")
+    _ -> http.reply(404, "no #{req.path} here")
+
+# The front: the round, a refusal, or what the upstream said.
+def answer(limits: shared var Limiter, upstream: Str, req: http.Incoming) -> http.Reply:
+  if req.method == "POST" and req.path == "/round":
+    n = limits.next_round
+    return http.reply(200, "round #{n}: #{LIMIT} each")
+  who = req.header("x-client").or("anyone")
+  if not limits.take(who):
+    return http.reply(429, "#{who} has had #{LIMIT} this round").header("Retry-After", "1")
+  target = if req.path.starts_with?("/dead/"): "http://127.0.0.1:9#{req.path}" else: upstream + req.path
+  match http.request(req.method, target).timeout(5000).send:
+    Ok(r) -> http.reply(r.status, r.body).header("X-Via", "proxy")
+    Error(_) -> http.reply(502, "the upstream did not answer").header("X-Via", "proxy")
+
+async def serve_back(server: http.Server) -> () or Error:
+  var answering: [Task[() or Error]] = []
+  for req in server.incoming:
+    answering.push(spawn: req.respond(price(req)))
+  for t in answering:
+    await t?
+  ()
+
+async def serve_front(server: http.Server, upstream: Str) -> () or Error:
+  shared var limits = Limiter(used: {}, round: 1)
+  var answering: [Task[() or Error]] = []
+  for req in server.incoming:
+    answering.push(spawn: req.respond(answer(limits, upstream, req)))
+  for t in answering:
+    await t?
+  ()
+
+# What a reply's headers add to its line.
+def note(r: http.Response) -> Str:
+  match (r.header("x-via"), r.header("retry-after")):
+    (Some(via), _)     -> " [via #{via}]"
+    (None, Some(secs)) -> " [retry after #{secs}]"
+    (None, None)       -> ""
+
+async def ask(base: Str, who: Str, method: Str, path: Str) -> Str:
+  match await http.request(method, base + path).header("X-Client", who).fetch:
+    Ok(r) -> "#{who} #{method} #{path}: #{r.status} #{r.body}#{note(r)}"
+    Error(e) -> "#{who} #{method} #{path}: #{e.message}"
+
+async def status_of(base: Str, who: Str) -> Int:
+  match await http.request("GET", "#{base}/price/pie").header("X-Client", who).fetch:
+    Ok(r) -> r.status
+    Error(_) -> 0
+
+# `n` requests from `who`, all at once: only how many of each came back.
+async def burst(base: Str, who: Str, n: Int) -> Str:
+  tasks = (1..n).map { |_| spawn: await status_of(base, who) }.to_list
+  got = await tasks
+  ok = got.count { |s| s == 200 }
+  waiting = got.count { |s| s == 429 }
+  "#{who}, #{n} at once: #{ok} answered, #{waiting} told to wait"
+
+async def visit(base: Str) -> [Str]:
+  var said: [Str] = []
+  said.push(await ask(base, "ana", "GET", "/price/tea"))
+  said.push(await burst(base, "bo", 5))
+  said.push(await ask(base, "ana", "GET", "/price/soup"))
+  said.push(await burst(base, "ana", 4))
+  said.push(await ask(base, "bo", "GET", "/price/tea"))
+  said.push(await ask(base, "anyone", "POST", "/round"))
+  said.push(await burst(base, "bo", 3))
+  for path in ["/price/cake", "/dead/price/tea", "/price/pie", "/price/pie"]:
+    said.push(await ask(base, "cy", "GET", path))
+  said
+
+async def main -> () or Error:
+  back = http.listen("127.0.0.1:0")?
+  front = http.listen("127.0.0.1:0")?
+  upstream = spawn: await serve_back(back)
+  proxy = spawn: await serve_front(front, "http://#{back.address}")
+  said = await visit("http://#{front.address}")
+  front.close
+  back.close
+  await proxy?
+  await upstream?
+  for line in said:
+    puts line
+  puts "both servers closed"
+  ()
+
+test "a round lets each client make three":
+  var l = Limiter(used: {}, round: 1)
+  assert l.take("ana") and l.take("ana") and l.take("ana")
+  assert not l.take("ana")
+  assert l.take("bo")
+  assert l.next_round == 2
+  assert l.take("ana")

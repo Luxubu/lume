@@ -1,0 +1,52 @@
+# a05_pages: a generator that is a loop around one `yield`, printing before
+# and after it, walked with `take`, a chain, `next` and `for`: each page is
+# read when it is asked for, and the line after the `yield` runs only when
+# the next one is.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+#   (reading page 1)
+#   (turned page 1)
+#   (reading page 2)
+# first two: [1, 2]
+#   (reading page 1)
+#   (turned page 1)
+#   (reading page 2)
+# first even: [2]
+# opened
+#   (reading page 1)
+# Some(1)
+# between
+#   (turned page 1)
+#   (reading page 2)
+# page 2
+#   (turned page 2)
+#   (reading page 3)
+# page 3
+#   (turned page 3)
+# done
+# None
+# None
+
+def pages(last: Int) -> Iterator[Int]:
+  var p = 1
+  while p <= last:
+    puts "  (reading page #{p})"
+    yield p
+    puts "  (turned page #{p})"
+    p += 1
+
+def main:
+  two = pages(5).take(2).to_list
+  puts "first two: #{two}"
+  even = pages(4).filter { |p| p % 2 == 0 }.take(1).to_list
+  puts "first even: #{even}"
+  var book = pages(3)
+  puts "opened"
+  puts book.next
+  puts "between"
+  for p in book:
+    puts "page #{p}"
+  puts "done"
+  var blank = pages(0)
+  puts blank.next
+  puts blank.next

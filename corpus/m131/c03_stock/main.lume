@@ -1,0 +1,180 @@
+# c03: a stock service saving each change to a JSON file under /tmp, as
+# examples/notes/ does; after it stops the file is shown and opened again.
+# Probes `need_…`, a guard in a route, `Ok(Now(i))`, `json.pretty`, and
+# `() or Error` calls ending the arms of the `match` that ends `settle`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# add bolts: 201 {"sku":"B7","name":"bolts","qty":40}
+# add nuts: 201 {"sku":"N2","name":"nuts","qty":25}
+# add bolts again: 409 {"error":"B7 is there already"}
+# add washers, no qty: 400 {"error":"`qty` is missing"}
+# take 15 bolts: 200 {"sku":"B7","name":"bolts","qty":25}
+# take 30 nuts: 409 {"error":"only 25 of N2 left"}
+# add 5 nuts: 200 {"sku":"N2","name":"nuts","qty":30}
+# take a Q9: 404 {"error":"no item Q9"}
+# take some bolts: 400 {"error":"qty must be a whole number above 0"}
+# drop nuts: 204
+# drop nuts again: 404 {"error":"no item N2"}
+# list: 200 [{"sku":"B7","name":"bolts","qty":25}]
+# file| {
+# file|   "goods": [
+# file|     {
+# file|       "sku": "B7",
+# file|       "name": "bolts",
+# file|       "qty": 25
+# file|     }
+# file|   ]
+# file| }
+# kept on disk: B7 bolts 25
+# cleared: true
+# EXPECTED STDERR:
+# warning: `kept` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+#   --> corpus/m131/c03_stock/main.lume:137:3
+#     |
+# 137 |   shared var kept = stock
+#     |   ^
+#   help: fine for a store or a counter; keep the work done while it is locked short
+
+import http
+import json
+import json.Json
+
+FOLDER = "/tmp/lume-review-c/stock"
+
+struct Item:
+  sku: Str
+  name: Str
+  qty: Int
+
+  def to_json -> Json = json.obj([("sku", sku.to_json), ("name", name.to_json), ("qty", qty.to_json)])
+  def self.read(doc: Json) -> Item or Error:
+    Item(sku: doc.need_str("sku")?, name: doc.need_str("name")?, qty: doc.need_int("qty")?)
+
+enum Moved:
+  Now(item: Item)
+  Short(left: Int)
+  Unknown
+
+struct Store:
+  file: Str
+  goods: [Item]
+
+  def add(var self, item: Item) -> Bool or Error:
+    return Ok(false) if goods.any? { |i| i.sku == item.sku }
+    goods.push(item)
+    save()?
+    Ok(true)
+  def move(var self, sku: Str, by: Int) -> Moved or Error:
+    match goods.enumerate.find { |_, i| i.sku == sku }.map { |p| p.0 }:
+      None -> Unknown
+      Some(pos) ->
+        was = goods.at(pos)
+        return Short(was.qty) if was.qty + by < 0
+        goods[pos] = Item(sku: sku, name: was.name, qty: was.qty + by)
+        save()?
+        Now(goods.at(pos))
+  def remove(var self, sku: Str) -> Bool or Error:
+    before = goods.len
+    goods = goods.reject { |i| i.sku == sku }.to_list
+    return Ok(false) if goods.len == before
+    save()?
+    Ok(true)
+  def save -> () or Error:
+    doc = json.obj([("goods", goods.map { |i| i.to_json }.to_list.to_json)])
+    File.write(file, json.pretty(doc))
+
+def open(folder: Str) -> Store or Error:
+  settle(folder, true)?
+  file = Path.join(folder, "stock.json")
+  return Ok(Store(file: file, goods: [])) unless File.exists?(file)
+  doc = json.parse(File.read(file)?)?
+  var goods: [Item] = []
+  for d in doc.need_items("goods")?:
+    goods.push(Item.read(d)?)
+  Store(file: file, goods: goods)
+
+def settle(folder: Str, keep: Bool) -> () or Error:
+  match (keep, Dir.exists?(folder)):
+    (true, _)      -> Dir.make(folder)
+    (false, true)  -> Dir.remove(folder)
+    (false, false) -> ()
+
+def problem(status: Int, why: Str) -> http.Reply = http.reply_json(status, json.obj([("error", why.to_json)]))
+
+def wanted(req: http.Incoming) -> Item or Error = Item.read(req.json?)
+
+def shift(stock: shared var Store, req: http.Incoming, sku: Str, sign: Int) -> http.Reply:
+  n = http.value(req.form.or([]), "qty").or("").to_int.or(0)
+  return problem(400, "qty must be a whole number above 0") if n < 1
+  match stock.move(sku, n * sign):
+    Ok(Now(i))      -> http.reply_json(200, i.to_json)
+    Ok(Short(left)) -> problem(409, "only #{left} of #{sku} left")
+    Ok(Unknown)     -> problem(404, "no item #{sku}")
+    Error(e)        -> problem(500, e.message)
+
+def answer(stock: shared var Store, req: http.Incoming) -> http.Reply:
+  match (req.method, req.path.split("/").reject(_.empty?).to_list):
+    ("GET", ["items"]) -> http.reply_json(200, stock.goods.map { |i| i.to_json }.to_list.to_json)
+    ("POST", ["items"]) ->
+      match wanted(req):
+        Error(e) -> problem(400, e.message)
+        Ok(it) ->
+          match stock.add(it):
+            Ok(true)  -> http.reply_json(201, it.to_json)
+            Ok(false) -> problem(409, "#{it.sku} is there already")
+            Error(e)  -> problem(500, e.message)
+    ("POST", ["items", sku, verb]) if verb == "take" or verb == "add" ->
+      sign = if verb == "take": 0 - 1 else: 1
+      shift(stock, req, sku, sign)
+    ("DELETE", ["items", sku]) ->
+      match stock.remove(sku):
+        Ok(true)  -> http.reply(204, "")
+        Ok(false) -> problem(404, "no item #{sku}")
+        Error(e)  -> problem(500, e.message)
+    _ -> problem(404, "no #{req.method} #{req.path} here")
+
+async def serve(server: http.Server, stock: Store) -> () or Error:
+  shared var kept = stock
+  var answering: [Task[() or Error]] = []
+  for req in server.incoming:
+    answering.push(spawn: req.respond(answer(kept, req)))
+  for t in answering:
+    await t?
+  ()
+
+def line(what: Str, r: http.Response or Error) -> Str:
+  match r:
+    Ok(x) -> "#{what}: #{x.status} #{x.body}".trim_right
+    Error(e) -> "#{what}: #{e.message}"
+
+def sent(sku: Str, name: Str, qty: Int) -> Json = json.obj([("sku", sku.to_json), ("name", name.to_json), ("qty", qty.to_json)])
+
+def client(base: Str, server: http.Server) -> [Str]:
+  var seen: [Str] = []
+  for what, doc in [("add bolts", sent("B7", "bolts", 40)), ("add nuts", sent("N2", "nuts", 25)), ("add bolts again", sent("B7", "more bolts", 5))]:
+    seen.push(line(what, http.post_json("#{base}/items", doc)))
+  seen.push(line("add washers, no qty", http.post_json("#{base}/items", json.obj([("sku", "W1".to_json), ("name", "washers".to_json)]))))
+  for what, path, qty in [("take 15 bolts", "B7/take", "15"), ("take 30 nuts", "N2/take", "30"), ("add 5 nuts", "N2/add", "5"), ("take a Q9", "Q9/take", "1"), ("take some bolts", "B7/take", "some")]:
+    seen.push(line(what, http.request("POST", "#{base}/items/#{path}").with_form([("qty", qty)]).send))
+  seen.push(line("drop nuts", http.delete("#{base}/items/N2")))
+  seen.push(line("drop nuts again", http.delete("#{base}/items/N2")))
+  seen.push(line("list", http.get("#{base}/items")))
+  server.close
+  seen
+
+async def main -> () or Error:
+  settle(FOLDER, false)?
+  stock = open(FOLDER)?
+  server = http.listen("127.0.0.1:0")?
+  asking = spawn: client("http://#{server.address}", server)
+  await serve(server, stock)?
+  for l in await asking:
+    puts l
+  for l in File.read(Path.join(FOLDER, "stock.json"))?.lines:
+    puts "file| #{l}"
+  again = open(FOLDER)?
+  kept_line = again.goods.map { |i| "#{i.sku} #{i.name} #{i.qty}" }.join(", ")
+  puts "kept on disk: #{kept_line}"
+  settle(FOLDER, false)?
+  puts "cleared: #{not Dir.exists?(FOLDER)}"
+  ()

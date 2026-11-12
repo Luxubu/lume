@@ -1,0 +1,36 @@
+# b08 — probes: an endless generator cut by `take_while`, `skip` and
+# `take`. `take_while` asks for one item more than it keeps — the one that
+# fails its test — and none after it; `skip(2)` asks for the two it drops.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# (making 1)
+# (making 2)
+# (making 3)
+# (making 4)
+# [1, 4, 9]
+# (making 1)
+# []
+# (making 1)
+# (making 2)
+# (making 3)
+# [9]
+# (making 1)
+# (making 2)
+# (making 3)
+# (making 4)
+# (making 5)
+# (making 6)
+# 55
+
+def squares -> Iterator[Int]:
+  var n = 1
+  while true:
+    puts "(making #{n})"
+    yield n * n
+    n += 1
+
+def main:
+  puts squares().take_while { |s| s < 10 }.to_list
+  puts squares().take_while { |s| s < 0 }.to_list
+  puts squares().skip(2).take(1).to_list
+  puts squares().take_while { |s| s < 30 }.sum

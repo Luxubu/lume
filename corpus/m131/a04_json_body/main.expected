@@ -1,0 +1,13 @@
+1: 201 {"dish":"soup","table":4,"note":"no salt"}
+2: 201 {"dish":"pie","table":2,"note":""}
+3: 400 `table` is a string, not a whole number
+4: 400 `dish` is missing
+5: 400 the body is not JSON: expected `,` or `}` at position 16
+6: 400 expected an object with `dish`, found an array
+7: 400 table 0 is not a table
+8: 400 `table` is a number, not a whole number
+9: 400 `note` is a number, not a string
+10: 400 `dish` is missing
+11: 400 the body is not JSON: unexpected character `d` at position 0
+GET: 404 no GET /orders here
+exit: 0

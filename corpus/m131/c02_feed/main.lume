@@ -1,0 +1,146 @@
+# c02: an event feed that a generator makes, served a page at a time with
+# `?after=` and `?limit=`, and a client that follows each page's `next`.
+# Probes a generator that is a loop around one `yield` (a plain iterator now)
+# doing its work only as `filter` and `take` ask: the server prints as each
+# event is made, between the line for the request and the answer.
+# `server.requests` answers one request at a time, so nothing printed
+# depends on timing; the client's lines come after the server has stopped.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# server: GET /events?after=0&limit=2
+#   making event 1
+#   making event 2
+#   making event 3
+# server: GET /events?after=2&limit=2
+#   making event 1
+#   making event 2
+#   making event 3
+#   making event 4
+#   making event 5
+# server: GET /events?after=4&limit=2
+#   making event 1
+#   making event 2
+#   making event 3
+#   making event 4
+#   making event 5
+# server: GET /events?after=5
+#   making event 1
+#   making event 2
+#   making event 3
+#   making event 4
+#   making event 5
+# server: GET /events?limit=0
+# server: GET /events?after=two
+# server: GET /events?limit=2&limit=9
+#   making event 1
+#   making event 2
+#   making event 3
+# server: GET /feed
+# client: after 0: 200 {"events":[{"id":1,"kind":"post","who":"bo"},{"id":2,"kind":"like","who":"cy"}],"next":2}
+# client: after 2: 200 {"events":[{"id":3,"kind":"leave","who":"ana"},{"id":4,"kind":"join","who":"bo"}],"next":4}
+# client: after 4: 200 {"events":[{"id":5,"kind":"post","who":"cy"}],"next":null}
+# client: ?after=5: 200 {"events":[],"next":null}
+# client: ?limit=0: 400 limit must be from 1 to 50, not 0
+# client: ?after=two: 400 after: `two` is not an integer
+# client: ?limit=2&limit=9: 200 {"events":[{"id":1,"kind":"post","who":"bo"},{"id":2,"kind":"like","who":"cy"}],"next":2}
+# client: /feed: 404 no GET /feed here
+# client: 3 pages, 5 events
+
+import http
+import json
+import json.Json
+
+TOTAL = 5
+KINDS = ["join", "post", "like", "leave"]
+WHO = ["ana", "bo", "cy"]
+
+struct Event:
+  id: Int
+  kind: Str
+  who: Str
+
+  def to_json -> Json = json.obj([("id", id.to_json), ("kind", kind.to_json), ("who", who.to_json)])
+
+# The feed, made an event at a time as it is asked for.
+def events(count: Int) -> Iterator[Event]:
+  var n = 1
+  while n <= count:
+    puts "  making event #{n}"
+    yield Event(id: n, kind: KINDS.at(n % 4), who: WHO.at(n % 3))
+    n += 1
+
+# A number from the query, or `fallback` when it is not there.
+def number(query: [(Str, Str)], name: Str, fallback: Int) -> Int or Error:
+  match http.value(query, name):
+    Some(text) -> text.to_int.map_error { |e| Error("#{name}: #{e.message}") }
+    None -> Ok(fallback)
+
+# One page: the events after `after`, at most `limit`, and where the next
+# page starts. One event more than the page is asked for, to know if there
+# is a next page at all.
+def page(req: http.Incoming) -> http.Reply:
+  query = match req.params:
+    Ok(q) -> q
+    Error(e) -> return http.reply(400, e.message)
+  after = match number(query, "after", 0):
+    Ok(n) -> n
+    Error(e) -> return http.reply(400, e.message)
+  limit = match number(query, "limit", 5):
+    Ok(n) -> n
+    Error(e) -> return http.reply(400, e.message)
+  if limit < 1 or limit > 50:
+    return http.reply(400, "limit must be from 1 to 50, not #{limit}")
+  got = events(TOTAL).filter { |e| e.id > after }.take(limit + 1).to_list
+  shown = got.take(limit).to_list
+  cursor = if got.len > limit: shown.last.map { |e| e.id.to_json }.or(Json.Null) else: Json.Null
+  http.reply_json(200, json.obj([("events", shown.map { |e| e.to_json }.to_list.to_json), ("next", cursor)]))
+
+def answer(req: http.Incoming) -> http.Reply:
+  match (req.method, req.path):
+    ("GET", "/events") -> page(req)
+    _ -> http.reply(404, "no #{req.method} #{req.path} here")
+
+# Follows the pages to the end, then asks for some that are wrong.
+def pages(base: Str) -> [Str] or Error:
+  var seen: [Str] = []
+  var after = 0
+  var count = 0
+  var shown = 0
+  while true:
+    r = http.request("GET", "#{base}/events").with_query([("after", after.to_s), ("limit", "2")]).send?
+    seen.push("after #{after}: #{r.status} #{r.body}")
+    doc = r.json?
+    count += 1
+    shown += doc.need_items("events")?.len
+    match doc.opt_int("next")?:
+      Some(n) -> after = n
+      None -> break
+  for q in ["after=5", "limit=0", "after=two", "limit=2&limit=9"]:
+    r = http.get("#{base}/events?#{q}")?
+    seen.push("?#{q}: #{r.status} #{r.body}")
+  gone = http.get("#{base}/feed")?
+  seen.push("/feed: #{gone.status} #{gone.body}")
+  seen.push("#{count} pages, #{shown} events")
+  Ok(seen)
+
+def walk(base: Str, server: http.Server) -> [Str] or Error:
+  got = pages(base)
+  server.close
+  got
+
+async def main -> () or Error:
+  server = http.listen("127.0.0.1:0")?
+  client = spawn: walk("http://#{server.address}", server)
+  for req in server.requests:
+    asked = if req.query.empty?: req.path else: "#{req.path}?#{req.query}"
+    puts "server: #{req.method} #{asked}"
+    req.respond(answer(req))?
+  for l in await client?:
+    puts "client: #{l}"
+  ()
+
+test "a page of the feed":
+  assert events(TOTAL).map { |e| e.who }.to_list == ["bo", "cy", "ana", "bo", "cy"]
+  assert number([("after", "3")], "after", 0) == Ok(3)
+  assert number([], "limit", 5) == Ok(5)
+  assert number([("limit", "x")], "limit", 5).error?

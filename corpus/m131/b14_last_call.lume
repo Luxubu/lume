@@ -1,0 +1,43 @@
+# b14 — probes: in a `() or Error` function, a `() or Error` call that is
+# the last line of each branch of a closing `if`/`else`, and of each arm
+# of a closing `match`, is the function's value: accepted, and its
+# failure passed on. The last call in `main` fails, and `?` passes it out of `main`.
+# Meant to RUN. It ends through `main`'s `?`, with exit status 1, not as a stop.
+# EXPECTED OUTPUT:
+# loudly:
+# saved ADA
+# saved bo
+# keeping 2
+# saved cy
+# keeping 0
+# failed: no name given
+# EXPECTED STDERR:
+# error: no name given
+# EXPECTED EXIT: 1
+
+def save(name: Str) -> () or Error:
+  return Error("no name given") if name.empty?
+  puts "saved #{name}"
+
+def keep(name: Str, loud: Bool) -> () or Error:
+  if loud:
+    puts "loudly:"
+    save(name.upcase)
+  else:
+    save(name)
+
+def keep_first(names: [Str]) -> () or Error:
+  puts "keeping #{names.len}"
+  match names.first:
+    Some(n) -> save(n)
+    None -> save("")
+
+def main -> () or Error:
+  keep("ada", true)?
+  keep("bo", false)?
+  keep_first(["cy", "di"])?
+  match keep_first([]):
+    Ok(_) -> puts "kept nothing"
+    Error(e) -> puts "failed: #{e.message}"
+  keep("", false)?
+  puts "never"

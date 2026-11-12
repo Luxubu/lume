@@ -406,6 +406,25 @@ def main:
   puts({"pear", "fig"}.in_order) #=> ["fig", "pear"]
 ```
 
+**A bound is the `extend`'s to keep**: on a list whose items do not meet
+it, its methods are not there, and Lume says which bound is not met:
+
+```lume-bad
+interface Loud:
+  def loud -> Str
+
+extend Str with Loud:
+  def loud -> Str = self.upcase
+
+extend [T: Loud] with Loud:
+  def loud -> Str = self.map { |x| x.loud }.join(" ")
+
+def main:
+  puts [1, 2].loud
+#! `[Int]` values have no method `loud`
+#! `loud` is there for `[T]` where `T` is `Loud`, and `Int` is not
+```
+
 A bare target must still be a real type, so a bound on one is a mistake
 rather than a silent parameter:
 

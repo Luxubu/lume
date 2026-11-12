@@ -1,0 +1,55 @@
+# a08_steps: a `() or Error` function that ends in a `match` whose arms each
+# call another `() or Error` function: each call is the arm's value, and so
+# the function's, with no `?` and no `_ =`. `main` matches the result of
+# each step, then passes the last one's failure up with `?`, which ends the
+# program with its message and exit status 1.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# step: Chop(what: "leeks")
+# chopped leeks
+# ok
+# step: Boil(minutes: 12)
+# boiled for 12 minutes
+# ok
+# step: Rest
+# rested
+# ok
+# step: Chop(what: "")
+# failed: nothing to chop
+# step: Boil(minutes: 30)
+# failed: 30 minutes is too long to boil
+# step: Boil(minutes: 25)
+# EXPECTED STDERR:
+# error: 25 minutes is too long to boil
+# EXPECTED EXIT: 1
+
+enum Step:
+  Boil(minutes: Int)
+  Chop(what: Str)
+  Rest
+
+def boil(minutes: Int) -> () or Error:
+  return Error("#{minutes} minutes is too long to boil") if minutes > 20
+  puts "boiled for #{minutes} minutes"
+
+def chop(what: Str) -> () or Error:
+  return Error("nothing to chop") if what.empty?
+  puts "chopped #{what}"
+
+def rest() -> () or Error:
+  puts "rested"
+
+def run(step: Step) -> () or Error:
+  puts "step: #{step}"
+  match step:
+    Boil(m) -> boil(m)
+    Chop(w) -> chop(w)
+    Rest    -> rest()
+
+def main -> () or Error:
+  for s in [Chop("leeks"), Boil(12), Rest, Chop(""), Boil(30)]:
+    match run(s):
+      Ok(_)    -> puts "ok"
+      Error(e) -> puts "failed: #{e.message}"
+  run(Boil(25))?
+  puts "never here"

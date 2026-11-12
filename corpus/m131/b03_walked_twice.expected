@@ -1,0 +1,7 @@
+error: `menu` is a generator, and it is used up here, so it cannot be used after
+  --> corpus/m131/b03_walked_twice.lume:19:12
+   |
+19 |   for c in menu:
+   |            ^
+  help: a generator hands out each item once: to walk the items twice, keep them with `.to_list` first
+exit: 1

@@ -1,0 +1,81 @@
+# a04_json_body: an order sent as JSON, read with `req.json` and decoded with
+# the `json` package's `need_str`, `need_int` and `opt_str`; every body that
+# will not decode is a 400 whose text is the error's message. The server
+# answers twelve requests one at a time; its own client makes them from a
+# task and the lines are printed after.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# 1: 201 {"dish":"soup","table":4,"note":"no salt"}
+# 2: 201 {"dish":"pie","table":2,"note":""}
+# 3: 400 `table` is a string, not a whole number
+# 4: 400 `dish` is missing
+# 5: 400 the body is not JSON: expected `,` or `}` at position 16
+# 6: 400 expected an object with `dish`, found an array
+# 7: 400 table 0 is not a table
+# 8: 400 `table` is a number, not a whole number
+# 9: 400 `note` is a number, not a string
+# 10: 400 `dish` is missing
+# 11: 400 the body is not JSON: unexpected character `d` at position 0
+# GET: 404 no GET /orders here
+
+import http
+import json
+import json.Json
+
+BODIES = [
+  "{\"dish\": \"soup\", \"table\": 4, \"note\": \"no salt\"}",
+  "{\"dish\": \"pie\", \"table\": 2}",
+  "{\"dish\": \"tea\", \"table\": \"four\"}",
+  "{\"table\": 3}",
+  "{\"dish\": \"stew\" \"table\": 1}",
+  "[1, 2]",
+  "{\"dish\": \"soup\", \"table\": 0}",
+  "{\"dish\": \"soup\", \"table\": 2.5}",
+  "{\"dish\": \"soup\", \"table\": 1, \"note\": 7}",
+  "{\"table\": \"x\"}",
+  "dish=soup&table=1",
+]
+
+struct Order:
+  dish: Str
+  table: Int
+  note: Str
+
+  def self.from_json(j: Json) -> Order or Error:
+    Order(dish: j.need_str("dish")?, table: j.need_int("table")?, note: j.opt_str("note")?.or(""))
+
+  def to_json -> Json =
+    json.obj([("dish", dish.to_json), ("table", table.to_json), ("note", note.to_json)])
+
+def order_from(req: http.Incoming) -> Order or Error:
+  doc = req.json?
+  o = Order.from_json(doc)?
+  return Error("table #{o.table} is not a table") if o.table < 1
+  o
+
+def answer(req: http.Incoming) -> http.Reply:
+  match (req.method, req.path):
+    ("POST", "/orders") ->
+      match order_from(req):
+        Ok(o)    -> http.reply_json(201, o.to_json)
+        Error(e) -> http.reply(400, e.message)
+    _ -> http.reply(404, "no #{req.method} #{req.path} here")
+
+def visit(base: Str) -> [Str] or Error:
+  var seen: [Str] = []
+  for i, body in BODIES.enumerate:
+    r = http.post("#{base}/orders", body, "application/json")?
+    seen.push("#{i + 1}: #{r.status} #{r.body}")
+  missing = http.get("#{base}/orders")?
+  seen.push("GET: #{missing.status} #{missing.body}")
+  Ok(seen)
+
+async def main -> () or Error:
+  server = http.listen("127.0.0.1:0")?
+  client = spawn: visit("http://#{server.address}")
+  for req in server.requests.take(12):
+    req.respond(answer(req))?
+  for line in await client?:
+    puts line
+  server.close
+  ()

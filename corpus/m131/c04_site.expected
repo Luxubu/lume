@@ -1,0 +1,28 @@
+  read Opening night
+wrote 1-opening-night.html
+  read Secret menu
+  skip Secret menu (a draft)
+  read Winter soups
+wrote 2-winter-soups.html
+  read A new oven
+wrote 3-a-new-oven.html
+wrote index.html
+wrote tag-news.html (2 posts)
+wrote tag-cafe.html (1 post)
+wrote tag-menu.html (1 post)
+wrote tag-food.html (1 post)
+8 files: 1-opening-night.html, 2-winter-soups.html, 3-a-new-oven.html, index.html, tag-cafe.html, tag-food.html, tag-menu.html, tag-news.html
+== index.html
+<h1>All posts</h1>
+<ul>
+<li><a href="1-opening-night.html">Opening night</a> 2026-03-02</li>
+<li><a href="3-a-new-oven.html">A new oven</a> 2026-02-20</li>
+<li><a href="2-winter-soups.html">Winter soups</a> 2026-01-15</li>
+</ul>
+== 2-winter-soups.html
+<h1>Winter soups</h1>
+<p class="date">2026-01-15</p>
+<p>Three soups &lt;hot&gt; &amp; one cold.</p>
+<p><a href="tag-menu.html">menu</a> <a href="tag-food.html">food</a></p>
+3 pages, 4 tags, 24 words
+exit: 0

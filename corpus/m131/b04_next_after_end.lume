@@ -1,0 +1,45 @@
+# b04 — probes: `next` on a `var` past the end of a generator whose loop
+# has a statement after its `yield`. The statement after the last item
+# runs on the `next` that finds the end; after that `next` gives `None`
+# and runs nothing. A `for` after a `next` carries on; a generator called
+# again starts afresh.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# Some(10)
+# (after 1)
+# Some(20)
+# (after 2)
+# None
+# None
+# (after 1)
+# (after 2)
+# [10, 20]
+# (after 1)
+# (after 2)
+# [10, 20]
+# Some(10)
+# (after 1)
+# rest 20
+# (after 2)
+# done
+
+def two -> Iterator[Int]:
+  var n = 0
+  while n < 2:
+    n += 1
+    yield n * 10
+    puts "(after #{n})"
+
+def main:
+  var g = two()
+  puts g.next
+  puts g.next
+  puts g.next
+  puts g.next
+  puts two().to_list
+  puts two().to_list
+  var h = two()
+  puts h.next
+  for x in h:
+    puts "rest #{x}"
+  puts "done"

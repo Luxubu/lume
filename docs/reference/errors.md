@@ -190,6 +190,30 @@ The same holds in a function declared `-> () or Error`: an `Error(...)` on a
 line of its own, other than the last, is refused with the same message, and
 the fix is the same `return`.
 
+**At the end of such a function, a branch's last call is its value**, as
+the function's own last line is: when an `if` or a `match` ends the
+function, an arm that ends in a call giving `() or Error` gives what that
+call gave.
+
+```lume
+def save(name: Str) -> () or Error:
+  return Error("no name") if name.empty?
+  puts "saved #{name}"
+
+def store(names: [Str]) -> () or Error:
+  match names.first:
+    Some(n) -> save(n)
+    None -> save("")
+
+def main:
+  puts store(["ada"])    #=> saved ada
+                         #=> Ok(())
+  puts store([])         #=> Error("no name")
+```
+
+With a line after the `match`, the arm is no longer the function's end, and
+its call is a failure nothing looks at, refused as any other.
+
 **A call that can fail, standing on its own line, is rejected**:
 
 ```lume-bad

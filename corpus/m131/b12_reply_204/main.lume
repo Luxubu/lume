@@ -1,0 +1,37 @@
+# b12 — probes: a reply answered with `204` and no body, which the client
+# reads as an empty, ok body; a second `respond` to it, refused; a status
+# of 600, refused without sending, so the request is still answered after.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# again: DELETE /notes/1 has been answered already
+# 600: 600 is not an HTTP status: one from 100 to 599
+# client: 204 [] ok? true
+# client: 201 made at /notes/2
+import http
+
+def client(base: Str) -> [Str] or Error:
+  var seen: [Str] = []
+  gone = http.delete(base + "/notes/1")?
+  seen.push("#{gone.status} [#{gone.body}] ok? #{gone.ok?}")
+  made = http.request("POST", base + "/notes").send?
+  seen.push("#{made.status} #{made.body} at #{made.header("location").or("?")}")
+  Ok(seen)
+
+async def main -> () or Error:
+  server = http.listen("127.0.0.1:0")?
+  helper = spawn: client("http://#{server.address}")
+  for req in server.requests.take(2):
+    if req.method == "DELETE":
+      req.respond(http.reply(204, ""))?
+      match req.respond(http.reply(200, "twice")):
+        Ok(_) -> puts "answered twice"
+        Error(e) -> puts "again: #{e.message}"
+    else:
+      match req.respond(http.reply(600, "too big")):
+        Ok(_) -> puts "600 sent"
+        Error(e) -> puts "600: #{e.message}"
+      req.respond(http.reply(201, "made").header("Location", "/notes/2"))?
+  for line in await helper?:
+    puts "client: #{line}"
+  server.close
+  ()

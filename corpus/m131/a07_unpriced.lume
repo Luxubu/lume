@@ -1,0 +1,29 @@
+# a07_unpriced: a method of an `extend [T: Priced]` called on a list whose
+# items are not `Priced`. `[Int]` is `Priced` through `extend Int`, so the
+# first call is fine; `[Str]` is not, and the bound should be checked here,
+# with the error naming what is not met, as in
+# `examples/errors/extend_bound_unmet.lume`.
+# Meant to FAIL.
+# EXPECTED ERROR (lume check corpus/m131/a07_unpriced.lume):
+# error: `[Str]` values have no method `bill`
+#   --> corpus/m131/a07_unpriced.lume:29:22
+#    |
+# 29 |   puts ["tea", "pie"].bill
+#    |                      ^
+#   help: `bill` is there for `[T]` where `T` is `Priced`, and `Str` is not
+
+interface Priced:
+  def cents -> Int
+
+extend Int with Priced:
+  def cents -> Int = self
+
+interface Billed:
+  def bill -> Str
+
+extend [T: Priced] with Billed:
+  def bill -> Str = "#{self.map { |x| x.cents }.sum} cents"
+
+def main:
+  puts [150, 250].bill
+  puts ["tea", "pie"].bill

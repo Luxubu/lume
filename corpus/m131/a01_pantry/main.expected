@@ -1,0 +1,16 @@
+warning: `pantry` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/m131/a01_pantry/main.lume:89:3
+   |
+89 |   shared var pantry = Pantry(items: [])
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+stock rice 2: 201 {"name":"rice","qty":2}
+stock beans 1: 201 {"name":"beans","qty":1}
+stock rice 3: 201 {"name":"rice","qty":5}
+use beans: 200 0 beans left
+use beans: 404 no beans in the pantry
+use rice: 200 4 rice left
+list: 200 [{"name":"rice","qty":4}]
+stock nothing: 400 stock needs a name and a quantity over 0
+PUT /items: 404 no PUT /items here
+exit: 0

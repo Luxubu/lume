@@ -1,0 +1,39 @@
+# qty.lume — an amount of something, in a unit; two add up only in one unit.
+
+pub enum Unit:
+  Grams
+  Millilitres
+  Pieces
+
+  def short -> Str:
+    match self:
+      Grams       -> "g"
+      Millilitres -> "ml"
+      Pieces      -> " pc"
+
+pub struct Qty:
+  n: Int
+  unit: Unit
+
+  def show -> Str = "#{n}#{unit.short}"
+
+  def plus(o: Qty) -> Qty or Error:
+    return Error("cannot add #{o.show} to #{show}") if o.unit != unit
+    Qty(n: n + o.n, unit: unit)
+
+  def times(k: Int) -> Qty = Qty(n: n * k, unit: unit)
+
+pub def grams(n: Int) -> Qty = Qty(n: n, unit: Grams)
+pub def ml(n: Int) -> Qty = Qty(n: n, unit: Millilitres)
+
+pub def pieces(n: Int) -> Qty = Qty(n: n, unit: Pieces)
+
+test "amounts show their unit":
+  assert grams(250).show == "250g"
+  assert pieces(2).show == "2 pc"
+
+test "amounts add up in one unit only":
+  sum = grams(200).plus(grams(50))!
+  assert sum == grams(250)
+  assert ml(5).plus(grams(5)).error.map { |e| e.message } == Some("cannot add 5g to 5ml")
+  assert ml(300).times(3) == ml(900)

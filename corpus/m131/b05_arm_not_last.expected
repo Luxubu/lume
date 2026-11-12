@@ -1,0 +1,7 @@
+error: `save` can fail, and nothing here looks at whether it did
+  --> corpus/m131/b05_arm_not_last.lume:19:16
+   |
+19 |     Some(n) -> save(n)
+   |                ^
+  help: pass the failure on with `?`, handle it with `match`, or say you mean to drop it: `_ = ...`
+exit: 1

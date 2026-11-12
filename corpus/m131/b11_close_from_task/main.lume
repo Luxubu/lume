@@ -1,0 +1,40 @@
+# b11 — probes: `server.incoming` in async code, ended by `close` called
+# from the client's task; then `accept` on the closed server is an
+# `Error`. A query whose name comes twice, and one with no `=`, read with
+# `http.value` on `req.params`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# server: GET /one [] x=- flag=-
+# server: GET /two [x=1&x=2&flag] x=1 flag=
+# loop ended after 2
+# client: 200 answer 1 to /one
+# client: 200 answer 2 to /two
+# accept after close: the server is closed
+import http
+
+def client(base: Str, server: http.Server) -> [Str]:
+  var seen: [Str] = []
+  for path in ["/one", "/two?x=1&x=2&flag"]:
+    r = http.get(base + path)
+    seen.push(r.map { |x| "#{x.status} #{x.body}" }.or("no answer"))
+  server.close
+  seen
+
+async def main -> () or Error:
+  server = http.listen("127.0.0.1:0")?
+  helper = spawn: client("http://#{server.address}", server)
+  var count = 0
+  for req in server.incoming:
+    count += 1
+    ps = req.params.or([])
+    x = http.value(ps, "x").or("-")
+    flag = http.value(ps, "flag").or("-")
+    puts "server: #{req.method} #{req.path} [#{req.query}] x=#{x} flag=#{flag}"
+    req.respond(http.reply(200, "answer #{count} to #{req.path}"))?
+  puts "loop ended after #{count}"
+  for line in await helper:
+    puts "client: #{line}"
+  match server.accept:
+    Ok(_) -> puts "accepted after close"
+    Error(e) -> puts "accept after close: #{e.message}"
+  ()

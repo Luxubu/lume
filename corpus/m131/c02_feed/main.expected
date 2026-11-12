@@ -1,0 +1,39 @@
+server: GET /events?after=0&limit=2
+  making event 1
+  making event 2
+  making event 3
+server: GET /events?after=2&limit=2
+  making event 1
+  making event 2
+  making event 3
+  making event 4
+  making event 5
+server: GET /events?after=4&limit=2
+  making event 1
+  making event 2
+  making event 3
+  making event 4
+  making event 5
+server: GET /events?after=5
+  making event 1
+  making event 2
+  making event 3
+  making event 4
+  making event 5
+server: GET /events?limit=0
+server: GET /events?after=two
+server: GET /events?limit=2&limit=9
+  making event 1
+  making event 2
+  making event 3
+server: GET /feed
+client: after 0: 200 {"events":[{"id":1,"kind":"post","who":"bo"},{"id":2,"kind":"like","who":"cy"}],"next":2}
+client: after 2: 200 {"events":[{"id":3,"kind":"leave","who":"ana"},{"id":4,"kind":"join","who":"bo"}],"next":4}
+client: after 4: 200 {"events":[{"id":5,"kind":"post","who":"cy"}],"next":null}
+client: ?after=5: 200 {"events":[],"next":null}
+client: ?limit=0: 400 limit must be from 1 to 50, not 0
+client: ?after=two: 400 after: `two` is not an integer
+client: ?limit=2&limit=9: 200 {"events":[{"id":1,"kind":"post","who":"bo"},{"id":2,"kind":"like","who":"cy"}],"next":2}
+client: /feed: 404 no GET /feed here
+client: 3 pages, 5 events
+exit: 0

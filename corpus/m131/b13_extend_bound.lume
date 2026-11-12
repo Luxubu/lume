@@ -1,0 +1,27 @@
+# b13 — probes: an `extend [T: Shown]` used on the right items — a list
+# of `Int`, which is `Shown`, and a list of lists of `Int`, whose items
+# are `Shown` through this same `extend` — and on the wrong ones, a list
+# of `Float`. The wrong one is refused by Lume, naming the unmet bound,
+# rather than reaching rustc.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `[Float]` values have no method `shown`
+#   --> corpus/m131/b13_extend_bound.lume:27:13
+#    |
+# 27 |   puts [1.5].shown
+#    |             ^
+#   help: `shown` is there for `[T]` where `T` is `Shown`, and `Float` is not
+
+interface Shown:
+  def shown -> Str
+
+extend Int with Shown:
+  def shown -> Str = "n#{self}"
+
+extend [T: Shown] with Shown:
+  def shown -> Str = self.map { |x| x.shown }.join(",")
+
+def main:
+  puts [1, 2].shown
+  puts [[1], [2, 3]].shown
+  puts [1.5].shown

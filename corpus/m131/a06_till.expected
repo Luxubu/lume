@@ -1,0 +1,14 @@
+till made
+  (opening the till at 10)
+["ticket 10", "ticket 11"]
+second till made
+  (opening the till at 20)
+Some("ticket 20")
+Some("ticket 21")
+ticket 22
+  (opening the till at 30)
+Some("ticket 30")
+  (opening the till at 40)
+ticket 40
+nothing opened
+exit: 0

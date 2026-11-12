@@ -1,0 +1,13 @@
+(map 1)
+(map 2)
+made from a list
+item 10
+item 20
+made from a range
+(map 1)
+item 10
+(map 2)
+item 20
+["item 5"]
+[1, 2, 3]
+exit: 0

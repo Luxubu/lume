@@ -1,0 +1,18 @@
+got 1
+(after 1)
+got 4
+(after 2)
+got 9
+(after 3)
+--
+got 1
+(after 1)
+got 4
+(after 2)
+--
+(after 1)
+[1, 4]
+--
+(after 1)
+Some(4)
+exit: 0

@@ -1,0 +1,121 @@
+# a01_pantry: a small service in lunch 27's shape: a pantry that is
+# stocked by form, used up one at a time, and listed as JSON. A route
+# enum, a `shared var` store with `var self` methods, `incoming` with a
+# task per request, and its own client on port 0 that closes the server.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# stock rice 2: 201 {"name":"rice","qty":2}
+# stock beans 1: 201 {"name":"beans","qty":1}
+# stock rice 3: 201 {"name":"rice","qty":5}
+# use beans: 200 0 beans left
+# use beans: 404 no beans in the pantry
+# use rice: 200 4 rice left
+# list: 200 [{"name":"rice","qty":4}]
+# stock nothing: 400 stock needs a name and a quantity over 0
+# PUT /items: 404 no PUT /items here
+# EXPECTED STDERR:
+# warning: `pantry` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+#   --> corpus/m131/a01_pantry/main.lume:89:3
+#    |
+# 89 |   shared var pantry = Pantry(items: [])
+#    |   ^
+#   help: fine for a store or a counter; keep the work done while it is locked short
+
+import http
+import json
+import json.Json
+
+struct Item:
+  name: Str
+  qty: Int
+
+  def to_json -> Json =
+    json.obj([("name", name.to_json), ("qty", qty.to_json)])
+
+# What every request shares. Stocking a name again adds to it, and moves
+# it to the end of the list.
+struct Pantry:
+  items: [Item]
+
+  def stock(var self, name: Str, qty: Int) -> Item:
+    had = items.find { |x| x.name == name }.map { |x| x.qty }.or(0)
+    items = items.reject { |x| x.name == name }.to_list
+    made = Item(name: name, qty: had + qty)
+    items.push(made)
+    made
+
+  # Takes one away; how many are left, or `None` when there is none.
+  def use_one(var self, name: Str) -> Int?:
+    match items.find { |x| x.name == name }:
+      None -> None
+      Some(x) ->
+        items = items.reject { |y| y.name == name }.to_list
+        if x.qty > 1:
+          items.push(Item(name: name, qty: x.qty - 1))
+        Some(x.qty - 1)
+
+enum Route:
+  List
+  Stock
+  Use(name: Str)
+  Nowhere
+
+def route(method: Str, path: Str) -> Route:
+  match (method, path.split("/").reject(_.empty?).to_list):
+    ("GET", ["items"])               -> List
+    ("POST", ["items"])              -> Stock
+    ("POST", ["items", name, "use"]) -> Use(name)
+    _                                -> Nowhere
+
+def answer(pantry: shared var Pantry, req: http.Incoming) -> http.Reply:
+  match route(req.method, req.path):
+    List -> http.reply_json(200, pantry.items.map { |x| x.to_json }.to_list.to_json)
+    Stock ->
+      form = req.form.or([])
+      name = http.value(form, "name").or("")
+      qty = http.value(form, "qty").or("1").to_int.or(0)
+      if name.empty? or qty < 1:
+        http.reply(400, "stock needs a name and a quantity over 0")
+      else:
+        made = pantry.stock(name, qty)
+        http.reply_json(201, made.to_json)
+    Use(name) ->
+      match pantry.use_one(name):
+        Some(left) -> http.reply(200, "#{left} #{name} left")
+        None       -> http.reply(404, "no #{name} in the pantry")
+    Nowhere -> http.reply(404, "no #{req.method} #{req.path} here")
+
+async def listen(server: http.Server) -> () or Error:
+  shared var pantry = Pantry(items: [])
+  var answering: [Task[() or Error]] = []
+  for req in server.incoming:
+    answering.push(spawn: req.respond(answer(pantry, req)))
+  for t in answering:
+    await t?
+  ()
+
+def say(what: Str, r: http.Response or Error) -> Str:
+  match r:
+    Ok(x)    -> "#{what}: #{x.status} #{x.body}"
+    Error(e) -> "#{what}: #{e.message}"
+
+def try_it(base: Str, server: http.Server) -> [Str]:
+  var said: [Str] = []
+  for name, qty in [("rice", "2"), ("beans", "1"), ("rice", "3")]:
+    r = http.request("POST", "#{base}/items").with_form([("name", name), ("qty", qty)]).send
+    said.push(say("stock #{name} #{qty}", r))
+  for name in ["beans", "beans", "rice"]:
+    said.push(say("use #{name}", http.request("POST", "#{base}/items/#{name}/use").send))
+  said.push(say("list", http.get("#{base}/items")))
+  said.push(say("stock nothing", http.request("POST", "#{base}/items").with_form([("qty", "2")]).send))
+  said.push(say("PUT /items", http.request("PUT", "#{base}/items").send))
+  server.close
+  said
+
+async def main -> () or Error:
+  server = http.listen("127.0.0.1:0")?
+  client = spawn: try_it("http://#{server.address}", server)
+  await listen(server)?
+  for line in await client:
+    puts line
+  ()

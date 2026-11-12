@@ -1,0 +1,85 @@
+# a02_pantry_tests: a01's routes and store, tested with no network, as
+# lunch 27.6 tests its own. The last test is wrong on purpose, to show what
+# a failed comparison says.
+# Run with `lume test corpus/m131/a02_pantry_tests.lume`
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# test routes ... ok
+# test stocking twice adds up ... ok
+# test using the last one takes it away ... ok
+# test a wrong count shows both sides ... FAILED
+#     corpus/m131/a02_pantry_tests.lume:85: assert p.use_one("rice") == Some(3)
+#       left:  Some(2)
+#       right: Some(3)
+#
+# 4 tests: 3 passed, 1 failed
+# EXPECTED EXIT: 1
+
+struct Item:
+  name: Str
+  qty: Int
+
+struct Pantry:
+  items: [Item]
+
+  def stock(var self, name: Str, qty: Int) -> Item:
+    had = items.find { |x| x.name == name }.map { |x| x.qty }.or(0)
+    items = items.reject { |x| x.name == name }.to_list
+    made = Item(name: name, qty: had + qty)
+    items.push(made)
+    made
+
+  def use_one(var self, name: Str) -> Int?:
+    match items.find { |x| x.name == name }:
+      None -> None
+      Some(x) ->
+        items = items.reject { |y| y.name == name }.to_list
+        if x.qty > 1:
+          items.push(Item(name: name, qty: x.qty - 1))
+        Some(x.qty - 1)
+
+enum Route:
+  List
+  Stock
+  Use(name: Str)
+  Nowhere
+
+def route(method: Str, path: Str) -> Route:
+  match (method, path.split("/").reject(_.empty?).to_list):
+    ("GET", ["items"])               -> List
+    ("POST", ["items"])              -> Stock
+    ("POST", ["items", name, "use"]) -> Use(name)
+    _                                -> Nowhere
+
+def main:
+  var p = Pantry(items: [])
+  _ = p.stock("rice", 2)
+  puts route("POST", "/items/rice/use")
+  puts p.use_one("rice")
+
+test "routes":
+  assert route("GET", "/items") == List
+  assert route("GET", "/items/") == List
+  assert route("POST", "/items") == Stock
+  assert route("POST", "/items/rice/use") == Use("rice")
+  assert route("POST", "/items/rice") == Nowhere
+  assert route("DELETE", "/items") == Nowhere
+
+test "stocking twice adds up":
+  var p = Pantry(items: [])
+  assert p.stock("rice", 2).qty == 2
+  assert p.stock("beans", 1).qty == 1
+  assert p.stock("rice", 3).qty == 5
+  assert p.items.map(_.name).to_list == ["beans", "rice"]
+
+test "using the last one takes it away":
+  var p = Pantry(items: [])
+  _ = p.stock("beans", 1)
+  assert p.use_one("beans") == Some(0)
+  assert p.use_one("beans") == None
+  assert p.items.empty?
+
+test "a wrong count shows both sides":
+  var p = Pantry(items: [])
+  _ = p.stock("rice", 3)
+  assert p.use_one("rice") == Some(3)

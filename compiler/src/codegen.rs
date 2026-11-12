@@ -3071,6 +3071,9 @@ impl Gen {
                 .with_help(format!("write `return {}` to stop here with it", snippet(e))));
         }
         if let Type::Result(ok, _) = &t {
+            // an `if` or `match` whose branches end in calls that can fail:
+            // the first such call is what is dropped, and is named
+            let e = branch_tail_call(e).unwrap_or(e);
             let what = match &e.kind {
                 ExprKind::Call { name, .. } => format!("`{}` can fail", name),
                 ExprKind::Method { name, .. } => format!("`{}` can fail", name),
@@ -11235,7 +11238,15 @@ impl Gen {
                         self.declare(name, false, true, ty.clone(), arm.line);
                     }
                 }
-                guards.push(self.expr(g)?);
+                let user = self.expr(g)?;
+                // names taken from inside a list or a boxed field are bound by
+                // `lets` at the top of the arm, which the guard runs before:
+                // the guard binds them for itself first
+                if cp.lets.is_empty() {
+                    guards.push(user);
+                } else {
+                    guards.push(format!("{{ {} {} }}", cp.lets.join(" "), user));
+                }
                 for (name, ty, kind) in &cp.binds {
                     if *kind == BindKind::Deref {
                         self.declare(name, false, false, ty.clone(), arm.line);
@@ -15384,6 +15395,26 @@ fn built_in_only(t: &Type) -> bool {
         Type::Tuple(ts) => ts.iter().all(built_in_only),
         _ => false,
     }
+}
+
+/// The call that ends the first branch of an `if` or `match`, at any depth.
+fn branch_tail_call(e: &Expr) -> Option<&Expr> {
+    fn ends(b: &Block) -> Option<&Expr> {
+        match b.stmts.last() {
+            Some(Stmt::Expr(x)) => Some(x),
+            _ => None,
+        }
+    }
+    let tails: Vec<&Expr> = match &e.kind {
+        ExprKind::If { branches, else_block } => branches.iter().filter_map(|(_, b)| ends(b)).chain(else_block.iter().filter_map(ends)).collect(),
+        ExprKind::Match { arms, .. } => arms.iter().filter_map(|a| ends(&a.body)).collect(),
+        _ => return None,
+    };
+    tails.into_iter().find_map(|x| match &x.kind {
+        ExprKind::Call { .. } | ExprKind::Method { .. } => Some(x),
+        ExprKind::If { .. } | ExprKind::Match { .. } => branch_tail_call(x),
+        _ => None,
+    })
 }
 
 /// A list made by the expression itself — a call's result, or a method that

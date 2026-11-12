@@ -1,0 +1,35 @@
+# b10 — probes: `http.value` with a name that comes twice (the first
+# wins), a name that is not there, a name in another case (names are
+# matched exactly), an empty list, and on what `http.parse_form` gives: a
+# name with no `=`, an empty value, `+` and `%26` decoded; and a form that
+# will not decode, as an `Error`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# Some("pie")
+# Some("2")
+# None
+# None
+# None
+# [("a", ""), ("b", ""), ("q", "two words"), ("q", "x&y")]
+# Some("")
+# Some("")
+# Some("two words")
+# Error("`%zz` in `%zz` is not a byte written as `%` and two hex digits")
+import http
+
+def main:
+  pairs = [("q", "pie"), ("n", "2"), ("q", "tea")]
+  puts http.value(pairs, "q")
+  puts http.value(pairs, "n")
+  puts http.value(pairs, "x")
+  puts http.value(pairs, "Q")
+  none: [(Str, Str)] = []
+  puts http.value(none, "q")
+  match http.parse_form("a&b=&q=two+words&q=x%26y"):
+    Ok(ps) ->
+      puts ps
+      puts http.value(ps, "a")
+      puts http.value(ps, "b")
+      puts http.value(ps, "q")
+    Error(e) -> puts e.message
+  puts http.parse_form("q=%zz")

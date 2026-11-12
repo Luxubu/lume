@@ -1,0 +1,23 @@
+  (reading page 1)
+  (turned page 1)
+  (reading page 2)
+first two: [1, 2]
+  (reading page 1)
+  (turned page 1)
+  (reading page 2)
+first even: [2]
+opened
+  (reading page 1)
+Some(1)
+between
+  (turned page 1)
+  (reading page 2)
+page 2
+  (turned page 2)
+  (reading page 3)
+page 3
+  (turned page 3)
+done
+None
+None
+exit: 0

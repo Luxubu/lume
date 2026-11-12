@@ -1,0 +1,25 @@
+# b15 — probes: a `() or Error` call on a line of its own before the last
+# line of a `() or Error` function is refused, though the calls that end
+# the closing `if`/`else` are its value and accepted.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `save` can fail, and nothing here looks at whether it did
+#   --> corpus/m131/b15_stray_call.lume:18:3
+#    |
+# 18 |   save(a)
+#    |   ^
+#   help: pass the failure on with `?`, handle it with `match`, or say you mean to drop it: `_ = ...`
+
+def save(name: Str) -> () or Error:
+  return Error("no name given") if name.empty?
+  puts "saved #{name}"
+
+def keep_both(a: Str, b: Str) -> () or Error:
+  save(a)
+  if b.empty?:
+    save("nobody")
+  else:
+    save(b)
+
+def main -> () or Error:
+  keep_both("ada", "bo")?

@@ -1,0 +1,42 @@
+# b01 — probes: a generator that is a loop around one `yield`, with
+# statements after the `yield`. They run when the next item is asked for,
+# not before, so a `break`, a `take` or a `find` that stops early never
+# runs them for the last item it took.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# got 1
+# (after 1)
+# got 4
+# (after 2)
+# got 9
+# (after 3)
+# --
+# got 1
+# (after 1)
+# got 4
+# (after 2)
+# --
+# (after 1)
+# [1, 4]
+# --
+# (after 1)
+# Some(4)
+
+def squares_upto(limit: Int) -> Iterator[Int]:
+  var n = 1
+  while n <= limit:
+    yield n * n
+    puts "(after #{n})"
+    n += 1
+
+def main:
+  for s in squares_upto(3):
+    puts "got #{s}"
+  puts "--"
+  for s in squares_upto(5):
+    break if s > 4
+    puts "got #{s}"
+  puts "--"
+  puts squares_upto(5).take(2).to_list
+  puts "--"
+  puts squares_upto(5).find { |s| s > 3 }

@@ -1,0 +1,21 @@
+# b03 — probes: a generator held in a plain name, walked by a `for`, then
+# used again. The `for` uses it up, so the second use is refused, and the
+# message points at the `for`'s use of the name, where it was used up.
+# Meant to FAIL.
+# EXPECTED OUTPUT:
+# error: `menu` is a generator, and it is used up here, so it cannot be used after
+#   --> corpus/m131/b03_walked_twice.lume:19:12
+#    |
+# 19 |   for c in menu:
+#    |            ^
+#   help: a generator hands out each item once: to walk the items twice, keep them with `.to_list` first
+
+def courses -> Iterator[Str]:
+  yield "soup"
+  yield "pie"
+
+def main:
+  menu = courses()
+  for c in menu:
+    puts c
+  puts menu.len

@@ -1,0 +1,7 @@
+error: `[Float]` values have no method `shown`
+  --> corpus/m131/b13_extend_bound.lume:27:13
+   |
+27 |   puts [1.5].shown
+   |             ^
+  help: `shown` is there for `[T]` where `T` is `Shown`, and `Float` is not
+exit: 1

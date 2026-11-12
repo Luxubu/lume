@@ -1,0 +1,27 @@
+# a09_kept_midway: the other side of a08. A `match` arm that calls a
+# `() or Error` function is the function's value only when the `match` ends
+# the function; here a line follows the `match`, so the arm's failure is
+# looked at by nothing, and the call should be refused as any such call on
+# a line of its own is.
+# Meant to FAIL.
+# EXPECTED ERROR (lume check corpus/m131/a09_kept_midway.lume):
+# error: `save` can fail, and nothing here looks at whether it did
+#   --> corpus/m131/a09_kept_midway.lume:22:10
+#    |
+# 22 |     _ -> save(name)
+#    |          ^
+#   help: pass the failure on with `?`, handle it with `match`, or say you mean to drop it: `_ = ...`
+
+def save(name: Str) -> () or Error:
+  return Error("no name") if name.empty?
+  puts "saved #{name}"
+
+def keep(name: Str) -> () or Error:
+  match name.len:
+    0 -> puts "nothing to keep"
+    _ -> save(name)
+  puts "kept #{name}"
+
+def main -> () or Error:
+  keep("jam")?
+  keep("")?

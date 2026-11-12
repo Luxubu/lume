@@ -1,0 +1,44 @@
+# b09 — probes: a generator over a `for` of its `Iterator[Int]` parameter.
+# A chain that starts from a list is worked out at the call, so its block
+# runs before the generator is walked; one that starts from a range stays
+# lazy, so its block runs item by item. A list given to it is its own copy,
+# so a later `push` does not show.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# (map 1)
+# (map 2)
+# made from a list
+# item 10
+# item 20
+# made from a range
+# (map 1)
+# item 10
+# (map 2)
+# item 20
+# ["item 5"]
+# [1, 2, 3]
+
+def loud(x: Int) -> Int:
+  puts "(map #{x})"
+  x * 10
+
+def labelled(xs: Iterator[Int]) -> Iterator[Str]:
+  for x in xs:
+    yield "item #{x}"
+
+def main:
+  var nums = [1, 2]
+  from_list = labelled(nums.map { |x| loud(x) })
+  nums.push(3)
+  puts "made from a list"
+  for s in from_list:
+    puts s
+  from_range = labelled((1..2).map { |x| loud(x) })
+  puts "made from a range"
+  for s in from_range:
+    puts s
+  var more = [5]
+  g = labelled(more)
+  more.push(6)
+  puts g.to_list
+  puts nums

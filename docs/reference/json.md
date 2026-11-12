@@ -111,8 +111,9 @@ Printing is strict too: a character below a space other than `\n`, `\t` and
 ## Writing
 
 A type with `def to_json -> Json` fits the package's `ToJson` interface.
-`Str`, `Int`, `Float`, `Bool` and lists of anything with `to_json` have it
-already, so a list of your own values writes itself:
+`Str`, `Int`, `Float`, `Bool`, a `Json` document itself, and lists of
+anything with `to_json` have it already, so a list of your own values — or
+of documents — writes itself:
 
 ```lume-skip
 struct Member:

@@ -1,0 +1,13 @@
+server: GET /find []
+server: GET /find?q=s ["q"]
+server: GET /find?q=e&max=400 ["q", "max"]
+server: GET /find?q=p&q=t ["q", "q"]
+server: GET /find?q=caf%C3%A9 ["q"]
+server: GET /find?q=100% []
+client: 200 nothing asked: pie, soup, stew, tea
+client: 200 q=s: soup, stew
+client: 200 q=e&max=400: pie, tea
+client: 200 q=p&q=t: pie, soup
+client: 200 q=caf%C3%A9: nothing under 1000 like café
+client: 400 q=100%: `%` in `100%` is not a byte written as `%` and two hex digits
+exit: 0

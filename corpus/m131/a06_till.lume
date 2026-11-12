@@ -1,0 +1,44 @@
+# a06_till: a generator whose set-up prints, before its loop around one
+# `yield`. The set-up runs when the first ticket is asked for, not when the
+# generator is made, and once per call; one that is never walked never
+# prints. Used with `take`, `next`, `for` with `break`, and `first`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# till made
+#   (opening the till at 10)
+# ["ticket 10", "ticket 11"]
+# second till made
+#   (opening the till at 20)
+# Some("ticket 20")
+# Some("ticket 21")
+# ticket 22
+#   (opening the till at 30)
+# Some("ticket 30")
+#   (opening the till at 40)
+# ticket 40
+# nothing opened
+
+def tickets(start: Int) -> Iterator[Str]:
+  puts "  (opening the till at #{start})"
+  var n = start
+  while true:
+    yield "ticket #{n}"
+    n += 1
+
+def main:
+  t = tickets(10)
+  puts "till made"
+  puts t.take(2).to_list
+  var u = tickets(20)
+  puts "second till made"
+  puts u.next
+  puts u.next
+  for x in u:
+    break if x == "ticket 23"
+    puts x
+  puts tickets(30).first
+  for x in tickets(40):
+    puts x
+    break
+  _ = tickets(50)
+  puts "nothing opened"

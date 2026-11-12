@@ -1,0 +1,179 @@
+# c01: a library's booking service in lunch 27's shape: books, loans and
+# returns, a `shared var` desk behind a task per request, its own client and
+# tests. Probes `http.value` on a form and a query, 201/400/404/409, `null`.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# add Dune: 201 {"id":1,"title":"Dune"}
+# add Emma: 201 {"id":2,"title":"Emma"}
+# add Ulysses: 201 {"id":3,"title":"Ulysses"}
+# add a blank title: 400 a book needs a title
+# ana takes 1: 201 {"book":1,"reader":"ana"}
+# bo takes 1: 409 book 1 is out to ana
+# bo takes 3: 201 {"book":3,"reader":"bo"}
+# bo takes 9: 404 no book 9
+# nobody takes 2: 400 a loan needs a reader
+# loans of bo: 200 [{"book":3,"reader":"bo"}]
+# books: 200 [{"id":1,"title":"Dune","out_to":"ana"},{"id":2,"title":"Emma","out_to":null},{"id":3,"title":"Ulysses","out_to":"bo"}]
+# 1 comes back: 200 book 1 is back
+# 1 comes back again: 404 book 1 was not out
+# x comes back: 404 no DELETE /loans/x here
+# EXPECTED STDERR:
+# warning: `desk` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+#   --> corpus/m131/c01_library/main.lume:128:3
+#     |
+# 128 |   shared var desk = Library(books: [], loans: [], next_id: 1)
+#     |   ^
+#   help: fine for a store or a counter; keep the work done while it is locked short
+
+import http
+import json
+import json.Json
+
+struct Book:
+  id: Int
+  title: Str
+  def to_json -> Json = json.obj([("id", id.to_json), ("title", title.to_json)])
+
+struct Loan:
+  book: Int
+  reader: Str
+  def to_json -> Json = json.obj([("book", book.to_json), ("reader", reader.to_json)])
+
+enum Lent:
+  Done(loan: Loan)
+  NoBook
+  Taken(by: Str)
+
+struct Library:
+  books: [Book]
+  loans: [Loan]
+  next_id: Int
+
+  def add(var self, title: Str) -> Book:
+    b = Book(id: next_id, title: title)
+    books.push(b)
+    next_id += 1
+    b
+
+  def lend(var self, id: Int, reader: Str) -> Lent:
+    return NoBook if not books.any? { |b| b.id == id }
+    match loans.find { |l| l.book == id }:
+      Some(l) -> Taken(l.reader)
+      None ->
+        loan = Loan(book: id, reader: reader)
+        loans.push(loan)
+        Done(loan)
+
+  def give_back(var self, id: Int) -> Bool:
+    before = loans.len
+    loans = loans.reject { |l| l.book == id }.to_list
+    loans.len < before
+
+  def of(reader: Str) -> [Loan] = loans.filter { |l| l.reader == reader }.to_list
+
+  def listing -> Json:
+    var shown: [Json] = []
+    for b in books:
+      who = loans.find { |l| l.book == b.id }.map { |l| l.reader.to_json }.or(Json.Null)
+      shown.push(json.obj([("id", b.id.to_json), ("title", b.title.to_json), ("out_to", who)]))
+    shown.to_json
+
+enum Route:
+  Books
+  AddBook
+  Loans
+  Lend
+  GiveBack(book: Int)
+  Nowhere
+
+def route(method: Str, path: Str) -> Route:
+  match (method, path.split("/").reject(_.empty?).to_list):
+    ("GET", ["books"])        -> Books
+    ("POST", ["books"])       -> AddBook
+    ("GET", ["loans"])        -> Loans
+    ("POST", ["loans"])       -> Lend
+    ("DELETE", ["loans", id]) -> id.to_int.map { |n| GiveBack(n) }.or(Nowhere)
+    _                         -> Nowhere
+
+def answer(desk: shared var Library, req: http.Incoming) -> http.Reply:
+  match route(req.method, req.path):
+    Books -> http.reply_json(200, desk.listing)
+    AddBook ->
+      title = http.value(req.form.or([]), "title").or("").trim
+      if title.empty?:
+        http.reply(400, "a book needs a title")
+      else:
+        b = desk.add(title)
+        http.reply_json(201, b.to_json)
+    Lend ->
+      form = req.form.or([])
+      book = http.value(form, "book").or("").to_int.or(0)
+      reader = http.value(form, "reader").or("")
+      if reader.empty?:
+        http.reply(400, "a loan needs a reader")
+      else:
+        match desk.lend(book, reader):
+          Done(loan) -> http.reply_json(201, loan.to_json)
+          NoBook     -> http.reply(404, "no book #{book}")
+          Taken(by)  -> http.reply(409, "book #{book} is out to #{by}")
+    Loans ->
+      shown = match http.value(req.params.or([]), "reader"):
+        Some(r) -> desk.of(r)
+        None    -> desk.loans
+      http.reply_json(200, shown.map { |l| l.to_json }.to_list.to_json)
+    GiveBack(id) -> if desk.give_back(id): http.reply(200, "book #{id} is back") else: http.reply(404, "book #{id} was not out")
+    Nowhere -> http.reply(404, "no #{req.method} #{req.path} here")
+
+async def listen(server: http.Server) -> () or Error:
+  shared var desk = Library(books: [], loans: [], next_id: 1)
+  var answering: [Task[() or Error]] = []
+  for req in server.incoming:
+    answering.push(spawn: req.respond(answer(desk, req)))
+  for t in answering:
+    await t?
+  ()
+
+def line(what: Str, r: http.Response or Error) -> Str:
+  match r:
+    Ok(x) -> "#{what}: #{x.status} #{x.body}"
+    Error(e) -> "#{what}: #{e.message}"
+
+def post(base: Str, path: Str, pairs: [(Str, Str)]) -> http.Response or Error = http.request("POST", base + path).with_form(pairs).send
+
+def visit(base: Str, server: http.Server) -> [Str]:
+  var said: [Str] = []
+  for title in ["Dune", "Emma", "Ulysses"]:
+    said.push(line("add #{title}", post(base, "/books", [("title", title)])))
+  said.push(line("add a blank title", post(base, "/books", [("title", "  ")])))
+  for who, book in [("ana", "1"), ("bo", "1"), ("bo", "3"), ("bo", "9")]:
+    said.push(line("#{who} takes #{book}", post(base, "/loans", [("book", book), ("reader", who)])))
+  said.push(line("nobody takes 2", post(base, "/loans", [("book", "2")])))
+  said.push(line("loans of bo", http.request("GET", "#{base}/loans").with_query([("reader", "bo")]).send))
+  said.push(line("books", http.get("#{base}/books")))
+  said.push(line("1 comes back", http.delete("#{base}/loans/1")))
+  said.push(line("1 comes back again", http.delete("#{base}/loans/1")))
+  said.push(line("x comes back", http.delete("#{base}/loans/x")))
+  server.close
+  said
+
+async def main -> () or Error:
+  server = http.listen("127.0.0.1:0")?
+  client = spawn: visit("http://#{server.address}", server)
+  await listen(server)?
+  for l in await client:
+    puts l
+  ()
+
+test "routes":
+  assert route("GET", "/books/") == Books
+  assert route("DELETE", "/loans/4") == GiveBack(4)
+  assert route("DELETE", "/loans/four") == Nowhere
+
+test "a book is lent to one reader at a time":
+  var d = Library(books: [], loans: [], next_id: 1)
+  _ = d.add("Dune")
+  assert d.lend(1, "ana") == Done(Loan(book: 1, reader: "ana"))
+  assert d.lend(1, "bo") == Taken("ana")
+  assert d.lend(2, "bo") == NoBook
+  assert d.give_back(1)
+  assert not d.give_back(1)

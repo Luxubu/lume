@@ -1,0 +1,134 @@
+# c04: a static site from a generator pipeline, with no HTTP: entries are
+# read from a text block, parsed, drafts dropped, pages rendered, each by a
+# generator that is a loop around one `yield`, and written under /tmp.
+# Probes that every stage does its work as the next one asks, so what the
+# stages print interleaves with "wrote" one page at a time; then an index
+# newest first, a page per tag, and one page read back from the disk.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+#   read Opening night
+# wrote 1-opening-night.html
+#   read Secret menu
+#   skip Secret menu (a draft)
+#   read Winter soups
+# wrote 2-winter-soups.html
+#   read A new oven
+# wrote 3-a-new-oven.html
+# wrote index.html
+# wrote tag-news.html (2 posts)
+# wrote tag-cafe.html (1 post)
+# wrote tag-menu.html (1 post)
+# wrote tag-food.html (1 post)
+# 8 files: 1-opening-night.html, 2-winter-soups.html, 3-a-new-oven.html, index.html, tag-cafe.html, tag-food.html, tag-menu.html, tag-news.html
+# == index.html
+# <h1>All posts</h1>
+# <ul>
+# <li><a href="1-opening-night.html">Opening night</a> 2026-03-02</li>
+# <li><a href="3-a-new-oven.html">A new oven</a> 2026-02-20</li>
+# <li><a href="2-winter-soups.html">Winter soups</a> 2026-01-15</li>
+# </ul>
+# == 2-winter-soups.html
+# <h1>Winter soups</h1>
+# <p class="date">2026-01-15</p>
+# <p>Three soups &lt;hot&gt; &amp; one cold.</p>
+# <p><a href="tag-menu.html">menu</a> <a href="tag-food.html">food</a></p>
+# 3 pages, 4 tags, 24 words
+
+OUT = "/tmp/lume-review-c/site"
+
+SOURCE = """
+  2026-03-02 | Opening night | news, cafe | The cafe opens its doors at six and stays open late.
+  draft      | Secret menu   | menu       | Not yet.
+  2026-01-15 | Winter soups  | menu, food | Three soups <hot> & one cold.
+
+  2026-02-20 | A new oven    | news       | Bread comes out twice a day now.
+  """
+
+struct Post:
+  date: Str
+  title: Str
+  tags: [Str]
+  body: Str
+
+  def draft? -> Bool = date == "draft"
+
+struct Page:
+  file: Str
+  html: Str
+  post: Post
+
+def escape(s: Str) -> Str = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+def slug(title: Str) -> Str:
+  title.downcase.chars.map { |c| if c.alnum?: c.to_s else: "-" }.join("").split("-").reject(_.empty?).join("-")
+
+# The lines that hold something, trimmed.
+def entries(text: Str) -> Iterator[Str]:
+  for line in text.lines:
+    yield line.trim if not line.trim.empty?
+
+# Each line as a post: `date | title | tags | body`.
+def posts(rows: Iterator[Str]) -> Iterator[Post]:
+  for row in rows:
+    parts = row.split("|").map(_.trim).to_list
+    puts "  read #{parts.at(1)}"
+    tags = parts.at(2).split(",").map(_.trim).reject(_.empty?).to_list
+    yield Post(date: parts.at(0), title: parts.at(1), tags: tags, body: parts.at(3))
+
+def published(ps: Iterator[Post]) -> Iterator[Post]:
+  for p in ps:
+    if p.draft?:
+      puts "  skip #{p.title} (a draft)"
+    else:
+      yield p
+
+def html_for(p: Post) -> Str:
+  links = p.tags.map { |t| "<a href=\"tag-#{t}.html\">#{t}</a>" }.join(" ")
+  "<h1>#{escape(p.title)}</h1>\n<p class=\"date\">#{p.date}</p>\n<p>#{escape(p.body)}</p>\n<p>#{links}</p>"
+
+# Pages numbered in the order they come.
+def rendered(ps: Iterator[Post]) -> Iterator[Page]:
+  var n = 0
+  for p in ps:
+    n += 1
+    yield Page(file: "#{n}-#{slug(p.title)}.html", html: html_for(p), post: p)
+
+def index_html(pages: [Page]) -> Str:
+  newest = pages.sort_by { |p| p.post.date }.reverse
+  items = newest.map { |p| "<li><a href=\"#{p.file}\">#{escape(p.post.title)}</a> #{p.post.date}</li>" }.join("\n")
+  "<h1>All posts</h1>\n<ul>\n#{items}\n</ul>"
+
+def write(name: Str, html: Str) -> () or Error:
+  File.write(Path.join(OUT, name), html)
+
+def main -> () or Error:
+  Dir.remove(OUT)? if Dir.exists?(OUT)
+  Dir.make(OUT)?
+  var built: [Page] = []
+  for page in rendered(published(posts(entries(SOURCE)))):
+    write(page.file, page.html)?
+    puts "wrote #{page.file}"
+    built.push(page)
+  write("index.html", index_html(built))?
+  puts "wrote index.html"
+
+  var tagged: {Str: [Page]} = {}
+  for page in built:
+    for t in page.post.tags:
+      tagged[t].push(page)
+  for t, pages in tagged:
+    links = pages.map { |p| "<li><a href=\"#{p.file}\">#{escape(p.post.title)}</a></li>" }.join("\n")
+    write("tag-#{t}.html", "<h1>#{t}</h1>\n<ul>\n#{links}\n</ul>")?
+    noun = if pages.len == 1: "post" else: "posts"
+    puts "wrote tag-#{t}.html (#{pages.len} #{noun})"
+
+  names = Dir.list(OUT)?
+  listed = names.join(", ")
+  puts "#{names.len} files: #{listed}"
+  for name in ["index.html", "2-winter-soups.html"]:
+    puts "== #{name}"
+    for l in File.read(Path.join(OUT, name))?.lines:
+      puts l
+  words = built.map { |p| p.post.body.split.len }.sum
+  puts "#{built.len} pages, #{tagged.len} tags, #{words} words"
+  Dir.remove(OUT)

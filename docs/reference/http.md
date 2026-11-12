@@ -218,7 +218,7 @@ def main -> () or Error:
 | `method`, `path` | `"GET"`, `"/menu"`: the path without its query, as it was sent — `%20` stays `%20`; `http.decode` reads it |
 | `query` | what follows `?` in the URL, as it was sent; `""` for none |
 | `headers`, `header(name)` | as a `Response`'s: names in lower case, found in any case |
-| `body`, `json` | the body as text, or parsed |
+| `body`, `json` | the body as text, or parsed: an `Error` for a body that is not JSON, ``the body is not JSON: ...`` with the parser's words |
 | `params` | the query's names and values, decoded as `http.parse_form` decodes them |
 | `form` | a form sent as the body, decoded the same way |
 | `respond(reply)` | sends the answer: `() or Error` |

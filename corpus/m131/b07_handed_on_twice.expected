@@ -1,0 +1,7 @@
+error: `e` is a generator, and it is used up here, so it cannot be used after
+  --> corpus/m131/b07_handed_on_twice.lume:21:14
+   |
+21 |   puts total(e)
+   |              ^
+  help: a generator hands out each item once: to walk the items twice, keep them with `.to_list` first
+exit: 1

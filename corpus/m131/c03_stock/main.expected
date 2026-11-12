@@ -1,0 +1,30 @@
+warning: `kept` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/m131/c03_stock/main.lume:137:3
+    |
+137 |   shared var kept = stock
+    |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+add bolts: 201 {"sku":"B7","name":"bolts","qty":40}
+add nuts: 201 {"sku":"N2","name":"nuts","qty":25}
+add bolts again: 409 {"error":"B7 is there already"}
+add washers, no qty: 400 {"error":"`qty` is missing"}
+take 15 bolts: 200 {"sku":"B7","name":"bolts","qty":25}
+take 30 nuts: 409 {"error":"only 25 of N2 left"}
+add 5 nuts: 200 {"sku":"N2","name":"nuts","qty":30}
+take a Q9: 404 {"error":"no item Q9"}
+take some bolts: 400 {"error":"qty must be a whole number above 0"}
+drop nuts: 204
+drop nuts again: 404 {"error":"no item N2"}
+list: 200 [{"sku":"B7","name":"bolts","qty":25}]
+file| {
+file|   "goods": [
+file|     {
+file|       "sku": "B7",
+file|       "name": "bolts",
+file|       "qty": 25
+file|     }
+file|   ]
+file| }
+kept on disk: B7 bolts 25
+cleared: true
+exit: 0

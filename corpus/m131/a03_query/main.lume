@@ -1,0 +1,67 @@
+# a03_query: a query read with `req.params` and `http.value`: no query, one
+# name, two names, a name given twice (the first wins), a value that is
+# not ASCII, and a query that does not decode, answered with a 400. The
+# server answers six requests one at a time with `requests.take(6)`, and
+# its own client makes them from a task.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# server: GET /find []
+# server: GET /find?q=s ["q"]
+# server: GET /find?q=e&max=400 ["q", "max"]
+# server: GET /find?q=p&q=t ["q", "q"]
+# server: GET /find?q=caf%C3%A9 ["q"]
+# server: GET /find?q=100% []
+# client: 200 nothing asked: pie, soup, stew, tea
+# client: 200 q=s: soup, stew
+# client: 200 q=e&max=400: pie, tea
+# client: 200 q=p&q=t: pie, soup
+# client: 200 q=caf%C3%A9: nothing under 1000 like café
+# client: 400 q=100%: `%` in `100%` is not a byte written as `%` and two hex digits
+
+import http
+
+PRICES = {"soup": 400, "pie": 350, "stew": 600, "tea": 150}
+
+def find(req: http.Incoming) -> http.Reply:
+  match req.params:
+    Error(e) -> http.reply(400, e.message)
+    Ok(ps) ->
+      wanted = http.value(ps, "q").or("")
+      most = http.value(ps, "max").map { |m| m.to_int.or(0) }.or(1000)
+      hits = PRICES.keys.filter { |d| d.contains?(wanted) and PRICES[d].or(0) <= most }.sort.to_list
+      http.reply(200, if hits.empty?: "nothing under #{most} like #{wanted}" else: hits.join(", "))
+
+def answer(req: http.Incoming) -> http.Reply:
+  match (req.method, req.path):
+    ("GET", "/find") -> find(req)
+    _                -> http.reply(404, "no #{req.path} here")
+
+# One request with a query, and what came back, as a line.
+def ask(base: Str, pairs: [(Str, Str)]) -> Str or Error:
+  r = http.request("GET", base + "/find").with_query(pairs).send?
+  "#{r.status} #{http.form(pairs)}: #{r.body}"
+
+def visit(base: Str) -> [Str] or Error:
+  var seen: [Str] = []
+  plain = http.get(base + "/find")?
+  seen.push("#{plain.status} nothing asked: #{plain.body}")
+  seen.push(ask(base, [("q", "s")])?)
+  seen.push(ask(base, [("q", "e"), ("max", "400")])?)
+  seen.push(ask(base, [("q", "p"), ("q", "t")])?)
+  seen.push(ask(base, [("q", "café")])?)
+  odd = http.get(base + "/find?q=100%")?
+  seen.push("#{odd.status} q=100%: #{odd.body}")
+  Ok(seen)
+
+async def main -> () or Error:
+  server = http.listen("127.0.0.1:0")?
+  client = spawn: visit("http://#{server.address}")
+  for req in server.requests.take(6):
+    asked = if req.query.empty?: req.path else: "#{req.path}?#{req.query}"
+    names = req.params.or([]).map { |p| p.0 }.to_list
+    puts "server: #{req.method} #{asked} #{names}"
+    req.respond(answer(req))?
+  for line in await client?:
+    puts "client: #{line}"
+  server.close
+  ()

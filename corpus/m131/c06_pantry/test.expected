@@ -1,0 +1,12 @@
+test qty: amounts show their unit ... ok
+test qty: amounts add up in one unit only ... ok
+test recipe: a recipe grows by whole servings ... ok
+test recipe: parts are JSON ... ok
+test money is shown with two places ... ok
+test a list of parts is totalled ... ok
+test a shopping list adds up what is alike ... ok
+test a shopping list will not add grams to millilitres ... ok
+test a label for each part ... ok
+
+9 tests: 9 passed, 0 failed
+exit: 0

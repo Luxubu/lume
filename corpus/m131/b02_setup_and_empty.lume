@@ -1,0 +1,49 @@
+# b02 — probes: a generator whose set-up is a call, and whose `while`
+# fails at once. Its arguments are worked out at the call (they are its
+# own copies), but its set-up runs only when the first item is asked for,
+# even when there turns out to be no item at all; `to_list`, `sum`,
+# `first` and `for` on the empty one each run the set-up once.
+# Meant to RUN.
+# EXPECTED OUTPUT:
+# argument 2
+# made
+# set up 2
+# [2, 1]
+# argument 0
+# made empty
+# set up 0
+# []
+# set up 0
+# 0
+# set up 0
+# None
+# set up 0
+# end
+
+def setup(n: Int) -> Int:
+  puts "set up #{n}"
+  n
+
+def arg(n: Int) -> Int:
+  puts "argument #{n}"
+  n
+
+def countdown(from: Int) -> Iterator[Int]:
+  start = setup(from)
+  var k = start
+  while k > 0:
+    yield k
+    k -= 1
+
+def main:
+  g = countdown(arg(2))
+  puts "made"
+  puts g.to_list
+  e = countdown(arg(0))
+  puts "made empty"
+  puts e.to_list
+  puts countdown(0).sum
+  puts countdown(0).first
+  for x in countdown(0):
+    puts "never #{x}"
+  puts "end"

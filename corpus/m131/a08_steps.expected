@@ -1,0 +1,16 @@
+step: Chop(what: "leeks")
+chopped leeks
+ok
+step: Boil(minutes: 12)
+boiled for 12 minutes
+ok
+step: Rest
+rested
+ok
+step: Chop(what: "")
+failed: nothing to chop
+step: Boil(minutes: 30)
+failed: 30 minutes is too long to boil
+step: Boil(minutes: 25)
+error: 25 minutes is too long to boil
+exit: 1

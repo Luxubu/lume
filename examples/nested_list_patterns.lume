@@ -8,46 +8,53 @@ enum Node:
 
 def opt(x: [Int]?) -> Str:
   match x:
-    Some([]) -> "some empty"
+    Some([])          -> "some empty"
     Some([a, ..rest]) -> "some #{a} then #{rest}"
-    None -> "none"
+    None              -> "none"
 
 def grid(g: [[Int]]) -> Str:
   match g:
     [[a, b], [c]] -> "2+1: #{a} #{b} #{c}"
-    [[], ..] -> "first row empty"
-    [row, ..] -> "first row #{row}"
-    [] -> "no rows"
+    [[], ..]      -> "first row empty"
+    [row, ..]     -> "first row #{row}"
+    []            -> "no rows"
 
 def alt(p: ([Int], Str)) -> Str:
   match p:
-    ([a], "x") -> "picked #{a}"
+    ([a], "x")    -> "picked #{a}"
     ([_, a], "y") -> "picked #{a}"
-    ([1, ..], _) -> "starts at one"
-    _ -> "other"
+    ([1, ..], _)  -> "starts at one"
+    _             -> "other"
 
 def tree(n: Node) -> Str:
   match n:
-    Leaf(v) -> "leaf #{v}"
-    Kids([]) -> "no kids"
-    Kids([Leaf(v)]) -> "one leaf #{v}"
+    Leaf(v)           -> "leaf #{v}"
+    Kids([])          -> "no kids"
+    Kids([Leaf(v)])   -> "one leaf #{v}"
     Kids([first, ..]) -> "kids from #{tree(first)}"
 
 def words(r: (Str, [Str])) -> Str:
   match r:
     ("say", ["hi" | "yo", ..more]) -> "greet +#{more.len}"
-    (cmd, [w]) -> "#{cmd} #{w}"
-    (cmd, _) -> cmd
+    (cmd, [w])                     -> "#{cmd} #{w}"
+    (cmd, _)                       -> cmd
+
+# a guard may read the names a list pattern binds
+def kind(p: (Str, [Str])) -> Str:
+  match p:
+    ("POST", ["items", sku, verb]) if verb == "take" or verb == "add" -> "#{verb} #{sku}"
+    ("GET", [first, ..rest]) if rest.len > 1 -> "#{first} and #{rest.len} more"
+    _ -> "other"
 
 def small(n: Node) -> Bool:
   match n:
     Kids([]) | Leaf(0) -> true
-    _ -> false
+    _                  -> false
 
 def short(p: ([Int], Int)) -> Str:
   match p:
     ([], _) | ([_], 1) -> "short"
-    _ -> "long"
+    _                  -> "long"
 
 def main:
   puts opt(Some([]))
@@ -73,3 +80,7 @@ def main:
   puts short(([], 5))
   puts short(([3], 1))
   puts short(([3], 2))
+  puts kind(("POST", ["items", "B7", "take"]))
+  puts kind(("POST", ["items", "B7", "sell"]))
+  puts kind(("GET", ["a", "b", "c"]))
+  puts kind(("GET", ["a", "b"]))

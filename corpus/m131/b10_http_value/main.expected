@@ -1,0 +1,11 @@
+Some("pie")
+Some("2")
+None
+None
+None
+[("a", ""), ("b", ""), ("q", "two words"), ("q", "x&y")]
+Some("")
+Some("")
+Some("two words")
+Error("`%zz` in `%zz` is not a byte written as `%` and two hex digits")
+exit: 0

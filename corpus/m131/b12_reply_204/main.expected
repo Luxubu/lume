@@ -1,0 +1,5 @@
+again: DELETE /notes/1 has been answered already
+600: 600 is not an HTTP status: one from 100 to 599
+client: 204 [] ok? true
+client: 201 made at /notes/2
+exit: 0

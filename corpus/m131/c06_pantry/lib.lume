@@ -1,0 +1,89 @@
+# c06: `pantry`, a library package: amounts (qty.lume), recipes
+# (recipe.lume), their cost and a shopping list. Probes `pub import`,
+# `extend [T: Priced] with Totalled` on lists of a module's own type that is
+# `Priced` only by having `cents`, an `extend ... with json.ToJson`, a
+# generator, and the order and names of tests across modules.
+# Meant to RUN.
+# Run with `lume test corpus/m131/c06_pantry/lib.lume`
+# EXPECTED OUTPUT:
+# test qty: amounts show their unit ... ok
+# test qty: amounts add up in one unit only ... ok
+# test recipe: a recipe grows by whole servings ... ok
+# test recipe: parts are JSON ... ok
+# test money is shown with two places ... ok
+# test a list of parts is totalled ... ok
+# test a shopping list adds up what is alike ... ok
+# test a shopping list will not add grams to millilitres ... ok
+# test a label for each part ... ok
+#
+# 9 tests: 9 passed, 0 failed
+
+pub import qty
+pub import recipe
+import qty.Qty
+import recipe.Part
+import recipe.Recipe
+
+pub interface Priced:
+  def cents -> Int
+
+  def price -> Str = money(cents)
+
+pub interface Totalled:
+  def total_cents -> Int
+
+  def total -> Str = money(total_cents)
+
+# A list is totalled when its items are priced: the bound is on the items.
+extend [T: Priced] with Totalled:
+  def total_cents -> Int = self.map { |x| x.cents }.sum
+
+pub def money(c: Int) -> Str:
+  rest = c % 100
+  zero = if rest < 10: "0" else: ""
+  "#{c / 100}.#{zero}#{rest}"
+
+# What to buy for these dishes: each thing once, its amounts added up, in
+# the order first needed. Amounts in two units cannot be added.
+pub def shopping(dishes: [Recipe]) -> [(Str, Qty)] or Error:
+  var need: {Str: Qty} = {}
+  for d in dishes:
+    for p in d.parts:
+      now = match need[p.name]:
+        Some(had) -> had.plus(p.amount).map_error { |e| Error("#{p.name}: #{e.message}") }?
+        None -> p.amount
+      need[p.name] = now
+  need.to_list
+
+# A label for each part, numbered, as the cook reads them.
+pub def labels(r: Recipe) -> Iterator[Str]:
+  var n = 0
+  for p in r.parts:
+    n += 1
+    yield "#{n}. #{p.amount.show} #{p.name}, #{p.price}"
+
+test "money is shown with two places":
+  assert money(1234) == "12.34"
+  assert money(5) == "0.05"
+  assert money(300) == "3.00"
+
+test "a list of parts is totalled":
+  parts = recipe.soup().parts
+  assert parts.total_cents == 245
+  assert parts.total == "2.45"
+  assert parts.at(0).price == "1.20"
+  none: [Part] = []
+  assert none.total == "0.00"
+
+test "a shopping list adds up what is alike":
+  got = shopping([recipe.soup(), recipe.soup().for_people(4)!])!
+  assert got.map { |name, q| "#{name} #{q.show}" }.to_list == ["leeks 900g", "stock 1500ml", "cream 150ml"]
+
+test "a shopping list will not add grams to millilitres":
+  odd = Recipe(title: "odd", serves: 1, parts: [Part(name: "cream", amount: qty.grams(10), cost: 1)])
+  match shopping([recipe.bread(), odd]):
+    Ok(_) -> assert false
+    Error(e) -> assert e.message == "cream: cannot add 10g to 100ml"
+
+test "a label for each part":
+  assert labels(recipe.bread()).take(2).to_list == ["1. 500g flour, 0.60", "2. 2 pc eggs, 0.50"]

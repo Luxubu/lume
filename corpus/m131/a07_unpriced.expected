@@ -1,0 +1,7 @@
+error: `[Str]` values have no method `bill`
+  --> corpus/m131/a07_unpriced.lume:29:22
+   |
+29 |   puts ["tea", "pie"].bill
+   |                      ^
+  help: `bill` is there for `[T]` where `T` is `Priced`, and `Str` is not
+exit: 1

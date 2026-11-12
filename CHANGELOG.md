@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Fixed**: a guard reading a name that a list pattern inside another
+  pattern binds — `("POST", ["items", sku, verb]) if verb == "take"` —
+  reached rustc; the guard binds those names for itself.
+- An `if` or `match` whose arm drops a failure names the call, at the
+  call: `` `save` can fail ``, not "this can fail" at the `match`.
+
 - **`LUME_CACHE_KEEP`**: how many programs' builds the shared cache keeps,
   300 unless it says otherwise. `LUME_CACHE_KEEP=50` keeps the cache near a
   gigabyte, for a small disk, rebuilding more often.

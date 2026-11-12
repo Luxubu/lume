@@ -1,0 +1,6 @@
+[package]
+name = "reply_204"
+version = "0.1.0"
+
+[dependencies]
+http = { path = "../../../packages/http" }

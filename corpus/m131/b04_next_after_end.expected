@@ -1,0 +1,18 @@
+Some(10)
+(after 1)
+Some(20)
+(after 2)
+None
+None
+(after 1)
+(after 2)
+[10, 20]
+(after 1)
+(after 2)
+[10, 20]
+Some(10)
+(after 1)
+rest 20
+(after 2)
+done
+exit: 0

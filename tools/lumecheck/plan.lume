@@ -123,6 +123,7 @@ rm -rf tests/stops/.lume tests/stops/shop/.lume"""
   all.push(suite.one("notes", How.Skippable("skipped: no local connection allowed here"), "examples/notes/check.sh \"$LUME\"", "examples/notes/check.expected"))
   all.push(suite.one("http_server", How.Skippable("skipped: no local connection allowed here"), "examples/http_server/check.sh \"$LUME\"", "examples/http_server/check.expected"))
   # a review program that is a library: its tests are what it shows
+  all.push(script("corpus/m131/c06_pantry tests", "cd corpus/m131/c06_pantry && \"$LUME\" test 2>/dev/null; echo \"exit: $?\"; rm -rf .lume", "corpus/m131/c06_pantry/test.expected"))
   all.push(script("corpus/m126/c06_tab tests", "cd corpus/m126/c06_tab && \"$LUME\" test; echo \"exit: $?\"; rm -rf .lume", "corpus/m126/c06_tab/test.expected"))
   all.push(script("corpus/m126/a05_tipjar tests", "cd corpus/m126/a05_tipjar && \"$LUME\" test; echo \"exit: $?\"; rm -rf .lume", "corpus/m126/a05_tipjar/test.expected"))
   all.push(script("http package tests", "cd packages/http && \"$LUME\" test 2>&1 | grep -v \"^warning\\|^ *|\\|^  -->\\|^  help\"; echo \"exit: ${PIPESTATUS[0]}\"", "packages/http/test.expected"))

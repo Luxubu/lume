@@ -1,0 +1,21 @@
+warning: `desk` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/m131/c01_library/main.lume:128:3
+    |
+128 |   shared var desk = Library(books: [], loans: [], next_id: 1)
+    |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+add Dune: 201 {"id":1,"title":"Dune"}
+add Emma: 201 {"id":2,"title":"Emma"}
+add Ulysses: 201 {"id":3,"title":"Ulysses"}
+add a blank title: 400 a book needs a title
+ana takes 1: 201 {"book":1,"reader":"ana"}
+bo takes 1: 409 book 1 is out to ana
+bo takes 3: 201 {"book":3,"reader":"bo"}
+bo takes 9: 404 no book 9
+nobody takes 2: 400 a loan needs a reader
+loans of bo: 200 [{"book":3,"reader":"bo"}]
+books: 200 [{"id":1,"title":"Dune","out_to":"ana"},{"id":2,"title":"Emma","out_to":null},{"id":3,"title":"Ulysses","out_to":"bo"}]
+1 comes back: 200 book 1 is back
+1 comes back again: 404 book 1 was not out
+x comes back: 404 no DELETE /loans/x here
+exit: 0

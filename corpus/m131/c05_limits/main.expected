@@ -1,0 +1,19 @@
+warning: `limits` is `shared var`: every use of it takes a lock, so tasks change it one at a time
+  --> corpus/m131/c05_limits/main.lume:84:3
+   |
+84 |   shared var limits = Limiter(used: {}, round: 1)
+   |   ^
+  help: fine for a store or a counter; keep the work done while it is locked short
+ana GET /price/tea: 200 tea: 250 [via proxy]
+bo, 5 at once: 3 answered, 2 told to wait
+ana GET /price/soup: 200 soup: 520 [via proxy]
+ana, 4 at once: 1 answered, 3 told to wait
+bo GET /price/tea: 429 bo has had 3 this round [retry after 1]
+anyone POST /round: 200 round 2: 3 each
+bo, 3 at once: 3 answered, 0 told to wait
+cy GET /price/cake: 404 no price for cake [via proxy]
+cy GET /dead/price/tea: 502 the upstream did not answer [via proxy]
+cy GET /price/pie: 200 pie: 400 [via proxy]
+cy GET /price/pie: 429 cy has had 3 this round [retry after 1]
+both servers closed
+exit: 0
