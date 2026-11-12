@@ -2,48 +2,74 @@
 
 ## Unreleased
 
-- **Fixed**: a guard reading a name that a list pattern inside another
-  pattern binds — `("POST", ["items", sku, verb]) if verb == "take"` —
-  reached rustc; the guard binds those names for itself.
-- An `if` or `match` whose arm drops a failure names the call, at the
-  call: `` `save` can fail ``, not "this can fail" at the `match`.
+## 1.2.0 — settled serving
 
-- **`LUME_CACHE_KEEP`**: how many programs' builds the shared cache keeps,
-  300 unless it says otherwise. `LUME_CACHE_KEEP=50` keeps the cache near a
-  gigabyte, for a small disk, rebuilding more often.
-- **`LUME_INCREMENTAL=0`** builds with no incremental state: a tenth of
-  what a build leaves in `.lume/`, for a machine that builds each program
-  once. The test suite sets it, and needs a few gigabytes less.
+Five milestones after 1.1.0 (128–132). Serving HTTP, the preview of 1.1, is
+settled, unchanged: a whole service built on it found nothing to change.
+Lunch 27 teaches it. Generators that are a loop around one `yield` run as
+fast as an iterator written by hand. There are no previews.
 
-- **Serving HTTP is settled**, as it was in 1.1: `http.listen`, `Server`,
-  `Incoming`, `Reply`. It was a preview for one release, and building
-  `examples/notes/` on it found nothing to change. An `Incoming` and a
-  `Reply` may gain fields, as a `Request` may.
-- **Lunch 27, A small web service**, teaches it: a café's orders, routes as
-  a `match`, a `shared var` many requests share, forms and JSON, a program
-  that is its own client, and tests with no network. The tutorial is
-  twenty-seven lunches.
+### Install
 
-- **`examples/notes/`**, a notes service built on the server preview: a
-  store kept in a JSON file, a task per request on one `shared var`, JSON
-  and form bodies, a query, its own tests and its own client. Its
-  `FINDINGS.md` says what building it found; the preview needed no change.
+```sh
+git clone https://github.com/Luxubu/lume && cd lume && git checkout v1.2.0
+./install.sh
+lume run examples/fib.lume
+```
+
+It needs a Rust toolchain (<https://rustup.rs>). On Windows, run it from
+Git's bash. See `docs/install.md`. Take the packages with
+`tag = "v1.2.0"`; `http` and `json` are at 1.2.0.
+
+### Settled in this release
+
+- **Serving HTTP**: `http.listen`, `Server`, `Incoming`, `Reply`, as they
+  were in 1.1. An `Incoming` and a `Reply` may gain fields, as a `Request`
+  may: build a reply with `http.reply` and its steps.
 - **`http.value(pairs, name)`**, the value of a name in a query or a form.
-- **Fixed**: a method of `extend [T: Loud]` was accepted on a list of
-  built-in values that are not `Loud`, and reached rustc; the bound is
-  checked there, and the error says which is not met. A `Json` document is
-  `ToJson`, so a list of them is too.
-- **Fixed**: a `() or Error` call at the end of a branch that ends a `() or
-  Error` function was refused as dropped; it is the function's value, as on
-  the function's own last line.
 
+### What is new
+
+- **Lunch 27, A small web service**: a café's orders, routes as a `match`,
+  a `shared var` many requests share, forms and JSON, a program that is its
+  own client, and tests with no network. The tutorial is twenty-seven
+  lunches.
+- **`examples/notes/`**: a notes service with a JSON store on disk, a task
+  per request, JSON and form bodies, its own tests and client; its
+  `FINDINGS.md` says what building it found.
 - **A generator that is a loop around one `yield`** — names bound to plain
   values, then a `while` with one `yield` at its top — runs as a plain Rust
-  iterator, a closure called for each item, with no coroutine. Its work
-  happens when, and in the order, it did. `bench/b7_generators` went from
-  130% of the same iterator written by hand in Rust to 100%.
-- A docs example on `next_done` gave its three tasks too little time apart
-  for a busy machine running examples side by side; they are further apart.
+  iterator, with no coroutine, and does its work when, and in the order, it
+  did. `bench/b7_generators` went from 130% of the same iterator written by
+  hand in Rust to 100%.
+- **A `Json` document is `ToJson`**, so a list of documents writes itself.
+- **`LUME_CACHE_KEEP`** sets how many programs' builds the shared cache
+  keeps (300); **`LUME_INCREMENTAL=0`** keeps no incremental state, a tenth
+  of what a build leaves. The test suite sets the second, and with
+  `LUME_CACHE_KEEP=50` needs under a gigabyte of disk.
+
+### Fixed
+
+- A method of `extend [T: I]` on a list of built-in values that are not
+  `I` reached rustc; the bound is checked, and the error names it.
+- A `() or Error` call that ends a branch at the end of a `() or Error`
+  function was refused as dropped; it is the function's value, as on the
+  function's own last line. A dropped one is named at its call.
+- A guard reading a name that a list pattern inside another binds reached
+  rustc.
+- A docs example on `next_done` gave its tasks too little time apart for a
+  busy machine.
+
+### How it was checked
+
+- **The suite**: `tests/run.sh`, 1443 checks and 706 docs examples, byte
+  for byte, on Linux, macOS and Windows (where ten that drive Unix programs
+  as Unix has them are left out).
+- **Review round twenty-six** (`corpus/m131/`): thirty programs by three
+  reviewers from the docs alone; 34 guesses, no wrong answer, and the one
+  leak to rustc fixed. Every generator did its work where its author said.
+- **The benchmarks**, all within budget.
+- Installed from a clean checkout and run.
 
 ## 1.1.0 — serving
 
