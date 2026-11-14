@@ -30,6 +30,7 @@ it claims by `tests/docs.sh`. If an answer here is wrong, the build fails.
 | [Tests](reference/testing.md) | `test` and `assert`, what a failure says, `lume test` by name, `async test` |
 | [Concurrency](reference/concurrency.md) | `async def`, `spawn:`, `await`, `shared var`, what a lock covers |
 | [HTTP](reference/http.md) | the `http` package: get, post, send; a 404 is a response, a lost connection an `Error` |
+| [PostgreSQL](reference/postgres.md) | the `postgres` package, a preview: connect, execute, query, rows read by column name |
 | [Rust crates](reference/crates.md) | `import rust.x`, what the bridge maps, builders that use their value up, `rust:` blocks |
 | [JSON](reference/json.md) | the `json` package: parsing, reading, decoding into your types, writing |
 | [Input and output](reference/io.md) | `File`, `Dir`, `Path`, `Env`, `Time`, `Process`: every function, and what a failure looks like |

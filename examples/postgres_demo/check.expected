@@ -1,0 +1,32 @@
+== package tests
+test a value is made from a Lume value ... ok
+test a row is read by column name, NULL apart ... ok
+test a password is not shown ... ok
+
+3 tests: 3 passed, 0 failed
+exit: 0
+== against the server
+added Ada: 1
+added Bo: 1
+added O'Neil: 1
+1 Ada, age 36, score 9.5, active true, tags ["math","engines"]
+2 Bo, age unknown, score 7.0, active false, tags none
+3 O'Neil; DROP TABLE people, age 41, score 8.25, active true, tags none
+older than 30: ["Ada", "O'Neil; DROP TABLE people"]
+Ada's first tag: math
+nobody: None
+made older: 2
+a typo: `SELEC name FROM lume_demo.people`: syntax error at or near "SELEC"
+no such table: `SELECT * FROM lume_demo.nobody`: relation "lume_demo.nobody" does not exist
+one parameter short: `SELECT name FROM lume_demo.people WHERE age > $1 AND scor...`: it has 2 parameters, and 1 was given
+text for a number: `SELECT name FROM lume_demo.people WHERE age > $1`: $1: text cannot go to a parameter of type `int4`
+too big for smallint: `UPDATE lume_demo.people SET small = $1`: $1: 70000 is too big for a parameter of type `int2`
+NULL for NOT NULL: `INSERT INTO lume_demo.people (name) VALUES ($1)`: null value in column "name" of relation "people" violates not-null constraint
+a uuid: `SELECT gen_random_uuid() AS id`: column `id` is a `uuid`, which this package does not read yet: write `id::text` in the query
+Bo's age: Error("column `age` is NULL")
+a column not there: Error("no column `nmae`: the row has `name`, `age`")
+query_one: `SELECT name FROM lume_demo.people` gave 3 rows, not one
+from tasks: 20 rows, scores adding up to 210.0
+after close: `SELECT 1`: the connection is closed
+no server: cannot connect to postgresql://lume:***@127.0.0.1:9/lume
+exit: 0

@@ -120,6 +120,7 @@ rm -rf tests/stops/.lume tests/stops/shop/.lume"""
   all.push(script("json_config", "cd examples/json_config && \"$LUME\" run; echo \"exit: $?\"", "examples/json_config/main.expected"))
   all.push(suite.one("http package, local server", How.Skippable("skipped: no local connection allowed here"), "tests/http_local.sh \"$LUME\"", "tests/http_local.expected"))
   all.push(script("lunch 27's tests", "cd docs/tutorial/orders-service && \"$LUME\" test 2>/dev/null; echo \"exit: $?\"; rm -rf .lume", "docs/tutorial/orders-service/test.expected"))
+  all.push(suite.one("postgres", How.Skippable("skipped: no PostgreSQL to try (set LUME_PG_URL)"), "examples/postgres_demo/check.sh \"$LUME\"", "examples/postgres_demo/check.expected"))
   all.push(suite.one("notes", How.Skippable("skipped: no local connection allowed here"), "examples/notes/check.sh \"$LUME\"", "examples/notes/check.expected"))
   all.push(suite.one("http_server", How.Skippable("skipped: no local connection allowed here"), "examples/http_server/check.sh \"$LUME\"", "examples/http_server/check.expected"))
   # a review program that is a library: its tests are what it shows

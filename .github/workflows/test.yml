@@ -53,6 +53,15 @@ jobs:
           echo "TEMP=$(cygpath -w "$d")" >> "$GITHUB_ENV"
           echo "TMP=$(cygpath -w "$d")" >> "$GITHUB_ENV"
 
+      # a PostgreSQL for the postgres package's check; GitHub runs Docker on
+      # its Linux runners only, so elsewhere that check says it skipped
+      - name: PostgreSQL
+        if: runner.os == 'Linux'
+        run: |
+          docker run -d --name lume-postgres -e POSTGRES_USER=lume -e POSTGRES_PASSWORD=lume -e POSTGRES_DB=lume -p 127.0.0.1:5440:5432 postgres:16-alpine
+          for i in $(seq 1 30); do docker exec lume-postgres pg_isready -U lume -d lume && break; sleep 1; done
+          echo "LUME_PG_URL=postgresql://lume:lume@127.0.0.1:5440/lume" >> "$GITHUB_ENV"
+
       - name: Build the compiler
         run: cargo build --release --manifest-path compiler/Cargo.toml
 

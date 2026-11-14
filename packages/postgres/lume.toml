@@ -1,0 +1,9 @@
+[package]
+name = "postgres"
+version = "0.1.0"
+
+[dependencies]
+json = { path = "../json" }
+
+[rust]
+postgres = "0.19"

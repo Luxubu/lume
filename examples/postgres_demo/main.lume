@@ -1,0 +1,90 @@
+# The postgres package against a real server: the URL comes from
+# LUME_PG_URL, as `postgresql://lume:lume@127.0.0.1:5440/lume`.
+# examples/postgres_demo/check.sh starts one in Docker for the suite.
+
+import postgres
+import postgres.Row
+import json
+
+def say(what: Str, r: Int or Error):
+  match r:
+    Ok(n)    -> puts "#{what}: #{n}"
+    Error(e) -> puts "#{what}: #{e.message}"
+
+def show(row: Row) -> Str or Error:
+  name = row.str("name")?
+  age = row.opt_int("age")?.map { |a| a.to_s }.or("unknown")
+  tags = row.opt_json("tags")?.map { |j| json.show(j) }.or("none")
+  Ok("#{row.int("id")?} #{name}, age #{age}, score #{row.float("score")?}, active #{row.bool("active")?}, tags #{tags}")
+
+# The calls are made from async code, as a service makes them: the
+# connection's work runs on a thread of its own.
+async def main -> () or Error:
+  url = Env.get("LUME_PG_URL").or_error("set LUME_PG_URL to a database to try")?
+  db = postgres.connect(url)?
+  db.batch("""
+    DROP SCHEMA IF EXISTS lume_demo CASCADE;
+    CREATE SCHEMA lume_demo;
+    CREATE TABLE lume_demo.people (
+      id     serial PRIMARY KEY,
+      name   text NOT NULL,
+      age    int,
+      score  double precision NOT NULL DEFAULT 0,
+      active boolean NOT NULL DEFAULT true,
+      tags   jsonb,
+      small  smallint
+    );
+    """)?
+  add = "INSERT INTO lume_demo.people (name, age, score, active, tags) VALUES ($1, $2, $3, $4, $5)"
+  say("added Ada", db.execute(add, ["Ada".sql, 36.sql, 9.5.sql, true.sql, postgres.data(json.parse("[\"math\", \"engines\"]")!)]))
+  say("added Bo", db.execute(add, ["Bo".sql, postgres.maybe(None), 7.sql, false.sql, postgres.maybe(None)]))
+  say("added O'Neil", db.execute(add, ["O'Neil; DROP TABLE people".sql, 41.sql, 8.25.sql, true.sql, postgres.maybe(None)]))
+
+  for row in db.query("SELECT id, name, age, score, active, tags FROM lume_demo.people ORDER BY id", [])?:
+    puts show(row)?
+  older = db.query("SELECT name FROM lume_demo.people WHERE age > $1 ORDER BY name", [30.sql])?
+  puts "older than 30: #{older.map { |r| r.str("name")! }.to_list}"
+  ada = db.query_one("SELECT name, tags FROM lume_demo.people WHERE name = $1", ["Ada".sql])?
+  puts "Ada's first tag: #{ada.json("tags")?.at(0).map { |t| t.str.or("?") }.or("?")}"
+  puts "nobody: #{db.query_opt("SELECT name FROM lume_demo.people WHERE name = $1", ["Cy".sql])?}"
+  say("made older", db.execute("UPDATE lume_demo.people SET age = age + 1 WHERE age IS NOT NULL", []))
+
+  # what goes wrong says so
+  for what, sql, params in [
+    ("a typo", "SELEC name FROM lume_demo.people", []),
+    ("no such table", "SELECT * FROM lume_demo.nobody", []),
+    ("one parameter short", "SELECT name FROM lume_demo.people WHERE age > $1 AND score > $2", [1.sql]),
+    ("text for a number", "SELECT name FROM lume_demo.people WHERE age > $1", ["thirty".sql]),
+    ("too big for smallint", "UPDATE lume_demo.people SET small = $1", [70000.sql]),
+    ("NULL for NOT NULL", "INSERT INTO lume_demo.people (name) VALUES ($1)", [postgres.maybe(None)]),
+  ]:
+    match db.execute(sql, params):
+      Ok(n)    -> puts "#{what}: #{n}?"
+      Error(e) -> puts "#{what}: #{e.message}"
+  match db.query("SELECT gen_random_uuid() AS id", []):
+    Ok(_)    -> puts "a uuid was read?"
+    Error(e) -> puts "a uuid: #{e.message}"
+  row = db.query_one("SELECT name, age FROM lume_demo.people WHERE name = $1", ["Bo".sql])?
+  puts "Bo's age: #{row.int("age")}"
+  puts "a column not there: #{row.str("nmae")}"
+  match db.query_one("SELECT name FROM lume_demo.people", []):
+    Ok(_)    -> puts "one row?"
+    Error(e) -> puts "query_one: #{e.message}"
+
+  # tasks share the connection, and take turns with it
+  inserts = (1..20).map { |i| spawn: db.execute("INSERT INTO lume_demo.people (name, score) VALUES ($1, $2)", ["task #{i}".sql, i.sql]) }.to_list
+  for t in inserts:
+    await t?
+  sum = db.query_one("SELECT count(*)::int AS n, sum(score) AS s FROM lume_demo.people WHERE name LIKE 'task %'", [])?
+  puts "from tasks: #{sum.int("n")?} rows, scores adding up to #{sum.float("s")?}"
+
+  db.batch("DROP SCHEMA lume_demo CASCADE")?
+  db.close
+  match db.query("SELECT 1", []):
+    Ok(_)    -> puts "closed?"
+    Error(e) -> puts "after close: #{e.message}"
+  match postgres.connect("postgresql://lume:secret@127.0.0.1:9/lume"):
+    Ok(_)    -> puts "connected to nothing?"
+    # the rest of the message is the system's own words, which differ
+    Error(e) -> puts "no server: #{e.message.split(": error connecting").first.or("")}"
+  ()

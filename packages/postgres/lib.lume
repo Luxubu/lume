@@ -1,0 +1,416 @@
+# postgres — a PostgreSQL database: queries with their parameters, and rows
+# read by column name. A preview: its shape may change in a 1.x release.
+#
+#   db = postgres.connect("postgresql://user:secret@localhost/app")?
+#   db.execute("INSERT INTO people (name, age) VALUES ($1, $2)", ["Ada".sql, 36.sql])?
+#   for row in db.query("SELECT name, age FROM people WHERE age > $1", [30.sql])?:
+#     puts "#{row.str("name")?} #{row.opt_int("age")?.or(0)}"
+#
+# A value goes to the server beside the query, never inside its text, so
+# what a user typed cannot change what the query does. A call waits for the
+# server, as `http`'s `send` does. It is built on the Rust crate postgres,
+# with no TLS: for a server elsewhere, use a tunnel or a later release.
+
+import rust.postgres
+import json
+
+# A value going to the server or coming back from it.
+pub enum Value:
+  Null
+  Bool(b: Bool)
+  Int(n: Int)
+  Float(f: Float)
+  Text(s: Str)
+  # JSON, as text: `json` and `jsonb` columns
+  Data(text: Str)
+
+  def null? -> Bool:
+    match self:
+      Null -> true
+      _ -> false
+
+# `"Ada".sql`, `36.sql`: a value as a parameter.
+pub interface Sql:
+  def sql -> Value
+
+extend Str with Sql:
+  def sql -> Value = Text(self)
+
+extend Int with Sql:
+  def sql -> Value = Int(self)
+
+extend Float with Sql:
+  def sql -> Value = Float(self)
+
+extend Bool with Sql:
+  def sql -> Value = Bool(self)
+
+# An optional value as a parameter: SQL's NULL for `None`. (`Value.Null` is
+# NULL itself.)
+pub def maybe(v: Value?) -> Value = v.or(Null)
+
+# A JSON document, as a parameter for a `json` or `jsonb` column.
+pub def data(doc: json.Json) -> Value = Data(json.show(doc))
+
+# A row of a query's answer, read by column name.
+pub struct Row:
+  columns: [Str]
+  values: [Value]
+
+  # The column's value as it came, or an `Error` naming the columns there are.
+  def get(name: Str) -> Value or Error:
+    match columns.index_of(name):
+      Some(i) -> Ok(values.at(i))
+      None -> Error("no column `#{name}`: the row has #{columns.map { |c| "`#{c}`" }.join(", ")}")
+
+  def opt_int(name: Str) -> Int? or Error:
+    match get(name)?:
+      Null -> Ok(None)
+      Int(n) -> Ok(Some(n))
+      v -> Error(wrong(name, "an integer", v))
+
+  def opt_float(name: Str) -> Float? or Error:
+    match get(name)?:
+      Null -> Ok(None)
+      Float(f) -> Ok(Some(f))
+      Int(n) -> Ok(Some(n.to_float))
+      v -> Error(wrong(name, "a number", v))
+
+  def opt_str(name: Str) -> Str? or Error:
+    match get(name)?:
+      Null -> Ok(None)
+      Text(s) -> Ok(Some(s))
+      v -> Error(wrong(name, "text", v))
+
+  def opt_bool(name: Str) -> Bool? or Error:
+    match get(name)?:
+      Null -> Ok(None)
+      Bool(b) -> Ok(Some(b))
+      v -> Error(wrong(name, "a boolean", v))
+
+  def opt_json(name: Str) -> json.Json? or Error:
+    match get(name)?:
+      Null -> Ok(None)
+      Data(text) -> json.parse(text).map { |j| Some(j) }.map_error { |e| Error("column `#{name}`: #{e.message}") }
+      v -> Error(wrong(name, "JSON", v))
+
+  # The same, with SQL's NULL an `Error`: for a column that is never NULL.
+  def int(name: Str) -> Int or Error = opt_int(name)?.or_error(null_in(name))
+  def float(name: Str) -> Float or Error = opt_float(name)?.or_error(null_in(name))
+  def str(name: Str) -> Str or Error = opt_str(name)?.or_error(null_in(name))
+  def bool(name: Str) -> Bool or Error = opt_bool(name)?.or_error(null_in(name))
+  def json(name: Str) -> json.Json or Error = opt_json(name)?.or_error(null_in(name))
+
+def null_in(name: Str) -> Str = "column `#{name}` is NULL"
+
+def wrong(name: Str, wanted: Str, v: Value) -> Str:
+  have = match v:
+    Null -> "NULL"
+    Bool(_) -> "a boolean"
+    Int(_) -> "an integer"
+    Float(_) -> "a number"
+    Text(_) -> "text"
+    Data(_) -> "JSON"
+  "column `#{name}` is #{have}, not #{wanted}"
+
+# A connection to a database, from `postgres.connect`. Copies of it share
+# the one connection, and take turns with it.
+pub struct Db:
+  # where it is, without the password
+  shown: Str
+  # the connection, set aside under a number; Lume's own
+  db_id: Int
+
+  # Runs a statement and gives how many rows it changed.
+  def execute(sql: Str, params: [Value]) -> Int or Error:
+    (n, _, _) = run(db_id, sql, params, false)?
+    Ok(n)
+
+  # Runs a query and gives its rows.
+  def query(sql: Str, params: [Value]) -> [Row] or Error:
+    (_, columns, rows) = run(db_id, sql, params, true)?
+    Ok(rows.map { |vs| Row(columns: columns, values: vs) }.to_list)
+
+  # The one row a query gives: an `Error` for none, or for more than one.
+  def query_one(sql: Str, params: [Value]) -> Row or Error:
+    rows = query(sql, params)?
+    return Error("`#{short(sql)}` gave #{rows.len} rows, not one") if rows.len != 1
+    Ok(rows.at(0))
+
+  # The row a query gives, or `None`: an `Error` for more than one.
+  def query_opt(sql: Str, params: [Value]) -> Row? or Error:
+    rows = query(sql, params)?
+    return Error("`#{short(sql)}` gave #{rows.len} rows, not one or none") if rows.len > 1
+    Ok(rows.first)
+
+  # Runs SQL with no parameters, any number of statements: a schema, say.
+  def batch(sql: Str) -> () or Error:
+    id = db_id
+    done: () or Error = rust:
+      {
+      // a server's own words for what went wrong, with its hint if it gives one
+      fn lume_pg_error(e: &postgres::Error) -> String {
+        match e.as_db_error() {
+          Some(d) => match d.hint() { Some(h) => format!("{} ({})", d.message(), h), None => d.message().to_string() },
+          None => {
+            // what the crate says, and why, with its parameters counted as SQL counts them
+            let mut s = e.to_string();
+            let mut cause = std::error::Error::source(e);
+            while let Some(c) = cause { s = format!("{}: {}", s, c); cause = c.source(); }
+            let s = s.strip_prefix("db error: ").unwrap_or(&s).to_string();
+            match s.strip_prefix("error serializing parameter ").and_then(|r| r.split_once(':')) {
+              Some((n, why)) => format!("${}:{}", n.trim().parse::<usize>().map(|n| n + 1).unwrap_or(0), why),
+              None => s,
+            }
+          }
+        }
+      }
+      // work for the connection's own thread, which the connection lives on
+      type Job = Box<dyn FnOnce(&mut postgres::Client) + Send>;
+      let closed = || Error { message: String::from("the connection is closed") };
+      let tx = lume_held().lock().unwrap().get(&id).and_then(|b| b.downcast_ref::<std::sync::mpsc::Sender<Job>>()).cloned();
+      match tx {
+        None => Err(closed()),
+        Some(tx) => {
+          let (back, answer) = std::sync::mpsc::channel::<Result<(), String>>();
+          let sql = sql.to_string();
+          let job: Job = Box::new(move |c| { let _ = back.send(c.batch_execute(&sql).map_err(|e| lume_pg_error(&e))); });
+          match tx.send(job) {
+            Err(_) => Err(closed()),
+            Ok(()) => match answer.recv() {
+              Ok(r) => r.map_err(|m| Error { message: m }),
+              Err(_) => Err(closed()),
+            },
+          }
+        }
+      }
+      }
+    done.map_error { |e| Error("`#{short(sql)}`: #{e.message}") }
+
+  # Closes the connection; using it after is an `Error`.
+  def close -> ():
+    id = db_id
+    gone: () = rust:
+      {
+        // the connection's thread ends when nothing can send it work
+        lume_held().lock().unwrap().remove(&id);
+      }
+    gone
+
+# The first line of a statement, cut short, for a message.
+def short(sql: Str) -> Str:
+  line = sql.trim.lines.first.or("")
+  if line.len > 60: line.slice(0, 57) + "..." else: line
+
+# Every statement goes here: prepared, so the server says what type each
+# parameter is, and each value is sent as that type; the rows come back as
+# `Value`s by each column's type. It runs on the connection's own thread,
+# which the Rust crate needs: it waits on a runtime of its own, which may
+# not be waited on from inside Lume's.
+def run(id: Int, sql: Str, params: [Value], rows_wanted: Bool) -> (Int, [Str], [[Value]]) or Error:
+  raw: (Int, [Str], [[Value]]) or Error = rust:
+    {
+      use postgres::types::{FromSql, IsNull, ToSql, Type};
+      // a server's own words for what went wrong, with its hint if it gives one
+      fn lume_pg_error(e: &postgres::Error) -> String {
+        match e.as_db_error() {
+          Some(d) => match d.hint() { Some(h) => format!("{} ({})", d.message(), h), None => d.message().to_string() },
+          None => {
+            // what the crate says, and why, with its parameters counted as SQL counts them
+            let mut s = e.to_string();
+            let mut cause = std::error::Error::source(e);
+            while let Some(c) = cause { s = format!("{}: {}", s, c); cause = c.source(); }
+            let s = s.strip_prefix("db error: ").unwrap_or(&s).to_string();
+            match s.strip_prefix("error serializing parameter ").and_then(|r| r.split_once(':')) {
+              Some((n, why)) => format!("${}:{}", n.trim().parse::<usize>().map(|n| n + 1).unwrap_or(0), why),
+              None => s,
+            }
+          }
+        }
+      }
+      // work for the connection's own thread, which the connection lives on
+      type Job = Box<dyn FnOnce(&mut postgres::Client) + Send>;
+      let closed = || Error { message: String::from("the connection is closed") };
+      // a value sent as the type the server asks for
+      #[derive(Debug)]
+      struct P<'a>(&'a Value);
+      impl<'a> ToSql for P<'a> {
+        fn to_sql(&self, ty: &Type, out: &mut postgres::types::private::BytesMut) -> Result<IsNull, Box<dyn std::error::Error + Sync + Send>> {
+          let fail = |what: &str| -> Box<dyn std::error::Error + Sync + Send> { format!("{} cannot go to a parameter of type `{}`", what, ty.name()).into() };
+          match self.0 {
+            Value::Null => Ok(IsNull::Yes),
+            Value::Bool { b } => if *ty == Type::BOOL { b.to_sql(ty, out) } else { Err(fail("a boolean")) },
+            Value::Int { n } => match *ty {
+              Type::INT2 => i16::try_from(*n).map_err(|_| -> Box<dyn std::error::Error + Sync + Send> { format!("{} is too big for a parameter of type `int2`", n).into() })?.to_sql(ty, out),
+              Type::INT4 => i32::try_from(*n).map_err(|_| -> Box<dyn std::error::Error + Sync + Send> { format!("{} is too big for a parameter of type `int4`", n).into() })?.to_sql(ty, out),
+              Type::INT8 => n.to_sql(ty, out),
+              Type::FLOAT4 => (*n as f32).to_sql(ty, out),
+              Type::FLOAT8 => (*n as f64).to_sql(ty, out),
+              _ => Err(fail("an integer")),
+            },
+            Value::Float { f } => match *ty {
+              Type::FLOAT4 => (*f as f32).to_sql(ty, out),
+              Type::FLOAT8 => f.to_sql(ty, out),
+              _ => Err(fail("a number")),
+            },
+            Value::Text { s } => match *ty {
+              Type::TEXT | Type::VARCHAR | Type::BPCHAR | Type::NAME | Type::UNKNOWN => s.as_str().to_sql(&Type::TEXT, out),
+              _ => Err(fail("text")),
+            },
+            Value::Data { text } => match *ty {
+              Type::JSON => { out.extend_from_slice(text.as_bytes()); Ok(IsNull::No) }
+              Type::JSONB => { out.extend_from_slice(&[1u8]); out.extend_from_slice(text.as_bytes()); Ok(IsNull::No) }
+              _ => Err(fail("JSON")),
+            },
+          }
+        }
+        fn accepts(_: &Type) -> bool { true }
+        postgres::types::to_sql_checked!();
+      }
+      // a `json` or `jsonb` value, as its text
+      struct J(String);
+      impl<'a> FromSql<'a> for J {
+        fn from_sql(ty: &Type, raw: &'a [u8]) -> Result<Self, Box<dyn std::error::Error + Sync + Send>> {
+          let raw = if *ty == Type::JSONB { raw.get(1..).unwrap_or(&[]) } else { raw };
+          Ok(J(String::from_utf8_lossy(raw).into_owned()))
+        }
+        fn accepts(ty: &Type) -> bool { *ty == Type::JSON || *ty == Type::JSONB }
+      }
+      fn work(c: &mut postgres::Client, sql: &str, params: &[Value], rows_wanted: bool) -> Result<(i64, Vec<String>, Vec<Vec<Value>>), String> {
+        let st = c.prepare(sql).map_err(|e| lume_pg_error(&e))?;
+        if st.params().len() != params.len() {
+          let given = if params.len() == 1 { String::from("1 was given") } else { format!("{} were given", params.len()) };
+          return Err(format!("it has {} parameters, and {}", st.params().len(), given));
+        }
+        let ps: Vec<P> = params.iter().map(P).collect();
+        let refs: Vec<&(dyn ToSql + Sync)> = ps.iter().map(|p| p as &(dyn ToSql + Sync)).collect();
+        if !rows_wanted {
+          let n = c.execute(&st, &refs).map_err(|e| lume_pg_error(&e))?;
+          return Ok((n as i64, Vec::new(), Vec::new()));
+        }
+        let rows = c.query(&st, &refs).map_err(|e| lume_pg_error(&e))?;
+        let columns: Vec<String> = st.columns().iter().map(|col| col.name().to_string()).collect();
+        let mut out = Vec::with_capacity(rows.len());
+        for row in &rows {
+          let mut vs = Vec::with_capacity(columns.len());
+          for (i, col) in st.columns().iter().enumerate() {
+            let bad = |e: postgres::Error| format!("column `{}`: {}", col.name(), lume_pg_error(&e));
+            let v = match *col.type_() {
+              Type::BOOL => row.try_get::<_, Option<bool>>(i).map_err(bad)?.map(|b| Value::Bool { b }),
+              Type::INT2 => row.try_get::<_, Option<i16>>(i).map_err(bad)?.map(|n| Value::Int { n: n as i64 }),
+              Type::INT4 => row.try_get::<_, Option<i32>>(i).map_err(bad)?.map(|n| Value::Int { n: n as i64 }),
+              Type::INT8 => row.try_get::<_, Option<i64>>(i).map_err(bad)?.map(|n| Value::Int { n }),
+              Type::FLOAT4 => row.try_get::<_, Option<f32>>(i).map_err(bad)?.map(|f| Value::Float { f: f as f64 }),
+              Type::FLOAT8 => row.try_get::<_, Option<f64>>(i).map_err(bad)?.map(|f| Value::Float { f }),
+              Type::TEXT | Type::VARCHAR | Type::BPCHAR | Type::NAME | Type::UNKNOWN => row.try_get::<_, Option<String>>(i).map_err(bad)?.map(|s| Value::Text { s }),
+              Type::JSON | Type::JSONB => row.try_get::<_, Option<J>>(i).map_err(bad)?.map(|j| Value::Data { text: j.0 }),
+              ref other => return Err(format!("column `{}` is a `{}`, which this package does not read yet: write `{}::text` in the query", col.name(), other.name(), col.name())),
+            };
+            vs.push(v.unwrap_or(Value::Null));
+          }
+          out.push(vs);
+        }
+        Ok((rows.len() as i64, columns, out))
+      }
+      let tx = lume_held().lock().unwrap().get(&id).and_then(|b| b.downcast_ref::<std::sync::mpsc::Sender<Job>>()).cloned();
+      match tx {
+        None => Err(closed()),
+        Some(tx) => {
+          let (back, answer) = std::sync::mpsc::channel();
+          let sql = sql.to_string();
+          let params: Vec<Value> = params.to_vec();
+          let job: Job = Box::new(move |c| { let _ = back.send(work(c, &sql, &params, rows_wanted)); });
+          match tx.send(job) {
+            Err(_) => Err(closed()),
+            Ok(()) => match answer.recv() {
+              Ok(r) => r.map_err(|m| Error { message: m }),
+              Err(_) => Err(closed()),
+            },
+          }
+        }
+      }
+    }
+  raw.map_error { |e| Error("`#{short(sql)}`: #{e.message}") }
+
+# Connects to the database at `url`, as `postgresql://user:password@host:port/dbname`
+# or `host=localhost user=app dbname=app`. The connection lives on a thread
+# of its own, which every statement is handed to.
+pub def connect(url: Str) -> Db or Error:
+  raw: Int or Error = rust:
+    {
+      // a server's own words for what went wrong, with its hint if it gives one
+      fn lume_pg_error(e: &postgres::Error) -> String {
+        match e.as_db_error() {
+          Some(d) => match d.hint() { Some(h) => format!("{} ({})", d.message(), h), None => d.message().to_string() },
+          None => {
+            // what the crate says, and why, with its parameters counted as SQL counts them
+            let mut s = e.to_string();
+            let mut cause = std::error::Error::source(e);
+            while let Some(c) = cause { s = format!("{}: {}", s, c); cause = c.source(); }
+            let s = s.strip_prefix("db error: ").unwrap_or(&s).to_string();
+            match s.strip_prefix("error serializing parameter ").and_then(|r| r.split_once(':')) {
+              Some((n, why)) => format!("${}:{}", n.trim().parse::<usize>().map(|n| n + 1).unwrap_or(0), why),
+              None => s,
+            }
+          }
+        }
+      }
+      // work for the connection's own thread, which the connection lives on
+      type Job = Box<dyn FnOnce(&mut postgres::Client) + Send>;
+      let closed = || Error { message: String::from("the connection is closed") };
+      let (ready_tx, ready_rx) = std::sync::mpsc::channel::<Result<(), String>>();
+      let (tx, rx) = std::sync::mpsc::channel::<Job>();
+      let url = url.to_string();
+      std::thread::spawn(move || {
+        match postgres::Client::connect(&url, postgres::NoTls) {
+          Ok(mut c) => {
+            let _ = ready_tx.send(Ok(()));
+            while let Ok(job) = rx.recv() {
+              job(&mut c);
+            }
+          }
+          Err(e) => { let _ = ready_tx.send(Err(lume_pg_error(&e))); }
+        }
+      });
+      match ready_rx.recv() {
+        Ok(Ok(())) => Ok(lume_hold(tx)),
+        Ok(Err(m)) => Err(Error { message: m }),
+        Err(_) => Err(closed()),
+      }
+    }
+  shown = hide_password(url)
+  id = raw.map_error { |e| Error("cannot connect to #{shown}: #{e.message}") }?
+  Db(shown: shown, db_id: id)
+
+# A URL with its password, if it has one, written as `***`.
+def hide_password(url: Str) -> Str:
+  match (url.index_of("://"), url.index_of("@")):
+    (Some(s), Some(at)) ->
+      creds = url.slice(s + 3, at - s - 3)
+      match creds.index_of(":"):
+        Some(c) -> url.slice(0, s + 3 + c + 1) + "***" + url.slice(at, url.len)
+        None -> url
+    _ -> url
+
+test "a value is made from a Lume value":
+  assert "Ada".sql == Value.Text("Ada")
+  assert 36.sql == Value.Int(36)
+  assert true.sql == Value.Bool(true)
+  assert maybe(None).null?
+  assert maybe(Some(1.sql)) == Value.Int(1)
+
+test "a row is read by column name, NULL apart":
+  r = Row(columns: ["id", "name", "note", "score"], values: [Value.Int(1), Value.Text("Ada"), Value.Null, Value.Float(2.5)])
+  assert r.int("id")! == 1
+  assert r.str("name")! == "Ada"
+  assert r.opt_str("note")! == None
+  assert r.str("note").error?
+  assert r.float("score")! == 2.5
+  assert r.float("id")! == 1.0
+  assert r.str("id").error?
+  assert r.get("nope").error?
+
+test "a password is not shown":
+  assert hide_password("postgresql://app:s3cret@db:5432/app") == "postgresql://app:***@db:5432/app"
+  assert hide_password("postgresql://app@db/app") == "postgresql://app@db/app"
+  assert hide_password("host=db user=app") == "host=db user=app"

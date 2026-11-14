@@ -62,9 +62,13 @@ a release says so; from then on the promise above covers it.
 
 ## Previews
 
-There are none: serving HTTP, a preview in 1.1, is settled in 1.2. A part
-added before it has been used enough to be sure of its shape is a preview,
-listed here; its changes are listed under **Preview:**.
+A part added before it has been used enough to be sure of its shape is a
+preview, listed here; its changes are listed under **Preview:**. Serving
+HTTP, a preview in 1.1, is settled since 1.2.
+
+| part | since | where it is described |
+|---|---|---|
+| The `postgres` package: `postgres.connect`, `Db`, `Row`, `Value` | 1.3 | [PostgreSQL](reference/postgres.md) |
 
 ## Not covered by the promise
 

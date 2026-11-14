@@ -312,8 +312,8 @@ launchctl print gui/$(id -u)/dev.todo-api | grep state
   `http.get` and the rest, speaks both.
 - **What a service keeps**, it keeps itself: the to-dos above are gone when
   it stops. `examples/notes/` saves every change to a JSON file and reads
-  it back on start; for more than that, a Rust crate is the way to a
-  database.
+  it back on start; for a database, the `postgres` package, a preview in
+  1.3, talks to PostgreSQL — [PostgreSQL](reference/postgres.md).
 - **There is no package registry yet.** Packages are shared from git, at a
   tag, as `http` and `json` are.
 - **If the compiler says "the generated Rust did not compile"**, that is a

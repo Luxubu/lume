@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **Preview: the `postgres` package**, for PostgreSQL:
+  `postgres.connect(url)`, then `execute`, `query`, `query_one`,
+  `query_opt` and `batch` on the `Db` it gives, with `$1` parameters passed
+  beside the SQL — `"Ada".sql`, `36.sql`, `postgres.data(doc)`,
+  `postgres.maybe(v)` — each sent as the type the server asks for. Rows are
+  read by column name: `int`, `float`, `str`, `bool`, `json`, and an `opt_`
+  form of each for NULL. Errors name the statement and give the server's
+  own words. Built on the Rust crate postgres; `examples/postgres_demo/`
+  tries it against a real server, which CI starts on Linux.
+
 ## 1.2.1 — two packages from one repository
 
 A fix, and a guide. Nothing else changed: the `http` and `json` packages

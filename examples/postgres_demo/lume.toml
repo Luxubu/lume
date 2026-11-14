@@ -1,0 +1,7 @@
+[package]
+name = "postgres_demo"
+version = "0.1.0"
+
+[dependencies]
+postgres = { path = "../../packages/postgres" }
+json = { path = "../../packages/json" }
